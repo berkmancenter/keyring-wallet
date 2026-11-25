@@ -1,0 +1,4049 @@
+/**
+ * vtaAgent — the phone's one session with its own VTA, shared by every screen.
+ *
+ * `VtaClient` is a session; this is the controller around it: one client per
+ * VTA for the whole app (so a granted notice reaches the task that waits for
+ * it, whichever screen sent it), the consent requests the VTA pushes to this
+ * phone as an approver, and the state a screen subscribes to. The shape
+ * mirrors `vtiAgent` on the community leg.
+ *
+ * @module trust-tasks/module/vtaAgent
+ */
+
+import type { Agent } from '@credo-ts/core'
+import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { AppState, DeviceEventEmitter, Platform } from 'react-native'
+
+import type { EnrolmentOffer } from '@bifold/trust-tasks'
+
+import { AGENT_NOT_FOUND_CONFIRM_MS, agentGoneVerdict, type AgentGoneWhy } from './agentGone'
+import { didPrefix } from './didPrefix'
+import { withKeyLock } from './keyedRecords'
+import {
+  AGENT_HOST_QR_LIFETIME_MS,
+  AgentHostConnectionError,
+  connectWithAgentHost,
+  type AgentHostDeps,
+  type AgentHostOffer,
+} from './agentHostConnection'
+import type { AgentLabel } from './agentLabel'
+import {
+  AGENT_LAST_KNOWN_MAX_AGE_MS,
+  AGENT_LAST_KNOWN_MAX_CHARS,
+  AGENT_LAST_KNOWN_MAX_TYPES,
+  AGENT_LAST_KNOWN_REFRESH_AFTER_MS,
+  AGENT_LAST_KNOWN_REWRITE_MS,
+  isAgentLastKnownOn,
+} from './agentLastKnownSwitch'
+import { classifyDid, type DidResolverAgent } from './classifyDid'
+import { VTI_PERSONA_KEYS_HELD_EVENT } from './communityChanged'
+import { setCurrentAgentDid } from './currentAgent'
+import { checkConsentRequest, consentMatchCode, consentOutcome, type ConsentOutcome } from './consentCheck'
+import { mayApprove } from './afterStepDown'
+import { approvedAgentOf, sendForeignDecision, takeForeignReply } from './foreignApproval'
+import { isKeyCopiesTogetherOn, KEY_COPIES_AT_ONCE, sweepKeyCopies } from './keyCopySweep'
+import type { StepUpRequest } from './stepUp'
+import { releaseWarn } from './releaseLog'
+import { approvalsView, withPhoneRule, type ApprovalsModel, type ApprovalsView } from './approvalRules'
+import {
+  TrustedRuleRefused,
+  trustedApproversView,
+  withTrustedApprovers,
+  type TrustedApproversView,
+  type TrustedKey,
+} from './trustedApprovers'
+import { isUnsupportedVersionRefusal } from './taskVersions'
+import { VtiRefusal, vtiAgent } from './vtiAgent'
+import {
+  ManagerKeyUnresolved,
+  SwapDoneSignInFailed,
+  VTA_TASK,
+  VtaClient,
+  consentPendingOf,
+  refusedAsNotOnAcl,
+  TspReplyBreaker,
+  resolveVtaMediator,
+  type KeySwapNotDone,
+  type VtaAclEntry,
+  type VtaConsentRequest,
+  type VtaContext,
+} from './VtaClient'
+import { GenericRecordsCommunityStore, type VtiCommunityStore } from './VtiCommunityStore'
+import {
+  GenericRecordsIdentityStore,
+  type VtiIdentityStore,
+  type VtiManagerIdentity,
+  type VtiPersona,
+} from './VtiIdentityStore'
+import { GenericRecordsVtaLinkStore, vtaLinkLockKey, type VtaLink, type VtaLinkStore } from './VtaLinkStore'
+import { createVtiTemporaryDidKey } from './VtiMediatorTransport'
+import {
+  AGENT_DEVICE_TASK,
+  clearThisDeviceWake,
+  listAgentDevices,
+  registerThisDevice,
+  removeAgentDevice,
+  renameThisDevice,
+  setThisDeviceWake,
+  type AgentDevice,
+  type AgentDevicePort,
+  type PushPlatform,
+  type WakeChannel,
+  type WakeHandle,
+} from './vtaDevices'
+import {
+  agentVersion,
+  rotateEachPersona,
+  rotatePersonaKeys,
+  rotationSupport,
+  type RotationSupport,
+} from './vtaRotation'
+import { EnrolmentError, submitEnrolment, waitForGrant } from './vtaEnrolment'
+import { migratePersonaKeys } from './vtaKeyMigration'
+import { forgetKeyCopy, setInMemoryKeyFetcher } from './vtaKeys'
+import { VTA_UNLINKING_EVENT } from './unlinkEvent'
+import {
+  initialLinkState,
+  QUIET_DROP_MS,
+  reconnectDelayMs,
+  reduceLink,
+  resumableFailure,
+  type VtaLinkEvent,
+  type VtaLinkFailure,
+  type VtaLinkState,
+} from './vtaLinkMachine'
+import {
+  DeviceActionRefused,
+  DeviceCannotOwn,
+  OwnerCheckNotConfigured,
+  OwnerNotConfirmed,
+  deviceRefusalOf,
+  looksLikeDid,
+  ownExpiryFromRefusal,
+  type ConfirmOwner,
+  type DeviceCanOwn,
+  type DeviceRefusalReason,
+} from './vtaOwner'
+
+/** The agent's approval rules as "Ask me before…" shows them. */
+export interface ApprovalRulesState {
+  model: ApprovalsModel & { unreadable: boolean }
+  view: ApprovalsView
+  /** This phone may write the rules: an unrestricted admin, and a row Keyring reads whole. */
+  canChange: boolean
+}
+
+/** Who approves for this person, as the agent holds it (trusted-approver plan §4). */
+export interface TrustedApproversState {
+  view: TrustedApproversView
+  /** The row's version, as read or as written. */
+  version: number
+}
+
+export interface VtiApproval extends VtaConsentRequest {
+  /** The request document's id. */
+  id: string
+  receivedAt: string
+  status: 'pending' | 'approved' | 'denied' | 'expired' | 'failed'
+  error?: string
+  /** The code to compare with the screen that asked (vta-sdk `match_code`); none for a digest that is not one. */
+  matchCode?: string
+  /** What approving would do: the dry-run effects, else the task's consequences, else unknown. */
+  outcome?: ConsentOutcome
+  /**
+   * How the request fared against `ConsentRequest::verify`: `verified`, or why
+   * not. Log-only for now — a request that fails is still listed.
+   */
+  requestCheck?: 'verified' | string
+  /**
+   * Set when the request is from another person's agent, one this phone agreed to approve for (foreignApproval.ts):
+   * that agent, and the person who asked. The decision goes to that agent, not to this phone's own.
+   */
+  forAgent?: { agentDid: string; asker: string; stopAsked?: true }
+}
+
+export interface VtaAgentState {
+  status: 'disconnected' | 'connecting' | 'connected' | 'failed'
+  vtaDid?: string
+  managerDid?: string
+  approvals: VtiApproval[]
+  /** A task of ours the VTA is holding for someone else's consent. */
+  awaitingConsentFor?: string
+  /**
+   * The comparison code of the request {@link awaitingConsentFor} waits on, derived as an approver's card derives it
+   * (consentCheck `consentMatchCode`), so the person can read it to their approver. It says which request, not who
+   * started it. Cleared with awaitingConsentFor.
+   */
+  awaitingConsentCode?: string
+  /**
+   * The last task of ours the agent said someone approved (its `task-consent/granted` notice), and when: the hold
+   * {@link awaitingConsentFor} named, released. Only a yes is told this way; a no or a lapse is not told at all.
+   */
+  consentGranted?: { taskType: string; at: number }
+  /**
+   * The last task of ours whose hold ended without consent, and when: the question {@link awaitingConsentFor} named
+   * was answered no or lapsed (VtaClient's consentNotGiven refusal). The phone cannot tell which, and the task was not run.
+   */
+  consentNotGiven?: { taskType: string; at: number }
+  /**
+   * The agent holds this phone's own `device/set-wake` for consent: an
+   * approval rule covers the notification setting, so switching notifications
+   * cannot take effect from this phone. Settings → Notifications says so.
+   * Cleared by the next set-wake the agent accepts.
+   */
+  wakeBlockedByRule?: boolean
+  /**
+   * The agent asks this phone to confirm it is the person before it does a
+   * task (a step-up): its own reason, shown as sent, and the task. Answered
+   * with `answerStepUp`; the owner check follows a confirmation.
+   */
+  stepUpAsk?: { id: string; reason: string; taskType?: string }
+  error?: string
+  /**
+   * Whether this phone is linked to an agent, and how that link is doing
+   * right now — the one state the agent screens read (plan §4.2). `status`
+   * above stays for the screens that predate linking.
+   */
+  link: VtaLinkState
+  /** Whether the first-link introduction has been seen (plan §4.1). */
+  introSeen: boolean
+  /**
+   * Reconnecting stopped after {@link MAX_RECONNECT_TRIES} tries in a row: the
+   * agent screen says the agent didn't answer, with Try again (`tryAgainNow`),
+   * instead of a loop out of sight. Cleared by any sign-in that works.
+   */
+  reconnectGaveUp?: boolean
+  /** What the agent did, newest first, in this session — the agent screen's "What your agent did". */
+  activity: VtaActivity[]
+  /**
+   * What each agent is called, by VTA DID, once read: its verified agent name,
+   * else its operator's `vta_name` (`VtaClient.agentLabel`). Absent until then,
+   * and a screen shows the host meanwhile — a name is never waited for. The
+   * source is kept because only an `agentName` is verified; a `vta_name` is
+   * whatever the operator typed.
+   */
+  agentNames?: Readonly<Record<string, AgentLabel>>
+  /** The linked agent was created from this phone ("Create my agent"): it belongs to this phone. */
+  ownsAgent?: boolean
+  /**
+   * Replies from the agent are not reaching this phone: two asks in a row got
+   * no answer, and asks wait a few minutes before one probe (VtaClient's
+   * breaker, VTI #1978). "Your agent is catching up", not "didn't answer".
+   */
+  repliesStalled?: boolean
+  /**
+   * A session to the linked agent is being opened, the quiet reopen after an unlock included (the link stays
+   * shown online then): a screen whose read failed meanwhile waits for it rather than saying the agent is
+   * unreachable (#772, 276.9: "Couldn't reach your agent" for 10–20 s after the PIN).
+   */
+  sessionOpening?: boolean
+  /** When a session to the linked agent last opened: a screen whose read failed reads again then. */
+  sessionOpenedAt?: number
+  /**
+   * The devices an agent's list named when last read, by DID: what a request
+   * card calls the device that asked (Alberto's iPhone, 10-06: a request from
+   * his computer read "Someone asks"). Filled by every read of the list.
+   */
+  knownDevices?: Readonly<Record<string, KnownDevice>>
+  /** Every agent this phone is linked to, oldest first; `link` is the current one's. */
+  agents?: ReadonlyArray<{ vtaDid: string; label: string; owner?: boolean }>
+  /** "Add another agent" is under way: the current agent was left until it ends. */
+  addingAgent?: boolean
+  /** An agent was just added: the person chooses to use it or keep the one before. */
+  addedAgent?: { from: string; added: string }
+  /**
+   * A switch to this agent is under way. It leaves the current agent and signs
+   * in to the next, which took about 20 s on the several-agents device check,
+   * with nothing on screen meanwhile.
+   */
+  switchingTo?: string
+  /**
+   * An unlink is under way: the current agent is being forgotten and the next
+   * (if any) brought up. Between the two the link reads "not linked" for a
+   * moment, which is not a phone with no agent (UI-smoothness plan, Phase 1).
+   */
+  unlinking?: boolean
+  /**
+   * Agents that are not current, being unlinked (`unlinking`, while the agent
+   * is told) or still on the list after an unlink (`failed`), by DID (IN-379).
+   */
+  unlinkingOthers?: Readonly<Record<string, 'unlinking' | 'failed'>>
+  /**
+   * Requests for this phone's decision from the agents that are not current,
+   * as last seen by a look at each (several agents, step 3), with whether the
+   * look reached it. Carried into `approvals` when the person switches to it.
+   */
+  /**
+   * What a look at each other agent found. `notFoundAt`: when its address first answered "not found" (any HTTP 404,
+   * which a host mid-deploy also gives), so not yet a verdict. `gone`: "not found" again at least
+   * AGENT_NOT_FOUND_CONFIRM_MS later, the same bar as the current agent's address: said so, and not looked at again
+   * for {@link GONE_OTHER_RECHECK_MS}.
+   */
+  otherRequests?: Readonly<
+    Record<string, { approvals: VtiApproval[]; reachable: boolean; at: number; notFoundAt?: number; gone?: true }>
+  >
+  /**
+   * Whether the saved link has been read at start-up (`restore`). Until then
+   * `link` reads "not linked" on every phone, linked or not, so a screen that
+   * acts on "not linked" waits for this first: a notification tap that cold-
+   * started the app opened Requests before the read, which took the phone for
+   * an unlinked one and left for My Agent (233, Android).
+   */
+  linkRestored?: boolean
+}
+
+/**
+ * One device that runs the agent: an admin row of its access list. `thisPhone`
+ * marks this phone's own key. Every admin row is shown — a backup added from
+ * this phone is an equal of it (plan §4, D3).
+ */
+/** What a request card needs to name a device: as My devices names it. */
+export interface KnownDevice {
+  did: string
+  label?: string
+  displayName?: string
+  isThisPhone: boolean
+}
+
+export interface VtaDevice {
+  did: string
+  role: string
+  label?: string
+  thisPhone: boolean
+  /** RFC 3339; absent means the device never lapses. */
+  expiresAt?: string
+  /** RFC 3339, when the agent added it. */
+  createdAt?: string
+  /** Who added it: a DID, or the agent's own marker such as `cli:import-did`. */
+  createdBy?: string
+}
+
+export interface VtaActivity {
+  at: number
+  kind: 'linked' | 'reconnected' | 'wentOffline' | 'revoked' | 'approved' | 'denied' | 'unlinked'
+}
+
+const ACTIVITY_LIMIT = 20
+
+/** What the controller needs from outside, replaceable in tests. */
+export interface VtaAgentDeps {
+  fetch?: typeof fetch
+  linkStore?: (agent: Agent) => VtaLinkStore
+  /** For tests: a look's quiet window and its most (LOOK_QUIET_MS, LOOK_MAX_MS). */
+  lookQuietMs?: number
+  lookMaxMs?: number
+  /** For tests: the client a look at another agent signs in with. */
+  lookClient?: (
+    agent: Agent,
+    vtaDid: string,
+    store: VtiIdentityStore,
+    options: { onInbound: (plaintext: DidCommV2PlaintextMessage) => void; connectDrainMs?: number }
+  ) => Pick<VtaClient, 'connect' | 'disconnect' | 'task'>
+  /** How long a key fetch waits for the current agent's session (KEY_FETCH_WAIT_MS); shorter in tests. */
+  keyFetchWaitMs?: number
+  /** For tests: the check a consent request passes before it is listed (checkConsentRequest). */
+  checkConsentRequest?: typeof checkConsentRequest
+  /** The client a session with a linked agent that is not the current one opens (withAgentSession). */
+  agentClient?: (agent: Agent, vtaDid: string, store: VtiIdentityStore) => VtaClient
+  /** The client a key fetch opens for a linked agent that is not the current one (fetchKeyCopy). */
+  keyClient?: (
+    agent: Agent,
+    vtaDid: string,
+    store: VtiIdentityStore
+  ) => Pick<VtaClient, 'holdPersonaKeys' | 'disconnect'>
+  /** Whether the agent's address exists: its DID host says `notFound`, it resolves (`found`), or no one could tell. */
+  agentAddress?: (agent: Agent, vtaDid: string) => Promise<'notFound' | 'found' | 'unknown'>
+  identityStore?: (agent: Agent) => VtiIdentityStore
+  communityStore?: (agent: Agent) => Pick<VtiCommunityStore, 'forgetCommunity'>
+  enrol?: {
+    submit: typeof submitEnrolment
+    waitForGrant: typeof waitForGrant
+  }
+  now?: () => number
+  /** How long "I've been added" waits for an answer; tests shorten it. */
+  grantCheckDeadlineMs?: number
+  /** How long signing in may take in a grant check; see GRANT_CONNECT_DEADLINE_MS. */
+  grantConnectDeadlineMs?: number
+  /**
+   * Ask the person to confirm an owner act now — biometrics or passcode, not
+   * only the app unlock (plan §3). Owner acts go ahead only on `ok: true`.
+   * Unset, every owner act refuses with {@link OwnerCheckNotConfigured}.
+   */
+  confirmOwner?: ConfirmOwner
+  /**
+   * How long an owner act (adding a device) may take once the owner has
+   * confirmed: signing in plus the agent's answer. Past it the act gives up
+   * as `noAnswer` instead of leaving the screen waiting (IN-53). Tests shorten it.
+   */
+  ownerActDeadlineMs?: number
+  /** How long an Approve or Deny waits for the agent to take it (al-phone, 10-05). */
+  decisionDeadlineMs?: number
+  /** How long My devices waits for the agent's list before saying it didn't answer (IN-124). */
+  deviceListDeadlineMs?: number
+  /**
+   * Whether this phone has a screen lock or biometrics, so an owner key made
+   * on it is protected (plan §3). Unset, "Create my agent" refuses with
+   * {@link OwnerCheckNotConfigured}.
+   */
+  deviceCanOwn?: DeviceCanOwn
+  /** An agent host's automatic connection: its waits, for tests (fetch is `fetch` above). */
+  agentHost?: Pick<AgentHostDeps, 'sleep' | 'now'>
+  /** How long to wait between sign-in tries once a host says the agent is ready; tests shorten it. */
+  hostSignInRetryMs?: number
+}
+
+/**
+ * Once an agent host says the agent is ready for this phone (`awaiting_mobile`),
+ * signing in is tried this many times, HOST_SIGN_IN_RETRY_MS apart: the agent
+ * has just restarted with this phone on its access list and may take a moment
+ * to answer.
+ */
+export const HOST_SIGN_IN_TRIES = 24
+export const HOST_SIGN_IN_RETRY_MS = 5000
+
+/** The longest name a person can give an agent on this phone. */
+export const AGENT_NICKNAME_MAX = 40
+
+/** Why an automatic connection stopped, as a link failure: the reason the older screens know, and the host's own. */
+function hostFailure(error: AgentHostConnectionError): VtaLinkFailure {
+  const reason: VtaLinkFailure['reason'] =
+    error.reason === 'expired' || error.reason === 'timedOut'
+      ? 'expired'
+      : error.reason === 'unreachable' || error.reason === 'busy' || error.reason === 'unavailable'
+        ? 'unreachable'
+        : error.reason === 'taken' || error.reason === 'notAccepted'
+          ? 'refused'
+          : 'failed'
+  // The host's own words go behind Details only for a failed setup, which its doc calls safe to display.
+  const detail = error.hostError ? `${error.message}: ${error.hostError}` : error.message
+  return { reason, hostReason: error.reason, detail }
+}
+
+/** A refusal that means the agent no longer accepts this phone at all. */
+const ACCESS_REVOKED = /not in (the )?ACL|unauthori[sz]ed|forbidden|revoked/i
+
+/**
+ * Does a failed connect mean the VTA no longer knows this phone (relink), or
+ * only that it could not be reached (retry)? A swap left unsettled says so by
+ * its type: both keys refused is revoked; either unanswered is reachability,
+ * so both keys are kept and the next connect asks again. Anything else is
+ * read from the VTA's words.
+ */
+export function connectFailureRevokes(error: unknown): boolean {
+  if (isUnsettledSwap(error)) return error.refusedBoth
+  // The ACL's own words count however the rest of the refusal is worded: a bare "ACL entry expired", without
+  // "forbidden", must not read as unreachable (the community service already words an expiry that way).
+  return ACCESS_REVOKED.test(error instanceof Error ? error.message : String(error)) || refusedAsNotOnAcl(error)
+}
+
+/** A key swap the VTA could not be asked about, or refused both keys of. */
+function isUnsettledSwap(error: unknown): error is ManagerKeyUnresolved {
+  return typeof ManagerKeyUnresolved === 'function' && error instanceof ManagerKeyUnresolved
+}
+
+/**
+ * How long "I've been added" waits for the agent's answer before it says so,
+ * counted from when the question is sent — not from the tap, which also pays
+ * for signing in (GRANT_CONNECT_DEADLINE_MS).
+ *
+ * An agent that answers says everything it has to say quickly: a first task,
+ * the greeting that precedes it included, came back in 1.76 s, and later ones
+ * in under a second (measured against a VTA on 2026-09-22). Ten seconds is
+ * about five times that worst honest case — slow enough that a sluggish agent
+ * still wins the race, short enough that the person waits through a pause
+ * rather than a silence.
+ *
+ * It exists because an answer can be lost rather than late: a reply produced
+ * before the transport's relationship is ready never arrives, and then nothing
+ * ever settles this. Without a deadline the screen spins for as long as the
+ * person is willing to watch it.
+ */
+export const GRANT_CHECK_DEADLINE_MS = 10000
+
+/**
+ * How long signing in to the agent may take before a grant check gives up.
+ * Separate from the answer's deadline on purpose: connecting is DID
+ * resolution, a challenge and a socket on the phone's side, and on a slow
+ * phone it took most of a shared 10 s budget, so an answer that came back in
+ * time was thrown away (Android, 2026-09-24: connect ≈5.5 s, answer ≈4.3 s).
+ */
+export const GRANT_CONNECT_DEADLINE_MS = 30000
+
+/**
+ * A link picked back up after a relaunch (resumeLink) is checked once; when that check gets no answer in time (a
+ * slow network, a busy agent), it is checked again after each of these, while the app is in the foreground and the
+ * same key is still shown unanswered. Then the person's "Continue linking" takes over, as before.
+ */
+export const RESUME_RETRY_DELAYS_MS = [5_000, 15_000, 45_000] as const
+/** How long a background sign-in may take before it counts as a drop and is retried (IN-53). */
+export const SESSION_CONNECT_DEADLINE_MS = 30000
+/** How long Unlink waits on the agent to hear it (wake cleared, sessions ended), from when it is told, before it unlinks anyway. */
+export const UNLINK_TELL_DEADLINE_MS = 5000
+/** The most Unlink waits in all, from the tap, whether or not the telling left the phone. */
+export const UNLINK_TELL_QUEUE_MS = 10000
+/**
+ * Signing in and the agent's answer to an owner act (adding a device): the
+ * grant's own reply wait is 30 s once sent, and signing in comes before it.
+ */
+export const OWNER_ACT_DEADLINE_MS = 45000
+/** An Approve or Deny not taken by then is said so, and can be sent again. */
+export const DECISION_DEADLINE_MS = 15000
+
+/** What the owner check says when a request is approved. */
+export const APPROVE_REASON = 'Approve a request from your agent'
+/**
+ * My devices' list, bounded (IN-124: "a spinner that never loads"). Reading it
+ * signs in through `connect`, which has no deadline of its own and shares a
+ * sign-in already in flight, so one stuck sign-in held the list forever.
+ */
+export const DEVICE_LIST_DEADLINE_MS = 15000
+/** Reconnect tries in a row (1 s, 2 s, 4 s, 8 s, 16 s apart) before the agent screen says it didn't answer. */
+export const MAX_RECONNECT_TRIES = 5
+
+/**
+ * How long an other agent found gone (its address answers "not found") is left before one more address check.
+ * Until then it is not looked at: a look's sign-in resolves the address four times, and the look runs on every
+ * return to the foreground (a deleted agent cost ~6 s of 404s per return on 277.8, DEAD-AGENT-LOOK).
+ */
+export const GONE_OTHER_RECHECK_MS = 24 * 60 * 60_000
+
+/**
+ * How long after a return a drop still counts as found because the app was
+ * away: the foreground's alive check (VtiMediatorTransport's ALIVE_CHECK_MS,
+ * 10 s) finds a socket iOS let die, then {@link QUIET_DROP_MS} more.
+ */
+export const RETURN_DROP_WINDOW_MS = 15_000
+
+/** How long the step-up card waits for the person; unanswered, nothing is sent. */
+export const STEP_UP_ASK_TIMEOUT_MS = 120_000
+
+/** Matches VtaClient's own "no answer in time" — a silence, not a refusal. */
+const NO_ANSWER = /the VTA did not answer/
+
+/**
+ * How long a grant check that got no answer keeps its question open. An
+ * answer that arrives in that time settles the next "I've been added" at once,
+ * instead of that tap signing in and asking all over again — which, on the
+ * slow link that made the first one late, would be late too.
+ */
+export const GRANT_HOLD_MS = 60000
+
+/**
+ * How long a temporary key is worth showing again: an admin grants it for an
+ * hour at linking (VtiManagerIdentity.stage), so a little under that.
+ */
+export const TEMPORARY_KEY_REUSE_MS = 55 * 60 * 1000
+
+const TIMED_OUT = Symbol('timedOut')
+
+/**
+ * Run `work` against a deadline: true if it finished in time, false if the
+ * deadline won. A failure still throws, so a refusal keeps its meaning.
+ */
+export async function withDeadline(work: Promise<unknown>, ms = GRANT_CHECK_DEADLINE_MS): Promise<boolean> {
+  // Work abandoned at the deadline may still fail later; that failure is
+  // nobody's news now, and without a handler it would surface as an unhandled
+  // rejection.
+  void work.catch(() => undefined)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const finished = Promise.race([
+      work.then(() => undefined),
+      new Promise<typeof TIMED_OUT>((resolve) => {
+        timer = setTimeout(() => resolve(TIMED_OUT), ms)
+      }),
+    ])
+    return (await finished) !== TIMED_OUT
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+type Listener = () => void
+
+/**
+ * What a manager session keeps of a message it receives with no request of
+ * ours waiting: a consent request (a request for this phone's decision) and a
+ * consent-granted notice. Everything else is ignored. One function for the
+ * live session and for a look at another agent (several agents, step 3), so
+ * neither keeps or drops anything the other would not.
+ */
+export function keepManagerMessage(
+  plaintext: DidCommV2PlaintextMessage,
+  now: number
+): { approval: VtiApproval } | { granted: true } | undefined {
+  const body = plaintext.body as { id?: string; type?: string; payload?: VtaConsentRequest } | undefined
+  if (body?.type === VTA_TASK.consentRequest && body.payload?.challenge) {
+    return {
+      approval: {
+        ...body.payload,
+        id: String(body.id ?? body.payload.challenge),
+        receivedAt: new Date(now).toISOString(),
+        status: 'pending',
+        matchCode: consentMatchCode(body.payload.payloadDigest),
+        outcome: consentOutcome(body.payload),
+      },
+    }
+  }
+  if (body?.type === VTA_TASK.consentGranted) return { granted: true }
+  return undefined
+}
+
+/**
+ * The requests still waiting at `now`: pending, and not past an expiry that can
+ * be read (the rule `waitingRequests` uses; kept here, as that module imports this one).
+ */
+function stillWaiting(approvals: VtiApproval[], now: number): VtiApproval[] {
+  return approvals.filter((a) => {
+    if (a.status !== 'pending') return false
+    const expiry = Date.parse(String(a.expiresAt ?? ''))
+    return !Number.isFinite(expiry) || expiry > now
+  })
+}
+
+/** A look at another agent: how long after the last message it ends, and at most. */
+export const LOOK_QUIET_MS = 3_000
+
+/**
+ * How long a key fetch for the current agent waits for its session to open:
+ * straight after a restart, an identity's key can be needed before the session
+ * that fetches the keys is up.
+ */
+export const KEY_FETCH_WAIT_MS = 20_000
+export const LOOK_MAX_MS = 12_000
+
+/**
+ * Tell an agent this phone is leaving it: stop waking it (`device/set-wake`
+ * with no handle), then end its sessions (`auth/revoke-session`, all). Best-
+ * effort: a refusal or a silence changes nothing. `sent` runs when the first
+ * task leaves the phone, so a deadline can count from there.
+ */
+export async function tellAgentLeaving(
+  client: Pick<VtaClient, 'task'>,
+  sent: () => void = () => undefined
+): Promise<void> {
+  // A rule holding set-wake is refused at once, not waited on (wakePort).
+  await client
+    .task(AGENT_DEVICE_TASK.setWake, {}, UNLINK_TELL_DEADLINE_MS, {}, sent, { waitForConsent: false })
+    .catch(() => undefined)
+  await client
+    .task(VTA_TASK.revokeSession, { all: true, reason: 'Unlinked on this phone' }, UNLINK_TELL_DEADLINE_MS)
+    .catch(() => undefined)
+}
+
+/**
+ * Whether a Credo agent can be used: Keyring's lock shuts it down
+ * (`isInitialized` false) until the person unlocks and a new one is handed
+ * over. An agent that does not say is taken as up.
+ */
+/** Whether two discovery answers name the same task types, in whatever order. */
+function sameTypes(a: readonly string[], b: readonly string[]): boolean {
+  const left = new Set(a)
+  const right = new Set(b)
+  return left.size === right.size && [...left].every((type) => right.has(type))
+}
+
+/**
+ * Whether a discovery answer is short enough to keep with the link: an agent's list is around a hundred types, and one
+ * far beyond that is not written to the store at each change. It is still used, asked live.
+ */
+function keepable(types: readonly string[]): boolean {
+  if (types.length > AGENT_LAST_KNOWN_MAX_TYPES) return false
+  let chars = 0
+  for (const type of types) chars += type.length
+  return chars <= AGENT_LAST_KNOWN_MAX_CHARS
+}
+
+function agentIsUp(agent: Agent): boolean {
+  return (agent as unknown as { isInitialized?: boolean }).isInitialized !== false
+}
+
+/**
+ * The agent asked to be linked is one this phone already has (IN-132): it is
+ * refused, matched by its DID and never by a name, and the person is offered
+ * a switch to it. Linking it again replaced its entry, its name, and this
+ * phone's key on it, leaving the old key on the agent's list.
+ */
+export class AgentAlreadyOnPhone extends Error {
+  constructor(readonly vtaDid: string) {
+    super('vtaAgent: this phone already has that agent')
+    this.name = 'AgentAlreadyOnPhone'
+  }
+}
+
+/**
+ * The agent being linked serves a community: its own VTC lives there (a
+ * full_stack stack). Keyring links only to a person's own agent, so the link
+ * stops before it is saved (Alberto, 10-05: "block it"). Its DID document
+ * says nothing (only VTARest), so the agent itself is asked, once signed in.
+ */
+export class CommunityAgentRefused extends Error {
+  constructor(readonly vtaDid: string) {
+    super("This is a community's agent. Link Keyring to your personal agent instead.")
+    this.name = 'CommunityAgentRefused'
+  }
+}
+
+/** At most this many of an agent's context DIDs are read to tell whether it serves a community. */
+const COMMUNITY_CONTEXTS_READ = 8
+/** How long the link waits for the agent to say what it holds. */
+const COMMUNITY_CHECK_MS = 10_000
+
+/**
+ * A failed link whose swap onto the long-term key the agent confirmed it did
+ * not make says why (held by an approval rule, refused, not answered), so the
+ * screen can say it in words rather than "the app doesn't know why".
+ */
+function withSwapReason(failure: VtaLinkFailure, error: unknown): VtaLinkFailure {
+  // By name, not `instanceof`: a test that stands in for VtaClient need not provide the class.
+  const swap = error instanceof Error && error.name === 'KeySwapNotDone' ? (error as KeySwapNotDone).why : undefined
+  return swap ? { ...failure, swap } : failure
+}
+
+/**
+ * The agent change under way, if any: a switch, an unlink, or an add. While
+ * one runs the link passes through "not linked", and a screen shows the change
+ * rather than "Link your agent" (UI-smoothness plan, Phase 1).
+ */
+export function agentTransition(
+  state: Pick<VtaAgentState, 'link' | 'switchingTo' | 'unlinking' | 'addingAgent'>
+): 'switching' | 'unlinking' | 'adding' | undefined {
+  if (state.switchingTo) return 'switching'
+  if (state.unlinking) return 'unlinking'
+  if (state.addingAgent && state.link.kind === 'notLinked') return 'adding'
+  return undefined
+}
+
+export class VtaAgentController {
+  private state: VtaAgentState = {
+    status: 'disconnected',
+    approvals: [],
+    link: initialLinkState,
+    introSeen: true,
+    activity: [],
+    linkRestored: false,
+  }
+  private listeners = new Set<Listener>()
+  private current?: { client: VtaClient; vtaDid: string; store: VtiIdentityStore; agent: Agent }
+  /** The agent the app handed over at restore; the app builds a new one after every lock. */
+  private agent?: Agent
+  /** A grant check's question still open after it gave up waiting (GRANT_HOLD_MS). */
+  private heldAnswer?: { vtaDid: string; answer: Promise<unknown>; until: number }
+  private deps: VtaAgentDeps = {}
+  private restored = false
+  /** The agent whose in-memory key fetcher is installed (`installKeyFetcher`). */
+  private fetcherFor?: Agent
+  private offer?: EnrolmentOffer
+  /** A scanned agent-host QR waiting for the person to confirm. Holds a credential: never logged. */
+  private hostOffer?: AgentHostOffer
+  /** Bumped by every new attempt and every cancel, so a late reply from an abandoned one moves nothing. */
+  private attemptToken = 0
+  private reconnectAttempt = 0
+  private retryTimer?: ReturnType<typeof setTimeout>
+  /** When the session last dropped, for the reconnect's log line. */
+  private droppedAt?: number
+  /** Whether the app is in the background now (`backgrounded`/`foregrounded`). */
+  private suspended = false
+  /** When the app last came back to the foreground. */
+  private returnedAt?: number
+  /** The next check of a resumed link that went unanswered: a timer, or a wait for the foreground. */
+  private resumeRetry?: { timer?: ReturnType<typeof setTimeout>; subscription?: { remove(): void } }
+  private reconnecting = false
+  private opening?: { client: VtaClient; done: Promise<void> }
+  /** The sign-in shared by every caller, and `sessionOpening` with it. */
+  private setOpening(opening: { client: VtaClient; done: Promise<void> } | undefined) {
+    this.opening = opening
+    if (Boolean(this.state.sessionOpening) !== Boolean(opening)) this.set({ sessionOpening: Boolean(opening) })
+  }
+  /** The VTA whose client an unlock just retired; its replacement opens quietly. */
+  private handedOver?: string
+  /** Identities whose keys moved into memory in this run; their stored copies go at the next (plan part E). */
+  private readonly switchedThisRun = new Set<string>()
+  /** Agents whose name is being read, or was read, in this app run. */
+  private namesAsked = new Set<string>()
+  /** What each agent last said it serves, as kept with its link: read once per run, then held here (agentLastKnownSwitch.ts). */
+  private readonly servedKept = new Map<string, { types: string[]; at: number }>()
+  /** Agents asked again in this app run for what they serve: once is enough, as one ask a run was before. */
+  private readonly servedAskedAgain = new Set<string>()
+  /** Moves each time an agent's kept answer is replaced by a different one (`servedTypesStamp`). */
+  private servedStamp = 0
+  /** The asks put off until a session has been open a while (`askBehind`). */
+  private behind?: { client: VtaClient; timer: ReturnType<typeof setTimeout> }
+  /** The agent the current link attempt is creating from this phone ("Create my agent"), if it is one. */
+  private ownerFor?: string
+  /** The agent that was current when "Add another agent" began: the way back. */
+  private addingFrom?: string
+  /** A pick-up of a link left part-way is under way (resumeLink). */
+  private resuming = false
+  /**
+   * Agents whose link the person backed out of while its key swap was under
+   * way. The app's own pick-up never offers their key again, and the key goes
+   * once the swap settles. Without this, a link backed out of while an
+   * approval held its swap finished on its own after the last unlink (240 gate, R4).
+   */
+  private readonly backedOut = new Set<string>()
+  /** The look at the other agents under way, if any. */
+  private looking?: Promise<void>
+  /** Each agent's reply breaker, kept across the clients made for it (D7FG-2Y9J: a client per reconnect forgot it). */
+  private readonly breakers = new Map<string, TspReplyBreaker>()
+
+  /** Replace I/O for tests; production uses the defaults. */
+  configure(deps: VtaAgentDeps) {
+    this.deps = deps
+  }
+
+  /**
+   * How the app confirms the owner and checks the phone can hold an owner key
+   * (biometrics or passcode). Only these two are set; the rest of the wiring is
+   * kept. Left unset, an owner act refuses with {@link OwnerCheckNotConfigured}
+   * rather than skipping the check.
+   */
+  setOwnerChecks(checks: { confirmOwner: ConfirmOwner; deviceCanOwn: DeviceCanOwn }) {
+    this.deps = { ...this.deps, confirmOwner: checks.confirmOwner, deviceCanOwn: checks.deviceCanOwn }
+  }
+
+  private linkStore(agent: Agent) {
+    return this.deps.linkStore?.(agent) ?? new GenericRecordsVtaLinkStore(agent)
+  }
+
+  private identityStore(agent: Agent) {
+    return this.deps.identityStore?.(agent) ?? new GenericRecordsIdentityStore(agent)
+  }
+
+  private communityStore(agent: Agent) {
+    return this.deps.communityStore?.(agent) ?? new GenericRecordsCommunityStore(agent)
+  }
+
+  private now() {
+    return (this.deps.now ?? Date.now)()
+  }
+
+  private dispatch(event: VtaLinkEvent) {
+    const previous = this.state.link
+    const next = reduceLink(previous, event)
+    if (next === previous) return
+    this.set({ link: next })
+    // A link that left the key screen (linked, refused) needs no further check: no wait outlives it.
+    if (next.kind !== 'showingKey') this.cancelResumeRetry()
+    // The activity list records what changed for the person, not every retry.
+    const wasOnline = previous.kind === 'linked' && previous.connection.kind === 'online'
+    const isOnline = next.kind === 'linked' && next.connection.kind === 'online'
+    // A refusal, or a dead host code: its temporary key is never tried again,
+    // so it is dropped, as on a cancel, and no restart picks it back up (IN-135).
+    // A swap held for an approver keeps it, for the person's Try again.
+    if (event.type === 'failed' && next.kind === 'notLinked' && next.lastError?.vtaDid && this.agent) {
+      if (!resumableFailure(next.lastError, { manual: true }))
+        void this.forgetTemporaryKey(this.agent, next.lastError.vtaDid)
+    }
+    if (event.type === 'linked') this.note('linked')
+    else if (event.type === 'accessRevoked') {
+      this.note('revoked')
+      // Seen in a report, not only on screen (IN-350: a refused key read as "didn't answer", and nothing said the
+      // link had gone).
+      if (next.kind === 'revoked') {
+        this.agent?.config?.logger?.warn?.(
+          `[VTA] the agent no longer accepts this phone; the link is removed: ${event.reason}`
+        )
+        // The phone has lost its agent as surely as by an unlink, and most often because it was lost (a revoke from
+        // another device): what it keeps for the agent's identities goes too (unlinkEvent; a2's finding, #1130).
+        DeviceEventEmitter.emit(VTA_UNLINKING_EVENT, { vtaDid: next.vtaDid, revoked: true })
+        // The session the agent no longer accepts is closed, and no screen reads it as connected (IN-350, run
+        // 1022-1822: the link moved to revoked while the status stayed 'connected').
+        this.set({ status: 'disconnected' })
+        void this.reset().catch(() => undefined)
+      }
+    } else if (wasOnline && !isOnline) {
+      // A drop found while suspended or just back is not news to the person: it stays out of the list (quietUntil).
+      if (!(next.kind === 'linked' && 'quietUntil' in next.connection && next.connection.quietUntil !== undefined))
+        this.note('wentOffline')
+    } else if (!wasOnline && isOnline && previous.kind === 'linked') {
+      if (!('quietUntil' in previous.connection && previous.connection.quietUntil !== undefined))
+        this.note('reconnected')
+    }
+  }
+
+  private note(kind: VtaActivity['kind']) {
+    this.set({ activity: [{ at: this.now(), kind }, ...this.state.activity].slice(0, ACTIVITY_LIMIT) })
+  }
+
+  /** The person dismissed the first-link introduction; it does not come back on its own. */
+  async markIntroSeen(agent: Agent): Promise<void> {
+    this.set({ introSeen: true })
+    const current = await this.linkStore(agent)
+      .get()
+      .catch(() => undefined)
+    if (current)
+      await this.changeLink(agent, current.vtaDid, (link) => ({
+        ...link,
+        introSeenAt: new Date(this.now()).toISOString(),
+      }))
+  }
+
+  /** "What is my agent?" — show the introduction again. */
+  showIntro() {
+    this.set({ introSeen: false })
+  }
+
+  subscribe = (listener: Listener) => {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  getState = () => this.state
+
+  private set(next: Partial<VtaAgentState>) {
+    this.state = { ...this.state, ...next }
+    // The stores answer "this community's identity" for the agent this phone
+    // acts with: the linked one, or the one that removed it (whose identities
+    // the person can still erase).
+    const { link } = this.state
+    setCurrentAgentDid(link.kind === 'linked' || link.kind === 'revoked' ? link.vtaDid : undefined)
+    this.listeners.forEach((l) => l())
+  }
+
+  /** The one client for this VTA; created on first use, kept for the app's life. */
+  client(agent: Agent, vtaDid: string, store?: VtiIdentityStore): VtaClient {
+    // Never a client built for another agent: after a lock the app makes a new
+    // one, and the old one's in-memory keys and session are gone with it.
+    if (this.current?.vtaDid === vtaDid && this.current.agent === agent) return this.current.client
+    const identityStore = store ?? this.identityStore(agent)
+    const breaker = this.breakers.get(vtaDid) ?? new TspReplyBreaker()
+    this.breakers.set(vtaDid, breaker)
+    const client = new VtaClient(agent, vtaDid, identityStore, {
+      breaker,
+      onError: (error) => {
+        this.set({ error: error.message })
+        // A socket that went away while linked is a drop, not a failure to
+        // show: go offline quietly and let the backoff bring it back.
+        if (this.state.link.kind === 'linked' && !client.isConnected) {
+          this.dropped(error.message)
+          this.scheduleReconnect(agent)
+        }
+      },
+      onInbound: (plaintext) => this.inbound(plaintext),
+      onConsentPending: ({ taskType, payloadDigest }) =>
+        this.set({
+          awaitingConsentFor: taskType,
+          awaitingConsentCode: consentMatchCode(payloadDigest),
+          consentGranted: undefined,
+          consentNotGiven: undefined,
+        }),
+      onConsentNotGiven: ({ taskType }) =>
+        this.set({
+          awaitingConsentFor: undefined,
+          awaitingConsentCode: undefined,
+          consentNotGiven: { taskType, at: Date.now() },
+        }),
+      onStepUp: (request, context) => this.askStepUp(request, context),
+      onRepliesStalled: (stalled) => {
+        if (this.current?.client === client) this.set({ repliesStalled: stalled })
+      },
+    })
+    // The client replaced for the agent an unlock handed over keeps what the
+    // screen shows: the new session opens quietly behind it.
+    const handedOver = (this.current?.agent !== agent ? this.current?.vtaDid : undefined) ?? this.handedOver
+    this.handedOver = undefined
+    this.current = { client, vtaDid, store: identityStore, agent }
+    if (handedOver !== vtaDid) this.set({ vtaDid, status: 'disconnected', approvals: [] })
+    this.set({ repliesStalled: breaker.open })
+    return client
+  }
+
+  /** Open the manager session — needed to be reachable as an approver. */
+  async connect(agent: Agent, vtaDid: string): Promise<void> {
+    const client = this.client(agent, vtaDid)
+    if (client.isConnected) {
+      // Opened by a caller that used the client directly (the Developer
+      // probe does): the state has to say so, or a screen gated on it
+      // never sees the session that is already there.
+      if (this.state.status !== 'connected')
+        this.set({ status: 'connected', managerDid: client.managerDid, error: undefined })
+      return
+    }
+    // One session per client: a screen asking while the app reopens it after
+    // an unlock waits for that one instead of opening a second.
+    if (this.opening?.client === client) return this.opening.done
+    // A session reopened behind a connected screen (after an unlock, or a
+    // drop) does not take the screen over with "Signing in".
+    if (this.state.status !== 'connected') this.set({ status: 'connecting', error: undefined })
+    const done = (async () => {
+      try {
+        await client.connect()
+        // Say hello to the VTA so it caches a reply route for this DID. Without a
+        // round-trip the VTA has never seen this approver and drops a consent
+        // request to it as "no mediator route" (VTI-24). whoami is the cheapest
+        // authenticated call and is what makes the approver reachable. An
+        // agent that no longer has this phone's key on its ACL says so here:
+        // that ends the connect, so the link is removed at once rather than at
+        // the next presence tick (IN-350). Any other failure of the hello is
+        // not a verdict on the link.
+        await client.whoAmI().catch((error: unknown) => {
+          if (refusedAsNotOnAcl(error)) throw error
+        })
+        this.set({ status: 'connected', managerDid: client.managerDid, sessionOpenedAt: this.now() })
+        // With a name already shown for the agent, asking it again waits behind the session's first work, with the
+        // ask of what it serves (agentLastKnownSwitch.ts). With none, or with the switch off: at once, as before.
+        if (isAgentLastKnownOn()) {
+          if (!this.state.agentNames?.[vtaDid]) this.learnAgentName(client, vtaDid)
+          this.askBehind(agent, client, vtaDid)
+        } else this.learnAgentName(client, vtaDid)
+      } catch (error) {
+        this.set({ status: 'failed', error: error instanceof Error ? error.message : String(error) })
+        // Removed here, for every caller: My Agent's own connect drops the throw, and would otherwise wait for the
+        // next presence tick (IN-350). Only while linked (`refused`): a key being enrolled is not on the ACL yet.
+        if (refusedAsNotOnAcl(error)) this.refused(error)
+        throw error
+      }
+    })()
+    this.setOpening({ client, done })
+    try {
+      await done
+    } finally {
+      if (this.opening?.done === done) this.setOpening(undefined)
+    }
+  }
+
+  /**
+   * Ask the agent what it is called, once per agent per app run, in the
+   * background: nothing waits on it, and a failure is simply no name. An agent
+   * that gave none is asked again on the next session, since "none" can also
+   * mean it could not be reached.
+   */
+  private learnAgentName(client: VtaClient, vtaDid: string) {
+    if (this.namesAsked.has(vtaDid)) return
+    this.namesAsked.add(vtaDid)
+    void Promise.resolve()
+      .then(() => client.agentLabel())
+      .then((found) => {
+        if (!found) this.namesAsked.delete(vtaDid)
+        else {
+          // Kept with the link either way; shown only when the person has not named it.
+          const named = this.state.agentNames?.[vtaDid]?.source === 'nickname'
+          if (!named) this.set({ agentNames: { ...this.state.agentNames, [vtaDid]: found } })
+          void this.keepAgentName(vtaDid, found)
+        }
+      })
+      .catch(() => this.namesAsked.delete(vtaDid))
+  }
+
+  /**
+   * Once this session has been open a while, ask the agent again what it is called and what it serves
+   * (agentLastKnownSwitch.ts): behind the key copies and the rooms' first read, which no longer wait for either
+   * answer. One wait at a time: a session that opens while another's wait is running takes its place.
+   */
+  private askBehind(agent: Agent, client: VtaClient, vtaDid: string) {
+    if (this.behind) clearTimeout(this.behind.timer)
+    const timer = setTimeout(() => {
+      if (this.behind?.timer === timer) this.behind = undefined
+      // Only on the session it was set for, still open. A session let go since (a lock, an unlink, a drop) is not
+      // reopened for this and is asked nothing, so nothing has to cancel the wait; the next session sets its own.
+      if (!isAgentLastKnownOn() || this.current?.client !== client || !client.isConnected) return
+      this.learnAgentName(client, vtaDid)
+      void this.askServedAgain(agent, client, vtaDid)
+    }, AGENT_LAST_KNOWN_REFRESH_AFTER_MS)
+    // The wait holds nothing open: a process with nothing else to do may end.
+    ;(timer as unknown as { unref?: () => void }).unref?.()
+    this.behind = { client, timer }
+  }
+
+  /**
+   * Ask the agent again what it serves, once per agent per app run, when an answer of its is kept: the kept one was
+   * given out meanwhile, and a different one replaces it. Nothing kept: nothing to check, and whoever needs the
+   * answer asks live (`servedTypes`). An ask the agent did not answer is made again at the next session.
+   */
+  private async askServedAgain(agent: Agent, client: VtaClient, vtaDid: string): Promise<void> {
+    if (!(await this.servedLastKnown(agent, vtaDid))) return
+    // Checked after the read, with nothing awaited before the mark: of two callers, one asks.
+    if (this.servedAskedAgain.has(vtaDid)) return
+    this.servedAskedAgain.add(vtaDid)
+    const live = await client.supportedTypes().catch(() => undefined)
+    if (!live) {
+      this.servedAskedAgain.delete(vtaDid)
+      return
+    }
+    await this.keepServed(agent, vtaDid, live)
+  }
+
+  /** The link kept for `vtaDid`, read afresh. */
+  private async linkFor(agent: Agent, vtaDid: string): Promise<{ store: VtaLinkStore; link?: VtaLink }> {
+    const store = this.linkStore(agent)
+    const links = (await Promise.resolve(store.list?.()).catch(() => undefined)) ?? []
+    const link =
+      links.find((l) => l.vtaDid === vtaDid) ??
+      (await store
+        .get()
+        .then((l) => (l?.vtaDid === vtaDid ? l : undefined))
+        .catch(() => undefined))
+    return { store, link }
+  }
+
+  /**
+   * Change the link kept for `vtaDid`: behind every earlier change of the same link, it is read afresh, `change` is
+   * given what was read, and what it returns is written, once (`vtaLinkLockKey`). `change` returns the whole link as
+   * it should be kept, built from the one it was given so that what it does not touch is carried along; undefined
+   * writes nothing. Resolves whether a write was made; no link kept for the agent is no write. A write the store
+   * refuses rejects.
+   */
+  private changeLink(agent: Agent, vtaDid: string, change: (link: VtaLink) => VtaLink | undefined): Promise<boolean> {
+    return withKeyLock(vtaLinkLockKey(vtaDid), async () => {
+      const { store, link } = await this.linkFor(agent, vtaDid)
+      if (!link) return false
+      const next = change(link)
+      if (!next) return false
+      await store.set(next)
+      return true
+    })
+  }
+
+  /** Take an agent's link out, behind every change of it under way: none of them writes it back afterwards. */
+  private removeLink(agent: Agent, vtaDid: string): Promise<void> {
+    return withKeyLock(vtaLinkLockKey(vtaDid), () => Promise.resolve(this.linkStore(agent).remove?.(vtaDid)))
+  }
+
+  /** Take the current agent's link out; `vtaDid`, when known, is that agent, and the same holds as for `removeLink`. */
+  private clearLink(agent: Agent, vtaDid: string | undefined): Promise<void> {
+    const clear = () => this.linkStore(agent).clear()
+    return vtaDid ? withKeyLock(vtaLinkLockKey(vtaDid), clear) : clear()
+  }
+
+  /**
+   * What the agent last said it serves, if that is kept and not older than {@link AGENT_LAST_KNOWN_MAX_AGE_MS}. Read
+   * from its link once per run, then from memory. A time in the future (a clock set back since) is no better known
+   * than an old one.
+   */
+  private async servedLastKnown(agent: Agent, vtaDid: string): Promise<string[] | undefined> {
+    let held = this.servedKept.get(vtaDid)
+    if (!held) {
+      const kept = (await this.linkFor(agent, vtaDid)).link?.served
+      const listed: unknown = kept?.types
+      const types = Array.isArray(listed) ? listed.filter((t): t is string => typeof t === 'string') : []
+      // Answered meanwhile (a live ask kept its answer while the link was being read): that one is newer.
+      held = this.servedKept.get(vtaDid)
+      if (!held && types.length > 0 && keepable(types) && typeof kept?.at === 'number') {
+        held = { types, at: kept.at }
+        this.servedKept.set(vtaDid, held)
+      }
+    }
+    if (!held || Math.abs(this.now() - held.at) >= AGENT_LAST_KNOWN_MAX_AGE_MS) return undefined
+    return held.types
+  }
+
+  /**
+   * Keep what the agent just said it serves: with its link, and in memory. An answer different from the one held
+   * moves `servedTypesStamp`, so whoever was given the old one reads again. The same answer is written again only
+   * when the kept one is over a day old, so that "still so" costs one store write a day. A list too long to keep
+   * (`keepable`) is not kept, and takes an earlier kept one away: the agent is then asked each time, as before.
+   */
+  private async keepServed(agent: Agent, vtaDid: string, types: string[]): Promise<void> {
+    const before = this.servedKept.get(vtaDid)
+    const now = this.now()
+    const same = before !== undefined && sameTypes(before.types, types)
+    if (same && Math.abs(now - before.at) < AGENT_LAST_KNOWN_REWRITE_MS) return
+    const served = keepable(types) ? { types: [...types], at: now } : undefined
+    if (!served && !before) return
+    // Unlinked while it was being asked: nothing of it is kept, here or with a link that is gone.
+    let linked = false
+    await this.changeLink(agent, vtaDid, (link) => {
+      linked = true
+      if (served) return { ...link, served }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { served: _tooLong, ...rest } = link
+      return rest
+    }).catch(() => undefined)
+    if (!linked) return
+    if (served) this.servedKept.set(vtaDid, served)
+    else this.servedKept.delete(vtaDid)
+    if (before && !same) {
+      this.servedStamp++
+      releaseWarn(
+        `[VTA] the agent serves a different set of tasks than it last said (${before.types.length} then, ${types.length} now)`
+      )
+    }
+  }
+
+  /**
+   * An agent unlinked: what it said is no longer held in memory for it. Nothing stored is touched here: what was kept
+   * with its link went with the link record, which the unlink itself removes.
+   */
+  private lastKnownGone(vtaDid: string) {
+    this.servedKept.delete(vtaDid)
+    this.servedAskedAgain.delete(vtaDid)
+  }
+
+  /**
+   * Which Trust Task types this phone's agent serves (`trust-task-discovery`), for the rooms and polls services;
+   * undefined with no agent linked, or when it could not be asked or listed nothing.
+   *
+   * The session is opened first, as before: `auth/whoami` is asked live, and an agent that no longer accepts this
+   * phone ends it there. Then, with agentLastKnownSwitch.ts on, the agent's last answer is given at once and the
+   * agent is asked again behind (`askBehind`); with nothing kept the agent is asked now and its answer kept. With
+   * the switch off, the agent is asked each time, as before.
+   */
+  async servedTypes(agent: Agent): Promise<string[] | undefined> {
+    const vtaDid = this.agentAddress()
+    if (!vtaDid) return undefined
+    const client = await this.signedIn(agent, vtaDid)
+    if (!isAgentLastKnownOn()) return client.supportedTypes()
+    const kept = await this.servedLastKnown(agent, vtaDid)
+    if (kept) return kept
+    const live = await client.supportedTypes()
+    if (live) {
+      // Asked live in this run: there is nothing older to check it against.
+      this.servedAskedAgain.add(vtaDid)
+      await this.keepServed(agent, vtaDid, live)
+    }
+    return live
+  }
+
+  /**
+   * The agent refused a task of the rooms or polls services. When it refused it as a version or a type it does not
+   * serve, an answer kept from an earlier launch is out of date (the agent was changed since): the agent is asked
+   * again now, not at the end of the wait. Once per agent per app run, as the wait's own ask is, so an agent that
+   * refuses again after answering is not asked each time. Any other refusal, and any refusal with
+   * agentLastKnownSwitch.ts off, does nothing here.
+   */
+  servedRefused(agent: Agent, error: unknown): void {
+    if (!isAgentLastKnownOn() || !isUnsupportedVersionRefusal(error)) return
+    const current = this.current
+    if (!current || current.vtaDid !== this.agentAddress() || !current.client.isConnected) return
+    void this.askServedAgain(agent, current.client, current.vtaDid)
+  }
+
+  /**
+   * Moves when the agent's answer to "what do you serve" was found to differ from the one given out before
+   * (`servedTypes`). A service that holds an answer compares this with what it read beside it, and asks again when
+   * it has moved. Never moves with agentLastKnownSwitch.ts off.
+   */
+  servedTypesStamp(): number {
+    return this.servedStamp
+  }
+
+  /**
+   * Name an agent on this phone ("Name this agent"), or clear the name with an
+   * empty one: kept with its link, and shown before any name the agent gives
+   * itself. Local only; the agent is not told.
+   */
+  async nameAgent(agent: Agent, vtaDid: string, nickname: string): Promise<void> {
+    const name = nickname.trim().slice(0, AGENT_NICKNAME_MAX)
+    const linked = await this.changeLink(agent, vtaDid, (link) => {
+      const { nickname: _old, ...rest } = link
+      return name ? { ...rest, nickname: name } : rest
+    })
+    if (!linked) return
+    await this.refreshAgents(agent)
+  }
+
+  /** Keep an agent's name with its link, so it survives a restart while another agent is current. */
+  private async keepAgentName(vtaDid: string, name: AgentLabel): Promise<void> {
+    if (!this.agent) return
+    await this.changeLink(this.agent, vtaDid, (link) =>
+      link.agentName?.label === name.label && link.agentName?.source === name.source
+        ? undefined
+        : { ...link, agentName: name }
+    ).catch(() => undefined)
+  }
+
+  /**
+   * Read the persisted link once, at start-up. A linked phone comes back
+   * offline and reconnects on its own; nothing live is restored.
+   */
+  async restore(agent: Agent): Promise<void> {
+    // Called again only when the app hands over its agent anew: after every
+    // unlock (the app shut its agent down at the lock, dropping every
+    // identity's in-memory keys, and restarted it or built a new one).
+    if (this.restored) {
+      await this.adoptAgent(agent)
+      return
+    }
+    this.restored = true
+    this.agent = agent
+    this.fetchKeysThrough(agent)
+    const link = await this.linkStore(agent)
+      .get()
+      .catch(() => undefined)
+    this.dispatch({ type: 'restored', link, now: this.now() })
+    this.set({ introSeen: !link || Boolean(link.introSeenAt), ownsAgent: link?.owner === true, linkRestored: true })
+    await this.refreshAgents(agent)
+    if (link) void this.ensureOnline(agent)
+    // No agent linked yet, and a link left part-way before the app stopped:
+    // the same key is shown again and checked once (IN-135).
+    else void this.resumeLink(agent).catch(() => undefined)
+  }
+
+  /** Read the list of linked agents into the state (the switcher's rows). */
+  private async refreshAgents(agent: Agent): Promise<void> {
+    const store = this.linkStore(agent)
+    let links = await Promise.resolve(store.list?.()).catch(() => undefined)
+    if (!links) {
+      const one = await store.get().catch(() => undefined)
+      links = one ? [one] : []
+    }
+    // Names learned before, kept with each link: an agent not connected now
+    // still reads by its name. A name learned this run wins.
+    const kept = Object.fromEntries(
+      links.filter((l) => l.agentName?.label).map((l) => [l.vtaDid, l.agentName as AgentLabel])
+    )
+    // What the person named an agent wins over any name it gives itself.
+    const nicknames: Record<string, AgentLabel> = Object.fromEntries(
+      links
+        .filter((l) => l.nickname?.trim())
+        .map((l) => [l.vtaDid, { label: (l.nickname as string).trim(), source: 'nickname' as const }])
+    )
+    // A nickname taken away gives the agent's own name back.
+    const learned = Object.fromEntries(
+      Object.entries(this.state.agentNames ?? {}).filter(([, n]) => n.source !== 'nickname')
+    )
+    const names = { ...kept, ...learned, ...nicknames }
+    this.set({
+      agents: links.map(({ vtaDid, label, owner }) => ({ vtaDid, label, ...(owner ? { owner } : {}) })),
+      ...(Object.keys(names).length || this.state.agentNames ? { agentNames: names } : {}),
+    })
+  }
+
+  /**
+   * Stop acting with the current agent: its session closes and what was live
+   * for it goes, but nothing stored is forgotten (switching, adding another).
+   */
+  private async leaveCurrent(): Promise<void> {
+    this.attemptToken++
+    this.offer = undefined
+    this.hostOffer = undefined
+    this.ownerFor = undefined
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = undefined
+    this.reconnectAttempt = 0
+    await this.reset()
+    this.set({
+      status: 'disconnected',
+      vtaDid: undefined,
+      managerDid: undefined,
+      approvals: [],
+      awaitingConsentFor: undefined,
+      awaitingConsentCode: undefined,
+      consentGranted: undefined,
+      consentNotGiven: undefined,
+      error: undefined,
+      reconnectGaveUp: false,
+      ownsAgent: false,
+    })
+    this.dispatch({ type: 'unlinked' })
+  }
+
+  /** Bring the store's current agent up as this phone's agent: its link, then a session. */
+  private async takeUpCurrent(agent: Agent, options: { not?: string } = {}): Promise<void> {
+    const found = await this.linkStore(agent)
+      .get()
+      .catch(() => undefined)
+    // Never the agent just unlinked, even when its record failed to go.
+    const link = found && found.vtaDid !== options.not ? found : undefined
+    if (link) this.dispatch({ type: 'restored', link, now: this.now() })
+    this.set({ introSeen: !link || Boolean(link.introSeenAt), ownsAgent: link?.owner === true })
+    await this.refreshAgents(agent)
+    if (link) void this.ensureOnline(agent)
+  }
+
+  /**
+   * Act with another linked agent (several agents, step 2): the current one's
+   * session closes, the other becomes current and connects. Only the current
+   * agent is connected; the others' messages wait at their mediators.
+   */
+  async useAgent(agent: Agent, vtaDid: string): Promise<void> {
+    const link = this.state.link
+    if (link.kind === 'linked' && link.vtaDid === vtaDid) return
+    if (this.state.switchingTo) {
+      releaseWarn(
+        `[VTI] agent switch: to ${didPrefix(vtaDid)} not started, one to ${didPrefix(this.state.switchingTo)} is under way`
+      )
+      return
+    }
+    const started = this.now()
+    releaseWarn(`[VTI] agent switch: to ${didPrefix(vtaDid)}`)
+    this.set({ switchingTo: vtaDid })
+    try {
+      await this.switchTo(agent, vtaDid)
+      releaseWarn(`[VTI] agent switch: to ${didPrefix(vtaDid)} done in ${this.now() - started} ms`)
+    } catch (e) {
+      releaseWarn(`[VTI] agent switch: to ${didPrefix(vtaDid)} failed (${(e as Error)?.message ?? e})`)
+      throw e
+    } finally {
+      this.set({ switchingTo: undefined })
+    }
+  }
+
+  private async switchTo(agent: Agent, vtaDid: string): Promise<void> {
+    const link = this.state.link
+    // Requests are acknowledged where they were seen, so the mediator will not
+    // deliver them again: the leaving agent's waiting ones are kept as its
+    // "other" requests, and the one switched to brings its looked-at ones in.
+    const now = this.now()
+    const leaving = link.kind === 'linked' || link.kind === 'revoked' ? link.vtaDid : undefined
+    const others = { ...(this.state.otherRequests ?? {}) }
+    if (leaving) {
+      others[leaving] = { approvals: stillWaiting(this.state.approvals, now), reachable: true, at: now }
+    }
+    const carried = stillWaiting(others[vtaDid]?.approvals ?? [], now)
+    delete others[vtaDid]
+    await this.linkStore(agent).use?.(vtaDid)
+    await this.leaveCurrent()
+    this.set({ addedAgent: undefined, otherRequests: others })
+    await this.takeUpCurrent(agent)
+    if (carried.length) {
+      const have = new Set(this.state.approvals.map((a) => a.id))
+      this.set({ approvals: [...carried.filter((a) => !have.has(a.id)), ...this.state.approvals] })
+    }
+  }
+
+  /**
+   * Look at every linked agent that is not current, for requests that wait on
+   * this phone (several agents, step 3): sign in as this phone's manager there,
+   * keep what arrives as the live session keeps it (`keepManagerMessage`) until
+   * it has been quiet for {@link LOOK_QUIET_MS}, and close. One look at a time.
+   */
+  async lookAtOtherAgents(agent: Agent): Promise<void> {
+    if (this.looking) return this.looking
+    this.looking = (async () => {
+      // Which agent is current is not known until the stored link is read, as fetchKeyCopy waits for: looked at
+      // before then (at start-up, a push wake), the current agent was taken for another and signed in to on a second
+      // session as the same manager key, and the mediator closed one of the two, 1008, twice in 3 s (a tester's
+      // 277.4 log, 11-02). A link never read is no look: better none than one that knocks the live session off.
+      try {
+        await this.untilLinkRead(this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
+      } catch {
+        return
+      }
+      const store = this.linkStore(agent)
+      const links = (await Promise.resolve(store.list?.()).catch(() => undefined)) ?? []
+      const current = () => (this.state.link.kind === 'linked' ? this.state.link.vtaDid : undefined)
+      for (const { vtaDid } of links) {
+        // Asked again before each look: a look takes seconds, and the current agent can change under it.
+        if (vtaDid === current()) continue
+        const known = this.state.otherRequests?.[vtaDid]
+        if (known?.gone && this.now() - known.at < GONE_OTHER_RECHECK_MS) continue
+        // One bounded address check first. "Not found" is any HTTP 404, which a host mid-deploy or a moved path also
+        // answers, so one is noted, not a verdict: the agent is skipped this time (no four-try sign-in) and said
+        // unreachable; "not found" again an hour or more later is the verdict, as for the current agent's address.
+        // A non-current agent is not signed in to for the bar the current one has (a failed sign-in first): the
+        // sign-in is the cost being saved, and a wrong verdict here only hides a look, never the agent itself.
+        const address = await (this.deps.agentAddress ?? agentAddressOf)(agent, vtaDid).catch(() => 'unknown' as const)
+        if (address === 'notFound') {
+          const at = this.now()
+          const firstAt = known?.notFoundAt ?? at
+          const gone = at - firstAt >= AGENT_NOT_FOUND_CONFIRM_MS
+          releaseWarn(
+            gone
+              ? `[VTA] another agent, ${didPrefix(vtaDid)}, no longer exists (its address is not found, again): not looked at`
+              : `[VTA] another agent, ${didPrefix(vtaDid)}: its address is not found; not looked at this time`
+          )
+          this.set({
+            otherRequests: {
+              ...(this.state.otherRequests ?? {}),
+              [vtaDid]: {
+                // Kept, as a failed look keeps them: one miss is not a verdict, and the waiting count is what the
+                // screen is for. Gone, the address can act on none of them.
+                approvals: gone ? [] : stillWaiting(known?.approvals ?? [], at),
+                reachable: false,
+                at,
+                notFoundAt: firstAt,
+                ...(gone ? { gone: true as const } : {}),
+              },
+            },
+          })
+          continue
+        }
+        // Found: an earlier "not found" is forgotten. Unknown (the host did not answer): kept, not confirmed.
+        const notFoundAt = address === 'unknown' ? known?.notFoundAt : undefined
+        const seen = await this.lookAt(agent, vtaDid)
+        const now = this.now()
+        const before = this.state.otherRequests?.[vtaDid]?.approvals ?? []
+        const byId = new Map([...before, ...(seen ?? [])].map((a) => [a.id, a]))
+        this.set({
+          otherRequests: {
+            ...(this.state.otherRequests ?? {}),
+            [vtaDid]: {
+              approvals: stillWaiting([...byId.values()], now),
+              reachable: seen !== undefined,
+              at: now,
+              ...(notFoundAt !== undefined ? { notFoundAt } : {}),
+            },
+          },
+        })
+      }
+    })().finally(() => {
+      this.looking = undefined
+    })
+    return this.looking
+  }
+
+  /** One look: the requests seen, or undefined when the agent could not be reached. */
+  private async lookAt(agent: Agent, vtaDid: string): Promise<VtiApproval[] | undefined> {
+    const seen: VtiApproval[] = []
+    // Each request is checked before it is kept; the look waits for every check.
+    const checks: Promise<void>[] = []
+    // Time since the last message, counted in the look's own sleeps: not the
+    // clock, which a phone (or a test) can move under it.
+    let sinceLast = 0
+    const client = (this.deps.lookClient ?? ((a, did, store, options) => new VtaClient(a, did, store, options)))(
+      agent,
+      vtaDid,
+      this.identityStore(agent),
+      {
+        onInbound: (plaintext: DidCommV2PlaintextMessage) => {
+          sinceLast = 0
+          const kept = keepManagerMessage(plaintext, this.now())
+          if (!kept || !('approval' in kept)) return
+          const { approval } = kept
+          const approver = (client as Partial<Pick<VtaClient, 'managerDid'>>).managerDid
+          checks.push(
+            this.passesCheck(
+              agent,
+              vtaDid,
+              approver,
+              approval.id,
+              plaintext.body as unknown as Record<string, unknown>
+            ).then((ok) => {
+              if (ok && !seen.some((a) => a.id === approval.id)) seen.push({ ...approval, requestCheck: 'verified' })
+            })
+          )
+        },
+      }
+    )
+    try {
+      await client.connect()
+      const quiet = this.deps.lookQuietMs ?? LOOK_QUIET_MS
+      const most = this.deps.lookMaxMs ?? LOOK_MAX_MS
+      const step = Math.min(250, quiet)
+      for (let waited = 0; sinceLast < quiet && waited < most; waited += step) {
+        await new Promise((resolve) => setTimeout(resolve, step))
+        sinceLast += step
+      }
+      await Promise.all(checks)
+      return seen
+    } catch {
+      return undefined
+    } finally {
+      await client.disconnect().catch(() => undefined)
+    }
+  }
+
+  /**
+   * "Add another agent": the current agent is left (not forgotten) so the link
+   * flow can run for a new one. A link that succeeds makes the new agent current
+   * and asks the person which to keep; one that is cancelled goes back.
+   */
+  async startAddingAgent(): Promise<void> {
+    const link = this.state.link
+    if (link.kind !== 'linked' && link.kind !== 'revoked') return
+    this.addingFrom = link.vtaDid
+    // Said before the agent is left, never after: every state a screen can see
+    // while it goes is an add under way, not a phone with no agent (Phase 1).
+    this.set({ addingAgent: true, addedAgent: undefined })
+    await this.leaveCurrent()
+  }
+
+  /**
+   * Unlink one of several agents (several agents, step 4). The current one
+   * unlinks as always, and the next comes up. Another is told first, best-
+   * effort, through a session of its own (only the current agent is connected),
+   * within the same deadline as an unlink of the current one; then this phone
+   * forgets its link, its own key for it and what a look found there. As with
+   * any unlink, the agent keeps this phone's key on its list until removed from
+   * another device (VTI-Q23), and identities and memberships stay recorded.
+   *
+   * The telling takes up to UNLINK_TELL_QUEUE_MS, so `unlinkingOthers` says
+   * the agent is going from the tap: its row stayed as it was for 5–10 s, with
+   * nothing to say the tap was taken (IN-379). It is not taken off the list
+   * before then: the telling signs in with the key this phone forgets after.
+   * An agent still on the list afterwards is marked failed, for a retry.
+   */
+  async unlinkAgent(agent: Agent, vtaDid: string): Promise<void> {
+    // Before anything of it is let go: what the phone keeps for its identities goes with it (unlinkEvent).
+    DeviceEventEmitter.emit(VTA_UNLINKING_EVENT, { vtaDid })
+    const link = this.state.link
+    if ((link.kind === 'linked' || link.kind === 'revoked') && link.vtaDid === vtaDid) return this.unlink(agent)
+    if (this.state.unlinkingOthers?.[vtaDid] === 'unlinking') return
+    this.markUnlinkingOther(vtaDid, 'unlinking')
+    let gone = false
+    try {
+      await this.unlinkOther(agent, vtaDid)
+      gone = !this.state.agents?.some((a) => a.vtaDid === vtaDid)
+    } finally {
+      this.markUnlinkingOther(vtaDid, gone ? undefined : 'failed')
+    }
+  }
+
+  private markUnlinkingOther(vtaDid: string, mark: 'unlinking' | 'failed' | undefined): void {
+    const marks = { ...(this.state.unlinkingOthers ?? {}) }
+    if (mark) marks[vtaDid] = mark
+    else delete marks[vtaDid]
+    this.set({ unlinkingOthers: marks })
+  }
+
+  private async unlinkOther(agent: Agent, vtaDid: string): Promise<void> {
+    const client = (this.deps.lookClient ?? ((a, did, store, options) => new VtaClient(a, did, store, options)))(
+      agent,
+      vtaDid,
+      this.identityStore(agent),
+      // No drain before the telling: a reply is matched by its thread, so the
+      // backlog a drain would discard cannot pass for one, and it saved 2 s.
+      { onInbound: () => undefined, connectDrainMs: 0 }
+    )
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, UNLINK_TELL_QUEUE_MS)
+    })
+    await Promise.race([
+      (async () => {
+        await client.connect()
+        await tellAgentLeaving(client)
+      })().catch(() => undefined),
+      deadline,
+    ])
+    clearTimeout(timer)
+    await client.disconnect().catch(() => undefined)
+    await this.removeLink(agent, vtaDid).catch(() => undefined)
+    await Promise.resolve(this.identityStore(agent).forgetManager?.(vtaDid)).catch(() => undefined)
+    this.namesAsked.delete(vtaDid)
+    this.lastKnownGone(vtaDid)
+    const others = { ...(this.state.otherRequests ?? {}) }
+    delete others[vtaDid]
+    this.set({ otherRequests: others })
+    await this.refreshAgents(agent)
+  }
+
+  /** The person keeps the agent just added: the question is answered. */
+  acknowledgeAdded(): void {
+    this.set({ addedAgent: undefined })
+  }
+
+  /** Back to the agent that was current before "Add another agent". */
+  async stopAddingAgent(agent: Agent): Promise<void> {
+    const from = this.addingFrom
+    this.addingFrom = undefined
+    this.set({ addingAgent: false })
+    if (from) await this.useAgent(agent, from)
+  }
+
+  /**
+   * The app handed over its agent again after an unlock (#10): locking shut the
+   * agent down and dropped every identity's in-memory keys, and unlocking
+   * either restarted the same agent or built a new one — both happen. The
+   * session belonged to the agent before the lock, so it is closed, and a
+   * session is opened on the agent now in use, which fetches every identity's
+   * keys into its memory. Without this nothing reconnected, and no identity
+   * could sign or message until the app was killed. Unlocking is the commonest
+   * thing a person does, so a link that was online stays shown online while
+   * this happens; only a reopen that fails counts as a drop.
+   */
+  private async adoptAgent(agent: Agent): Promise<void> {
+    const before = this.agent
+    // Keyring was locked meanwhile: a resumed link's further checks end; its card stays.
+    this.cancelResumeRetry()
+    this.agent = agent
+    this.fetchKeysThrough(agent)
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = undefined
+    const previous = this.current
+    // A screen may already have built a client for a NEW agent (its effects
+    // can run first): that one is current, not a leftover, and is kept.
+    if (previous && !(previous.agent === agent && before !== agent)) {
+      this.current = undefined
+      this.handedOver = previous.vtaDid
+      await previous.client.disconnect().catch(() => undefined)
+    }
+    await this.ensureOnline(agent, { reopen: true })
+  }
+
+  /** A scanned or pasted enrolment offer: ask the person before anything is minted. */
+  scanOffer(offer: EnrolmentOffer) {
+    this.offer = offer
+    this.hostOffer = undefined
+    this.ownerFor = undefined
+    this.dispatch({ type: 'offerScanned', vtaDid: offer.vta, label: offer.label, offerUrl: offer.url, exp: offer.exp })
+  }
+
+  cancelLink() {
+    this.cancelResumeRetry()
+    const cancelling = this.state.link
+    // The attempt given up: the one on screen, or the one a failure names
+    // (a swap held for an approval ends there, its key kept for Try again).
+    const attemptFor =
+      'vtaDid' in cancelling
+        ? cancelling.vtaDid
+        : cancelling.kind === 'notLinked'
+          ? cancelling.lastError?.vtaDid
+          : undefined
+    this.attemptToken++
+    this.offer = undefined
+    this.hostOffer = undefined
+    this.ownerFor = undefined
+    this.dispatch({ type: 'cancelled' })
+    // Given up on purpose: its temporary key is not offered again (IN-135).
+    // Not yet from `linking`: the key swap may be under way, and a rotate
+    // already in flight would write the record back with its next key. That
+    // key goes once the swap settles.
+    if (this.agent && attemptFor && cancelling.kind !== 'linked') {
+      if (cancelling.kind === 'linking') this.backedOut.add(attemptFor)
+      else void this.forgetTemporaryKey(this.agent, attemptFor)
+    }
+    // Adding another agent, given up: back to the one before.
+    if (this.addingFrom && this.agent) void this.stopAddingAgent(this.agent)
+  }
+
+  /**
+   * After a failure or a revocation, back to a phone with no agent. After a
+   * revocation ("Link again"), the removed agent is also forgotten as a link:
+   * its key is no longer on the agent's list, so the stored link is of no use,
+   * and left on the list of agents it made a scan of that agent say "This
+   * phone already has that agent" with nothing to switch to (IN-251). The
+   * identities made for its communities are kept, as an unlink keeps them.
+   */
+  relink() {
+    const was = this.state.link
+    this.dispatch({ type: 'relink' })
+    if (was.kind !== 'revoked') return
+    // At once, so a scan straight after is not refused; the store follows.
+    this.set({ agents: (this.state.agents ?? []).filter((a) => a.vtaDid !== was.vtaDid) })
+    if (this.agent) void this.forgetRemovedAgent(this.agent, was.vtaDid)
+  }
+
+  /** A removed agent's link and this phone's key for it, gone; the list of agents read again. */
+  private async forgetRemovedAgent(agent: Agent, vtaDid: string): Promise<void> {
+    await this.removeLink(agent, vtaDid).catch(() => undefined)
+    await Promise.resolve(this.identityStore(agent).forgetManager?.(vtaDid)).catch(() => undefined)
+    await this.refreshAgents(agent).catch(() => undefined)
+  }
+
+  /**
+   * The person unlinks this phone from its agent. Everything is local: the
+   * session is closed, the stored link and this phone's manager identity for
+   * the agent are forgotten, and pending approvals are dropped, so nothing
+   * here can act for the agent again. The agent keeps this phone's key on its
+   * ACL until its owner removes it — a VTA refuses a client's request to
+   * delete its own entry (VTI-Q23) — so the screen says so, and an agent that
+   * cannot be reached changes nothing. Community identities and memberships
+   * stay recorded: they are held by that agent, and linking it again brings
+   * them back. Never throws; a store that fails to clear is retried at the
+   * next unlink, and the phone is unlinked either way.
+   */
+  async unlink(agent: Agent): Promise<void> {
+    const vtaDid = this.state.link.kind === 'notLinked' ? undefined : this.state.link.vtaDid
+    // Before anything of it is let go: what the phone keeps for its identities goes with it (unlinkEvent).
+    DeviceEventEmitter.emit(VTA_UNLINKING_EVENT, { vtaDid })
+    // Every state published until the next agent is up says an unlink is under
+    // way, so no screen draws "Link your agent" in between (Phase 1).
+    this.set({ unlinking: true })
+    try {
+      await this.unlinkCurrent(agent, vtaDid)
+    } finally {
+      this.set({ unlinking: false })
+    }
+  }
+
+  private async unlinkCurrent(agent: Agent, vtaDid: string | undefined): Promise<void> {
+    this.cancelResumeRetry()
+    await this.tellAgentBeforeUnlink()
+    this.attemptToken++
+    this.offer = undefined
+    this.ownerFor = undefined
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = undefined
+    this.reconnectAttempt = 0
+    await this.reset()
+    await this.clearLink(agent, vtaDid).catch(() => undefined)
+    if (vtaDid) {
+      await Promise.resolve(this.identityStore(agent).forgetManager?.(vtaDid)).catch(() => undefined)
+      this.namesAsked.delete(vtaDid)
+      this.lastKnownGone(vtaDid)
+    }
+    this.set({
+      status: 'disconnected',
+      vtaDid: undefined,
+      managerDid: undefined,
+      approvals: [],
+      awaitingConsentFor: undefined,
+      awaitingConsentCode: undefined,
+      consentGranted: undefined,
+      consentNotGiven: undefined,
+      wakeBlockedByRule: undefined,
+      error: undefined,
+      ownsAgent: false,
+    })
+    this.dispatch({ type: 'unlinked' })
+    this.note('unlinked')
+    // Another linked agent is now current (the store's oldest): it comes up.
+    await this.takeUpCurrent(agent, { not: vtaDid })
+    if (this.state.link.kind === 'notLinked') vtiAgent.clearFailure()
+  }
+
+  /**
+   * Before the local unlink, tell a reachable agent (A6, upstream alignment):
+   * stop waking this phone (`device/set-wake`, empty), then end this phone's
+   * sessions (`auth/revoke-session/0.2`, `all`). Best-effort and bounded by
+   * {@link UNLINK_TELL_DEADLINE_MS}: offline, nothing is sent; a refusal or a
+   * silence changes nothing, and the phone unlinks either way.
+   */
+  private async tellAgentBeforeUnlink(): Promise<void> {
+    const link = this.state.link
+    const client = this.current?.client
+    if (link.kind !== 'linked' || link.connection.kind !== 'online' || !client) return
+    // What was queued or in flight (an app just started runs whoami …
+    // device/list) is pointless once the phone unlinks, and went first: the
+    // telling waited behind it past its deadline and never reached the agent
+    // (227 gate, U4). Dropped, the telling is sent at once; offline, it fails
+    // at once and the phone unlinks without waiting.
+    client.dropQueued()
+    // The deadline counts from when the agent is told, not from the tap; at
+    // most UNLINK_TELL_QUEUE_MS in all, sent or not. Timers, not clock readings.
+    const timers: ReturnType<typeof setTimeout>[] = []
+    let giveUp: () => void = () => undefined
+    const deadline = new Promise<void>((resolve) => {
+      giveUp = resolve
+      timers.push(setTimeout(resolve, UNLINK_TELL_QUEUE_MS))
+    })
+    const tell = tellAgentLeaving(client, () => {
+      timers.push(setTimeout(giveUp, UNLINK_TELL_DEADLINE_MS))
+    })
+    await Promise.race([tell, deadline])
+    timers.forEach((timer) => clearTimeout(timer))
+  }
+
+  /**
+   * The person chose to erase this phone's copy of its agent (#10), after the
+   * agent stopped accepting it — or at any time. Only this phone's data for
+   * that agent goes: for each identity this phone minted through it, the
+   * borrowed key copies, the identity record, and the community's membership,
+   * invitations and delivered credentials; then everything {@link unlink}
+   * forgets. Contacts, DIDComm connections and the wallet's own credentials
+   * stay. The agent holds every identity's keys, so linking again (or another
+   * device) loses nothing. Never erases on its own: a refusal alone may be a
+   * mistake or a restore, so the person decides. Never throws; a record that
+   * fails to go is left, and the phone is unlinked either way.
+   */
+  async eraseThisPhonesCopy(agent: Agent): Promise<void> {
+    const vtaDid = this.state.link.kind === 'notLinked' ? undefined : this.state.link.vtaDid
+    if (vtaDid) {
+      const identities = this.identityStore(agent)
+      const communities = this.communityStore(agent)
+      const personas = await identities.listPersonas().catch(() => [])
+      for (const persona of personas.filter((p) => p.vtaDid === vtaDid)) {
+        for (const keyId of Object.values(persona.kmsKeyIds ?? {})) {
+          if (keyId) await forgetKeyCopy(agent, keyId)
+        }
+        await communities.forgetCommunity(persona.communityDid, persona.did).catch(() => undefined)
+        await identities.forgetPersona(persona.communityDid, persona.vtaDid).catch(() => undefined)
+      }
+    }
+    await this.unlink(agent)
+  }
+
+  /**
+   * A scanned agent-host QR (`{ vta_did, callback_url }`): ask the person
+   * before anything is minted or sent, showing the agent and the host's site.
+   * The callback is kept out of the state the screens read.
+   */
+  scanHostOffer(offer: AgentHostOffer) {
+    this.hostOffer = offer
+    this.offer = undefined
+    this.ownerFor = undefined
+    this.dispatch({
+      type: 'offerScanned',
+      vtaDid: offer.vtaDid,
+      label: offer.vtaDid.split(':')[3] ?? offer.vtaDid,
+      offerUrl: offer.host,
+      exp: this.now() + AGENT_HOST_QR_LIFETIME_MS,
+      via: 'host',
+    })
+  }
+
+  /**
+   * The person agreed to an agent host's automatic connection: this phone's
+   * did:key — the form a host's Admin DID takes — goes to the callback, the
+   * phone waits while the host sets the agent up, then signs in and rotates
+   * as every link does, and tells the host it connected. A phone with no
+   * screen lock is refused first, as for "Create my agent": it becomes an
+   * administrator, and the agent is remembered as its own.
+   */
+  private async confirmHostOffer(agent: Agent): Promise<void> {
+    const offer = this.hostOffer
+    if (!offer || this.state.link.kind !== 'confirming') return
+    // A code the person confirms after it has lapsed (the phone slept on this
+    // screen, IN-135) is said to have, before anything is sent: the host
+    // would refuse it, and only after a key had been made for it.
+    if (this.state.link.exp && this.now() > this.state.link.exp) {
+      this.hostOffer = undefined
+      this.dispatch({ type: 'confirmed' })
+      this.dispatch({
+        type: 'failed',
+        failure: { reason: 'expired', hostReason: 'expired', detail: 'the code lapsed before it was confirmed' },
+      })
+      return
+    }
+    const token = ++this.attemptToken
+    const live = () => token === this.attemptToken
+    this.dispatch({ type: 'confirmed' })
+    const identities = this.identityStore(agent)
+    const label = offer.vtaDid.split(':')[3] ?? offer.vtaDid
+    try {
+      if (this.hasAgent(offer.vtaDid)) throw new AgentAlreadyOnPhone(offer.vtaDid)
+      const canOwn = this.deps.deviceCanOwn
+      if (canOwn && !(await canOwn())) throw new DeviceCannotOwn()
+      this.ownerFor = offer.vtaDid
+      if (await this.resumeEarlierLink(agent, offer.vtaDid, label, identities, live)) return
+      if (!live()) return
+      await connectWithAgentHost(offer, {
+        ...(this.deps.fetch ? { fetch: this.deps.fetch } : {}),
+        ...this.deps.agentHost,
+        shouldStop: () => !live(),
+        adminDid: async () => {
+          await resolveVtaMediator(agent, offer.vtaDid)
+          const did = await createVtiTemporaryDidKey(agent)
+          await identities.setManager({
+            vtaDid: offer.vtaDid,
+            did,
+            createdAt: new Date(this.now()).toISOString(),
+            stage: 'temporary',
+          })
+          return did
+        },
+        onAccepted: (accepted) => {
+          if (!live()) return
+          this.dispatch({ type: 'submitted', code: '' })
+          this.dispatch({
+            type: 'hostStage',
+            step: accepted.status === 'provisioning' ? 'creating' : 'connecting',
+            now: this.now(),
+          })
+        },
+        onStatus: (status) => {
+          if (live()) {
+            this.dispatch({
+              type: 'hostStage',
+              step: status === 'provisioning' ? 'creating' : 'connecting',
+              now: this.now(),
+            })
+          }
+        },
+        link: async () => {
+          if (!live()) throw new AgentHostConnectionError('cancelled')
+          const signedIn = await this.signInOnceReady(agent, offer.vtaDid, identities, live)
+          if (!live()) throw new AgentHostConnectionError('cancelled')
+          this.dispatch({ type: 'granted' })
+          // With the agent in use now: a lock while the host worked hands over a
+          // new one. The signed-in client goes along only if it was made on
+          // that agent; a lock since then leaves it on a shut-down one, and the
+          // link signs in afresh.
+          const current = this.agent ?? agent
+          await this.finishLink(
+            current,
+            offer.vtaDid,
+            label,
+            current === agent ? identities : this.identityStore(current),
+            live,
+            signedIn.agent === current ? signedIn.client : undefined
+          )
+        },
+        warn: (message) => agent.config?.logger?.warn?.(`[TrustTasks:VtaAgent] ${message}`),
+      })
+    } catch (error) {
+      if (!live()) return
+      if (error instanceof AgentHostConnectionError && error.reason === 'cancelled') return
+      const failure =
+        error instanceof AgentHostConnectionError
+          ? hostFailure(error)
+          : error instanceof DeviceCannotOwn
+            ? { reason: 'refused' as const, detail: 'no screen lock', hostReason: 'needsScreenLock' as const }
+            : error instanceof CommunityAgentRefused
+              ? { reason: 'communityAgent' as const, detail: error.message }
+              : error instanceof AgentAlreadyOnPhone
+                ? { reason: 'alreadyLinked' as const, detail: error.message }
+                : withSwapReason(
+                    { reason: 'failed', detail: error instanceof Error ? error.message : String(error) },
+                    error
+                  )
+      this.ownerFor = undefined
+      this.set({ status: 'failed', error: failure.detail })
+      this.dispatch({ type: 'failed', failure })
+    } finally {
+      if (live()) this.hostOffer = undefined
+    }
+  }
+
+  /**
+   * Sign in as the temporary key once a host says the agent is ready. The
+   * agent has just restarted with this phone on its access list, so a
+   * refusal or silence is tried again, a few seconds apart, before giving up.
+   */
+  private async signInOnceReady(
+    agent: Agent,
+    vtaDid: string,
+    identities: VtiIdentityStore,
+    live: () => boolean
+  ): Promise<{ client: VtaClient; agent: Agent }> {
+    const wait = this.deps.agentHost?.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
+    let last: unknown
+    for (let attempt = 0; attempt < HOST_SIGN_IN_TRIES; attempt++) {
+      if (!live()) throw new AgentHostConnectionError('cancelled')
+      // Keyring locked meanwhile (IN-135): its agent is shut down until the
+      // person unlocks, when a new one is handed over. Waiting for it spends
+      // no try, and each try signs in with the agent in use now — the one
+      // this began with may be shut down for good.
+      while (!agentIsUp(this.agent ?? agent)) {
+        if (!live()) throw new AgentHostConnectionError('cancelled')
+        await wait(this.deps.hostSignInRetryMs ?? HOST_SIGN_IN_RETRY_MS)
+      }
+      const now = this.agent ?? agent
+      if (now !== agent) {
+        agent = now
+        identities = this.identityStore(now)
+      }
+      // The first try is "connecting this phone"; a retry says which try it is.
+      this.dispatch(
+        attempt === 0
+          ? { type: 'hostStage', step: 'connecting', now: this.now() }
+          : { type: 'hostStage', step: 'signingIn', attempt: attempt + 1, of: HOST_SIGN_IN_TRIES, now: this.now() }
+      )
+      await this.reset()
+      const client = this.client(agent, vtaDid, identities)
+      this.set({ status: 'connecting', error: undefined })
+      try {
+        const connected = await withDeadline(
+          client.connect(),
+          this.deps.grantConnectDeadlineMs ?? GRANT_CONNECT_DEADLINE_MS
+        )
+        if (connected) {
+          await client.whoAmI()
+          // With the agent it was signed in on: a lock after this hands over another.
+          return { client, agent }
+        }
+        last = new Error('the agent did not answer')
+      } catch (error) {
+        last = error
+      }
+      await wait(this.deps.hostSignInRetryMs ?? HOST_SIGN_IN_RETRY_MS)
+    }
+    await this.reset()
+    throw last instanceof Error ? last : new Error(String(last))
+  }
+
+  /**
+   * The person agreed to link: submit the temporary key, wait for the admin,
+   * then sign in as that key and rotate onto a long-lived one. Every step
+   * moves the machine; the screen only renders it.
+   */
+  async confirmOffer(agent: Agent): Promise<void> {
+    if (this.hostOffer) return this.confirmHostOffer(agent)
+    const offer = this.offer
+    if (!offer || this.state.link.kind !== 'confirming') return
+    this.backedOut.delete(offer.vta)
+    const token = ++this.attemptToken
+    const live = () => token === this.attemptToken
+    this.dispatch({ type: 'confirmed' })
+    const identities = this.identityStore(agent)
+    const enrol = this.deps.enrol ?? { submit: submitEnrolment, waitForGrant }
+    try {
+      if (this.hasAgent(offer.vta)) throw new AgentAlreadyOnPhone(offer.vta)
+      if (await this.resumeEarlierLink(agent, offer.vta, offer.label, identities, live)) return
+      if (!live()) return
+      const { code } = await enrol.submit(agent, offer, identities, { fetch: this.deps.fetch })
+      if (!live()) return
+      this.dispatch({ type: 'submitted', code })
+      await enrol.waitForGrant(offer, { fetch: this.deps.fetch, shouldStop: () => !live() })
+      if (!live()) return
+      this.dispatch({ type: 'granted' })
+      // With the agent in use now: a lock while the admin decided hands over a new one.
+      const current = this.agent ?? agent
+      await this.finishLink(
+        current,
+        offer.vta,
+        offer.label,
+        current === agent ? identities : this.identityStore(current),
+        live
+      )
+    } catch (error) {
+      if (!live()) return this.settleBackedOut(this.agent ?? agent, offer.vta)
+      const detail = error instanceof Error ? error.message : String(error)
+      this.set({ status: 'failed', error: detail })
+      this.dispatch({
+        type: 'failed',
+        failure: withSwapReason(
+          {
+            reason:
+              error instanceof EnrolmentError
+                ? error.reason
+                : error instanceof CommunityAgentRefused
+                  ? 'communityAgent'
+                  : error instanceof AgentAlreadyOnPhone
+                    ? 'alreadyLinked'
+                    : 'failed',
+            detail,
+          },
+          error
+        ),
+      })
+    } finally {
+      if (live()) this.offer = undefined
+    }
+  }
+
+  /**
+   * A fresh link attempt for an agent this phone left a key swap unsettled
+   * with — the swap's answer was lost, and the app never settled it. The agent
+   * may hold the successor key, and minting a new temporary key would
+   * overwrite the only record of it, so the agent is asked first (a connect
+   * settles a pending swap). If it knows one of this phone's keys the phone is
+   * linked again with it, no new grant needed: true. If it refused both, the
+   * record holds nothing live and the attempt goes on as a new link: false.
+   * If it could not be asked, the attempt fails rather than risk the key.
+   *
+   * A pending swap with a different agent is left alone: the identity store
+   * keeps one record per agent, so it waits there for that agent to be linked
+   * again. The phone cannot take the key off that agent's ACL (VTI-Q23); only
+   * its admin can.
+   */
+  private async resumeEarlierLink(
+    agent: Agent,
+    vtaDid: string,
+    label: string,
+    identities: VtiIdentityStore,
+    live: () => boolean
+  ): Promise<boolean> {
+    const record = await Promise.resolve(identities.getManager?.(vtaDid)).catch(() => undefined)
+    if (!record?.pendingNext) return false
+    await this.reset()
+    const client = this.client(agent, vtaDid, identities)
+    this.set({ status: 'connecting', error: undefined })
+    try {
+      await client.connect()
+    } catch (error) {
+      await this.reset()
+      if (isUnsettledSwap(error) && error.refusedBoth) return false
+      const detail = error instanceof Error ? error.message : String(error)
+      throw new EnrolmentError(detail, 'unreachable')
+    }
+    if (!live()) return true
+    // Settled: rotate only a temporary key the VTA confirmed it kept (the swap
+    // never happened). A successor still pending is never replaced by a new
+    // one — rotating would overwrite it — and the next connect asks again.
+    const settled = await Promise.resolve(identities.getManager(vtaDid)).catch(() => undefined)
+    const rotate = settled?.stage === 'temporary' && !settled.pendingNext
+    this.dispatch({ type: 'resumed', vtaDid, label })
+    await this.finishLink(agent, vtaDid, label, identities, live, client, rotate)
+    return true
+  }
+
+  /**
+   * The granted key signs in, rotates onto a long-lived one, and the agent is
+   * remembered — the same for a scanned offer and for a key pasted by hand.
+   * Assumes the machine is in `linking` (it dispatched `granted`).
+   *
+   * The link is remembered before the swap is sent: the agent granted this
+   * phone, and the swap only moves that grant to another of its keys. So an
+   * answer lost to a dropped socket or a killed app leaves a linked phone
+   * whose next connect settles which key the agent holds — never an unlinked
+   * one whose agent holds a key it will not use again.
+   */
+  /**
+   * Whether the agent just signed in to serves a community rather than a
+   * person. A full_stack agent's DID advertises only VTARest, so its own
+   * document cannot say (keyring-test, 10-05); what it holds can. In order:
+   * its DID read as a community's (or both); a context named "VTC", as VTC
+   * setup names it (vtc-service setup/wizard.rs); a context whose DID is a
+   * community's, reading at most a few. An answer it cannot give is not a
+   * reason to refuse a person their own agent.
+   */
+  private async servesACommunity(agent: Agent, client: VtaClient, vtaDid: string): Promise<boolean> {
+    const canResolve = typeof (agent as unknown as { dids?: { resolve?: unknown } })?.dids?.resolve === 'function'
+    const isCommunity = async (did: string) => {
+      if (!canResolve) return false
+      const kind = await classifyDid(agent as unknown as DidResolverAgent, did).catch(() => undefined)
+      return kind?.kind === 'community' || kind?.kind === 'ambiguous'
+    }
+    if (await isCommunity(vtaDid)) return true
+    // Bounded: an agent that does not answer this is not a reason to hold up
+    // the link a person asked for.
+    let contexts: VtaContext[] = []
+    const reading = Promise.resolve()
+      .then(() => client.listContexts())
+      .then((found) => {
+        contexts = found
+      })
+    await withDeadline(reading, COMMUNITY_CHECK_MS).catch(() => false)
+    if (contexts.some((c) => typeof c.name === 'string' && c.name.trim().toUpperCase() === 'VTC')) return true
+    const dids = [
+      ...new Set(
+        contexts
+          .map((c) => c.did)
+          .filter((d): d is string => typeof d === 'string' && d.startsWith('did:') && d !== vtaDid)
+      ),
+    ].slice(0, COMMUNITY_CONTEXTS_READ)
+    const found = await Promise.all(dids.map(isCommunity))
+    return found.some(Boolean)
+  }
+
+  private async finishLink(
+    agent: Agent,
+    vtaDid: string,
+    label: string,
+    identities: VtiIdentityStore,
+    live: () => boolean,
+    signedIn?: VtaClient,
+    rotate = true
+  ): Promise<void> {
+    let client = signedIn
+    if (!client) {
+      // A fresh client: whatever session an earlier link left must not be reused.
+      await this.reset()
+      client = this.client(agent, vtaDid, identities)
+      this.set({ status: 'connecting', error: undefined })
+      await client.connect()
+      await client.whoAmI()
+    }
+    if (!live()) return
+    if (await this.servesACommunity(agent, client, vtaDid)) {
+      // Nothing of this agent stays on the phone: not its link, not the
+      // temporary key made for it. The key this phone was granted stays on
+      // that agent's list until its admin removes it (a VTA refuses a
+      // self-delete).
+      await client.disconnect().catch(() => undefined)
+      await Promise.resolve(identities.forgetManager?.(vtaDid)).catch(() => undefined)
+      throw new CommunityAgentRefused(vtaDid)
+    }
+    const linkedAt = new Date(this.now()).toISOString()
+    const links = this.linkStore(agent)
+    const owner = this.ownerFor === vtaDid
+    this.ownerFor = undefined
+    // Read before the swap below moves the manager record onto the long-term key.
+    // A claim key keeps its Farm on its own record, so a Try again with it
+    // after a swap that never happened, even after a restart, still knows it.
+    const manager = await Promise.resolve(identities.getManager?.(vtaDid)).catch(() => undefined)
+    const farmLogin = manager?.claimedFrom ? { farmLogin: { farmDid: manager.claimedFrom, did: manager.did } } : {}
+    await withKeyLock(vtaLinkLockKey(vtaDid), () =>
+      links.set({ vtaDid, label, linkedAt, ...(owner ? { owner: true } : {}), ...farmLogin })
+    )
+    // The agent just linked is the one this phone acts with: the store keeps
+    // every linked agent, and a link no longer replaces another one's record.
+    await links.use?.(vtaDid)
+    this.set({ ownsAgent: owner })
+    // Kept until the swap settles: a swap the agent does not make undoes the
+    // link, and an "Add" then still goes back to the agent before.
+    const addingFrom = this.addingFrom
+    if (this.addingFrom && this.addingFrom !== vtaDid) {
+      this.set({ addingAgent: false, addedAgent: { from: this.addingFrom, added: vtaDid } })
+    } else if (this.state.addingAgent) {
+      this.set({ addingAgent: false })
+    }
+    this.addingFrom = undefined
+    await this.refreshAgents(agent)
+    if (rotate) {
+      this.dispatch({ type: 'rotating' })
+      try {
+        await client.rotateManagerKey()
+        // An approval rule held the swap and then let it through: no longer waiting (UX-240-a).
+        this.set({ awaitingConsentFor: undefined, awaitingConsentCode: undefined })
+      } catch (error) {
+        // Held, refused or lost: the screen stops saying it waits for an approval.
+        this.set({ awaitingConsentFor: undefined, awaitingConsentCode: undefined })
+        // Swapped, but the new key's sign-in failed: linked, and it reconnects (below).
+        const swapDone = error instanceof SwapDoneSignInFailed
+        if (!swapDone && !(await this.swapStillOpen(error, identities, vtaDid))) {
+          // Settled on the VTA's word that the swap never happened (or it was
+          // refused outright): the attempt failed, as before, and is forgotten.
+          // The list of agents is read again, as the link was added to it: an
+          // agent left on it read as already on the phone, so a held swap
+          // offered no Try again and a scan of it said "already linked".
+          // Only this agent's: a person who went back meanwhile made the one
+          // before current again, and that link stays.
+          await withKeyLock(vtaLinkLockKey(vtaDid), () => (links.remove ? links.remove(vtaDid) : links.clear())).catch(
+            () => undefined
+          )
+          if (addingFrom && addingFrom !== vtaDid) {
+            // An "Add" that did not finish: back is still back to the agent before.
+            this.addingFrom = addingFrom
+            this.set({ addingAgent: true, addedAgent: undefined })
+          }
+          await this.refreshAgents(agent).catch(() => undefined)
+          throw error
+        }
+        // The swap's outcome is not known yet. Linked, offline: the next
+        // connect asks the VTA which key it holds, and this screen does not
+        // say "didn't answer" about a request the agent may well have done.
+        const reason = error instanceof Error ? error.message : String(error)
+        await this.reset()
+        this.set({ introSeen: false, status: 'disconnected', vtaDid, error: reason })
+        this.reconnectAttempt = 0
+        this.dispatch({ type: 'linked', linkedAt, connection: { kind: 'offline', since: this.now(), reason } })
+        void this.ensureOnline(agent)
+        return
+      }
+      // The new key has never spoken to the VTA; a round trip gives it a reply route (VTI-24).
+      await client.whoAmI().catch(() => undefined)
+      // Approval rules that name the swapped-out key follow this phone onto the new one.
+      void this.carryApprovers(agent, vtaDid)
+      // This phone does not label its own access entry: an agent refuses any
+      // change to the caller's own entry (VTI-ACL-052), so the entry keeps the
+      // label it was granted with. The key screens suggest one for whoever
+      // grants it (IN-200).
+      agent.config?.logger?.debug?.(
+        "[TrustTasks:VtaAgent] not labelling this phone's own access entry: agents refuse a self-update (VTI-ACL-052)"
+      )
+    }
+    this.set({ introSeen: false })
+    this.reconnectAttempt = 0
+    this.set({ status: 'connected', vtaDid, managerDid: client.managerDid })
+    this.dispatch({ type: 'linked', linkedAt })
+    this.learnAgentName(client, vtaDid)
+  }
+
+  /** Whether this phone still speaks to `vtaDid` with the temporary key its link began with. */
+  private async onTemporaryKey(agent: Agent, vtaDid: string): Promise<boolean> {
+    const record = await Promise.resolve(this.identityStore(agent).getManager?.(vtaDid)).catch(() => undefined)
+    return record?.stage === 'temporary'
+  }
+
+  /**
+   * Whether a failed rotation left the successor pending: the VTA could not
+   * be asked, or it was asked and the answer did not settle it. Refused both
+   * keys is settled — nothing live is left to link with.
+   */
+  private async swapStillOpen(error: unknown, identities: VtiIdentityStore, vtaDid: string): Promise<boolean> {
+    if (isUnsettledSwap(error)) return !error.refusedBoth
+    const record = await Promise.resolve(identities.getManager?.(vtaDid)).catch(() => undefined)
+    return Boolean(record?.pendingNext)
+  }
+
+  /**
+   * Linking without a QR (plan §5.1 fallback): the person names their agent,
+   * the phone mints its temporary key and shows it, and the admin pastes it
+   * into their own console — upstream's Grant access form, or the Farm's
+   * admin-DID step. Nothing is submitted anywhere by the phone.
+   */
+  /**
+   * Whether this phone already has `vtaDid` among its agents — by DID, never
+   * by a name (IN-132), whichever agent is current or none is (an "Add" has
+   * left the current one). Not a removed phone's own agent: linking it again
+   * is the way back.
+   */
+  hasAgent(vtaDid: string): boolean {
+    const { link, agents } = this.state
+    if (link.kind === 'revoked' && link.vtaDid === vtaDid) return false
+    return (link.kind === 'linked' && link.vtaDid === vtaDid) || (agents ?? []).some((a) => a.vtaDid === vtaDid)
+  }
+
+  /**
+   * Go to an agent this phone already has, from an "Add" that named it: the
+   * adding is given up and that agent becomes current.
+   */
+  async switchToExisting(agent: Agent, vtaDid: string): Promise<void> {
+    this.attemptToken++
+    this.offer = undefined
+    this.hostOffer = undefined
+    this.ownerFor = undefined
+    this.addingFrom = undefined
+    this.set({ addingAgent: false })
+    await this.useAgent(agent, vtaDid)
+  }
+
+  /**
+   * A temporary key this phone made for linking `vtaDid` (or, without one,
+   * for any agent) and could not finish with: the grant may already be on
+   * the agent. Only while it is young enough to still be granted, not in the
+   * middle of a key swap (`resumeEarlierLink`'s), and for an agent not
+   * already linked.
+   */
+  async pendingLinkKey(agent: Agent, vtaDid?: string): Promise<{ vtaDid: string; did: string } | undefined> {
+    const identities = this.identityStore(agent)
+    const records = vtaDid
+      ? [await Promise.resolve(identities.getManager?.(vtaDid)).catch(() => undefined)]
+      : await Promise.resolve(identities.listManagers?.()).catch(() => undefined)
+    const linked = new Set([
+      ...(this.state.agents ?? []).map((a) => a.vtaDid),
+      ...(this.state.link.kind === 'linked' ? [this.state.link.vtaDid] : []),
+    ])
+    const now = this.now()
+    const fresh = (records ?? [])
+      .filter((r): r is VtiManagerIdentity => Boolean(r))
+      .filter(
+        (r) =>
+          r.stage === 'temporary' &&
+          !r.pendingNext &&
+          !linked.has(r.vtaDid) &&
+          // The app's own pick-up skips a link the person backed out of.
+          (vtaDid !== undefined || !this.backedOut.has(r.vtaDid)) &&
+          now - Date.parse(r.createdAt) < TEMPORARY_KEY_REUSE_MS
+      )
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    return fresh[0] ? { vtaDid: fresh[0].vtaDid, did: fresh[0].did } : undefined
+  }
+
+  /**
+   * Pick a link left part-way back up (IN-135): a sleep, Keyring's lock or a
+   * restart dropped it, or it failed for a reason that was not a refusal
+   * (`resumableFailure`). The same temporary key is shown again — the agent
+   * may already hold it — and checked once; the person can check again from
+   * there. Nothing happens while something is linked or under way, or while
+   * another agent is being added. Without `vtaDid` (the app's own pick-up, at
+   * start and back in the foreground) a refused attempt is not retried: only
+   * the person's Try again names an agent. Whether there was one to pick up.
+   */
+  async resumeLink(agent: Agent, vtaDid?: string): Promise<boolean> {
+    if (this.state.link.kind !== 'notLinked' || this.resuming) return false
+    if (!vtaDid && this.state.addingAgent) return false
+    const failed = this.state.link.lastError
+    if (!vtaDid && failed && !resumableFailure(failed)) return false
+    this.resuming = true
+    try {
+      const pending = await this.pendingLinkKey(agent, vtaDid)
+      if (!pending || this.state.link.kind !== 'notLinked') return false
+      const lastError = this.state.link.lastError
+      const label =
+        lastError?.vtaDid === pending.vtaDid && lastError.label
+          ? lastError.label
+          : (pending.vtaDid.split(':')[3] ?? pending.vtaDid)
+      this.dispatch({ type: 'keyShown', vtaDid: pending.vtaDid, label, did: pending.did, resumed: true })
+      await this.checkManualGrant(agent)
+      // One check that got no answer is not the end: a slow relaunch would otherwise leave a link the agent already
+      // granted on "Continue linking" until the person tapped it (the 1018-2239 gate, a busy runner).
+      this.scheduleResumeRetry(agent, pending.vtaDid, pending.did, 0)
+      return true
+    } finally {
+      this.resuming = false
+    }
+  }
+
+  /** Whether the key shown is still the resumed `did` for `vtaDid`, its last check unanswered and none under way. */
+  private resumedUnanswered(vtaDid: string, did: string): boolean {
+    const link = this.state.link
+    return (
+      link.kind === 'showingKey' &&
+      link.vtaDid === vtaDid &&
+      link.did === did &&
+      link.resumed === true &&
+      link.noAnswer === true &&
+      !link.checking
+    )
+  }
+
+  /**
+   * Check a resumed link again after RESUME_RETRY_DELAYS_MS[step], if it is still shown unanswered: only after no
+   * answer, never after "not added yet" or a refusal. In the background it waits for the foreground, where it
+   * checks at once. Any change of the link (linked, refused, cancelled, another key) ends it, as do unlink and a lock.
+   */
+  private scheduleResumeRetry(agent: Agent, vtaDid: string, did: string, step: number): void {
+    this.cancelResumeRetry()
+    if (step >= RESUME_RETRY_DELAYS_MS.length || !this.resumedUnanswered(vtaDid, did)) return
+    const run = async (): Promise<void> => {
+      this.resumeRetry = undefined
+      if (!this.resumedUnanswered(vtaDid, did)) return
+      if (AppState.currentState !== 'active') {
+        const subscription = AppState.addEventListener('change', (next) => {
+          if (next !== 'active') return
+          this.cancelResumeRetry()
+          void run()
+        })
+        this.resumeRetry = { subscription }
+        return
+      }
+      agent.config?.logger?.info?.(
+        `[VTA] checking a resumed link again (${step + 1} of ${RESUME_RETRY_DELAYS_MS.length})`
+      )
+      await this.checkManualGrant(this.agent ?? agent).catch(() => undefined)
+      this.scheduleResumeRetry(agent, vtaDid, did, step + 1)
+    }
+    this.resumeRetry = { timer: setTimeout(() => void run(), RESUME_RETRY_DELAYS_MS[step]) }
+  }
+
+  private cancelResumeRetry(): void {
+    if (this.resumeRetry?.timer) clearTimeout(this.resumeRetry.timer)
+    this.resumeRetry?.subscription?.remove()
+    this.resumeRetry = undefined
+  }
+
+  /** A swap the person backed out of has settled: its temporary key goes, as on any cancel. */
+  private settleBackedOut(agent: Agent, vtaDid: string): void {
+    if (this.backedOut.delete(vtaDid)) void this.forgetTemporaryKey(agent, vtaDid)
+  }
+
+  /** Drop a temporary key no attempt will use again (a cancel). A settled key is never touched. */
+  private async forgetTemporaryKey(agent: Agent, vtaDid: string): Promise<void> {
+    const identities = this.identityStore(agent)
+    const record = await Promise.resolve(identities.getManager?.(vtaDid)).catch(() => undefined)
+    if (record?.stage !== 'temporary' || record.pendingNext) return
+    if ((this.state.agents ?? []).some((a) => a.vtaDid === vtaDid)) return
+    await Promise.resolve(identities.forgetManager?.(vtaDid)).catch(() => undefined)
+  }
+
+  /**
+   * `probe`: the DID did not say it is an agent (no REST endpoint) and is
+   * reached through a mediator as one is. Its key is shown and checked at once,
+   * within the usual deadlines: an agent answers, granted or not yet; anything
+   * that does not answer is said not to be an agent this phone can link, with
+   * a way back, rather than leaving the person on a key nobody will grant.
+   */
+  async startManualLink(
+    agent: Agent,
+    vtaDid: string,
+    label: string,
+    opts: { via?: 'scan'; probe?: boolean } = {}
+  ): Promise<void> {
+    await this.beginManualLink(agent, vtaDid, label, false, opts.via)
+    if (opts.probe) void this.probeAsAgent(agent, vtaDid).catch(() => undefined)
+  }
+
+  /** One check of a key shown for a DID tried as an agent; no answer ends the attempt (`notAnAgent`). */
+  private async probeAsAgent(agent: Agent, vtaDid: string): Promise<void> {
+    const shown = this.state.link
+    if (shown.kind !== 'showingKey' || shown.vtaDid !== vtaDid) return
+    await this.checkManualGrant(agent)
+    const after = this.state.link
+    if (after.kind !== 'showingKey' || after.vtaDid !== vtaDid || !after.noAnswer) return
+    this.attemptToken++
+    this.dispatch({ type: 'failed', failure: { reason: 'notAnAgent' } })
+    await this.forgetTemporaryKey(agent, vtaDid)
+  }
+
+  /**
+   * "Create my agent" (own_agent_subtask.md §1): the person created the agent
+   * on the Farm and brought its address here; the phone makes its owner code
+   * — today's temporary key — for the Farm's Admin DID box. It is the manual
+   * link from here on (`showingKey`, then `checkManualGrant`, then the swap
+   * onto a long-term key), with two differences: a phone with no screen lock
+   * or biometrics is refused before any key is made ({@link DeviceCannotOwn}),
+   * and the finished link is remembered as this phone's own (`ownsAgent`).
+   */
+  async startCreateAgent(agent: Agent, vtaDid: string, label: string = vtaDid): Promise<void> {
+    if (this.state.link.kind !== 'notLinked') return
+    if (this.hasAgent(vtaDid)) throw new AgentAlreadyOnPhone(vtaDid)
+    const canOwn = this.deps.deviceCanOwn
+    if (!canOwn) throw new OwnerCheckNotConfigured('deviceCanOwn')
+    if (!(await canOwn())) throw new DeviceCannotOwn()
+    return this.beginManualLink(agent, vtaDid, label, true)
+  }
+
+  /**
+   * A key for claiming an agent from a Farm (`vta-claim`, vtaClaim.ts): the
+   * same temporary did:key the manual link shows as the owner code, made
+   * before the Farm is told of it. It becomes the agent's administrator once
+   * the Farm hands the agent over ({@link finishClaimedLink}); a claim that
+   * ends otherwise never stores it.
+   */
+  async createClaimKey(agent: Agent): Promise<string> {
+    return createVtiTemporaryDidKey(agent)
+  }
+
+  /**
+   * The Farm handed over `vtaDid`, administered by `did` (`vta-claim`): finish
+   * as the manual link does once its owner code was added — the key recorded
+   * as this agent's temporary key, shown, checked (signed in as it), then
+   * swapped onto a long-term key and remembered as this phone's own agent.
+   * The person already compared the claim check and confirmed as owner, so
+   * nothing is asked here. With an agent already current it is the "add
+   * another agent" path, which keeps that one.
+   *
+   * `farmDid`, the Farm the code came from: the link keeps it with `did`
+   * (`farmLogin`), the key the Farm signs this person in by.
+   */
+  async finishClaimedLink(
+    agent: Agent,
+    vtaDid: string,
+    did: string,
+    farmDid?: string,
+    label: string = vtaDid
+  ): Promise<void> {
+    if (this.hasAgent(vtaDid)) throw new AgentAlreadyOnPhone(vtaDid)
+    const current = this.state.link
+    if (current.kind === 'linked' || current.kind === 'revoked') await this.startAddingAgent()
+    if (this.state.link.kind !== 'notLinked') throw new Error('vtaAgent: another link is in progress')
+    this.ownerFor = vtaDid
+    const token = ++this.attemptToken
+    try {
+      await resolveVtaMediator(agent, vtaDid)
+      await this.identityStore(agent).setManager({
+        vtaDid,
+        did,
+        createdAt: new Date(this.now()).toISOString(),
+        stage: 'temporary',
+        ...(farmDid ? { claimedFrom: farmDid } : {}),
+      })
+      if (token !== this.attemptToken) return
+      this.dispatch({ type: 'keyShown', vtaDid, label, did })
+    } catch (error) {
+      if (token !== this.attemptToken) return
+      const detail = error instanceof Error ? error.message : String(error)
+      this.dispatch({ type: 'failed', failure: { reason: 'unreachable', detail } })
+      return
+    }
+    await this.checkManualGrant(agent)
+  }
+
+  private async beginManualLink(
+    agent: Agent,
+    vtaDid: string,
+    label: string,
+    owner: boolean,
+    via?: 'scan'
+  ): Promise<void> {
+    if (this.state.link.kind !== 'notLinked') return
+    if (this.hasAgent(vtaDid)) throw new AgentAlreadyOnPhone(vtaDid)
+    // The person links this agent again: no longer backed out of.
+    this.backedOut.delete(vtaDid)
+    this.ownerFor = owner ? vtaDid : undefined
+    const token = ++this.attemptToken
+    const live = () => token === this.attemptToken
+    try {
+      if (await this.resumeEarlierLink(agent, vtaDid, label, this.identityStore(agent), live)) return
+      if (!live()) return
+      // The agent must be reachable before a key is shown for it; the key
+      // itself is a did:key, the only form the Farm's Admin DID field takes.
+      await resolveVtaMediator(agent, vtaDid)
+      // A key made for this agent a little earlier and not yet used is shown
+      // again rather than replaced: its admin may already have added it
+      // (IN-135). A new one would leave that grant unused.
+      const earlier = await this.pendingLinkKey(agent, vtaDid)
+      const did = earlier?.did ?? (await createVtiTemporaryDidKey(agent))
+      if (!earlier) {
+        await this.identityStore(agent).setManager({
+          vtaDid,
+          did,
+          createdAt: new Date(this.now()).toISOString(),
+          stage: 'temporary',
+        })
+      }
+      if (token !== this.attemptToken) return
+      this.dispatch({ type: 'keyShown', vtaDid, label, did, ...(via ? { via } : {}) })
+    } catch (error) {
+      if (token !== this.attemptToken) return
+      const detail = error instanceof Error ? error.message : String(error)
+      this.dispatch({ type: 'failed', failure: { reason: 'unreachable', detail } })
+    }
+  }
+
+  /**
+   * "I've been added": try to sign in as the shown key. A refusal because the
+   * key is not in the agent's access list yet leaves the key showing, marked
+   * not yet; an agent that says nothing within the deadline, or a check cut
+   * short before the agent took the key (a sleep, a lock), leaves it showing
+   * too, marked unanswered. Only a refusal, or a failure after the key was
+   * taken, ends the attempt.
+   */
+  async checkManualGrant(agent: Agent): Promise<void> {
+    const link = this.state.link
+    if (link.kind !== 'showingKey' || link.checking) return
+    const token = this.attemptToken
+    const live = () => token === this.attemptToken
+    const identities = this.identityStore(agent)
+    this.dispatch({ type: 'grantCheckStarted' })
+    try {
+      // Two deadlines, not one. The agent is given its full time to answer,
+      // counted from when the question leaves the phone; getting signed in is
+      // bounded separately. A question that outlives its deadline is held
+      // open, and the next tap waits on it rather than asking again.
+      const answerMs = this.deps.grantCheckDeadlineMs ?? GRANT_CHECK_DEADLINE_MS
+      let answer = this.takeHeldAnswer(link.vtaDid)
+      if (!answer) {
+        await this.reset()
+        const fresh = this.client(agent, link.vtaDid, identities)
+        const connected = await withDeadline(
+          fresh.connect(),
+          this.deps.grantConnectDeadlineMs ?? GRANT_CONNECT_DEADLINE_MS
+        )
+        if (!live()) return
+        if (!connected) {
+          this.attemptToken++
+          await this.reset()
+          this.dispatch({ type: 'grantNoAnswer' })
+          return
+        }
+        let sent: () => void = () => undefined
+        const sending = new Promise<void>((resolve) => (sent = resolve))
+        answer = fresh.whoAmI(GRANT_HOLD_MS, sent)
+        void answer.catch(() => undefined)
+        // The clock starts at the send; the bound here is only a backstop for
+        // work that hangs before it can send.
+        await withDeadline(Promise.race([sending, answer]), answerMs * 3).catch(() => undefined)
+      }
+      let silent = false
+      const answered = await withDeadline(answer, answerMs).catch((error: unknown) => {
+        if (!NO_ANSWER.test(error instanceof Error ? error.message : String(error))) throw error
+        silent = true
+        return false
+      })
+      if (!live()) return
+      if (!answered) {
+        // Hand the attempt on, so an answer that arrives after we have given
+        // up on it cannot move the screen under the person later; it waits
+        // for the next tap instead, unless the client itself stopped waiting.
+        this.attemptToken++
+        if (silent) await this.reset()
+        else this.heldAnswer = { vtaDid: link.vtaDid, answer, until: this.now() + GRANT_HOLD_MS }
+        this.dispatch({ type: 'grantNoAnswer' })
+        return
+      }
+      const client = this.client(agent, link.vtaDid, identities)
+      this.dispatch({ type: 'granted' })
+      await this.finishLink(agent, link.vtaDid, link.label, identities, live, client)
+    } catch (error) {
+      if (!live()) return this.settleBackedOut(agent, link.vtaDid)
+      const detail = error instanceof Error ? error.message : String(error)
+      if (this.state.link.kind === 'showingKey' && ACCESS_REVOKED.test(detail)) {
+        await this.reset()
+        this.dispatch({ type: 'grantNotYet' })
+        return
+      }
+      // Before the agent took the key, anything but a refusal is passing: the
+      // socket a sleep or a lock closed, an agent shut down under the attempt
+      // (IN-135). The key stays showing, marked unanswered, and the next check
+      // uses the same key — the host may already have added it. Ending the
+      // attempt made the next one mint a new key, and the added one was lost.
+      if (this.state.link.kind === 'showingKey' && !(error instanceof CommunityAgentRefused)) {
+        agent.config?.logger?.warn?.(`[TrustTasks:VtaAgent] the grant check did not finish; the key stays: ${detail}`)
+        this.attemptToken++
+        await this.reset().catch(() => undefined)
+        this.dispatch({ type: 'grantNoAnswer' })
+        return
+      }
+      this.set({ status: 'failed', error: detail })
+      this.dispatch({
+        type: 'failed',
+        failure: withSwapReason(
+          { reason: error instanceof CommunityAgentRefused ? 'communityAgent' : 'failed', detail },
+          error
+        ),
+      })
+    }
+  }
+
+  /** The linked agent's address, for the QR a backup phone scans (plan §4); undefined before a link. */
+  agentAddress(): string | undefined {
+    const link = this.state.link
+    return link.kind === 'linked' ? link.vtaDid : undefined
+  }
+
+  /**
+   * The devices that run this agent: its admin rows, this phone's marked.
+   * Signs in if it must. Refuses with {@link DeviceActionRefused}.
+   */
+  async listDevices(agent: Agent): Promise<VtaDevice[]> {
+    const vtaDid = this.linkedAgent()
+    const client = await this.signedIn(agent, vtaDid)
+    const mine = await this.phoneKeys(agent, vtaDid)
+    const entries = await client.listAcl().catch((error: unknown) => {
+      throw this.refused(error)
+    })
+    return entries.filter((entry) => entry.role === 'admin').map((entry) => deviceFrom(entry, mine))
+  }
+
+  /**
+   * Make another device a full administrator of this agent (plan §4): the
+   * backup phone's code, scanned or pasted. Refuses this phone's own code and
+   * anything that is not a DID before asking anyone; then asks the person to
+   * confirm ({@link OwnerNotConfirmed} if not, nothing sent); then sends
+   * `acl/grant/0.1`. Answers the device as the agent now holds it.
+   *
+   * A phone whose own entry lapses may add a device only until then
+   * (VTI-ACL-053): a permanent one is refused, and the person read "Your agent
+   * doesn't let this phone do that." The new device is given this phone's own
+   * expiry, read from the access list; the device answered carries it, for the
+   * screen to say. When the list cannot be read, the agent's refusal names the
+   * expiry, and the grant is sent once more with it.
+   */
+  async addBackupDevice(agent: Agent, did: string, label?: string): Promise<VtaDevice> {
+    const vtaDid = this.linkedAgent()
+    if (!looksLikeDid(did)) throw new DeviceActionRefused('notADid')
+    let mine = await this.phoneKeys(agent, vtaDid)
+    if (mine.includes(did)) throw new DeviceActionRefused('thisPhone')
+    await this.confirmOwner('Add a backup device to your agent')
+    return this.withinOwnerDeadline(async () => {
+      const client = await this.signedIn(agent, vtaDid)
+      mine = await this.phoneKeys(agent, vtaDid)
+      if (mine.includes(did)) throw new DeviceActionRefused('thisPhone')
+      const own = await client
+        .listAcl()
+        .then((entries) => entries.find((e) => mine.includes(e.subject)))
+        .catch(() => undefined)
+      // The new device gets this phone's own purposes, which is the most it may be given (VTI-ACL-107).
+      const grant = (expiresAt?: string) =>
+        client.grantAdmin(did, {
+          label,
+          ...(expiresAt ? { expiresAt } : {}),
+          ...(own?.purposes ? { purposes: own.purposes } : {}),
+        })
+      const entry = await grant(own?.expiresAt)
+        .catch((error: unknown) => {
+          const expiresAt = own?.expiresAt ? undefined : ownExpiryFromRefusal(error)
+          if (!expiresAt) throw error
+          return grant(expiresAt)
+        })
+        .catch((error: unknown) => {
+          throw this.refused(error)
+        })
+      return deviceFrom(entry, mine)
+    })
+  }
+
+  /**
+   * An owner act, bounded: signing in has no deadline of its own (resolving the
+   * agent's mediator and opening the session), so an agent that cannot be
+   * reached kept "Add as backup" spinning for minutes (IN-53, a Farm-hosted
+   * agent on 226). Past the deadline it is `noAnswer` — "Your agent didn't
+   * answer. Check the list before trying again." — since the act may still land.
+   */
+  private async withinOwnerDeadline<T>(act: () => Promise<T>): Promise<T> {
+    const ms = this.deps.ownerActDeadlineMs ?? OWNER_ACT_DEADLINE_MS
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new DeviceActionRefused('noAnswer')), ms)
+    })
+    try {
+      return await Promise.race([act(), late])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  /**
+   * Take a device off this agent: `acl/revoke/0.1`. Never this phone — it is
+   * refused here before anything is asked, and the agent refuses a caller
+   * removing itself anyway (vta-service operations/acl.rs:792-796). Asks the
+   * person to confirm first; nothing is sent without it.
+   */
+  async removeDevice(agent: Agent, did: string): Promise<void> {
+    const vtaDid = this.linkedAgent()
+    if (!looksLikeDid(did)) throw new DeviceActionRefused('notADid')
+    if ((await this.phoneKeys(agent, vtaDid)).includes(did)) throw new DeviceActionRefused('thisPhone')
+    await this.confirmOwner('Remove a device from your agent')
+    const client = await this.signedIn(agent, vtaDid)
+    if ((await this.phoneKeys(agent, vtaDid)).includes(did)) throw new DeviceActionRefused('thisPhone')
+    await client.revokeSubject(did).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /**
+   * Name another device on this agent (IN-123): its access-list label, the
+   * name My devices shows for a device that does not name itself (a
+   * computer, a CLI, a plugin). `acl/update/0.1` sets it; the agent refuses a
+   * caller's own entry (VTI acl.rs `refuse_self_modification`), so this phone
+   * names itself through {@link renameThisDevice} instead. An owner act: the
+   * person confirms first, and nothing is sent without it.
+   */
+  async renameAgentDevice(agent: Agent, did: string, label: string): Promise<void> {
+    const vtaDid = this.linkedAgent()
+    if (!looksLikeDid(did)) throw new DeviceActionRefused('notADid')
+    if ((await this.phoneKeys(agent, vtaDid)).includes(did)) throw new DeviceActionRefused('thisPhone')
+    await this.confirmOwner('Rename a device on your agent')
+    await this.withinOwnerDeadline(async () => {
+      const client = await this.signedIn(agent, vtaDid)
+      await client.labelAclEntry(did, label).catch((error: unknown) => {
+        throw this.refused(error)
+      })
+    })
+  }
+
+  /** Keep what a read of the device list named, for the request cards. */
+  private rememberDevices(devices: KnownDevice[]): void {
+    const known = { ...this.state.knownDevices }
+    for (const d of devices) {
+      known[d.did] = {
+        did: d.did,
+        isThisPhone: d.isThisPhone,
+        ...(d.label ? { label: d.label } : {}),
+        ...(d.displayName ? { displayName: d.displayName } : {}),
+      }
+    }
+    this.set({ knownDevices: known })
+  }
+
+  /**
+   * Every device that runs this agent with its device binding where it has one
+   * (#10, {@link listAgentDevices}), this phone's own keys marked. Signs in if
+   * it must. Refuses with {@link DeviceActionRefused}.
+   */
+  async agentDevices(agent: Agent): Promise<AgentDevice[]> {
+    const vtaDid = this.linkedAgent()
+    const read = async () => {
+      const client = await this.signedIn(agent, vtaDid)
+      const mine = await this.phoneKeys(agent, vtaDid)
+      const devices = await listAgentDevices(client).catch((error: unknown) => {
+        throw this.refused(error)
+      })
+      const listed = devices.map((d) => ({ ...d, isThisPhone: mine.includes(d.did) }))
+      this.rememberDevices(listed)
+      return listed
+    }
+    const ms = this.deps.deviceListDeadlineMs ?? DEVICE_LIST_DEADLINE_MS
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new DeviceActionRefused('noAnswer')), ms)
+    })
+    const reading = read()
+    // Abandoned at the deadline, a late failure is nobody's news.
+    void reading.catch(() => undefined)
+    try {
+      return await Promise.race([reading, late])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  /**
+   * Remove a device from this agent (#10, {@link removeAgentDevice}): a
+   * registered device is wiped and then revoked, one with no binding revoked. Never this phone,
+   * refused before anything is asked; the person confirms first and nothing is
+   * sent without it.
+   */
+  async removeAgentDevice(agent: Agent, device: AgentDevice): Promise<{ mode: 'wiped' | 'revoked' }> {
+    const vtaDid = this.linkedAgent()
+    if ((await this.phoneKeys(agent, vtaDid)).includes(device.did)) throw new DeviceActionRefused('thisPhone')
+    await this.confirmOwner('Remove a device from your agent')
+    const client = await this.signedIn(agent, vtaDid)
+    if ((await this.phoneKeys(agent, vtaDid)).includes(device.did)) throw new DeviceActionRefused('thisPhone')
+    return removeAgentDevice(client, { ...device, isThisPhone: false }).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /**
+   * Every agent this phone is linked to, the current one first, each by the
+   * name this phone shows for it (the person's nickname, the agent's own name,
+   * or its host's), and the Farm sign-in key of one claimed from a Farm.
+   * Waits for the stored link to be read, as a sign-in at start-up may ask
+   * before then.
+   */
+  async linkedAgents(
+    agent: Agent
+  ): Promise<{ vtaDid: string; name: string; current: boolean; farmLogin?: VtaLink['farmLogin'] }[]> {
+    await this.untilLinkRead(this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
+    const store = this.linkStore(agent)
+    let links = await Promise.resolve(store.list?.()).catch(() => undefined)
+    if (!links) {
+      const one = await store.get().catch(() => undefined)
+      links = one ? [one] : []
+    }
+    const current = this.agentAddress()
+    return links
+      .map((l) => ({
+        vtaDid: l.vtaDid,
+        name: l.nickname?.trim() || this.state.agentNames?.[l.vtaDid]?.label || l.agentName?.label || l.label,
+        current: l.vtaDid === current,
+        ...(l.farmLogin ? { farmLogin: { ...l.farmLogin } } : {}),
+      }))
+      .sort((x, y) => Number(y.current) - Number(x.current))
+  }
+
+  /**
+   * `use` with a signed-in client for the linked agent `vtaDid` (IN-296: a
+   * sign-in through whichever agent holds the persona). The current agent is
+   * asked on its own session; another linked agent on a short session of its
+   * own, closed after, never beside a look at it (as fetchKeyCopy does: one
+   * session per agent at a time). Refuses with {@link DeviceActionRefused}.
+   */
+  async withAgentSession<T>(agent: Agent, vtaDid: string, use: (client: VtaClient) => Promise<T>): Promise<T> {
+    await this.untilLinkRead(this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
+    if (vtaDid === this.agentAddress()) return use(await this.signedIn(agent, vtaDid))
+    const link = this.state.link
+    // An agent being linked right now is not reachable for this yet: a side session would sign in as the same
+    // manager key as the link, and the mediator keeps one live socket per DID.
+    if (link.kind !== 'notLinked' && link.kind !== 'revoked' && 'vtaDid' in link && link.vtaDid === vtaDid)
+      throw new DeviceActionRefused('unreachable', 'that agent is being linked now')
+    const links = (await Promise.resolve(this.linkStore(agent).list?.()).catch(() => undefined)) ?? []
+    if (!links.some((l) => l.vtaDid === vtaDid)) throw new DeviceActionRefused('notLinked')
+    await this.looking?.catch(() => undefined)
+    const store = this.identityStore(agent)
+    const client = (this.deps.agentClient ?? ((a, did, s) => new VtaClient(a, did, s)))(agent, vtaDid, store)
+    try {
+      try {
+        await client.connect()
+      } catch (error) {
+        if (connectFailureRevokes(error)) throw this.refused(error)
+        throw new DeviceActionRefused('unreachable', error instanceof Error ? error.message : String(error))
+      }
+      return await use(client)
+    } finally {
+      await client.disconnect().catch(() => undefined)
+    }
+  }
+
+  /**
+   * What the agent asks this phone about ("Ask me before…"): its approval
+   * rules as this phone sees them, and whether this phone may change them —
+   * writing policy is super-admin only, an unrestricted admin (vti-common
+   * auth/extractor.rs:350, vta-service operations/policy.rs:159), which
+   * whoami shows as the admin role with no context scopes. Signs in if it
+   * must. Refuses with {@link DeviceActionRefused}.
+   */
+  async approvalRules(agent: Agent): Promise<ApprovalRulesState> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    const managerDid = client.managerDid
+    if (!managerDid) throw new DeviceActionRefused('notLinked')
+    // A rule holds only the version it names, so the rules are read against what the agent dispatches now
+    // (approvalRules.ts OLDER_VERSIONS). supportedTypes never throws: unanswered, nothing is judged against it.
+    const [model, me, served] = await Promise.all([
+      client.readApprovals(),
+      client.whoAmI(),
+      client.supportedTypes(),
+    ]).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+    const roles = me.roles ?? (me.role ? [me.role] : [])
+    const scoped = (me.scopes ?? []).length > 0 || (me.contexts ?? []).length > 0
+    const view = approvalsView(model, managerDid, served)
+    const renew = view.offered.filter((o) => o.renew).map((o) => o.key)
+    if (renew.length) releaseWarn(`[VTI] ask me before: rules miss a version the agent serves: ${renew.join(', ')}`)
+    return { model, view, canChange: roles.includes('admin') && !scoped && !model.unreadable }
+  }
+
+  /**
+   * Switch this phone's rule for an offered task on or off, on the row as the
+   * agent holds it now: read, change only this phone's rule, write against the
+   * version read. If the row changed in between (another device), read and
+   * apply once more; a second clash is left to the person ("try again").
+   * Asks the person to confirm first; nothing is sent without it. Answers the
+   * rules as now held.
+   */
+  async setApprovalRule(agent: Agent, taskType: string, on: boolean): Promise<ApprovalRulesState> {
+    const vtaDid = this.linkedAgent()
+    await this.confirmOwner('Change what your agent asks you about')
+    releaseWarn('[VTI] ask me before: owner confirmed; writing the rules')
+    return this.withinOwnerDeadline(async () => {
+      const client = await this.signedIn(agent, vtaDid)
+      const managerDid = client.managerDid
+      if (!managerDid) throw new DeviceActionRefused('notLinked')
+      // A rule holds only the exact version it names: write one per version the agent dispatches. Unanswered
+      // (undefined), every version Keyring knows.
+      const served = await client.supportedTypes()
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const model = await client.readApprovals()
+          if (model.unreadable)
+            throw new DeviceActionRefused('failed', 'the approval rules hold something Keyring cannot read')
+          const next = withPhoneRule(model, taskType, on, managerDid, served)
+          const version = await client.writeApprovals(next, model.version)
+          releaseWarn(`[VTI] ask me before: rules written, version ${model.version} → ${version}`)
+          const held = { ...next, version, unreadable: false }
+          return { model: held, view: approvalsView(held, managerDid, served), canChange: true }
+        } catch (error) {
+          const details = (error instanceof VtiRefusal ? error.details : undefined) as { reason?: unknown } | undefined
+          if (details?.reason === 'conflict' && attempt === 0) continue
+          throw this.refused(error)
+        }
+      }
+    })
+  }
+
+  /**
+   * The DID this phone approves as when it says yes to being someone's
+   * approver: its manager DID on its own linked agent, where that agent's
+   * consent requests reach it. Signs in if it must. Refuses with
+   * {@link DeviceActionRefused} `notLinked` when there is none.
+   */
+  async approverDid(agent: Agent): Promise<string> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    if (!client.managerDid) throw new DeviceActionRefused('notLinked')
+    return client.managerDid
+  }
+
+  /**
+   * Saying yes to being someone's approver (the offer sheet's Accept): an owner act, so Face ID, a fingerprint or the
+   * passcode first, with `reason` (already in the person's language) on the prompt; then the DID this phone approves
+   * as. Not confirmed, it throws {@link OwnerNotConfirmed} before anything is read or sent.
+   */
+  async acceptAsApprover(agent: Agent, reason: string): Promise<string> {
+    await this.confirmOwner(reason)
+    return this.approverDid(agent)
+  }
+
+  /**
+   * Who approves for this person, read from the agent's approvals row
+   * (trustedApprovers.ts). Signs in if it must. Refuses with
+   * {@link DeviceActionRefused}.
+   */
+  async trustedApprovers(agent: Agent): Promise<TrustedApproversState> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    const model = await client.readApprovals().catch((error: unknown) => {
+      throw this.refused(error)
+    })
+    return { view: trustedApproversView(model), version: model.version }
+  }
+
+  /**
+   * Set who approves for this person and for what (trusted-approver plan §4
+   * step 3), on the row as the agent holds it now: read, change only the
+   * trusted rules, write against the version read, and on a clash read and
+   * apply once more, as {@link setApprovalRule} does. Empty `approvers` or
+   * `keys` removes them. Asks the person to confirm first; nothing is sent
+   * without it. If the agent holds rule changes for the approver's yes, the
+   * write waits for it like any held task.
+   */
+  async setTrustedApprovers(
+    agent: Agent,
+    approvers: readonly string[],
+    keys: readonly TrustedKey[]
+  ): Promise<TrustedApproversState> {
+    const vtaDid = this.linkedAgent()
+    await this.confirmOwner('Change who approves for you')
+    releaseWarn('[VTI] trusted approvers: owner confirmed; writing the rules')
+    return this.withinOwnerDeadline(async () => {
+      const client = await this.signedIn(agent, vtaDid)
+      const served = await client.supportedTypes()
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const model = await client.readApprovals()
+          if (model.unreadable)
+            throw new DeviceActionRefused('failed', 'the approval rules hold something Keyring cannot read')
+          const next = withTrustedApprovers(model, approvers, keys, served)
+          const version = await client.writeApprovals(next, model.version)
+          releaseWarn(`[VTI] trusted approvers: rules written, version ${model.version} → ${version}`)
+          return { view: trustedApproversView(next), version }
+        } catch (error) {
+          if (error instanceof TrustedRuleRefused)
+            throw new DeviceActionRefused(error.reason === 'not-served' ? 'notServed' : 'failed', error.message)
+          const details = (error instanceof VtiRefusal ? error.details : undefined) as { reason?: unknown } | undefined
+          if (details?.reason === 'conflict' && attempt === 0) continue
+          throw this.refused(error)
+        }
+      }
+    })
+  }
+
+  /** "Send me a test request" ({@link VtaClient.sendTestRequest}). Signs in if it must. */
+  async sendTestRequest(agent: Agent): Promise<Awaited<ReturnType<VtaClient['sendTestRequest']>>> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    return client.sendTestRequest().catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /**
+   * Register this phone on its agent with the name the person chose (#10). The
+   * agent refuses a second registration, so a phone already registered — by
+   * the presence loop with the default name, say — gets the chosen name by a
+   * heartbeat instead: either way the agent ends with this name.
+   */
+  async registerThisDevice(agent: Agent, displayName: string): Promise<void> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    const claimed = await registerThisDevice(client, { displayName, platform: Platform.OS }).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+    if (claimed === 'alreadyRegistered') {
+      await renameThisDevice(client, displayName).catch((error: unknown) => {
+        throw this.refused(error)
+      })
+    }
+  }
+
+  /**
+   * A signed-in client for the presence loop (#10, `vtaPresence`) while this
+   * phone is linked; undefined when it is not. Refuses like any other call when
+   * the agent cannot be reached — the loop logs that and tries again.
+   */
+  async presencePort(agent: Agent): Promise<VtaClient | undefined> {
+    const vtaDid = this.agentAddress()
+    if (!vtaDid) return undefined
+    return this.signedIn(agent, vtaDid)
+  }
+
+  /**
+   * A signed-in client for the rooms service (`modules/rooms`) while this
+   * phone is linked; undefined when it is not.
+   */
+  async roomsClient(agent: Agent): Promise<Pick<VtaClient, 'task' | 'supportedTypes'> | undefined> {
+    const vtaDid = this.agentAddress()
+    if (!vtaDid) return undefined
+    return this.signedIn(agent, vtaDid)
+  }
+
+  /**
+   * A presence tick that failed. The agent answers a phone another device
+   * removed with "DID not in ACL" (a signed permissionDenied, vta-service
+   * messaging/auth.rs), which moves the link to removed, as a refused owner
+   * act does; anything else — no answer, the network — is tried next tick.
+   */
+  presenceFailed(error: unknown): void {
+    this.refused(error)
+  }
+
+  /**
+   * Tell this phone's agent how to wake it: the handle a push gateway gave for
+   * its push token (push notifications plan §4.4). The agent provisions the
+   * gateway itself; the phone signs nothing there.
+   */
+  async setThisDeviceWake(
+    agent: Agent,
+    wake: WakeHandle,
+    opts: { pushPlatform?: PushPlatform; suggestedTriggers?: string[] } = {}
+  ): Promise<WakeChannel> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    return this.wakeOutcome(setThisDeviceWake(this.wakePort(client), wake, opts))
+  }
+
+  /** Stop this phone's agent waking it: sent before the phone unlinks (plan §8). */
+  async clearThisDeviceWake(agent: Agent): Promise<WakeChannel> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    return this.wakeOutcome(clearThisDeviceWake(this.wakePort(client)))
+  }
+
+  /**
+   * `device/set-wake` without waiting for consent. A rule that holds it names
+   * approvers that may include this very phone, so waiting would never end:
+   * switching notifications looked like it hung (approvalRules.ts, the trap
+   * the "Ask me before…" screen never offers). Refused at once instead.
+   */
+  private wakePort(client: VtaClient): AgentDevicePort {
+    return {
+      managerDid: client.managerDid,
+      task: <T>(type: string, payload: Record<string, unknown>) =>
+        client.task<T>(type, payload, undefined, {}, undefined, { waitForConsent: false }),
+    }
+  }
+
+  /** The agent's answer to set-wake, with whether an approval rule is holding it. */
+  private async wakeOutcome(sent: Promise<WakeChannel>): Promise<WakeChannel> {
+    try {
+      const channel = await sent
+      if (this.state.wakeBlockedByRule) this.set({ wakeBlockedByRule: false })
+      return channel
+    } catch (error) {
+      if (consentPendingOf(error)) {
+        releaseWarn('[VTI] notifications: device/set-wake is held by an approval rule on the agent')
+        this.set({ wakeBlockedByRule: true })
+      }
+      throw this.refused(error)
+    }
+  }
+
+  /** Rename this phone on its agent (#10): a heartbeat carrying the new name. */
+  async renameThisDevice(agent: Agent, displayName: string): Promise<void> {
+    const client = await this.signedIn(agent, this.linkedAgent())
+    await renameThisDevice(client, displayName).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /**
+   * Whether rotating a persona's keys is safe on this agent (#10, lost phone):
+   * `yes` from vta-service 0.43.0, `unknown` when the agent does not say or
+   * reports 0.42.x, `agentTooOld` before that. Never throws.
+   */
+  async canRotatePersonaKeys(agent: Agent): Promise<RotationSupport> {
+    const vtaDid = this.agentAddress()
+    if (!vtaDid) return 'unknown'
+    return rotationSupport(await agentVersion(agent, vtaDid))
+  }
+
+  /**
+   * Rotate one persona's keys on the agent after a lost phone (#10), then take
+   * fresh copies for this phone. The person confirms first; nothing is sent
+   * without it.
+   */
+  async rotatePersonaKeys(agent: Agent, personaDid: string): Promise<void> {
+    const vtaDid = this.linkedAgent()
+    await this.confirmOwner("Replace this identity's keys")
+    const client = await this.signedIn(agent, vtaDid)
+    const store = this.identityStore(agent)
+    const persona = (await store.listPersonas()).find((p) => p.did === personaDid)
+    if (!persona) throw new DeviceActionRefused('failed', `no persona ${personaDid} on this phone`)
+    await rotatePersonaKeys(client, store, persona).catch((error: unknown) => {
+      throw this.refused(error)
+    })
+  }
+
+  /**
+   * Rotate the keys of every identity this phone holds on the linked agent,
+   * behind one owner check rather than one per identity. Carries on past an
+   * identity the agent refuses and answers each outcome, worded as a
+   * {@link DeviceRefusalReason}.
+   */
+  async rotateAllPersonaKeys(agent: Agent): Promise<{
+    rotated: string[]
+    unpublished: string[]
+    failed: { did: string; reason: DeviceRefusalReason }[]
+  }> {
+    const vtaDid = this.linkedAgent()
+    await this.confirmOwner("Replace your identities' keys")
+    const client = await this.signedIn(agent, vtaDid)
+    const store = this.identityStore(agent)
+    const personas = (await store.listPersonas()).filter((p) => p.vtaDid === vtaDid)
+    const { rotated, unpublished, failed } = await rotateEachPersona(client, store, personas, (did, keys) =>
+      resolvesWithKeys(agent, did, keys)
+    )
+    return {
+      rotated,
+      unpublished,
+      failed: failed.map(({ did, error }) => ({ did, reason: this.refused(error).reason })),
+    }
+  }
+
+  /**
+   * With a session open, fetch into memory the keys of every identity this
+   * phone holds through that agent (#10, plan part C): memory is empty after a
+   * restart or a lock, and nothing signs as a persona until its keys are back.
+   * Never throws; an identity whose keys cannot be fetched is tried again at
+   * the next session, or when it is next used.
+   */
+  /**
+   * After a key swap, keep this phone on the agent's approval rules: they
+   * name its key, and the swap retired that key (VtaClient.carryApproversAcrossSwap).
+   * Best effort and logged; a session that could not do it leaves it to the next.
+   */
+  private async carryApprovers(agent: Agent, vtaDid: string): Promise<void> {
+    try {
+      const outcome = await this.client(agent, vtaDid).carryApproversAcrossSwap()
+      if (outcome !== 'none') releaseWarn(`[VTI] approval rules after the key swap: ${outcome}`)
+    } catch (error) {
+      agent.config?.logger?.warn?.(
+        `[VTA] approval rules after the key swap: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+  }
+
+  private async holdPersonaKeys(agent: Agent, vtaDid: string): Promise<void> {
+    // An install from before memory-only custody moves its stored copies first
+    // (plan part E); a persona whose agent will not hand its keys over keeps
+    // its stored copy and moves at a later session.
+    try {
+      const client = this.client(agent, vtaDid)
+      const { switched, moved, removed, waiting } = await migratePersonaKeys(
+        { borrowKey: (id) => client.borrowKey(id), forgetKeyCopy: (id) => forgetKeyCopy(agent, id) },
+        this.identityStore(agent),
+        vtaDid,
+        this.switchedThisRun
+      )
+      // Ids only, never key material: the upgrade's one destructive step is
+      // visible in the device log.
+      const log = agent.config?.logger
+      if (switched.length > 0) {
+        log?.warn?.(
+          `[VTA] key migration: ${switched.length} identities now use in-memory keys; their stored copies are removed at the next launch (${switched.join(', ')})`
+        )
+      }
+      if (moved.length > 0) {
+        log?.warn?.(
+          `[VTA] key migration: removed ${removed.length} stored identity key copies (ids: ${removed.join(', ')}) for ${moved.join(', ')}`
+        )
+      }
+      for (const { did, error } of waiting) {
+        agent.config?.logger?.warn?.(
+          `[VTA] ${did} keeps its stored keys for now: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
+    } catch (e) {
+      agent.config?.logger?.warn?.(
+        `[VTA] moving identities' keys into memory: ${e instanceof Error ? e.message : String(e)}`
+      )
+    }
+    const personas = await Promise.resolve(this.identityStore(agent).listPersonas?.())
+      .then((all) => (all ?? []).filter((p) => p.vtaDid === vtaDid))
+      .catch(() => [])
+    // One identity after another, or the first alone and then a few side by side (keyCopySweep.ts). Either way
+    // nothing more is started after a refusal that ends the link.
+    const atOnce = isKeyCopiesTogetherOn() ? KEY_COPIES_AT_ONCE : 1
+    const began = this.now()
+    let fetchedFor = 0
+    let ended = false
+    await sweepKeyCopies(
+      personas,
+      async (persona) => {
+        try {
+          if (await this.client(agent, vtaDid).holdPersonaKeys(persona, 'session sweep')) fetchedFor++
+          DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
+        } catch (e) {
+          agent.config?.logger?.warn?.(
+            `[VTA] fetching ${persona.did}'s keys into memory: ${e instanceof Error ? e.message : String(e)}`
+          )
+          // This phone's own agent refusing its key is the link's end, as a refused heartbeat is (IN-350). Another
+          // linked agent refusing says nothing about this link.
+          // Several running side by side may each be refused: `refused` ends a working link only, so once.
+          if (refusedAsNotOnAcl(e) && vtaDid === this.agentAddress()) {
+            this.refused(e)
+            ended = true
+            return 'stop'
+          }
+        }
+        return 'go'
+      },
+      atOnce
+    )
+    // Counts and a time only, never an identity or a key id: what a report needs to say whether the copies went
+    // together and what that took.
+    if (fetchedFor > 0 && !ended)
+      agent.config?.logger?.info?.(
+        `[VTA] key copies: fetched for ${fetchedFor} of ${personas.length} identities in ${this.now() - began} ms (${
+          atOnce > 1 ? `the first alone, then up to ${atOnce} at a time` : 'one at a time'
+        })`
+      )
+  }
+
+  /**
+   * An identity's key copy is held in memory only, and is gone after every
+   * restart or lock. This session fetches the current agent's when it opens
+   * (holdPersonaKeys); any copy needed before that — or one of an identity
+   * under another linked agent, which no session fetches — is fetched when it
+   * is first used, through that identity's own agent (TestFlight 239: an
+   * identity of a non-current agent failed with "not found in backend
+   * 'ephemeral'").
+   */
+  private fetchKeysThrough(agent: Agent): void {
+    this.fetcherFor = agent
+    setInMemoryKeyFetcher(agent, (keyId) => this.fetchKeyCopy(agent, keyId))
+  }
+
+  /**
+   * Install the in-memory key fetcher for `agent` now, if it is not already.
+   *
+   * `restore` installs it, but the persona inbox signs in on its own schedule
+   * and, on the first launch after an install, ran before `restore` had: its
+   * key copy was missing and nothing was there to fetch it, so a recoverable
+   * miss read "not found in backend 'ephemeral'" (#422). Whatever may use an
+   * identity's keys at start-up calls this first. Safe to call any number of
+   * times; the fetcher itself waits for the link to be read (`fetchKeyCopy`).
+   */
+  installKeyFetcher(agent: Agent): void {
+    if (this.fetcherFor === agent) return
+    this.fetchKeysThrough(agent)
+  }
+
+  /**
+   * Fetch `persona`'s key copies again, now, through its agent, and say why
+   * when that cannot be done (the agent did not come online, it is no longer
+   * linked). For a sign-in that failed on a missing copy (#422): the backend
+   * does not ask again for a while after a failed fetch, and this does.
+   */
+  async refetchPersonaKeys(agent: Agent, persona: VtiPersona): Promise<void> {
+    this.installKeyFetcher(agent)
+    const keyId = persona.kmsKeyIds?.keyAgreement ?? persona.kmsKeyIds?.signing
+    if (!keyId) throw new Error(`${persona.did} has no borrowed key to fetch`)
+    await this.fetchKeyCopy(agent, keyId)
+  }
+
+  /** Fetch the copy `keyId` names, through the agent of the identity that names it. */
+  private async fetchKeyCopy(agent: Agent, keyId: string): Promise<void> {
+    // Which agent is current is not known until the stored link is read: asked
+    // before then (#422, a sign-in at start-up), the current agent would be
+    // taken for "another linked agent" and asked on a second session as the
+    // same manager key, which the mediator closes (one socket per DID).
+    await this.untilLinkRead(this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
+    const store = this.identityStore(agent)
+    const personas = (await Promise.resolve(store.listPersonas?.()).catch(() => undefined)) ?? []
+    const persona = personas.find((p) => Object.values(p.kmsKeyIds ?? {}).includes(keyId))
+    if (!persona) throw new Error(`no identity on this phone names ${keyId}`)
+    const vtaDid = persona.vtaDid
+    const link = this.state.link
+    // The current agent — or the one being linked right now, which is about to
+    // be: ask on its session once it is up. Never a side session beside a link
+    // in progress, which signs in as the same manager key, and the mediator
+    // keeps one live socket per DID.
+    // A revoked agent is neither: it will not answer this phone's key at all.
+    const linking = link.kind !== 'notLinked' && link.kind !== 'revoked' && 'vtaDid' in link && link.vtaDid === vtaDid
+    if (linking) {
+      await this.untilOnline(vtaDid, this.deps.keyFetchWaitMs ?? KEY_FETCH_WAIT_MS)
+      await this.client(agent, vtaDid)
+        .holdPersonaKeys(persona, 'on use')
+        .catch((error: unknown) => {
+          // This phone's own agent no longer accepts it: the link ends here too (IN-350), and the caller (the persona
+          // inbox) still hears the refusal, to word it.
+          if (refusedAsNotOnAcl(error)) this.refused(error)
+          throw error
+        })
+      DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
+      return
+    }
+    const links = (await Promise.resolve(this.linkStore(agent).list?.()).catch(() => undefined)) ?? []
+    if (!links.some((l) => l.vtaDid === vtaDid)) throw new Error(`${persona.did}'s agent is no longer linked`)
+    // Another linked agent: its own short session, as a look at it opens one,
+    // and never beside a look (one session per agent at a time).
+    await this.looking?.catch(() => undefined)
+    const client = (this.deps.keyClient ?? ((a, did, s) => new VtaClient(a, did, s)))(agent, vtaDid, store)
+    try {
+      await client.holdPersonaKeys(persona, 'on use')
+      agent.config?.logger?.info?.(`[VTA] fetched ${persona.did}'s keys through its agent ${didPrefix(vtaDid)} on use`)
+      // Whatever waits for this identity's keys (its inbox, its listeners) looks again now.
+      DeviceEventEmitter.emit(VTI_PERSONA_KEYS_HELD_EVENT, { did: persona.did })
+    } finally {
+      await client.disconnect().catch(() => undefined)
+    }
+  }
+
+  /** Wait until `restore` has read the stored link, up to `ms`; throws if it has not. */
+  private async untilLinkRead(ms: number): Promise<void> {
+    for (let waited = 0; !this.state.linkRestored; waited += 250) {
+      if (waited >= ms) throw new Error(`the link with this phone's agent was not read within ${ms / 1000} s`)
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+  }
+
+  /** Wait until the linked agent `vtaDid` is online, up to `ms`; throws if it is not. */
+  private async untilOnline(vtaDid: string, ms: number): Promise<void> {
+    const online = () => {
+      const link = this.state.link
+      return link.kind === 'linked' && link.vtaDid === vtaDid && link.connection.kind === 'online'
+    }
+    for (let waited = 0; !online(); waited += 250) {
+      if (waited >= ms) throw new Error(`${didPrefix(vtaDid)} did not come online within ${ms / 1000} s`)
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+  }
+
+  /** The agent this phone is linked to, or a refusal a screen words as "no agent yet". */
+  private linkedAgent(): string {
+    const vtaDid = this.agentAddress()
+    if (!vtaDid) throw new DeviceActionRefused('notLinked')
+    return vtaDid
+  }
+
+  /** The session with the linked agent, opened if it must be. */
+  private async signedIn(agent: Agent, vtaDid: string): Promise<VtaClient> {
+    try {
+      await this.connect(agent, vtaDid)
+    } catch (error) {
+      if (connectFailureRevokes(error)) throw this.refused(error)
+      throw new DeviceActionRefused('unreachable', error instanceof Error ? error.message : String(error))
+    }
+    return this.client(agent, vtaDid)
+  }
+
+  /** Every key of this phone's the agent might hold: the recorded one, a pending successor, the one signed in. */
+  private async phoneKeys(agent: Agent, vtaDid: string): Promise<string[]> {
+    const record = await Promise.resolve(this.identityStore(agent).getManager?.(vtaDid)).catch(() => undefined)
+    const signedInAs = this.current?.vtaDid === vtaDid ? this.current.client.managerDid : undefined
+    return [record?.did, record?.pendingNext?.did, signedInAs].filter((d): d is string => Boolean(d))
+  }
+
+  /** The answer to the step-up card on screen now, if it is still there. */
+  private stepUpAnswer?: { id: string; answer: (choice: 'approve' | 'deny') => void }
+
+  /**
+   * The agent asks for a step-up. The person first sees its reason, as sent,
+   * on a card in the app (the 228 lab check: on Android the owner check right
+   * after an act's own check passed without a prompt, so a reason that lived
+   * only in that prompt was never seen). Confirmed, the owner check runs;
+   * cancelled there, or "Don't allow" on the card, is a signed no. Nothing is
+   * sent for a check that failed or a card left unanswered.
+   */
+  private async askStepUp(request: StepUpRequest, context: { taskType?: string } = {}): Promise<'approve' | 'deny'> {
+    const confirm = this.deps.confirmOwner
+    if (!confirm) throw new OwnerCheckNotConfigured('confirmOwner')
+    const id = `step-up-${request.challenge.slice(0, 12)}-${this.now()}`
+    const choice = await new Promise<'approve' | 'deny' | undefined>((resolve) => {
+      const timer = setTimeout(() => resolve(undefined), STEP_UP_ASK_TIMEOUT_MS)
+      this.stepUpAnswer = {
+        id,
+        answer: (c) => {
+          clearTimeout(timer)
+          resolve(c)
+        },
+      }
+      this.set({
+        stepUpAsk: { id, reason: request.reason, ...(context.taskType ? { taskType: context.taskType } : {}) },
+      })
+    })
+    if (this.stepUpAnswer?.id === id) this.stepUpAnswer = undefined
+    if (this.state.stepUpAsk?.id === id) this.set({ stepUpAsk: undefined })
+    if (choice === undefined) throw new OwnerNotConfirmed('cancelled', 'the extra check was not answered')
+    if (choice === 'deny') return 'deny'
+    let answer: Awaited<ReturnType<ConfirmOwner>> | undefined
+    try {
+      answer = await confirm(request.reason)
+    } catch (error) {
+      throw new OwnerNotConfirmed('failed', error instanceof Error ? error.message : String(error))
+    }
+    if (answer?.ok === true) return 'approve'
+    if (answer?.reason === 'cancelled') return 'deny'
+    throw new OwnerNotConfirmed(answer?.reason ?? 'failed')
+  }
+
+  /** The person answered the step-up card `id`; an answer for a card no longer shown is ignored. */
+  answerStepUp(id: string, choice: 'approve' | 'deny'): void {
+    if (this.stepUpAnswer?.id !== id) return
+    this.stepUpAnswer.answer(choice)
+  }
+
+  /** The owner check, first thing in every owner act. Throws unless the person confirmed. */
+  private async confirmOwner(reason: string): Promise<void> {
+    const confirm = this.deps.confirmOwner
+    if (!confirm) throw new OwnerCheckNotConfigured('confirmOwner')
+    let answer: Awaited<ReturnType<ConfirmOwner>> | undefined
+    try {
+      answer = await confirm(reason)
+    } catch (error) {
+      throw new OwnerNotConfirmed('failed', error instanceof Error ? error.message : String(error))
+    }
+    if (answer?.ok !== true) throw new OwnerNotConfirmed(answer?.reason ?? 'failed')
+  }
+
+  /** An owner act's failure, worded; an agent that no longer knows this phone also moves the link. */
+  private refused(error: unknown): DeviceActionRefused {
+    const refusal = deviceRefusalOf(error)
+    // Only a working link is ended: while a phone is being linked its key is not on the ACL yet, and a refusal then is
+    // the link's own business (not yet granted), never a removal.
+    if (refusal.reason === 'accessRevoked' && this.state.link.kind === 'linked') {
+      this.dispatch({ type: 'accessRevoked', reason: refusal.detail ?? refusal.message })
+    }
+    return refusal
+  }
+
+  /**
+   * Back in the foreground: the moment a receive leg iOS let die while suspended would otherwise go unnoticed — its
+   * socket still reads open, and `ensureOnline` only looks at whether it is. The session proves itself, a held reply
+   * breaker lets one probe go early, and then the link is brought online as before.
+   */
+  async foregrounded(given: Agent): Promise<void> {
+    this.suspended = false
+    this.returnedAt = this.now()
+    this.dispatch({ type: 'returned', now: this.returnedAt })
+    const link = this.state.link
+    if (link.kind === 'linked') {
+      this.current?.client.checkAlive()
+      if (this.breakers.get(link.vtaDid)?.allowEarlyProbe(Date.now()))
+        (this.agent ?? given).config?.logger?.info?.(
+          `[VTA] back in the foreground: the next ask probes the agent early`
+        )
+    }
+    await this.ensureOnline(given)
+  }
+
+  /** The app went to the background: a drop found from now until just after the return is a quiet one. */
+  backgrounded(): void {
+    this.suspended = true
+  }
+
+  /**
+   * Until when a drop found now stays out of sight, if it is quiet: found while
+   * the app is suspended, or within {@link RETURN_DROP_WINDOW_MS} of the return.
+   */
+  private quietUntil(now: number): number | undefined {
+    if (this.suspended) return now + QUIET_DROP_MS
+    if (this.returnedAt === undefined || now - this.returnedAt >= RETURN_DROP_WINDOW_MS) return undefined
+    return now + QUIET_DROP_MS
+  }
+
+  /** The session dropped: said in the log (a report could not show it, 277.6), and to the link. */
+  private dropped(reason: string): void {
+    const link = this.state.link
+    if (link.kind !== 'linked') return
+    const now = this.now()
+    const quietUntil = this.quietUntil(now)
+    if (link.connection.kind === 'online') this.droppedAt = now
+    // Identifiers as prefixes only: these lines reach testers' problem reports.
+    const words = reason.replace(/did:[a-z0-9]+:[^\s,;)]+/gi, (did) => didPrefix(did)).slice(0, 160)
+    const what =
+      link.connection.kind === 'online'
+        ? 'session dropped'
+        : link.connection.kind === 'connecting'
+          ? 'start-up sign-in failed'
+          : 'reconnect failed'
+    const quiet =
+      quietUntil !== undefined ? `, found while away: shown only if not back in ${QUIET_DROP_MS / 1000} s` : ''
+    releaseWarn(`[VTA] ${what}${quiet}: ${words}`)
+    this.dispatch({
+      type: 'sessionDropped',
+      reason,
+      now,
+      quietUntil,
+      ...(quietUntil !== undefined && this.suspended ? { untilReturn: true as const } : {}),
+    })
+  }
+
+  /**
+   * Bring a linked phone back online: now, when the app returns to the
+   * foreground or the network changes, and on a backoff after a drop.
+   */
+  async ensureOnline(given: Agent, options: { reopen?: boolean } = {}): Promise<void> {
+    // A retry scheduled before the app replaced its agent still carries the old one.
+    const agent = this.agent ?? given
+    const link = this.state.link
+    // Back in the foreground with nothing linked: a link left part-way picks up (IN-135).
+    if (link.kind === 'notLinked') void this.resumeLink(agent).catch(() => undefined)
+    if (link.kind !== 'linked' || this.reconnecting) return
+    // Online already, unless the session it was online on is gone (reopen).
+    if (link.connection.kind === 'online' && !options.reopen) return
+    this.reconnecting = true
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = undefined
+    try {
+      await this.signInWithin(agent, link.vtaDid)
+      const tries = this.reconnectAttempt
+      this.reconnectAttempt = 0
+      if (this.state.reconnectGaveUp) this.set({ reconnectGaveUp: false })
+      if (link.connection.kind !== 'connecting' && this.droppedAt !== undefined)
+        releaseWarn(
+          `[VTA] back online ${Math.round((this.now() - this.droppedAt) / 100) / 10} s after the drop (${tries} ${tries === 1 ? 'retry' : 'retries'})`
+        )
+      this.droppedAt = undefined
+      this.dispatch({ type: 'sessionOpened' })
+      void this.noteReached(agent, link.vtaDid)
+      void this.holdPersonaKeys(agent, link.vtaDid)
+      void this.carryApprovers(agent, link.vtaDid)
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      if (isUnsettledSwap(error) && error.refusedBoth && (await this.onTemporaryKey(agent, link.vtaDid))) {
+        // A first link whose swap answer was lost, and the VTA now refuses
+        // both keys: the temporary one expired, and the successor was never
+        // written. The link never finished, so this is "link again", with the
+        // VTA's words under Details, not a revocation of a working link and
+        // not a retry that can never succeed. A later swap from a permanent
+        // key refused both ways is a revocation, read as one below.
+        await this.clearLink(agent, link.vtaDid).catch(() => undefined)
+        await this.reset()
+        this.set({ status: 'disconnected', managerDid: undefined })
+        this.dispatch({ type: 'linkLost', failure: { reason: 'failed', detail: reason } })
+        return
+      }
+      if (connectFailureRevokes(error)) {
+        this.dispatch({ type: 'accessRevoked', reason })
+        return
+      }
+      this.dropped(reason)
+      this.scheduleReconnect(agent)
+      // Beside the retry, never in front of it: the lookup can take seconds.
+      void this.markIfGone(agent, link.vtaDid)
+    } finally {
+      this.reconnecting = false
+    }
+  }
+
+  /** The agent answered: keep when, and forget any "not found" seen before (agentGone.ts). */
+  private async noteReached(agent: Agent, vtaDid: string): Promise<void> {
+    const current = await this.linkStore(agent)
+      .get()
+      .catch(() => undefined)
+    if (!current || current.vtaDid !== vtaDid) return
+    const now = this.now()
+    await this.changeLink(agent, vtaDid, (link) => {
+      // One write an hour is plenty for a threshold counted in days.
+      const fresh = link.lastOnlineAt !== undefined && now - link.lastOnlineAt < 60 * 60 * 1000
+      if (fresh && link.notFoundAt === undefined) return undefined
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { notFoundAt: _forgotten, ...rest } = link
+      return { ...rest, lastOnlineAt: now }
+    }).catch(() => undefined)
+  }
+
+  /** A gone agent is said once, with a way on (a new agent), and retrying stops. */
+  private async markIfGone(agent: Agent, vtaDid: string): Promise<void> {
+    const why = await this.goneFor(agent, vtaDid)
+    const link = this.state.link
+    if (!why || link.kind !== 'linked' || link.vtaDid !== vtaDid) return
+    this.dispatch({ type: 'agentGone', why, now: this.now() })
+    if (this.state.link.kind === 'linked' && this.state.link.connection.kind === 'gone' && this.retryTimer) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = undefined
+    }
+  }
+
+  /**
+   * After a failed sign-in: is the agent gone for good? Its address is looked
+   * up, what that says is kept with the link, and the thresholds decide.
+   */
+  private async goneFor(agent: Agent, vtaDid: string): Promise<AgentGoneWhy | undefined> {
+    const store = this.linkStore(agent)
+    const link = await store.get().catch(() => undefined)
+    if (!link || link.vtaDid !== vtaDid) return undefined
+    const lookUp = this.deps.agentAddress ?? agentAddressOf
+    const address = await lookUp(agent, vtaDid).catch(() => 'unknown' as const)
+    const verdict = agentGoneVerdict(link, {
+      notFound: address === 'unknown' ? undefined : address === 'notFound',
+      now: this.now(),
+    })
+    if (verdict.notFoundAt !== link.notFoundAt) {
+      // The look-up took seconds: the link is read again for the write, and only this field is changed.
+      await this.changeLink(agent, vtaDid, (now) => {
+        if (now.notFoundAt === verdict.notFoundAt) return undefined
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { notFoundAt: _previous, ...rest } = now
+        return verdict.notFoundAt !== undefined ? { ...rest, notFoundAt: verdict.notFoundAt } : rest
+      }).catch(() => undefined)
+    }
+    return verdict.gone
+  }
+
+  /**
+   * Sign in, bounded. Signing in has no deadline of its own (resolving the
+   * agent's mediator, opening the session), and while one is in flight every
+   * other attempt returns at once (`reconnecting`): one that never settled
+   * kept the phone from its agent for good, through foregrounds, unlocks and
+   * retries, with nothing in the log (IN-53, 226). Past the deadline the
+   * half-open client is let go and it counts as a drop, so the usual retry
+   * follows.
+   */
+  private async signInWithin(agent: Agent, vtaDid: string): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        // The sign-in in flight is shared by every caller (`opening`): let it
+        // go, or the next attempt would wait on the same one.
+        const stuck = this.opening
+        if (stuck) {
+          this.setOpening(undefined)
+          void stuck.client.disconnect().catch(() => undefined)
+        }
+        reject(new Error(`the VTA did not answer: signing in took over ${SESSION_CONNECT_DEADLINE_MS / 1000} s`))
+      }, SESSION_CONNECT_DEADLINE_MS)
+    })
+    try {
+      await Promise.race([this.connect(agent, vtaDid), late])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  /** "Try again" after reconnecting stopped: a fresh set of tries, starting now. */
+  async tryAgainNow(agent: Agent): Promise<void> {
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = undefined
+    this.reconnectAttempt = 0
+    this.set({ reconnectGaveUp: false })
+    await this.ensureOnline(agent)
+  }
+
+  private scheduleReconnect(agent: Agent) {
+    if (this.retryTimer || this.state.link.kind !== 'linked') return
+    const attempt = ++this.reconnectAttempt
+    if (attempt > MAX_RECONNECT_TRIES) {
+      releaseWarn(
+        `[VTA] reconnecting stopped after ${MAX_RECONNECT_TRIES} tries: Try again on My Agent, or the next foreground`
+      )
+      this.set({ reconnectGaveUp: true })
+      return
+    }
+    const delay = reconnectDelayMs(attempt - 1)
+    releaseWarn(`[VTA] reconnect try ${attempt} of ${MAX_RECONNECT_TRIES} in ${delay / 1000} s`)
+    this.dispatch({ type: 'retryScheduled', attempt, nextRetryAt: this.now() + delay })
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = undefined
+      void this.ensureOnline(agent)
+    }, delay)
+  }
+
+  /** The held question for this agent, if it is still worth waiting on; taken once. */
+  private takeHeldAnswer(vtaDid: string): Promise<unknown> | undefined {
+    const held = this.heldAnswer
+    this.heldAnswer = undefined
+    if (!held || held.vtaDid !== vtaDid || this.now() >= held.until || this.current?.vtaDid !== vtaDid) return
+    return held.answer
+  }
+
+  /** Drop the current client and its session, and any held question with them. */
+  private async reset() {
+    this.heldAnswer = undefined
+    const current = this.current
+    this.current = undefined
+    await current?.client.disconnect().catch(() => undefined)
+  }
+
+  /** Who hears a room's change signal (`rooms/keys/changed/0.1`): the rooms service, while one runs. */
+  private readonly roomSignals = new Set<(payload: Record<string, unknown>) => void>()
+
+  /**
+   * Hear each `rooms/keys/changed/0.1` the linked agent pushes, with its payload as sent. What it may do is the
+   * listener's to decide: the rooms service acts only on one that names a watch it armed, and at most by reading that
+   * room once. Returns the way to stop hearing them.
+   */
+  onRoomSignal(listener: (payload: Record<string, unknown>) => void): () => void {
+    this.roomSignals.add(listener)
+    return () => this.roomSignals.delete(listener)
+  }
+
+  private inbound(plaintext: DidCommV2PlaintextMessage) {
+    // The answer to a decision sent to another person's agent is that wait's, never a request.
+    if (takeForeignReply(plaintext)) return
+    const body = plaintext.body as { type?: unknown; payload?: unknown } | undefined
+    if (body?.type === VTA_TASK.roomsKeysChanged) {
+      const payload = body.payload
+      if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return
+      for (const listener of [...this.roomSignals]) {
+        try {
+          listener(payload as Record<string, unknown>)
+        } catch {
+          // One listener's failure is its own; the signal still reaches the rest.
+        }
+      }
+      return
+    }
+    const kept = keepManagerMessage(plaintext, Date.now())
+    if (kept && 'approval' in kept) {
+      const { approval } = kept
+      if (this.state.approvals.some((a) => a.id === approval.id)) return
+      const current = this.current
+      if (!current) return
+      void this.listIfChecked(current, approval, plaintext.body as unknown as Record<string, unknown>)
+      return
+    }
+    if (kept && 'granted' in kept) {
+      const taskType = this.state.awaitingConsentFor
+      this.set({
+        awaitingConsentFor: undefined,
+        awaitingConsentCode: undefined,
+        consentNotGiven: undefined,
+        ...(taskType ? { consentGranted: { taskType, at: Date.now() } } : {}),
+      })
+    }
+  }
+
+  /**
+   * List a consent request only once it passes the check, and only on the
+   * agent it arrived through: the session may have moved on while it ran.
+   */
+  private async listIfChecked(
+    current: { client: VtaClient; vtaDid: string; store: VtiIdentityStore; agent: Agent },
+    approval: VtiApproval,
+    doc: Record<string, unknown>
+  ) {
+    // From another person's agent that this phone approves for: checked against that agent, as its issuer. Any other
+    // request is checked against the agent it arrived through, as before.
+    const other = await approvedAgentOf(current.agent, doc).catch(() => undefined)
+    const issuer = other?.agentDid ?? current.vtaDid
+    const ok = await this.passesCheck(current.agent, issuer, current.client.managerDid, approval.id, doc)
+    if (!ok || this.current?.vtaDid !== current.vtaDid) return
+    if (this.state.approvals.some((a) => a.id === approval.id)) return
+    const listed: VtiApproval = {
+      ...approval,
+      requestCheck: 'verified',
+      ...(other
+        ? {
+            forAgent: {
+              agentDid: other.agentDid,
+              asker: other.asker,
+              ...(other.stopAsked ? { stopAsked: true as const } : {}),
+            },
+          }
+        : {}),
+    }
+    this.set({ approvals: [listed, ...this.state.approvals] })
+    if (other) {
+      releaseWarn(`[VTI] approval asked by ${didPrefix(other.agentDid)}, an agent this phone approves for`)
+      return
+    }
+    // Asked by a device this phone has not seen named: read the list once,
+    // in the background, so the card can say which device asked.
+    const agent = this.agent
+    if (agent && !this.state.knownDevices?.[approval.requester]) void this.agentDevices(agent).catch(() => undefined)
+  }
+
+  /**
+   * The check a consent request passes before a person sees it, as
+   * `ConsentRequest::verify` does: its proof, its signer is its issuer, that
+   * issuer is the agent it arrived through, it is addressed to this phone, and
+   * it has not expired (consentCheck.ts). A request that does not pass is not
+   * shown (pnm_cnm_subtask §4.2); the reason is in the log.
+   */
+  private async passesCheck(
+    agent: Agent,
+    vtaDid: string,
+    approver: string | undefined,
+    id: string,
+    doc: Record<string, unknown>
+  ): Promise<boolean> {
+    const log = agent.config?.logger
+    if (!approver) {
+      log?.warn?.(
+        `[TrustTasks:VtaAgent] consent request ${id} not shown: no identity at ${didPrefix(vtaDid)} to check it against`
+      )
+      return false
+    }
+    const check = this.deps.checkConsentRequest ?? checkConsentRequest
+    const verdict = await check(agent, doc, { vtaDid, approver }).catch(() => ({
+      ok: false as const,
+      reason: 'proof' as const,
+    }))
+    if (verdict.ok) {
+      log?.info?.(`[TrustTasks:VtaAgent] consent request ${id} verified`)
+      return true
+    }
+    log?.warn?.(`[TrustTasks:VtaAgent] consent request ${id} did not pass the check (${verdict.reason}); not shown`)
+    return false
+  }
+
+  /**
+   * Answer a consent request; the decision is signed by this phone's manager
+   * identity. Bounded (al-phone, 10-05: an agent's refusal never came back,
+   * and Approve and Deny stayed dimmed): past the deadline the answer counts
+   * as not taken, and the request waits to be answered again.
+   */
+  async decide(id: string, decision: 'approve' | 'deny', reason?: string): Promise<void> {
+    const client = this.current?.client
+    const approval = this.state.approvals.find((a) => a.id === id)
+    if (!client || !approval) return
+    // After a step-down only a change to who approves can be approved (afterStepDown.ts); the card shows no Approve.
+    if (decision === 'approve' && !mayApprove(approval)) {
+      releaseWarn(
+        '[VTI] approve refused: this phone asked to stop approving for that agent, and it is not a change to who approves'
+      )
+      return
+    }
+    // Approving lets the agent do what was asked, so it is an owner act, as
+    // removing or renaming a device is: Face ID, a fingerprint or the
+    // passcode first (Alberto's iPhone, 10-06: Approve asked for nothing).
+    // Declining grants nothing and stays one tap. Not confirmed: nothing is
+    // sent, and the request still waits — it did not fail.
+    if (decision === 'approve') await this.confirmOwner(APPROVE_REASON)
+    try {
+      const ms = this.deps.decisionDeadlineMs ?? DECISION_DEADLINE_MS
+      const other = approval.forAgent
+      const managerDid = client.managerDid
+      // Asked by another person's agent: the decision goes to that agent (foreignApproval.ts), as this phone.
+      const sending = other
+        ? managerDid && this.current
+          ? sendForeignDecision(
+              { agent: this.current.agent, managerDid, sendTo: (peer, plaintext) => client.sendTo(peer, plaintext) },
+              { issuer: other.agentDid, challenge: approval.challenge, payloadDigest: approval.payloadDigest },
+              decision,
+              reason,
+              ms
+            )
+          : Promise.reject(new DeviceActionRefused('notLinked'))
+        : client.decideConsent(approval, decision, reason)
+      if (!(await withDeadline(sending, ms))) {
+        // Name the agent the decision went to: for someone else's, that is the asking agent, never this phone's own.
+        throw new Error(`${other ? 'the asking agent' : 'the VTA'} did not take the decision within ${ms / 1000} s`)
+      }
+      this.update(id, { status: decision === 'approve' ? 'approved' : 'denied' })
+      // What this phone's own agent did; a decision for someone else's agent is not that.
+      if (!other) this.note(decision === 'approve' ? 'approved' : 'denied')
+    } catch (error) {
+      this.update(id, { status: 'failed', error: error instanceof Error ? error.message : String(error) })
+      throw error
+    }
+  }
+
+  private update(id: string, patch: Partial<VtiApproval>) {
+    this.set({ approvals: this.state.approvals.map((a) => (a.id === id ? { ...a, ...patch } : a)) })
+  }
+}
+
+function deviceFrom(entry: VtaAclEntry, mine: string[]): VtaDevice {
+  return {
+    did: entry.subject,
+    role: entry.role,
+    ...(entry.label ? { label: entry.label } : {}),
+    thisPhone: mine.includes(entry.subject),
+    ...(entry.expiresAt ? { expiresAt: entry.expiresAt } : {}),
+    ...(entry.createdAt ? { createdAt: entry.createdAt } : {}),
+    ...(entry.createdBy ? { createdBy: entry.createdBy } : {}),
+  }
+}
+
+export const vtaAgent = new VtaAgentController()
+
+/** The agent's address, looked up once more: bounded, so a failed sign-in is not held up by it. */
+async function agentAddressOf(agent: Agent, vtaDid: string): Promise<'notFound' | 'found' | 'unknown'> {
+  const kind = await classifyDid(agent as unknown as DidResolverAgent, vtaDid, { timeoutMs: 10_000 })
+  if (kind.kind !== 'unresolvable') return 'found'
+  return kind.reason === 'notFound' ? 'notFound' : 'unknown'
+}
+
+/**
+ * Whether `did` resolves, fresh from its host, with every key in `keys` — asked
+ * a few times, since a DID host may serve an update a moment after it takes it.
+ */
+async function resolvesWithKeys(agent: Agent, did: string, keys: string[], attempts = 3, delayMs = 3000) {
+  if (keys.length === 0) return false
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+    const result = await agent.dids.resolve(did, { useCache: false, persistInCache: false }).catch(() => undefined)
+    const published = new Set(
+      (result?.didDocument?.verificationMethod ?? []).map((m) => m.publicKeyMultibase).filter(Boolean)
+    )
+    if (keys.every((k) => published.has(k))) return true
+  }
+  return false
+}

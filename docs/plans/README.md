@@ -33,6 +33,7 @@ protocol we use to agree on them.
 | [release-cadence-and-testing-strategy/](./release-cadence-and-testing-strategy/) | Release cadence and the release gate's test strategy. **No parent plan file in the repo:** `release-cadence-and-testing-strategy.md` is a local export that was never committed. The folder holds [`gate_efficiency_subtask.md`](./release-cadence-and-testing-strategy/gate_efficiency_subtask.md) (what the gate is for, and how it gets cheaper) and its dated companions | Subtask design approved by the project lead on 2026-10-14 (per the subtask); the subtask's own phases name what each waits on |
 | [agent-connect-plan.md](./agent-connect-plan.md) | A person connects their own Claude session (reaching their VTA by MCP) to Keyring by QR, chats with it, adds it to `open` or `attributed` data rooms, and revokes it, with no VTI change. The agent is a presenter, never a room member; mention-only behaviour is **not enforced**. Companion: [`2026-11-20-bam.md`](./agent-connect-plan/2026-11-20-bam.md) | **Draft.** Nothing built; Phase 0 is a lab reference rung (`ref-25-agent-pairing`). Plugin ownership undecided |
 | [data-rooms-performance-plan.md](./data-rooms-performance-plan.md) | How fast a data room reaches the screen and how it stays current: the chain from Keyring's start through the VTA, the community and the room to drawn messages; what the phone keeps and in what order it refreshes; how it hears of new records; several identities. The product owner's brainstorm of 2026-11-22, recorded as requirements with a measurement step first | Brainstorm. Nothing designed or decided; Phase 0 measures the loading chain |
+| [single-codebase-plan.md](./single-codebase-plan.md) | Folding the `keyring-bifold` submodule into this repository: one repository, one commit and one PR per change, the framework's history kept on a `history/bifold` ref because `main` accepts only signed commits, two moves (same paths first, then `packages/*` with one install), the OTA transition at the first folded store build (282), and how the parallel DIDComm v2 workstream is carried across. Companions: [research and decisions](./single-codebase-plan/2026-11-20-al.md), [review](./single-codebase-plan/2026-11-20-bam.md). | Accepted 2026-11-20. **Phase 1 and the CI port are on `main` since 2026-11-22** (7e07bb801, companion [2026-11-22](./single-codebase-plan/2026-11-22-al.md)); Phase 2 after store build 282 |
 
 ## Why documents instead of only pull-request threads
 
@@ -72,7 +73,7 @@ invisible to an agent reading the codebase. So:
    daily; several claims in the first review round were accurate when written
    and stale a week later. `scripts/openvtc/` exists to make that verification
    reproducible for everyone.
-6. **A plan is done when the last PR of its stack merges** and two things are
+6. **A plan is done when its feature branch merges into `main`** and two things are
    recorded: the plan's status line (and its row in the table above) says
    `Implemented` with the merged PRs, and a dated companion lists every
    deviation from the plan, or says there were none. Until then it is
@@ -83,6 +84,12 @@ invisible to an agent reading the codebase. So:
    the Plan structure workflow on PRs touching `docs/plans/`. Legacy plans are
    skipped until they migrate ([`CLAUDE.md`](./CLAUDE.md), "Checking a plan's
    structure").
+8. **Tiers, lanes and asks.** A new plan carries `<!-- plan-format: tiers -->`:
+   P0, P1 and P2 are iterative MVPs (each works on its own; none depends on a
+   later tier), steps have owners and sit in lanes with a stack table showing
+   what can run in parallel, and upstream asks are recorded with the step and
+   tier they block and a fallback, not filed ([`CLAUDE.md`](./CLAUDE.md), "Tiers,
+   lanes and upstream asks").
 
 ## Working on this workstream
 

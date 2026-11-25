@@ -67,6 +67,7 @@ from a report or an issue always lands on the right entry.
 | [VTI-41](#vti-41--tsp-rev-3-does-not-cross-two-mediators-no-accept-comes-back-didcomm-does) | TSP Rev 3 does not cross two mediators: no accept comes back; DIDComm does | **High** | **Fixed upstream** in affinidi-tdk-rs #884 (SDK 0.26.27, 09-23) — the accept was posted to the wrong mediator. **Operator requirement remains:** the receiving mediator must admit the relayed hop (`enable_inter_mediator_relay`, or the sender in `relay_trusted_mediators`) — for the Farm, a Farm-side setting | F′ |
 | [VTI-42](#vti-42--a-community-names-withdraw01-as-the-remedy-and-its-didcomm-router-has-never-heard-of-it) | A DIDComm router that has never heard of verbs its own service dispatches (VTC and VTA) | **High** | **Resolved upstream** in VTI #1687 (09-23): the binding envelope is the intended — and now the only — DIDComm carriage for every verb, on both services; refusals of a task-typed message name the envelope and are threaded. Keyring sends it (keyring-bifold#76) | F′ |
 | [VTI-43](#vti-43--a-tsp-reply-sent-before-the-relationship-is-accepted-never-arrives) | A TSP reply sent before the relationship is accepted never arrives | **High** | **Fixed upstream** in VTI #1675 (09-23): a relationship-control frame now completes before anything the same sender sent after it. Recurred on the Farm before the fix reached it (VTA 0.39.0) | F′ |
+| [VTI-44](#vti-44--the-mediator-reads-a-discover-features-query-only-in-its-own-spelling-and-answers-the-specs-with-nothing) | The mediator reads a Discover Features query only in its own spelling, and answers the spec's with nothing | Low | New — read in source at the deployed mediator, the last pre-move commit and the current pin; measured live on a local mediator | I |
 
 ## Findings by feature
 
@@ -100,6 +101,7 @@ particular none are the images a VTA Farm currently offers.
 | **D** | 2026-09-20 | unchanged from C — vta 0.34.1 · vtc 0.11.58 | `b544da04` — the **#829 branch tip**, mediator 0.28.0; this is *not* upstream main, which has since merged #829 and thirteen more (#830–#842) and stands at mediator 0.28.9 | `35244b7` — daemon 0.8.3 |
 | **H** | 2026-09-21 (evening) | `a96fe02f` — upstream main; carries #1579, #1581, #1591–#1593, #1601 and the persona/face work (#1594–#1606); `affinidi-messaging-sdk` 0.26.12 from upstream's own lockfile; `vta` built `--features tsp` | `ad36f0b1` — upstream main, mediator **0.28.11** (#843, #844), `--features tsp` | `5365da7` — upstream main (#205) |
 | **G** | 2026-09-21 | `6bd52cab` as era C, **plus `affinidi-messaging-sdk` 0.26.12** (carries tdk-rs #838) in the lockfile; `vta` built **`--features tsp`**; alice and the community VTA advertise `TSPTransport` (`vta services tsp enable`), the VTC by a DID-log edit (VTI-35) | `15499952` as era E — mediator 0.28.9, rebuilt **`--features tsp`** | `35244b7` — daemon 0.8.3 |
+| **I** | 2026-11-20 | not involved | `c0a69f1e` — the last `affinidi-tdk-rs` commit before the mediator moved to its own repository (#949), 20 commits after the version Keyring deploys (`55580615`, mediator **0.33.1**), default features, built locally; its own Redis, no persistence. The code in question reads identically at `55580615`, `c0a69f1e` and the current pin `7609754e` | not involved |
 
 **Era F′ — the Farm's VTAs upgraded, 2026-09-22.** The Farm moved its VTAs from
 `vta 0.36.0-d383d17e` to **`0.37.1-d9a5be02`** (upstream #1634), newer than the
@@ -1648,6 +1650,69 @@ rather than waiting out the timeout. Related: [VTI-27](#vti-27) (refusals that
 arrive as problem-reports) and [VTI-Q17](#open-questions-and-requests)
 (idempotency, which is what a safe retry of a non-idempotent verb would need).
 
+### VTI-44 — The mediator reads a Discover Features query only in its own spelling, and answers the spec's with nothing
+
+*Observed on era **I** (see [Stack under test](#stack-under-test)); read in source at three commits.*
+
+(a) **What happens.** A client asks the mediator which protocols it serves,
+with a Discover Features 2.0 `queries` message spelled as the DIDComm
+Messaging specification spells it:
+
+```json
+{ "queries": [ { "feature-type": "protocol", "match": "*" } ] }
+```
+
+The mediator answers with a well-formed `disclose` that discloses nothing:
+
+```json
+{ "disclosures": [] }
+```
+
+The same query in the mediator's own spelling is answered in full, from the
+same session, seconds later:
+
+```json
+{ "queries": [ { "feature_type": "Protocol", "match": "*" } ] }
+```
+
+→ `discover-features/2.0`, `routing/2.0`, `trust-ping/2.0`, `out-of-band/2.0`,
+`messagepickup/3.0`, `atm/1.0/authenticate`, `report-problem/2.0`.
+
+Two things differ, and both must be the mediator's way for a query to be read:
+the key (`feature_type`, not `feature-type`) and the value (`Protocol`, not
+`protocol`). A query that does not parse is treated as asking for nothing, so a
+spec-conformant client cannot tell "this mediator serves none of these" from
+"this mediator did not read the question". Credo sends the specification's
+spelling.
+
+**What it costs.** Nothing to Keyring today: our only Discover Features use
+asks another wallet, not a mediator or an agent. It would cost a client that
+decides what a mediator or VTA supports by asking it, which is what Discover
+Features is for: an empty answer reads as "unsupported".
+
+(b) **How to reproduce.** Authenticate to the mediator, open the live socket,
+and send the two queries above to the mediator's own DID; read the two
+`disclose` replies. Our lab run does exactly this beside a wallet-to-wallet run
+(two Credo agents through one mediator), and reports the first as an expected
+gap.
+
+(c) **Where it lives.** `crates/messaging/affinidi-messaging-sdk/src/protocols/discover_features.rs`:
+`FeatureType` derives `Deserialize` with no `rename`, and `Query` is
+`rename_all = "snake_case"`, so the accepted form is the Rust field and variant
+names. `calculate_disclosure` is reached only when the body parses;
+`generate_disclosure_message` substitutes an empty disclosure when it does not.
+`Disclosure` is serialised the same way, so a reply carries `feature_type` as
+well — not measured against a spec-conformant reader. The definitions are
+identical at `55580615`, `c0a69f1e` and `7609754e`. The SDK's own client
+serialises the same structs, so the SDK interoperates with itself; the gap is
+against the specification and other implementations.
+
+(d) **What we do meanwhile.** Nothing in the app. Our lab tooling asks in the
+mediator's spelling and records the spec's as a gap. If a client of ours ever
+asks a mediator or VTA what it serves, it must not read an empty `disclose` as
+a refusal. The fix we would suggest is accepting the specification's spelling
+(serde aliases on the key and lowercase variants), and answering in it.
+
 ## Beyond VTI
 
 Findings in other upstreams that a VTI deployment exposes. Numbered `EXT-NN`,
@@ -2329,6 +2394,7 @@ file store.
 | 1.48 | 2026-11-23 | **VTI-Q38** (new): a `delegation` member on the `memberProfile` record, the author's delegation credential and acceptance, so any member can verify whose agent an author is; today an author can say only its name about itself, and the leaf chain is not shown to members. Read at the pin `f7b78e29d`. |
 | 1.47 | 2026-11-23 | **VTI-Q37** (new): a room-scoped context binding, so an agent that holds several memory contexts uses only the matching one in each room; today `act` is per entry and `vta/memory/*` checks the context alone. Read at the pin `f7b78e29d`. **Findings by feature** (new section): an index from each feature's plan to its questions and findings, starting with agent connect (VTI-Q26 to VTI-Q37), with the rule that a plan registers each gap here in the PR of the step that meets it. |
 | 1.46 | 2026-11-22 | **VTI-Q26 to VTI-Q36** (new): eleven questions arising from the plan for a person's own AI agent in Keyring (`docs/plans/agent-connect-plan.md` and its ledger `agent-connect-plan/vti-asks.md`): a `mentions` record member and mention-scoped delivery (Q26, with details), a VTA-side pairing flow (Q27), the consumer kind on `acl/grant` (Q28), capabilities bound to a context (Q29), a member-side withdrawal of an agent's leaf (Q30), an `agents` room setting (Q31), persona-issued credentials (Q32), an author's chain with a record (Q33), control over `acl/swap-key` and revoke by `deviceId` (Q34), what `stepUp` gates (Q35), and three starter-mediator measurements recorded as a question until re-measured on a pinned image (Q36). Read at the pin `f7b78e29d` where each row says so, otherwise at `origin/main` `71d524572` on 2026-11-20. |
+| 1.45 | 2026-11-20 | **VTI-44** (new): the mediator reads a Discover Features query only as `{"feature_type": "Protocol"}`; the specification's `{"feature-type": "protocol"}` (what Credo sends) is answered with an empty `disclose`. Measured live on era I (a locally built mediator at `c0a69f1e`) and read identically in source at the deployed `55580615` and the pin `7609754e`. No effect on Keyring today. |
 | 1.44 | 2026-09-24 | **VTI-Q25** (new): a community that publishes a vetting criterion requires vetting of everyone. An invitation does not admit on its own, and naming its criterion changes nothing; `decide` refuses a Deferred request, so an admin cannot admit that applicant either. Measured on the Farm's `keyring-test-vtc` (VTC 0.11.58); read at `a96fe02f`. |
 | 1.43 | 2026-09-24 | **VTI-Q24** (new): an openvtc vetter refuses a Vetting Card silently (a log line, no reply, no desk notice), so a failed card looks like a slow vetter to both people. Read from source at openvtc `177a218`. The card in the run that surfaced it was Keyring's fault (keyring-bifold#108). |
 | 1.42 | 2026-09-24 | **VTI-25 resolved as ours.** Traced from source at `460e0ebb` and `a96fe02f`: the `allow` reply carries the card inline on every transport, and the two `credential-exchange/issue` pushes are awaited inside the submit, so they arrive *before* the reply. Keyring took the first message after a send as the reply until keyring-bifold `4eddfbd2` (09-17). No upstream change asked; not re-measured live. |

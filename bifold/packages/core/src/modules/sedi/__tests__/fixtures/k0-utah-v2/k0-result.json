@@ -1,0 +1,585 @@
+{
+  "steps": [
+    {
+      "step": "AIDs",
+      "ok": true,
+      "roy": "IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6",
+      "deb": "IBv2DqvYol_GdZH3R6M6X-UiSjqcBm6pooXoikn2alOZ",
+      "sue": "IDTFZ-B3B25INJli8AtIDcYRyZpwcfE7sNYaS4ISbZjx",
+      "jordan": "IIJfHGUVWYHR3-ODUwcD4zEg18OsF1ke3-0I8ojPgQav",
+      "sam": "IFDf7z58Wp19EQ-EjCviVU2sgmFnjecWqCEaNsAz8lq6",
+      "other-ward": "IJpj8_jwPauLZMmIjiglQEvnOC0Lfw9nV-LCEKovbEIk",
+      "verifier": "INTrmiBTWHvoHKyohAhg4GsAhyj1gn_YNWQ5x2_81ezn",
+      "mal-root": "IOdDcQH0rKGnmqOJKWWhbV8xkcROHpicCqKecLHGuMYg",
+      "mal-org": "IL-s_XaqPPnHE90Ij8HOeLOhf2Ko-l1EtxEEsiEihBZF",
+      "mal-agent": "IF86yzxGueA0lXgtBWCGXCp4QCoggtPpd0tTLubW3W-6",
+      "jordan-nt": "1AAIAi6H-tHU1FTMt6cDzStFO8-yzKr6J3LS6JKJiCzReyT7",
+      "jordan-nt-ed": "BO06-duiao9wxLLhTOOfl03Lavbr30WUqcc9LgzImLtd",
+      "keyCode": "1AAJ",
+      "prefixCode": "I",
+      "icpSaidCode": "E",
+      "ndigCode": "I",
+      "kelVerstr": "KERICAACAAJSONAAEx.",
+      "jordanNtTransferable": false
+    },
+    {
+      "step": "issued all; revoked G-revoked",
+      "ok": true,
+      "saidCodes": {
+        "acdc": "E",
+        "attr": "E",
+        "tel": [
+          "E"
+        ],
+        "schema": "E"
+      },
+      "acdcVerstr": "ACDCCAACAAJSONAASI.",
+      "telEvents": 23,
+      "kelSn": {
+        "roy": 2,
+        "deb": 2,
+        "sue": 11,
+        "jordan": 2,
+        "sam": 0,
+        "other-ward": 0,
+        "verifier": 0,
+        "mal-root": 2,
+        "mal-org": 2,
+        "mal-agent": 2
+      }
+    },
+    {
+      "step": "verifier replayed every issuer KEL (keripy Kevery)",
+      "ok": true
+    },
+    {
+      "step": "keripy verifier on G-ok-issued-proof (Keyring wants: accept)",
+      "ok": true,
+      "keripyAccepted": true,
+      "log": [],
+      "falseReturns": [
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>"
+      ]
+    },
+    {
+      "step": "keripy verifier on G-revoked-revoked-proof (Keyring wants: refuse)",
+      "ok": true,
+      "keripyAccepted": true,
+      "log": [],
+      "falseReturns": [
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>"
+      ]
+    },
+    {
+      "step": "keripy verifier on G-revoked-issued-proof (Keyring wants: refuse)",
+      "ok": true,
+      "keripyAccepted": false,
+      "log": [
+        "ERROR: exn event for route /ipex/grant failed behavior verification. said=EGFlhWJeHm0ehSp5n7Eixet_y-O6vS3RFJXgH7GKeljV",
+        "ERROR: exn event for route /ipex/grant failed behavior verification. said=EGFlhWJeHm0ehSp5n7Eixet_y-O6vS3RFJXgH7GKeljV"
+      ],
+      "falseReturns": [
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>"
+      ]
+    },
+    {
+      "step": "keripy verifier on G-otherward-issued-proof (Keyring wants: app-layer)",
+      "ok": true,
+      "keripyAccepted": true,
+      "log": [],
+      "falseReturns": [
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>"
+      ]
+    },
+    {
+      "step": "keripy verifier on G-untrusted-issued-proof (Keyring wants: app-layer)",
+      "ok": true,
+      "keripyAccepted": true,
+      "log": [],
+      "falseReturns": [
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>"
+      ]
+    },
+    {
+      "step": "keripy verifier on S2-social-issued-proof (Keyring wants: accept)",
+      "ok": true,
+      "keripyAccepted": true,
+      "log": [],
+      "falseReturns": [
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>"
+      ]
+    },
+    {
+      "step": "\u00a713 sue-to-jordan-nt: holder stored sue's grant",
+      "ok": true,
+      "log": [],
+      "falseReturns": [
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>"
+      ]
+    },
+    {
+      "step": "\u00a713 sue-to-jordan-nt: sue ACCEPTED the /ipex/admit from jordan-nt",
+      "ok": false,
+      "sueHasHolderKel": false,
+      "admitSigner": "1AAIAi6H-tHU1FTMt6cDzStFO8-yzKr6J3LS6JKJiCzReyT7",
+      "attachmentHead": "-CAj-MAi1AAI",
+      "sueNotices": [
+        "/exn/ipex/grant"
+      ],
+      "log": [
+        "INFO: (unformattable log record: not enough arguments for format string) 'Cueing keystate retrieval: missing KEL for sender=%s, current_sn=%s, error=%s' ('1AAIAi6H-tHU1FTMt6cDzStFO8-yzKr6J3LS6JKJiCzReyT7', None)",
+        "ERROR: GroupParsator error post extraction of msg+atc : Sender KEL unavailable for 1AAIAi6H-tHU1FTMt6cDzStFO8-yzKr6J3LS6JKJiCzReyT7"
+      ],
+      "falseReturns": []
+    },
+    {
+      "step": "\u00a713 sue-to-jordan-nt retry: sue accepts the SAME admit after receiving jordan-nt's non-trans icp",
+      "ok": true,
+      "sueHasHolderKel": true,
+      "icpNextKeys": [],
+      "icpLog": [
+        "INFO: AID 1AAI...eyT7: Added to KEL icp at sn=0 valid event SAID=EAZiLGyPj1n04PHuRD-il9XjV_pmab5cw7vl3jsZHPTR"
+      ],
+      "log": [],
+      "sueNotices": [
+        "/exn/ipex/grant",
+        "/exn/ipex/admit"
+      ],
+      "falseReturns": []
+    },
+    {
+      "step": "\u00a713 sue-to-jordan-nt-ed: holder stored sue's grant",
+      "ok": true,
+      "log": [],
+      "falseReturns": [
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>"
+      ]
+    },
+    {
+      "step": "\u00a713 sue-to-jordan-nt-ed: sue ACCEPTED the /ipex/admit from jordan-nt-ed",
+      "ok": false,
+      "sueHasHolderKel": false,
+      "admitSigner": "BO06-duiao9wxLLhTOOfl03Lavbr30WUqcc9LgzImLtd",
+      "attachmentHead": "-CAi-MAhBO06",
+      "sueNotices": [
+        "/exn/ipex/admit",
+        "/exn/ipex/grant"
+      ],
+      "log": [
+        "INFO: (unformattable log record: not enough arguments for format string) 'Cueing keystate retrieval: missing KEL for sender=%s, current_sn=%s, error=%s' ('BO06-duiao9wxLLhTOOfl03Lavbr30WUqcc9LgzImLtd', None)",
+        "ERROR: GroupParsator error post extraction of msg+atc : Sender KEL unavailable for BO06-duiao9wxLLhTOOfl03Lavbr30WUqcc9LgzImLtd"
+      ],
+      "falseReturns": []
+    },
+    {
+      "step": "\u00a713 sue-to-jordan-nt-ed retry: sue accepts the SAME admit after receiving jordan-nt-ed's non-trans icp",
+      "ok": true,
+      "sueHasHolderKel": true,
+      "icpNextKeys": [],
+      "icpLog": [
+        "INFO: AID BO06...mLtd: Added to KEL icp at sn=0 valid event SAID=EIqSxKD66do6kItUoPNNPtESlXaBbS0mP0b-28WTYjfn"
+      ],
+      "log": [],
+      "sueNotices": [
+        "/exn/ipex/grant",
+        "/exn/ipex/admit"
+      ],
+      "falseReturns": []
+    },
+    {
+      "step": "\u00a713 sue-to-jordan: holder stored sue's grant",
+      "ok": true,
+      "log": [],
+      "falseReturns": [
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>",
+        "ipexing.py:276 <genexpr>"
+      ]
+    },
+    {
+      "step": "\u00a713 sue-to-jordan: sue ACCEPTED the /ipex/admit from jordan",
+      "ok": true,
+      "sueHasHolderKel": true,
+      "admitSigner": "IIJfHGUVWYHR3-ODUwcD4zEg18OsF1ke3-0I8ojPgQav",
+      "attachmentHead": "-CAv-XAuIIJf",
+      "sueNotices": [
+        "/exn/ipex/grant",
+        "/exn/ipex/admit"
+      ],
+      "log": [],
+      "falseReturns": []
+    },
+    {
+      "step": "unblind G-revoked sn2 -> revoked",
+      "ok": true
+    },
+    {
+      "step": "verifier TEL head for G-revoked = the revoke bup",
+      "ok": true
+    }
+  ],
+  "producer": {
+    "impl": "keripy",
+    "version": "2.1.0-dev1",
+    "commit": "7143832"
+  },
+  "aids": {
+    "roy": "IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6",
+    "deb": "IBv2DqvYol_GdZH3R6M6X-UiSjqcBm6pooXoikn2alOZ",
+    "sue": "IDTFZ-B3B25INJli8AtIDcYRyZpwcfE7sNYaS4ISbZjx",
+    "jordan": "IIJfHGUVWYHR3-ODUwcD4zEg18OsF1ke3-0I8ojPgQav",
+    "sam": "IFDf7z58Wp19EQ-EjCviVU2sgmFnjecWqCEaNsAz8lq6",
+    "other-ward": "IJpj8_jwPauLZMmIjiglQEvnOC0Lfw9nV-LCEKovbEIk",
+    "verifier": "INTrmiBTWHvoHKyohAhg4GsAhyj1gn_YNWQ5x2_81ezn",
+    "mal-root": "IOdDcQH0rKGnmqOJKWWhbV8xkcROHpicCqKecLHGuMYg",
+    "mal-org": "IL-s_XaqPPnHE90Ij8HOeLOhf2Ko-l1EtxEEsiEihBZF",
+    "mal-agent": "IF86yzxGueA0lXgtBWCGXCp4QCoggtPpd0tTLubW3W-6",
+    "jordan-nt": "1AAIAi6H-tHU1FTMt6cDzStFO8-yzKr6J3LS6JKJiCzReyT7",
+    "jordan-nt-ed": "BO06-duiao9wxLLhTOOfl03Lavbr30WUqcc9LgzImLtd"
+  },
+  "trustedRoot": "IMTne_Mkgzgf4iVRanVTxV3RdtL1ggDUKdKOv2OuSBd6",
+  "untrustedRoot": "IOdDcQH0rKGnmqOJKWWhbV8xkcROHpicCqKecLHGuMYg",
+  "creds": {
+    "unit": {
+      "said": "EATRaAsY3_JEhFpAXLZtkLhpnZQ9eilv32782UsiJQ-j",
+      "issuer": "roy",
+      "regk": "EA6_YiKz_zTp-awJ0mJBTQwOHNKGeaydL0xMGQpR2QLh",
+      "schema": "EBbOpBe0lP_epHhakeiXdOmeal3leDfLRf0PAItsanoQ",
+      "issuee": "IBv2DqvYol_GdZH3R6M6X-UiSjqcBm6pooXoikn2alOZ",
+      "states": [
+        "issued"
+      ]
+    },
+    "agent": {
+      "said": "EMD1mmYiNCghkOL1P1Y_8hEw-s7WiqT9bH0qY0SBarKG",
+      "issuer": "deb",
+      "regk": "EL72FbaqZwTusDf_b9ia6o30grWmJAO6HkQQvq5mE0pG",
+      "schema": "EGx4BLclkjhaK1501guyBifxuTTJLwuK61InBTdkKF7v",
+      "issuee": "IDTFZ-B3B25INJli8AtIDcYRyZpwcfE7sNYaS4ISbZjx",
+      "states": [
+        "issued"
+      ]
+    },
+    "G-ok": {
+      "said": "EE77k2PeUVmo7nPAEjvZ-R-8G3UsxLbmaOM__tG3I6PC",
+      "issuer": "sue",
+      "regk": "EAUsTxG8EXQqCE9pdJp0dwupuVgOfiGsrIOk_kf6HtH2",
+      "schema": "EDJzXg34opr6-odFix6lpiccfHF7ksITHuIES_MQRH4b",
+      "issuee": "IIJfHGUVWYHR3-ODUwcD4zEg18OsF1ke3-0I8ojPgQav",
+      "states": [
+        "issued"
+      ]
+    },
+    "G-revoked": {
+      "said": "EBZbDGyRj3r3IzC77kZwtGVMl0HfmwwTfaAo3h47ZtsS",
+      "issuer": "sue",
+      "regk": "EOQot8nMnPI6XeqUnk5fcziJ8vwRmHk33umCdfZTKdHu",
+      "schema": "EDJzXg34opr6-odFix6lpiccfHF7ksITHuIES_MQRH4b",
+      "issuee": "IIJfHGUVWYHR3-ODUwcD4zEg18OsF1ke3-0I8ojPgQav",
+      "states": [
+        "issued",
+        "revoked"
+      ]
+    },
+    "G-otherward": {
+      "said": "ELGk99h13IZdns4QLZP28uGXX-FhqPjazjfxazrmEZru",
+      "issuer": "sue",
+      "regk": "EIbMxwTbNsAeQ9Bg727CyTGOHZGqTVbJN97cohwgtkfo",
+      "schema": "EDJzXg34opr6-odFix6lpiccfHF7ksITHuIES_MQRH4b",
+      "issuee": "IIJfHGUVWYHR3-ODUwcD4zEg18OsF1ke3-0I8ojPgQav",
+      "states": [
+        "issued"
+      ]
+    },
+    "G-nontrans-issuee": {
+      "said": "ELTt8gtS-ds0QUgT_jUSe_T07fqTtsOblMuy-9DVBHgb",
+      "issuer": "sue",
+      "regk": "EE3QqhTlWc-1BYbhd4khvehrNbVC1CQqoL_v0S5JkHzt",
+      "schema": "EDJzXg34opr6-odFix6lpiccfHF7ksITHuIES_MQRH4b",
+      "issuee": "1AAIAi6H-tHU1FTMt6cDzStFO8-yzKr6J3LS6JKJiCzReyT7",
+      "states": [
+        "issued"
+      ]
+    },
+    "G-nontrans-ed25519-issuee": {
+      "said": "ENEa9KRLIHQgq580aG9FhwN4aYKqu8aebE5lf_oc1Cxc",
+      "issuer": "sue",
+      "regk": "EKbABQZTX3JCvrShKS0uTj4bZioQAvdKJuhFsxC3Sb6e",
+      "schema": "EDJzXg34opr6-odFix6lpiccfHF7ksITHuIES_MQRH4b",
+      "issuee": "BO06-duiao9wxLLhTOOfl03Lavbr30WUqcc9LgzImLtd",
+      "states": [
+        "issued"
+      ]
+    },
+    "mal-unit": {
+      "said": "EBxjtMtwj2FVDe0LE7lR_Yaz986259BGQ1EDOD1VWrEy",
+      "issuer": "mal-root",
+      "regk": "EL93WH1ZOjBs5cIsaJ4D9zzKZc59S2Hz_VAwwjGfI9CS",
+      "schema": "EBbOpBe0lP_epHhakeiXdOmeal3leDfLRf0PAItsanoQ",
+      "issuee": "IL-s_XaqPPnHE90Ij8HOeLOhf2Ko-l1EtxEEsiEihBZF",
+      "states": [
+        "issued"
+      ]
+    },
+    "mal-agent": {
+      "said": "EObMIYs8Wxhm54jDnf1nC62G1IMvHHgSuUW9FDj2hK9p",
+      "issuer": "mal-org",
+      "regk": "EMe-fODc65TjGcqLNdDoB-rhJNnGnHO0cKum0lUevIFA",
+      "schema": "EGx4BLclkjhaK1501guyBifxuTTJLwuK61InBTdkKF7v",
+      "issuee": "IF86yzxGueA0lXgtBWCGXCp4QCoggtPpd0tTLubW3W-6",
+      "states": [
+        "issued"
+      ]
+    },
+    "G-untrusted": {
+      "said": "ECmPiBi5JKCZADTBXJq72zEiI39fwn9yjVuV8-b32UTS",
+      "issuer": "mal-agent",
+      "regk": "ENyamTZWreIe1LxR6WHF8Q8YpbqPBKgggDqywc_RbQ6d",
+      "schema": "EDJzXg34opr6-odFix6lpiccfHF7ksITHuIES_MQRH4b",
+      "issuee": "IIJfHGUVWYHR3-ODUwcD4zEg18OsF1ke3-0I8ojPgQav",
+      "states": [
+        "issued"
+      ]
+    },
+    "S2-social": {
+      "said": "EMGfZcZgHU4CyeLIWukpVK_DyQk5olsJuTgNlfweFtYB",
+      "issuer": "jordan",
+      "regk": "EHV0k7fX3tEGxGW0Ml3luDK0ykqEI-sTXQ-2cxXiKznx",
+      "schema": "EB8MUTKRg8284YPduyhDgUVvNM192-247KcRaXhIxoni",
+      "issuee": "IFDf7z58Wp19EQ-EjCviVU2sgmFnjecWqCEaNsAz8lq6",
+      "states": [
+        "issued"
+      ]
+    }
+  },
+  "tel": [
+    {
+      "label": "unit-rip",
+      "issuer": "roy",
+      "regk": "EA6_YiKz_zTp-awJ0mJBTQwOHNKGeaydL0xMGQpR2QLh",
+      "sn": 0,
+      "said": "EA6_YiKz_zTp-awJ0mJBTQwOHNKGeaydL0xMGQpR2QLh",
+      "ilk": "rip"
+    },
+    {
+      "label": "unit-issued",
+      "issuer": "roy",
+      "regk": "EA6_YiKz_zTp-awJ0mJBTQwOHNKGeaydL0xMGQpR2QLh",
+      "sn": 1,
+      "said": "ELb9aoj663cTYFYp7ScBoG1wf3kZTqqGzo2cyuhlxF4t",
+      "ilk": "bup"
+    },
+    {
+      "label": "agent-rip",
+      "issuer": "deb",
+      "regk": "EL72FbaqZwTusDf_b9ia6o30grWmJAO6HkQQvq5mE0pG",
+      "sn": 0,
+      "said": "EL72FbaqZwTusDf_b9ia6o30grWmJAO6HkQQvq5mE0pG",
+      "ilk": "rip"
+    },
+    {
+      "label": "agent-issued",
+      "issuer": "deb",
+      "regk": "EL72FbaqZwTusDf_b9ia6o30grWmJAO6HkQQvq5mE0pG",
+      "sn": 1,
+      "said": "EHUgQDeOkHaTqBXbYExNP5-4vojGfbgrt24-z13Cl-cF",
+      "ilk": "bup"
+    },
+    {
+      "label": "G-ok-rip",
+      "issuer": "sue",
+      "regk": "EAUsTxG8EXQqCE9pdJp0dwupuVgOfiGsrIOk_kf6HtH2",
+      "sn": 0,
+      "said": "EAUsTxG8EXQqCE9pdJp0dwupuVgOfiGsrIOk_kf6HtH2",
+      "ilk": "rip"
+    },
+    {
+      "label": "G-ok-issued",
+      "issuer": "sue",
+      "regk": "EAUsTxG8EXQqCE9pdJp0dwupuVgOfiGsrIOk_kf6HtH2",
+      "sn": 1,
+      "said": "EIHMuRJKh8zftV1PpPGHI2MThZ-p_LQYmkM-QA9SjcjW",
+      "ilk": "bup"
+    },
+    {
+      "label": "G-revoked-rip",
+      "issuer": "sue",
+      "regk": "EOQot8nMnPI6XeqUnk5fcziJ8vwRmHk33umCdfZTKdHu",
+      "sn": 0,
+      "said": "EOQot8nMnPI6XeqUnk5fcziJ8vwRmHk33umCdfZTKdHu",
+      "ilk": "rip"
+    },
+    {
+      "label": "G-revoked-issued",
+      "issuer": "sue",
+      "regk": "EOQot8nMnPI6XeqUnk5fcziJ8vwRmHk33umCdfZTKdHu",
+      "sn": 1,
+      "said": "ELrjWcKIdxSQ-bZaLmxNAORiewt3NQKa-IyggTHY2mlj",
+      "ilk": "bup"
+    },
+    {
+      "label": "G-revoked-revoked",
+      "issuer": "sue",
+      "regk": "EOQot8nMnPI6XeqUnk5fcziJ8vwRmHk33umCdfZTKdHu",
+      "sn": 2,
+      "said": "EB0z2DQkzE3yKWsOWXeIwmUh-WgtDkE101kM0OqaF46u",
+      "ilk": "bup"
+    },
+    {
+      "label": "G-otherward-rip",
+      "issuer": "sue",
+      "regk": "EIbMxwTbNsAeQ9Bg727CyTGOHZGqTVbJN97cohwgtkfo",
+      "sn": 0,
+      "said": "EIbMxwTbNsAeQ9Bg727CyTGOHZGqTVbJN97cohwgtkfo",
+      "ilk": "rip"
+    },
+    {
+      "label": "G-otherward-issued",
+      "issuer": "sue",
+      "regk": "EIbMxwTbNsAeQ9Bg727CyTGOHZGqTVbJN97cohwgtkfo",
+      "sn": 1,
+      "said": "EKkzxlLdREmXbLdyCKk2vXAzg1vzvxOjnDvRNxfT4xrK",
+      "ilk": "bup"
+    },
+    {
+      "label": "G-nontrans-issuee-rip",
+      "issuer": "sue",
+      "regk": "EE3QqhTlWc-1BYbhd4khvehrNbVC1CQqoL_v0S5JkHzt",
+      "sn": 0,
+      "said": "EE3QqhTlWc-1BYbhd4khvehrNbVC1CQqoL_v0S5JkHzt",
+      "ilk": "rip"
+    },
+    {
+      "label": "G-nontrans-issuee-issued",
+      "issuer": "sue",
+      "regk": "EE3QqhTlWc-1BYbhd4khvehrNbVC1CQqoL_v0S5JkHzt",
+      "sn": 1,
+      "said": "EJrb-zJxH1WeZHamBJxSEPD-qw9pqQCEXo9wcpNMFIc_",
+      "ilk": "bup"
+    },
+    {
+      "label": "G-nontrans-ed25519-issuee-rip",
+      "issuer": "sue",
+      "regk": "EKbABQZTX3JCvrShKS0uTj4bZioQAvdKJuhFsxC3Sb6e",
+      "sn": 0,
+      "said": "EKbABQZTX3JCvrShKS0uTj4bZioQAvdKJuhFsxC3Sb6e",
+      "ilk": "rip"
+    },
+    {
+      "label": "G-nontrans-ed25519-issuee-issued",
+      "issuer": "sue",
+      "regk": "EKbABQZTX3JCvrShKS0uTj4bZioQAvdKJuhFsxC3Sb6e",
+      "sn": 1,
+      "said": "EJl5Bc8PVkUdnls1YFiiBZ4l91vgtFIKDlXdc456w7bC",
+      "ilk": "bup"
+    },
+    {
+      "label": "mal-unit-rip",
+      "issuer": "mal-root",
+      "regk": "EL93WH1ZOjBs5cIsaJ4D9zzKZc59S2Hz_VAwwjGfI9CS",
+      "sn": 0,
+      "said": "EL93WH1ZOjBs5cIsaJ4D9zzKZc59S2Hz_VAwwjGfI9CS",
+      "ilk": "rip"
+    },
+    {
+      "label": "mal-unit-issued",
+      "issuer": "mal-root",
+      "regk": "EL93WH1ZOjBs5cIsaJ4D9zzKZc59S2Hz_VAwwjGfI9CS",
+      "sn": 1,
+      "said": "EDI6OsTbnMTnX0tTfy2U7k38iCgXNKqKlGb7J3f6SPkK",
+      "ilk": "bup"
+    },
+    {
+      "label": "mal-agent-rip",
+      "issuer": "mal-org",
+      "regk": "EMe-fODc65TjGcqLNdDoB-rhJNnGnHO0cKum0lUevIFA",
+      "sn": 0,
+      "said": "EMe-fODc65TjGcqLNdDoB-rhJNnGnHO0cKum0lUevIFA",
+      "ilk": "rip"
+    },
+    {
+      "label": "mal-agent-issued",
+      "issuer": "mal-org",
+      "regk": "EMe-fODc65TjGcqLNdDoB-rhJNnGnHO0cKum0lUevIFA",
+      "sn": 1,
+      "said": "EBTohGqrxLoQX3sy0ksFJJ0GffOsr3CHRXe0gvqPMI6-",
+      "ilk": "bup"
+    },
+    {
+      "label": "G-untrusted-rip",
+      "issuer": "mal-agent",
+      "regk": "ENyamTZWreIe1LxR6WHF8Q8YpbqPBKgggDqywc_RbQ6d",
+      "sn": 0,
+      "said": "ENyamTZWreIe1LxR6WHF8Q8YpbqPBKgggDqywc_RbQ6d",
+      "ilk": "rip"
+    },
+    {
+      "label": "G-untrusted-issued",
+      "issuer": "mal-agent",
+      "regk": "ENyamTZWreIe1LxR6WHF8Q8YpbqPBKgggDqywc_RbQ6d",
+      "sn": 1,
+      "said": "EL-Hd_cXMMGRAwCMxisZRCP4GOrkz0U-LQgUSyJNQMV6",
+      "ilk": "bup"
+    },
+    {
+      "label": "S2-social-rip",
+      "issuer": "jordan",
+      "regk": "EHV0k7fX3tEGxGW0Ml3luDK0ykqEI-sTXQ-2cxXiKznx",
+      "sn": 0,
+      "said": "EHV0k7fX3tEGxGW0Ml3luDK0ykqEI-sTXQ-2cxXiKznx",
+      "ilk": "rip"
+    },
+    {
+      "label": "S2-social-issued",
+      "issuer": "jordan",
+      "regk": "EHV0k7fX3tEGxGW0Ml3luDK0ykqEI-sTXQ-2cxXiKznx",
+      "sn": 1,
+      "said": "EDbavbyVXEUc5PAP8SnAHPIQ6SHn7_S8R1rFkEQKf07v",
+      "ilk": "bup"
+    }
+  ],
+  "generatedAt": "2026-11-10T18:25:27.056299+00:00"
+}

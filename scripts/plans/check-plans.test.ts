@@ -7,7 +7,7 @@ import path from 'node:path'
 
 import { sha256, sheetManifest } from './mockup-kit/kit.ts'
 import { fingerprint } from './mockup-kit/tokens.ts'
-import { checkText, classify, mockupProblem, FORMAT_START, HUMAN_MARKER, isExternalRef, namedDocuments, PRECISION_MARKER, run, sectionRefs } from './check-plans.ts'
+import { ASKS_COLUMNS, checkText, classify, TIERS_MARKER, mockupProblem, FORMAT_START, HUMAN_MARKER, isExternalRef, namedDocuments, PRECISION_MARKER, run, sectionRefs } from './check-plans.ts'
 
 const HUMAN = `${HUMAN_MARKER}\n\n> **Human part: for people deciding and reviewing.** The precision part wins.\n`
 const PRECISION = `${PRECISION_MARKER}\n\n> **Precision part: for implementers and agents.** Implement from this.\n`
@@ -350,4 +350,132 @@ test('contact sheet: a stale sheet fails with the regeneration command; no brows
 test('contact sheet: legacy plans and files without mockups are not asked for one', () => {
   assert.deepEqual(checkText('docs/plans/x-plan.md', 'skip', '# Legacy\n\n![a](./x-plan/mockups/01-a.svg)\n'), [])
   assert.deepEqual(sheetMessages(GOOD.replace('Text.', '[web](https://example.com/mockups/01-a.svg)')), [])
+})
+
+// ---- tiers, lanes and upstream asks (opt-in by marker) ----
+
+const FINDINGS = '## VTI-01\n\nVTI-Q8 and VTI-Q9 are open questions.\n'
+const tfs = { exists: (p: string): boolean => p === 'docs/VTI_UPSTREAM_FINDINGS.md' || true, read: (p: string): string => (p === 'docs/VTI_UPSTREAM_FINDINGS.md' ? FINDINGS : KIT_SVG) }
+
+const OVERVIEW_OK = 'Overview text.\n\n**Open decisions**\n\n| Question | Recommendation | Who decides | By when |\n|---|---|---|---|\n| q | r | w | d |\n\n**Decisions made**\n\n| Decision | Who | When | Why |\n|---|---|---|---|\n| None yet | | | |\n'
+
+const ZERO = `### 7.0 Tiers, lanes and order
+
+| Tier | Exit criterion | Demo or test |
+|---|---|---|
+| P0 | works alone | demo A |
+| P1 | works alone, richer | demo B |
+| P2 | works alone, richest | demo C |
+
+| Lane | Owner | Steps |
+|---|---|---|
+| Core | bam | 7.1, 7.2 |
+
+\`\`\`mermaid
+flowchart LR
+    s1[7.1] --> s2[7.2]
+    style s1 stroke-width:4px
+\`\`\`
+
+| PR n of N | Step | Tier | Base | Can start after |
+|---|---|---|---|---|
+| 1 of 2 | 7.1 | P0 | feat/x | none |
+| 2 of 2 | 7.2 | P1 | PR 1 | PR 1 |
+`
+
+const STEPS = `${ZERO}
+### 7.1 First step (P0)
+
+**Owner:** bam
+
+Do it. **Fallback:** none needed.
+
+### 7.2 Second step (P1)
+
+**Owner:** bam
+
+Needs VTI-Q8.
+
+**Fallback:** do it locally.
+`
+
+const ASKS = `## 10. Upstream asks and blocked on whom
+
+| Ask | Id | Blocks (step, tier) | Fallback meanwhile |
+|---|---|---|---|
+| a thing | VTI-Q8 | 7.2, P1 | do it locally |
+`
+
+const FILLER = (a: number, b: number): string => Array.from({ length: b - a + 1 }, (_, i) => `## ${a + i}. Section\n\nText.\n\n`).join('')
+const tiered = (steps = STEPS, asks = ASKS, overview = OVERVIEW_OK, marker = TIERS_MARKER): string =>
+  plan(`${FILLER(1, 6)}## 7. Steps and acceptance criteria\n\n${steps}\n${FILLER(8, 9)}${asks}`, overview).replace('**Status:** Draft.\n', `**Status:** Draft.\n${marker}\n`)
+const tmsgs = (text: string): string[] => checkText('docs/plans/x-plan.md', 'plan', text, tfs.exists, tfs.read).map((p) => p.message)
+
+test('tiers: a plan with the marker and the full format passes', () => {
+  assert.deepEqual(tmsgs(tiered()), [])
+})
+
+test('tiers: without the marker none of the new rules apply (existing plans keep passing)', () => {
+  assert.deepEqual(tmsgs(plan(`${FILLER(1, 6)}## 7. Steps\n\nSee VTI-Q404.\n\n### 7.1 A step\n`)), [])
+})
+
+test('tiers: §7 must open with 7.0, hold tiers, lanes, graph and stack table', () => {
+  const noZero = tmsgs(tiered(STEPS.replace(ZERO, '')))
+  assert.ok(noZero.some((m) => m.includes('### 7.0 Tiers, lanes and order')))
+  const noGraph = tmsgs(tiered(STEPS.replace(/```mermaid[\s\S]*?```/, '')))
+  assert.ok(noGraph.some((m) => m.includes('mermaid dependency graph')))
+  const noLanes = tmsgs(tiered(STEPS.replace('| Lane | Owner | Steps |', '| Lane | Who | Steps |')))
+  assert.ok(noLanes.some((m) => m.includes('lanes table')))
+  const noStack = tmsgs(tiered(STEPS.replace('| PR n of N |', '| PR |')))
+  assert.ok(noStack.some((m) => m.includes('stack table')))
+  const noP2 = tmsgs(tiered(STEPS.replace('| P2 | works alone, richest | demo C |\n', '')))
+  assert.ok(noP2.some((m) => m.includes('no row for P2')))
+})
+
+test('tiers: a step heading needs a tier and an owner', () => {
+  assert.ok(tmsgs(tiered(STEPS.replace('First step (P0)', 'First step'))).some((m) => m.includes('must end with its tier')))
+  assert.ok(tmsgs(tiered(STEPS.replace('**Owner:** bam\n\nDo it', 'Do it'))).some((m) => m.includes('names no owner')))
+})
+
+test('tiers: no step starts after a later-tier step; tiers must agree with the headings', () => {
+  const bad = STEPS.replace('| 1 of 2 | 7.1 | P0 | feat/x | none |', '| 1 of 2 | 7.1 | P0 | feat/x | PR 2 |')
+  assert.ok(tmsgs(tiered(bad)).some((m) => m.includes('no tier depends on a later tier')))
+  const ghost = STEPS.replace('| PR 1 | PR 1 |', '| PR 1 | PR 9 |')
+  assert.ok(tmsgs(tiered(ghost)).some((m) => m.includes('PR 9')))
+  const mismatch = STEPS.replace('| 2 of 2 | 7.2 | P1 |', '| 2 of 2 | 7.2 | P2 |')
+  assert.ok(tmsgs(tiered(mismatch)).some((m) => m.includes('is P1 in its heading but P2')))
+  const missingRow = STEPS.replace(/\| 2 of 2 .*\n/, '')
+  assert.ok(tmsgs(tiered(missingRow)).some((m) => m.includes('step 7.2 is not in the stack table')))
+})
+
+test('tiers: a step that names a VTI id needs a fallback, and the id must be in the asks table', () => {
+  assert.ok(tmsgs(tiered(STEPS.replace('**Fallback:** do it locally.', ''))).some((m) => m.includes('no `**Fallback:**`')))
+  const unlisted = ASKS.replace('VTI-Q8', 'VTI-Q9')
+  assert.ok(tmsgs(tiered(STEPS, unlisted)).some((m) => m.includes('VTI-Q8 is named in §7 but is not in the asks table')))
+})
+
+test('tiers: every VTI id the plan names is registered in the findings file', () => {
+  const m = tmsgs(tiered(STEPS.replace(/VTI-Q8/g, 'VTI-Q77'), ASKS.replace('VTI-Q8', 'VTI-Q77')))
+  assert.ok(m.some((x) => x.startsWith('VTI-Q77 is not registered')))
+})
+
+test('tiers: the upstream section and its table are exact, and an ask carries tier and fallback', () => {
+  assert.ok(tmsgs(tiered(STEPS, ASKS.replace('Upstream asks and blocked on whom', 'Blocked, and on whom'))).some((m) => m.includes('Upstream asks and blocked on whom')))
+  assert.ok(tmsgs(tiered(STEPS, ASKS.replace('| Fallback meanwhile |', '| Fallback meanwhile | Status |').replace('| do it locally |', '| do it locally | open |'))).some((m) => m.includes(ASKS_COLUMNS.join(' | '))))
+  assert.ok(tmsgs(tiered(STEPS, ASKS.replace('7.2, P1', '7.2'))).some((m) => m.includes('step and tier')))
+  assert.ok(tmsgs(tiered(STEPS, ASKS.replace('| do it locally |', '|  |'))).some((m) => m.includes('fallback')))
+})
+
+test('tiers: the Overview needs the decisions register', () => {
+  assert.ok(tmsgs(tiered(STEPS, ASKS, 'Overview text.\n')).some((m) => m.includes('Decisions made')))
+})
+
+test('tiers: a Decisions made Who cell names the person, never the role', () => {
+  const row = (who: string): string => OVERVIEW_OK.replace('| None yet | | | |', `| Use X (D1) | ${who} | 2026-11-25 | because |`)
+  assert.deepEqual(tmsgs(tiered(STEPS, ASKS, row('Brendan and Alberto'))), [])
+  for (const who of ['the user', 'Product owner (Alberto)', 'the owner']) {
+    assert.ok(tmsgs(tiered(STEPS, ASKS, row(who))).some((m) => m.includes('name the person who decided')), who)
+  }
+  // Only the Who cell is read: the decision's own text may speak of the owner.
+  assert.deepEqual(tmsgs(tiered(STEPS, ASKS, OVERVIEW_OK.replace('| None yet | | | |', '| The owner approves (D2) | Brendan | 2026-11-25 | the user asked |'))), [])
 })

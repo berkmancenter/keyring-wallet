@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vta/_shared/0.1/backup-transfer",
+  "title": "Backup transfer — shared definitions for the vta/backup/* spec family",
+  "description": "The shapes that describe how an encrypted backup bundle moves between an operator and an agent. Defined once because `initiate-export` and `initiate-import` return the same descriptor, `initiate-import` and the descriptor carry the same chunk manifest, and `get-chunk` and `put-chunk` carry the same chunk — an inline copy per task would fork the moment one of them gained a member.\n\nTwo transfer algorithms are defined. `stream` moves the whole bundle in one HTTPS request against a recipient-published address, authorized by a bearer token. `chunkedTrustTask` moves it as a sequence of Trust Task documents over whatever transport already carries the family's control-plane tasks, which is what makes a backup possible for an agent that speaks only DIDComm or TSP and has no HTTPS address to publish. The normative account of `chunkedTrustTask` — the chunk-size bound and why, ordering, resume and expiry — is in the `vta/backup/initiate-export/1.1` specification's Chunked transfer section; these definitions carry its shape.",
+  "$defs": {
+    "BundleId": {
+      "title": "BundleId",
+      "description": "Handle for a bundle across its whole lifecycle. Recipient-generated and unguessable, which is what lets an unauthorized reference be answered as not-found without confirming existence. Opaque: a producer quotes what it was given and must not derive, guess or enumerate one.",
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "ChunkSize": {
+      "title": "ChunkSize",
+      "description": "Size in bytes of every chunk except the last, which carries the remainder and is between 1 and this value inclusive. The ceiling of 262144 (256 KiB) is normative and is derived in `vta/backup/initiate-export/1.1` under Chunked transfer: it is the largest power of two whose `get-chunk` or `put-chunk` document still fits a 1 MiB mediator message after base64url encoding of `data`, DIDComm authcrypt encoding, and two nested forward wrappers. The floor of 16384 keeps a 1 GiB bundle within `ChunkCount`'s ceiling at sizes a constrained transport can still choose.",
+      "type": "integer",
+      "minimum": 16384,
+      "maximum": 262144
+    },
+    "ChunkCount": {
+      "title": "ChunkCount",
+      "description": "Number of chunks in the bundle, equal to ceil(expectedSizeBytes / chunkSize). Bounded at 4096 so that the manifest itself — one digest per chunk — fits in the single document that carries it under the same message-size reasoning as a chunk.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4096
+    },
+    "ChunkIndex": {
+      "title": "ChunkIndex",
+      "description": "Zero-based position of a chunk within its bundle. Valid values are 0 to chunkCount − 1; an index outside that range is refused with chunkOutOfRange rather than validated here, because the bound depends on the bundle.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4095
+    },
+    "ChunkData": {
+      "title": "ChunkData",
+      "description": "The chunk's bytes, base64url-encoded without padding (RFC 4648 §5). Bounded at 349526 characters, the unpadded encoding of a 262144-byte chunk. These are bytes of the encrypted bundle, so a chunk read in isolation reveals nothing of the agent's state — but a complete set of chunks is the export, and is to be handled as such.",
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 349526,
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "ChunkManifest": {
+      "title": "ChunkManifest",
+      "description": "The terms of a `chunkedTrustTask` transfer, committed before any chunk moves. On export the recipient states them in the descriptor; on import the producer pre-commits them in the request and the recipient echoes them. Either way the manifest arrives in a document whose proof is REQUIRED, so the per-chunk digests are authenticated by the party that computed them and each chunk can be verified — and a single bad chunk re-fetched or refused — on arrival rather than only after reassembly.\n\nConsistency rules JSON Schema cannot state: `chunkCount` MUST equal ceil(expectedSizeBytes / chunkSize) for the bundle the manifest describes, and `chunkDigests` MUST have exactly `chunkCount` items. A party receiving a manifest violating either MUST refuse it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chunkSize",
+        "chunkCount",
+        "chunkDigests"
+      ],
+      "properties": {
+        "chunkSize": {
+          "$ref": "#/$defs/ChunkSize"
+        },
+        "chunkCount": {
+          "$ref": "#/$defs/ChunkCount"
+        },
+        "chunkDigests": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "description": "Digest of each chunk's raw bytes (not of its base64url encoding), in index order. Compared as decoded multihash bytes, never as encoded strings. sha2-256 is RECOMMENDED and MUST be implemented by every party; a party that does not implement the hash a digest names MUST treat the manifest as unverifiable rather than skip the check.",
+          "items": {
+            "$ref": "../../../_framework/0.3/framework.schema.json#/$defs/DigestMultibase"
+          }
+        }
+      }
+    },
+    "StreamDescriptor": {
+      "title": "StreamDescriptor",
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A descriptor for a transfer that happens outside Trust Task documents, at an address the recipient publishes — the `stream` algorithm, and any other algorithm a recipient offers that is shaped as an address plus a bearer credential. Identical in members to the `vta/backup/*/1.0` descriptor.",
+      "required": [
+        "bundleId",
+        "algorithm",
+        "transportUrl",
+        "transportToken",
+        "expectedSha256",
+        "expectedSizeBytes",
+        "expiresAt"
+      ],
+      "properties": {
+        "bundleId": {
+          "$ref": "#/$defs/BundleId"
+        },
+        "algorithm": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The mechanism in use. Never `chunkedTrustTask`, which has its own descriptor shape; a descriptor naming it with a transport address is malformed."
+        },
+        "transportUrl": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048,
+          "description": "Where to fetch (export) or write (import) the bytes. A recipient with no address at which it is reachable cannot produce this and refuses with transportUnavailable rather than returning an unusable one. An import address is write-only: staged bytes are never served back from it."
+        },
+        "transportToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Bearer credential for transportUrl, presented in the X-Backup-Token header. Minted per bundle and never reused. A recipient should store only a hash of it, and should accept an export token once."
+        },
+        "expectedSha256": {
+          "$ref": "#/$defs/ExpectedSha256"
+        },
+        "expectedSizeBytes": {
+          "$ref": "#/$defs/ExpectedSizeBytes"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/ExpiresAt"
+        }
+      }
+    },
+    "ChunkedDescriptor": {
+      "title": "ChunkedDescriptor",
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A descriptor for the `chunkedTrustTask` algorithm. Carries no address and no bearer token: every chunk moves in a Trust Task document whose sender the transport authenticates, so possession of a token would add nothing and would be one more secret to leak.",
+      "required": [
+        "bundleId",
+        "algorithm",
+        "chunks",
+        "expectedSha256",
+        "expectedSizeBytes",
+        "expiresAt"
+      ],
+      "properties": {
+        "bundleId": {
+          "$ref": "#/$defs/BundleId"
+        },
+        "algorithm": {
+          "type": "string",
+          "enum": [
+            "chunkedTrustTask"
+          ],
+          "description": "Discriminates this shape from StreamDescriptor."
+        },
+        "chunks": {
+          "$ref": "#/$defs/ChunkManifest"
+        },
+        "expectedSha256": {
+          "$ref": "#/$defs/ExpectedSha256"
+        },
+        "expectedSizeBytes": {
+          "$ref": "#/$defs/ExpectedSizeBytes"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/ExpiresAt"
+        }
+      }
+    },
+    "BundleDescriptor": {
+      "title": "BundleDescriptor",
+      "description": "The control-plane account of a bundle transfer: which algorithm, on what terms, until when. Exactly one of the two shapes — they are mutually exclusive, since StreamDescriptor requires `transportUrl` and `transportToken` and forbids `chunks`, and ChunkedDescriptor requires `chunks` and forbids both.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/StreamDescriptor"
+        },
+        {
+          "$ref": "#/$defs/ChunkedDescriptor"
+        }
+      ]
+    },
+    "ExpectedSha256": {
+      "title": "ExpectedSha256",
+      "description": "Lowercase hex SHA-256 of the whole bundle's bytes. Kept in the hex form the 1.0 descriptor published rather than moved to DigestMultibase, because it is an unchanged member of an existing descriptor and re-encoding it would break every stream producer for no gain in what it checks. For a chunked transfer it is the check over the reassembled bundle, applied after every chunk has verified individually, so that a correct set of chunks assembled in the wrong order is still caught.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "ExpectedSizeBytes": {
+      "title": "ExpectedSizeBytes",
+      "description": "Total byte count of the bundle. A zero-length bundle is not a degenerate success — nothing was serialized — so the floor is 1.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "ExpiresAt": {
+      "title": "ExpiresAt",
+      "description": "After which the bundle is collected: staged bytes discarded, tokens and chunk requests refused. Short by design. For a chunked transfer a recipient may move it later as chunks are exchanged, never past its own ceiling — each chunk response reports the current value.",
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

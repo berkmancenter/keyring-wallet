@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vetting/attestation/0.1",
+  "title": "Vetting — Attestation — payload",
+  "description": "A vetter gives an applicant an attestation that names nobody. It carries the same facts a Vetting Statement carries and no issuer: what proves it was made by an eligible vetter is the proof the applicant later builds over it, not a signature on this document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "suite",
+    "attestation",
+    "meta",
+    "token"
+  ],
+  "properties": {
+    "suite": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The hidden-vetting suite this attestation was made under, exactly as the community's criterion publishes it. An applicant holding attestations under two suites cannot mix them in one proof."
+    },
+    "attestation": {
+      "type": "string",
+      "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+      "description": "The attestation itself, multibase base58btc: a tag, a shown class credential and a proof. It carries no identifier of the vetter — the tag is deterministic for this (vetter, applicant) pair and unlinkable across applicants."
+    },
+    "meta": {
+      "$ref": "../../../vetting/_shared/0.1/hidden-vetting.schema.json#/$defs/StatementMeta",
+      "description": "The facts the community will count. Bound into the attestation, so changing one here invalidates it."
+    },
+    "token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "serial",
+        "shown"
+      ],
+      "description": "The attestation token spent for this attestation. The community records the serial, which is how a vetter's rate is capped without anybody learning who they are.",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The token label spent under."
+        },
+        "serial": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+          "description": "The serial revealed by the spend. Recorded by the community; a second appearance is a double spend."
+        },
+        "shown": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+          "description": "The re-randomised token signature, verifiable under the published token key."
+        }
+      }
+    },
+    "ext": {
+      "$ref": "../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "Vetting Attestation — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accepted"
+      ],
+      "description": "The applicant's receipt. It verifies the attestation on arrival rather than at submit, so a vetter learns immediately that what it sent is usable.",
+      "properties": {
+        "accepted": {
+          "type": "boolean",
+          "description": "Whether the attestation verified against the community's published parameters and the card the applicant showed."
+        },
+        "heldCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "OPTIONAL. How many attestations the applicant now holds for this criterion — a courtesy so a vetter can tell someone they are done."
+        },
+        "ext": {
+          "$ref": "../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

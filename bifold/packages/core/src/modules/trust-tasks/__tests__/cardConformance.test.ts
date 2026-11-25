@@ -1,0 +1,832 @@
+/**
+ * A Vetting Card made by the shipping code (`VtiApplicant.sendCard`) and really
+ * signed — eddsa-jcs-2022 over a `did:key` persona's Ed25519 key — so the VTI
+ * SDK's own verifier can judge it (wallet `scripts/openvtc/card-verify`, the
+ * check an openvtc vetter runs). Nothing is mocked between the application and
+ * the signed card except the key store and the DID resolver, which a `did:key`
+ * needs none of.
+ *
+ * With `CARD_OUT=<dir>` it writes `card.json` and `expect.json` there for
+ * `card-verify`; the gate runs the two together
+ * (`scripts/openvtc/card-verify/check-keyring-card.sh`).
+ *
+ * The same run has Keyring's vetter (`VtiVetterDesk.attest`) attest to that
+ * card, really signed by the vetter's did:key, and writes the vetted/1
+ * statement as `statement-v1.json` with the session document it cites as
+ * `session.json`: `card-verify verify-statement` runs vta-sdk's
+ * `verify_statement`, `check_against_card` and `check_against_session` on it —
+ * what an openvtc applicant runs on a statement it receives (openvtc-core
+ * `vetting/applicant.rs:1068`, at ed13d29). The endorsement-shaped statement is
+ * still made and checked here, but no longer written: vta-sdk 0.55 refuses it.
+ *
+ * And Keyring's vetter accepts a request (`VtiVetterDesk` taking a
+ * `vetting/request`), presenting a grant a did:key community really signed.
+ * With the role VAC a DTG Credentials v1 community issues, the run writes that
+ * presentation as `eligibility-v1.json`, with `expect.json`'s `eligibilityV1`
+ * member naming what vta-sdk `verify_eligibility_vp` (vetting/eligibility.rs)
+ * must be given — the check an openvtc applicant runs on it (openvtc-core
+ * `vetting/inbound.rs:607-620`, at ed13d29). The presentation with the older
+ * CommunityRole grant is still checked here, but no longer written. The
+ * community is a did:key of its own so the upstream checker needs no network
+ * to verify the grant.
+ *
+ * And every Trust Task document Keyring signs — to a peer, to a community, to
+ * its VTA — made by the shipping code, written to `tasks/<name>.json`, with
+ * `tasks.json` listing each one's `type`, `issuer` and expected signer. The
+ * workflow runs `card-verify verify-task` on each (vta-sdk
+ * `verify_trust_task_proof_with`, what a VTA or a VTC runs, and the first half
+ * of openvtc's `wire::open`); this test holds the rest of `wire::open` —
+ * issuer is the signer, the document's type is the one it was sent as — until
+ * card-verify checks those itself. The vetter profile is listed since PR E
+ * (its proof is RECOMMENDED, and openvtc signs it); the manifest is the one
+ * task Keyring sends unsigned, on purpose (vtiAgent `SIGNED_TASKS`), and is not.
+ */
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+import { DidKey, TypedArrayEncoder } from '@credo-ts/core'
+import { ed25519 } from '@noble/curves/ed25519.js'
+
+// CONFORMANCE_WHOLE_SECOND=1: every clock read lands on a whole second, so
+// every timestamp Keyring signs is one `toISOString()` writes as `.000Z`.
+// vta-sdk re-serialises those without the fraction before checking a proof,
+// and refused about one document in a thousand at random until
+// signDocumentProof wrote them its way (wireTimestamp). CI runs this file
+// once as-is and once like this; `Date.now` is already pinned to a whole
+// second by jestSetup.
+if (process.env.CONFORMANCE_WHOLE_SECOND) {
+  const RealDate = Date
+  const wholeSecond = () => Math.floor(new RealDate().getTime() / 1000) * 1000
+  global.Date = class extends RealDate {
+    constructor(...args: unknown[]) {
+      if (args.length) super(...(args as [string]))
+      else super(wholeSecond())
+    }
+  } as DateConstructor
+}
+
+const mockSend = jest.fn(async () => undefined)
+const mockAsk = jest.fn()
+jest.mock('../module/vtiAgent', () => ({
+  ...jest.requireActual('../module/vtiAgent'),
+  vtiAgent: {
+    send: (...a: unknown[]) => (mockSend as jest.Mock)(...a),
+    ask: (...a: unknown[]) => mockAsk(...a),
+    sentNoAnswer: () => new Error('no answer'),
+    onInbound: () => () => undefined,
+    // A named way in: asking a vetter reads whether the community vets privately.
+    fetchManifest: async () => ({ criteria: [{ id: 'vetted', vetting: { minStatements: 1 } }] }),
+  },
+}))
+jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+
+// eslint-disable-next-line import/order
+import {
+  MAX_CARD_VALIDITY_MS,
+  VETTING,
+  VtiApplicant,
+  VtiVetterDesk,
+  cardDigestMultibase,
+  type VettingDeskRequest,
+  type VettingTicket,
+  type VtiVettingStore,
+} from '../module/vtiVetting'
+// eslint-disable-next-line import/order
+import { DTG_V1_WRITING_RELEASE_DEFAULT, setDtgV1WritingEnabled, setDtgV1WritingMode } from '../module/dtgV1Writing'
+// eslint-disable-next-line import/order
+import { verifyEligibilityPresentation } from '../module/vtiEligibility'
+import { purposeForDocumentType } from '../module/proofPurpose'
+// eslint-disable-next-line import/order
+import {
+  digestMultibase,
+  signCompactJws,
+  signDocumentProof,
+  taskDigestMultibase,
+  verifyDocumentProof,
+  verifyTrustTaskProof,
+} from '@bifold/trust-tasks'
+// eslint-disable-next-line import/order
+import { VTA_TASK, VtaClient } from '../module/VtaClient'
+
+/** 32 random bytes, base64url — the shape the schema requires of a salt and a challenge. */
+const random32 = () => TypedArrayEncoder.toBase64Url(ed25519.utils.randomSecretKey())
+
+/** A did:key over an Ed25519 key, and an agent that can sign as it — nothing else. */
+function didKeySigner() {
+  const secret = ed25519.utils.randomSecretKey()
+  const publicKey = ed25519.getPublicKey(secret)
+  const did = `did:key:z${TypedArrayEncoder.toBase58(new Uint8Array([0xed, 0x01, ...publicKey]))}`
+  const document = DidKey.fromDid(did).didDocument
+  const verificationMethodId = document.verificationMethod?.[0]?.id as string
+  const agent = {
+    config: { logger: { info: () => undefined, warn: () => undefined, debug: () => undefined } },
+    // No hidden-vetting application is held: asking a vetter looks for one.
+    genericRecords: { findAllByQuery: async () => [] },
+    dids: {
+      resolveDidDocument: async (d: string) => DidKey.fromDid(d).didDocument,
+      getCreatedDids: async () => [],
+    },
+    dependencyManager: {
+      resolve: () => ({
+        sign: async ({ data }: { data: Uint8Array }) => ({ signature: ed25519.sign(data, secret) }),
+      }),
+    },
+  }
+  return { did, verificationMethodId, agent, publicKey }
+}
+
+describe('a Vetting Card from the shipping code, really signed', () => {
+  it('carries a proof that verifies, and a window within the SDK limit', async () => {
+    const applicant = didKeySigner()
+    const vetter = didKeySigner()
+    const community = 'did:webvh:QmCommunity:dids.example:community'
+    const session = {
+      documentId: 'urn:uuid:session-conformance',
+      requiredClaims: ['name.legal'],
+      challenge: random32(),
+      // The spec: a vetter MUST set `domain` to the request's community.
+      domain: community,
+      // `new Date()`, not `Date.now()`: the test setup pins the latter.
+      expiresAt: new Date(new Date().getTime() + 30 * 60000).toISOString(),
+    }
+    const application = {
+      communityDid: community,
+      joinDid: applicant.did,
+      minStatements: 1,
+      requiredClaims: session.requiredClaims,
+      acceptedMethods: ['inPerson'],
+      commitmentSalt: random32(),
+      claims: { 'name.legal': 'Ada Lovelace' },
+      startedAt: 't',
+      requests: [{ vetterDid: vetter.did, status: 'sessionOpen', session }],
+    }
+    const store = {
+      getApplication: async () => application,
+      saveApplication: jest.fn(async () => undefined),
+    } as unknown as VtiVettingStore
+    const persona = {
+      did: applicant.did,
+      communityDid: community,
+      vtaKeyIds: { signing: applicant.verificationMethodId, keyAgreement: applicant.verificationMethodId },
+      kmsKeyIds: { signing: 'applicant-key', keyAgreement: 'applicant-key' },
+    }
+
+    const card = await new VtiApplicant(applicant.agent as never, persona as never, store, {} as never).sendCard(
+      vetter.did
+    )
+    // The session response that carries the card: a Trust Task document the
+    // applicant signed, as every task Keyring sends is signed.
+    const sessionResponse = (mockSend.mock.calls.at(-1) as unknown as [string, string, Record<string, unknown>])[2]
+
+    // The proof verifies against the did:key, before anyone else looks at it.
+    await expect(verifyDocumentProof(applicant.agent as never, card, applicant.did)).resolves.toBe(true)
+    const window = Date.parse(card.expiresAt as string) - Date.parse(card.issuedAt as string)
+    expect(window).toBeGreaterThan(0)
+    expect(window).toBeLessThanOrEqual(MAX_CARD_VALIDITY_MS)
+
+    // Keyring's vetter attests to that card. The statement must name the card
+    // by its DTG digestMultibase — JCS WITHOUT the top-level proof, as the VTI
+    // SDK computes it — or an openvtc applicant refuses it (vta-sdk
+    // vetting/statement.rs check_against_card, at a96fe02f).
+    const desk: VettingDeskRequest = {
+      requestId: 'request-conformance',
+      applicantDid: applicant.did,
+      communityDid: community,
+      status: 'cardReceived',
+      receivedAt: new Date().toISOString(),
+      session: { ...session, method: 'inPerson', matchCode: 'ABCD-1234' },
+      card,
+    }
+    const deskStore = {
+      listDesk: async () => [desk],
+      saveDesk: jest.fn(async () => undefined),
+    } as unknown as VtiVettingStore
+    const vetterPersona = {
+      did: vetter.did,
+      communityDid: community,
+      vtaKeyIds: { signing: vetter.verificationMethodId, keyAgreement: vetter.verificationMethodId },
+      kmsKeyIds: { signing: 'vetter-key', keyAgreement: 'vetter-key' },
+    }
+    mockSend.mockClear()
+    // The endorsement-shaped statement, made on purpose: with no requirements
+    // and no grant here, mode auto now writes vetted/1, which statement-v1.json
+    // below already covers.
+    setDtgV1WritingMode('off')
+    try {
+      await new VtiVetterDesk(vetter.agent as never, vetterPersona as never, deskStore, {} as never).attest(
+        desk.requestId,
+        { documentClasses: ['passport'], claimsVerified: ['name.legal'], livenessConfirmed: true }
+      )
+    } finally {
+      setDtgV1WritingMode(DTG_V1_WRITING_RELEASE_DEFAULT)
+    }
+    // Delivered as openvtc delivers and opens one (openvtc b52dc28
+    // vetting/wire.rs:188-205 `credential_delivery`, :218-240 `open`): a signed
+    // Trust Task document, its type the message's, issued by the vetter,
+    // threaded on the session, the statement under `payload`. A bare body has
+    // no `id` and is refused as a malformed vetting document. Listed below too.
+    const [, sentType, issue, sentOptions] = mockSend.mock.calls.at(-1) as unknown as [
+      string,
+      string,
+      Record<string, unknown>,
+      { thid?: string },
+    ]
+    expect(sentType).toBe('https://trusttasks.org/spec/credential-exchange/issue/0.1')
+    expect(issue).toMatchObject({ type: sentType, issuer: vetter.did, threadId: desk.session!.documentId })
+    expect(String(issue.id)).toMatch(/^urn:uuid:[0-9a-f-]{36}$/)
+    // The wrapper is an operational Trust Task document, signed for
+    // authentication as vta-sdk signs one; a receiver checks it as a Trust Task
+    // (inboundProofs: verifyTrustTaskProof), whatever purpose it declares.
+    expect((issue.proof as { proofPurpose?: string }).proofPurpose).toBe('authentication')
+    await expect(verifyTrustTaskProof(vetter.agent as never, issue)).resolves.toEqual({ ok: true, signer: vetter.did })
+    expect(sentOptions).toMatchObject({ thid: desk.session!.documentId })
+    const statement = (
+      (issue.payload as Record<string, unknown>).credential_response as {
+        credential: Record<string, unknown>
+      }
+    ).credential
+    // Two ids: the document's, and the statement's own, which a vetter names to
+    // withdraw it (vetting/session/0.1 spec.md "The session's name").
+    expect(String(statement.id)).toMatch(/^urn:uuid:[0-9a-f-]{36}$/)
+    expect(statement.id).not.toBe(issue.id)
+    const endorsement = (statement.credentialSubject as { endorsement: Record<string, unknown> }).endorsement
+    expect(endorsement.cardDigestMultibase).toBe(cardDigestMultibase(card))
+    expect(endorsement.identityCommitment).toBe(card.identityCommitment)
+    await expect(verifyDocumentProof(vetter.agent as never, statement, vetter.did)).resolves.toBe(true)
+
+    // 228 writer, flag on: the same attestation as DTG Credentials v1's vetted/1
+    // statement, over a session document the vetter opened. Written out as
+    // statement-v1.json + session.json for the 0.47 checker (card-verify-v047),
+    // which runs vta-sdk 0.58 verify_statement, check_against_card and
+    // check_against_session on it.
+    const sessionDocument = await signDocumentProof(
+      vetter.agent as never,
+      {
+        id: session.documentId,
+        type: VETTING.session,
+        threadId: session.documentId,
+        issuer: vetter.did,
+        recipient: applicant.did,
+        issuedAt: new Date().toISOString(),
+        payload: {
+          requestId: 'request-conformance',
+          challenge: session.challenge,
+          domain: session.domain,
+          method: 'inPerson',
+          requiredClaims: session.requiredClaims,
+          expiresAt: session.expiresAt,
+        },
+      },
+      vetter.did,
+      { kmsKeyId: 'vetter-key', verificationMethodId: vetter.verificationMethodId, proofPurpose: 'authentication' }
+    )
+    const deskV1: VettingDeskRequest = {
+      ...desk,
+      status: 'cardReceived',
+      session: { ...desk.session!, taskDigestMultibase: taskDigestMultibase(sessionDocument) },
+    }
+    mockSend.mockClear()
+    setDtgV1WritingEnabled(true)
+    try {
+      await new VtiVetterDesk(
+        vetter.agent as never,
+        vetterPersona as never,
+        { listDesk: async () => [deskV1], saveDesk: jest.fn(async () => undefined) } as unknown as VtiVettingStore,
+        {} as never
+      ).attest(desk.requestId, {
+        documentClasses: ['passport'],
+        claimsVerified: ['name.legal'],
+        livenessConfirmed: true,
+      })
+    } finally {
+      setDtgV1WritingEnabled(false)
+    }
+    const issueV1 = (mockSend.mock.calls.at(-1) as unknown as [string, string, Record<string, unknown>])[2]
+    const statementV1 = (
+      (issueV1.payload as Record<string, unknown>).credential_response as { credential: Record<string, unknown> }
+    ).credential
+    expect(statementV1.type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    expect(statementV1.taskDigestMultibase).toBe(taskDigestMultibase(sessionDocument))
+    await expect(verifyDocumentProof(vetter.agent as never, statementV1, vetter.did)).resolves.toBe(true)
+
+    // The vetter accepts a request, presenting its grant. The community here is
+    // a did:key so an upstream checker can verify the grant offline.
+    const grantor = didKeySigner()
+    const requestDocumentId = 'urn:uuid:request-conformance'
+    const grant = await signDocumentProof(
+      grantor.agent as never,
+      {
+        '@context': ['https://www.w3.org/ns/credentials/v2', 'https://firstperson.network/credentials/dtg/v1'],
+        type: ['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'],
+        id: 'urn:uuid:grant-conformance',
+        issuer: grantor.did,
+        validFrom: new Date(new Date().getTime() - 86400000).toISOString(),
+        validUntil: new Date(new Date().getTime() + 90 * 86400000).toISOString(),
+        credentialSubject: {
+          id: vetter.did,
+          endorsement: { type: 'CommunityRole', role: 'vetter', communityDid: grantor.did },
+        },
+      },
+      grantor.did,
+      { kmsKeyId: 'community-key', verificationMethodId: grantor.verificationMethodId }
+    )
+    const ticket: VettingTicket = {
+      ticketId: 'vt-conformance',
+      code: 'AAAA-BBBB',
+      secret: random32(),
+      communityDid: grantor.did,
+      usesLeft: 1,
+      expiresAt: new Date(new Date().getTime() + 86400000).toISOString(),
+      createdAt: new Date().toISOString(),
+    }
+    const intakeStore = {
+      listTickets: async () => [{ ...ticket }],
+      saveTicket: jest.fn(async () => undefined),
+      listDesk: async () => [],
+      saveDesk: jest.fn(async () => undefined),
+    } as unknown as VtiVettingStore
+    const grants = {
+      listHeldCredentials: async () => [
+        {
+          kind: 'vetter-grant',
+          communityDid: grantor.did,
+          subjectDid: vetter.did,
+          credential: grant,
+          receivedAt: new Date().toISOString(),
+        },
+      ],
+    }
+    mockSend.mockClear()
+    const intake = new VtiVetterDesk(
+      vetter.agent as never,
+      { ...vetterPersona, communityDid: grantor.did } as never,
+      intakeStore,
+      grants as never
+    )
+    await (intake as unknown as { takeRequest(m: unknown): Promise<void> }).takeRequest({
+      id: 'urn:uuid:didcomm-conformance',
+      type: VETTING.request,
+      from: applicant.did,
+      body: {
+        id: requestDocumentId,
+        type: VETTING.request,
+        issuer: applicant.did,
+        recipient: vetter.did,
+        payload: { community: grantor.did, joinDid: applicant.did, ticket: { code: ticket.code } },
+      },
+    })
+    const response = (
+      mockSend.mock.calls.at(-1) as unknown as [string, string, { payload: Record<string, unknown> }]
+    )[2]
+    const eligibility = response.payload.eligibilityVp as Record<string, unknown>
+    const eligibilityExpect = {
+      vetter: vetter.did,
+      challenge: requestDocumentId,
+      domain: applicant.did,
+      community: grantor.did,
+      role: 'vetter',
+      now: new Date().toISOString(),
+    }
+    // Keyring's own applicant, judging as vta-sdk does, takes it.
+    await expect(
+      verifyEligibilityPresentation(vetter.agent as never, eligibility, {
+        ...eligibilityExpect,
+        now: new Date(eligibilityExpect.now),
+      })
+    ).resolves.toMatchObject({ ok: true })
+
+    // The same request answered with the grant a DTG Credentials v1 community
+    // issues: a role VAC (vta-sdk 0.55 vetting/eligibility.rs takes only this).
+    // No credentialStatus, so an upstream checker can judge it offline.
+    const second = (ms: number) => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace('.000Z', 'Z')
+    const vac = await signDocumentProof(
+      grantor.agent as never,
+      {
+        '@context': ['https://www.w3.org/ns/credentials/v2', 'https://registry.trustoverip.org/dtg/context/v1'],
+        type: ['VerifiableCredential', 'DTGCredential', 'AuthorityCredential'],
+        id: 'urn:uuid:vac-conformance',
+        issuer: grantor.did,
+        issuerScope: 'public',
+        validFrom: second(new Date().getTime() - 86400000),
+        validUntil: second(new Date().getTime() + 90 * 86400000),
+        credentialSubject: {
+          id: vetter.did,
+          authority: { scope: grantor.did, actions: ['role:vetter'], maxAttenuation: 0 },
+        },
+      },
+      grantor.did,
+      { kmsKeyId: 'community-key', verificationMethodId: grantor.verificationMethodId }
+    )
+    const requestV1DocumentId = 'urn:uuid:request-conformance-v1'
+    const intakeV1 = new VtiVetterDesk(
+      vetter.agent as never,
+      { ...vetterPersona, communityDid: grantor.did } as never,
+      { ...intakeStore, listTickets: async () => [{ ...ticket }] } as unknown as VtiVettingStore,
+      {
+        listHeldCredentials: async () => [
+          {
+            kind: 'vetter-grant',
+            communityDid: grantor.did,
+            subjectDid: vetter.did,
+            credential: vac,
+            receivedAt: new Date().toISOString(),
+          },
+        ],
+      } as never
+    )
+    mockSend.mockClear()
+    await (intakeV1 as unknown as { takeRequest(m: unknown): Promise<void> }).takeRequest({
+      id: 'urn:uuid:didcomm-conformance-v1',
+      type: VETTING.request,
+      from: applicant.did,
+      body: {
+        id: requestV1DocumentId,
+        type: VETTING.request,
+        issuer: applicant.did,
+        recipient: vetter.did,
+        payload: { community: grantor.did, joinDid: applicant.did, ticket: { code: ticket.code } },
+      },
+    })
+    const responseV1 = (
+      mockSend.mock.calls.at(-1) as unknown as [string, string, { payload: Record<string, unknown> }]
+    )[2]
+    const eligibilityV1 = responseV1.payload.eligibilityVp as Record<string, unknown>
+    const eligibilityV1Expect = { ...eligibilityExpect, challenge: requestV1DocumentId, now: new Date().toISOString() }
+    const presentedV1 = (eligibilityV1.verifiableCredential as Record<string, unknown>[] | undefined) ?? []
+    expect(presentedV1.map((c) => c.type)).toContainEqual([
+      'VerifiableCredential',
+      'DTGCredential',
+      'AuthorityCredential',
+    ])
+    await expect(
+      verifyEligibilityPresentation(vetter.agent as never, eligibilityV1, {
+        ...eligibilityV1Expect,
+        now: new Date(eligibilityV1Expect.now),
+      })
+    ).resolves.toMatchObject({ ok: true })
+
+    const out = process.env.CARD_OUT
+    if (out) {
+      mkdirSync(out, { recursive: true })
+      writeFileSync(join(out, 'card.json'), JSON.stringify(card, null, 2))
+      writeFileSync(join(out, 'statement-v1.json'), JSON.stringify(statementV1, null, 2))
+      writeFileSync(join(out, 'session.json'), JSON.stringify(sessionDocument, null, 2))
+      // Two signed Trust Task documents, for vta-sdk's verify_trust_task_proof_with.
+      // The vetter's is its request response: the statement travels in a bare
+      // credential-exchange/issue body, which is not a signed document (the
+      // statement inside it is, and verify-statement judges it).
+      writeFileSync(join(out, 'task-applicant.json'), JSON.stringify(sessionResponse, null, 2))
+      writeFileSync(join(out, 'task-vetter.json'), JSON.stringify(response, null, 2))
+      writeFileSync(
+        join(out, 'signers.json'),
+        JSON.stringify({ applicant: applicant.did, vetter: vetter.did }, null, 2)
+      )
+      writeFileSync(join(out, 'eligibility-v1.json'), JSON.stringify(eligibilityV1, null, 2))
+      writeFileSync(
+        join(out, 'expect.json'),
+        JSON.stringify(
+          {
+            audience: vetter.did,
+            publisher: applicant.did,
+            community,
+            challenge: session.challenge,
+            domain: session.domain,
+            requiredClaims: session.requiredClaims,
+            // The role-VAC presentation (eligibility-v1.json).
+            eligibilityV1: eligibilityV1Expect,
+          },
+          null,
+          2
+        )
+      )
+    }
+  })
+})
+
+/** One signed task as it left the phone: the document, and the type it was sent as. */
+type Produced = { name: string; sentAs: string; document: Record<string, unknown>; signer: string }
+
+describe('every Trust Task Keyring signs, from the shipping code', () => {
+  it('is signed by its issuer, under its own type, and written out for vta-sdk', async () => {
+    const applicant = didKeySigner()
+    const vetter = didKeySigner()
+    const community = didKeySigner()
+    const vta = didKeySigner()
+    const manager = didKeySigner()
+    const produced: Produced[] = []
+    const lastSent = (name: string, signer: string) => {
+      const [, sentAs, document] = mockSend.mock.calls.at(-1) as unknown as [string, string, Record<string, unknown>]
+      produced.push({ name, sentAs, document, signer })
+    }
+    const personaOf = (who: ReturnType<typeof didKeySigner>) => ({
+      did: who.did,
+      communityDid: community.did,
+      vtaKeyIds: { signing: who.verificationMethodId, keyAgreement: who.verificationMethodId },
+      kmsKeyIds: { signing: `${who.did}-key`, keyAgreement: `${who.did}-key` },
+    })
+
+    // --- Peer: the applicant ---------------------------------------------------
+    let application = {
+      communityDid: community.did,
+      joinDid: applicant.did,
+      minStatements: 1,
+      requiredClaims: ['name.legal'],
+      acceptedMethods: ['inPerson'],
+      commitmentSalt: random32(),
+      claims: { 'name.legal': 'Ada Lovelace' },
+      startedAt: 't',
+      requests: [] as Record<string, unknown>[],
+    }
+    const applicantStore = {
+      getApplication: async () => application,
+      saveApplication: async (a: typeof application) => {
+        application = a
+      },
+    } as unknown as VtiVettingStore
+    const vti = new VtiApplicant(applicant.agent as never, personaOf(applicant) as never, applicantStore, {} as never)
+    mockSend.mockClear()
+    await vti.requestVetter({ vetterDid: vetter.did, code: 'AAAA-BBBB' })
+    lastSent('vetting-request', applicant.did)
+    const requestDocument = produced.at(-1)!.document
+
+    // --- Peer: the vetter ------------------------------------------------------
+    const grant = await signDocumentProof(
+      community.agent as never,
+      {
+        '@context': ['https://www.w3.org/ns/credentials/v2', 'https://firstperson.network/credentials/dtg/v1'],
+        type: ['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'],
+        id: 'urn:uuid:grant-tasks',
+        issuer: community.did,
+        validFrom: new Date(new Date().getTime() - 86400000).toISOString(),
+        validUntil: new Date(new Date().getTime() + 90 * 86400000).toISOString(),
+        credentialSubject: {
+          id: vetter.did,
+          endorsement: { type: 'CommunityRole', role: 'vetter', communityDid: community.did },
+        },
+      },
+      community.did,
+      { kmsKeyId: 'community-key', verificationMethodId: community.verificationMethodId }
+    )
+    let desk: VettingDeskRequest[] = []
+    let tickets: VettingTicket[] = [
+      {
+        ticketId: 'vt-tasks',
+        code: 'AAAA-BBBB',
+        secret: random32(),
+        communityDid: community.did,
+        usesLeft: 1,
+        expiresAt: new Date(new Date().getTime() + 86400000).toISOString(),
+        createdAt: new Date().toISOString(),
+      },
+    ]
+    const deskStore = {
+      listTickets: async () => tickets.map((t) => ({ ...t })),
+      saveTicket: async (t: VettingTicket) => {
+        tickets = [...tickets.filter((x) => x.ticketId !== t.ticketId), t]
+      },
+      listDesk: async () => desk.map((r) => ({ ...r })),
+      saveDesk: async (r: VettingDeskRequest) => {
+        desk = [...desk.filter((x) => x.requestId !== r.requestId), r]
+      },
+    } as unknown as VtiVettingStore
+    const grants = {
+      listHeldCredentials: async () => [
+        {
+          kind: 'vetter-grant',
+          communityDid: community.did,
+          subjectDid: vetter.did,
+          credential: grant,
+          receivedAt: 't',
+        },
+      ],
+    }
+    const vetterDesk = new VtiVetterDesk(vetter.agent as never, personaOf(vetter) as never, deskStore, grants as never)
+    const take = (m: unknown) => (vetterDesk as unknown as { takeRequest(m: unknown): Promise<void> }).takeRequest(m)
+    // A wrong QR secret is answered with a trust-task-error.
+    await take({
+      id: 'urn:uuid:didcomm-refused',
+      type: VETTING.request,
+      from: applicant.did,
+      body: {
+        ...requestDocument,
+        id: 'urn:uuid:request-refused',
+        payload: {
+          community: community.did,
+          joinDid: applicant.did,
+          ticket: { ticketId: 'vt-tasks', secret: 'wrong' },
+        },
+      },
+    })
+    lastSent('trust-task-error', vetter.did)
+    await take({ id: 'urn:uuid:didcomm-request', type: VETTING.request, from: applicant.did, body: requestDocument })
+    lastSent('vetting-request-response', vetter.did)
+    const opened = await vetterDesk.openSession(desk[0].requestId, ['name.legal'])
+    lastSent('vetting-session', vetter.did)
+
+    // The applicant sends its card on that session.
+    application.requests = application.requests.map((r) => ({
+      ...r,
+      status: 'session',
+      session: { ...opened.session!, documentId: opened.session!.documentId },
+    }))
+    await vti.sendCard(vetter.did)
+    lastSent('vetting-session-response', applicant.did)
+    const card = (produced.at(-1)!.document.payload as { card: Record<string, unknown> }).card
+    desk = desk.map((r) => ({ ...r, card, status: 'cardReceived' as const }))
+    await vetterDesk.attest(opened.requestId, {
+      documentClasses: ['passport'],
+      claimsVerified: ['name.legal'],
+      livenessConfirmed: true,
+    })
+    lastSent('credential-exchange-issue', vetter.did)
+    // The statement names the session it was issued in, and binds the name to
+    // that document with its task digest (vetting/session/0.1 spec.md "The
+    // session's name": taskContext MUST, taskDigestMultibase SHOULD).
+    const sessionDocument = produced.find((p) => p.name === 'vetting-session')!.document
+    const issued = (
+      (produced.at(-1)!.document.payload as Record<string, unknown>).credential_response as {
+        credential: Record<string, unknown>
+      }
+    ).credential
+    expect(issued).toMatchObject({
+      taskContext: sessionDocument.id,
+      taskDigestMultibase: taskDigestMultibase(sessionDocument),
+    })
+    await vetterDesk.decline(opened.requestId, 'the session ended')
+    lastSent('vetting-decline', vetter.did)
+
+    // --- Community: the join tasks, through the real controller ----------------
+    const { vtiAgent: controller } = jest.requireActual('../module/vtiAgent') as typeof import('../module/vtiAgent')
+    const toCommunity: Record<string, unknown>[] = []
+    Object.assign(controller as unknown as Record<string, unknown>, {
+      agent: applicant.agent,
+      persona: personaOf(applicant),
+      session: {
+        isOpen: true,
+        sendTo: async (_to: string, message: { body: Record<string, unknown> }) => {
+          toCommunity.push(message.body)
+        },
+      },
+      state: { status: 'connected', did: applicant.did },
+    })
+    controller.answerTimeoutMs = 1
+    controller.submitAnswerTimeoutMs = 1
+    const community_ = community.did
+    const manifest = { criteria: [], requirementsDigest: 'zQmDigest' } as never
+    const asks: [string, () => Promise<unknown>][] = [
+      ['join-submit', () => controller.apply(community_, manifest, { credentials: [], registryConsent: true })],
+      ['join-supplement', () => controller.supplement(community_, { credentials: [], requestId: 'jr-1' })],
+      ['join-status', () => controller.status(community_, { requestId: 'jr-1' })],
+      ['join-withdraw', () => controller.withdraw(community_, { requestId: 'jr-1', reason: 'changed my mind' })],
+      ['member-self-remove', () => controller.selfRemove(community_, { disposition: 'purge' })],
+    ]
+    for (const [name, ask] of asks) {
+      await ask().catch(() => undefined)
+      const document = toCommunity.at(-1)!
+      produced.push({ name, sentAs: String(document.type), document, signer: applicant.did })
+    }
+
+    // The vetter's profile, published by the shipping desk through the same
+    // controller, now speaking as the vetter.
+    Object.assign(controller as unknown as Record<string, unknown>, {
+      agent: vetter.agent,
+      persona: personaOf(vetter),
+      state: { status: 'connected', did: vetter.did },
+    })
+    mockAsk.mockImplementation((...a: unknown[]) =>
+      (controller.ask as (...x: unknown[]) => Promise<unknown>).apply(controller, a)
+    )
+    await vetterDesk
+      .publishProfile({
+        displayName: 'Carol',
+        country: 'CZ',
+        city: 'Prague',
+        events: [{ name: 'Kernel Maintainer Summit', startDate: '2026-10-05', endDate: '2026-10-08' }],
+      })
+      .catch(() => undefined)
+    const profileDocument = toCommunity.at(-1)!
+    expect(profileDocument.type).toBe(VETTING.vettersProfile)
+    produced.push({
+      name: 'vetter-profile',
+      sentAs: String(profileDocument.type),
+      document: profileDocument,
+      signer: vetter.did,
+    })
+
+    // --- The VTA: every task the client sends, signed as the manager ----------
+    const toVta: Record<string, unknown>[] = []
+    const client = new VtaClient(manager.agent as never, vta.did, {} as never)
+    Object.assign(client as unknown as Record<string, unknown>, {
+      identity: { did: manager.did },
+      session: {
+        isOpen: true,
+        sendTo: async (_to: string, message: { body: Record<string, unknown> }) => {
+          toVta.push(message.body)
+          // Answer at once, so each task settles without waiting out a clock. Only one task is ever on the wire
+          // here, so the first pending is the one being answered: the answer resolves it directly, not through
+          // deliver(), so the client never learns that replies are threaded, and none of these tasks is in the
+          // read lane (vtaReadLane.ts) anyway. Route this through the real inbound path or add lane tasks, and
+          // that stops holding: match the pending by thread instead.
+          const pendings = (client as unknown as { pendings: Map<number, { resolve(m: unknown): void }> }).pendings
+          const [pending] = pendings.values()
+          pending?.resolve({ type: `${String(message.body.type)}#response`, body: { payload: {} } })
+        },
+      },
+    })
+    const newKey = didKeySigner()
+    const linkProof = await signCompactJws(newKey.agent as never, newKey.did, { iss: newKey.did, aud: vta.did })
+    const vtaTasks: [string, () => Promise<unknown>][] = [
+      ['vta-whoami', () => client.whoAmI(1000)],
+      ['vta-config-show', () => client.task(VTA_TASK.configShow, { keys: ['vta_name'] })],
+      ['vta-contexts-list', () => client.listContexts()],
+      ['vta-contexts-create', () => client.createContext('vetting', 'Vetting')],
+      ['vta-servers-list', () => client.listServers()],
+      ['vta-dids-list', () => client.listDids('vetting')],
+      [
+        'vta-dids-create',
+        () => client.mintPersona({ contextId: 'vetting', serverId: 'host-1', label: 'p', idempotencyKey: 'k-1' }),
+      ],
+      ['vta-keys-export-secret', () => client.borrowKey(`${vta.did}#key-0`)],
+      [
+        'vta-consent-decision',
+        // A digest as a VTA sends one: the salted wire digest, a base58btc
+        // SHA-256 multihash (vta-policy consent.rs:73-94, :126-131).
+        () =>
+          client.decideConsent({ challenge: random32(), payloadDigest: digestMultibase({ consent: 1 }) }, 'approve'),
+      ],
+      [
+        'vta-acl-swap-key',
+        () =>
+          client.task(VTA_TASK.aclSwapKey, {
+            currentSubject: manager.did,
+            newSubject: newKey.did,
+            linkProof,
+            reason: 'rotate',
+          }),
+      ],
+    ]
+    // Each task is answered at once, but its answer clock (30 s) would keep
+    // the run alive after it: fake timers for this part, cleared after.
+    // `now` from the (possibly whole-second) clock, not the fake's own.
+    jest.useFakeTimers({ now: new Date() })
+    try {
+      for (const [name, task] of vtaTasks) {
+        await task().catch(() => undefined)
+        const document = toVta.at(-1)!
+        produced.push({ name, sentAs: String(document.type), document, signer: manager.did })
+      }
+    } finally {
+      jest.clearAllTimers()
+      jest.useRealTimers()
+    }
+
+    // The rest of openvtc's `wire::open`, held here until card-verify checks
+    // it: each document is signed — by its own issuer — and names the type it
+    // was sent as. And Keyring's own verifier, which mirrors vta-sdk's, agrees.
+    const names = produced.map((p) => p.name)
+    expect(new Set(names).size).toBe(names.length)
+    expect(names).toHaveLength(23)
+    for (const { name, sentAs, document, signer } of produced) {
+      expect({ name, issuer: document.issuer }).toEqual({ name, issuer: signer })
+      expect({ name, type: document.type }).toEqual({ name, type: sentAs })
+      const verdict = await verifyTrustTaskProof(
+        signer === manager.did ? manager.agent : (applicant.agent as never),
+        document
+      )
+      expect({ name, verdict }).toEqual({ name, verdict: { ok: true, signer } })
+      // Signed for the purpose upstream signs this type for (vta-sdk
+      // purpose_for_document_type): authentication, save an approver's
+      // attestation. card-verify checks it against vta-sdk itself.
+      const purpose = (document.proof as { proofPurpose?: string } | undefined)?.proofPurpose
+      expect({ name, purpose }).toEqual({ name, purpose: purposeForDocumentType(String(document.type)) })
+    }
+
+    const out = process.env.CARD_OUT
+    if (out) {
+      mkdirSync(join(out, 'tasks'), { recursive: true })
+      const listed = produced.map(({ name, document, signer }) => {
+        const file = `tasks/${name}.json`
+        writeFileSync(join(out, file), JSON.stringify(document, null, 2))
+        return { name, file, type: document.type, issuer: document.issuer, signer }
+      })
+      writeFileSync(join(out, 'tasks.json'), JSON.stringify(listed, null, 2))
+    }
+  })
+})
+
+// Each address as the published specification names it (the `$id` of each
+// schema in trust-tasks-rs 0.24.6, the version VTI main pins). A wrong one is
+// a task no community serves, whatever the payload says.
+describe('the vetting task addresses Keyring uses', () => {
+  it('are the published ones', () => {
+    expect(VETTING).toEqual({
+      request: 'https://trusttasks.org/spec/vetting/request/0.1',
+      attestation: 'https://trusttasks.org/spec/vetting/attestation/0.1',
+      session: 'https://trusttasks.org/spec/vetting/session/0.1',
+      decline: 'https://trusttasks.org/spec/vetting/decline/0.1',
+      revokeStatement: 'https://trusttasks.org/spec/vtc/vetting/revoke-statement/0.1',
+      vettersList: 'https://trusttasks.org/spec/vtc/vetting/vetters/list/0.1',
+      vettersProfile: 'https://trusttasks.org/spec/vtc/vetting/vetters/profile/0.1',
+    })
+  })
+})

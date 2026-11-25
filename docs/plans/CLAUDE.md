@@ -174,9 +174,26 @@ Each item is either present or explicitly marked "not applicable" with a reason.
       main action, or that it has none), where each screen sits in the
       navigation (in a tab or above the tabs), and accessibility. The mockups
       are drawn from this, not the other way round.
-- [ ] **Steps with acceptance criteria**, each checkable.
+- [ ] **Steps with acceptance criteria**, each checkable, each in a tier and
+      with an owner (next item).
+- [ ] **Tiers, lanes and order** (§7.0): P0, P1 and P2 are iterative MVPs, each
+      with an exit criterion and a named demo or test; the lanes with their
+      owners; a Mermaid dependency graph with the critical path marked; and the
+      stack table (below, "Tiers, lanes and upstream asks").
+- [ ] **Decisions made**, a register beside the open decisions: decision, who,
+      when, why.
 - [ ] **Test plan** (below).
-- [ ] **Blocked on whom**, and **open questions** with an owner each.
+- [ ] **Upstream asks and blocked on whom**, and **open questions** with an owner each.
+- [ ] **Upstream gaps.** Every gap in upstream (VTI, the mediator, a
+      specification) that the plan's flow meets is registered in
+      [`../VTI_UPSTREAM_FINDINGS.md`](../VTI_UPSTREAM_FINDINGS.md): as a
+      `VTI-QN` question once it has been read against the pinned clone, as a
+      `VTI-NN` finding once a lab measurement shows it, and in the PR of the step
+      that meets it, never kept in the plan alone. The findings file's "Findings
+      by feature" index carries one row per feature, so a plan's gaps are read
+      as that feature's sub-findings; the plan's blocked-on section names each
+      `VTI-QN` it depends on, with the step and tier it blocks and the fallback
+      used meanwhile. A plan with no upstream contact says so.
 
 ### The test plan
 
@@ -321,8 +338,9 @@ same commit. A superseded mockup is not kept in the folder: the dated companion
 that records the change links the old version by commit permalink.
 
 **Dates go on point-in-time artifacts, not on living ones.** A dated companion
-records what someone concluded on a day and is never revised afterwards, so the
-date is part of its identity. A plan — including a subtask plan — is revised
+records what someone concluded on a day and is never revised afterwards (beyond
+the mechanical fixes in "Collaborative plan branches"), so the date is part of
+its identity. A plan — including a subtask plan — is revised
 continuously, so a date in its filename is wrong the moment it is edited, and
 worse, it advertises a currency the file may not have.
 
@@ -330,7 +348,10 @@ worse, it advertises a currency the file may not have.
 are of the person or people behind it. A session that produces both a review of
 the plan and design decisions for a subtask writes *one* file with two parts —
 splitting by topic instead duplicates whatever the two share, and the reader has
-no way to tell which file is authoritative on the overlap.
+no way to tell which file is authoritative on the overlap. A second working
+session by the same author on the same day writes its own file with a suffix,
+`<YYYY-MM-DD>-<initials>-2.md`, then `-3`, and its header says why it is a
+separate session.
 
 **There is no running changelog, and do not add one.** Three artifacts already
 cover the ground: the plan holds current design, the dated documents hold
@@ -355,7 +376,12 @@ obligation is on the change rather than on the author's discretion.
 - **Same author, same working session → update that day's file.** One file per
   author per session still holds; a second change that afternoon extends the
   morning's document rather than starting a new one.
-- **Otherwise → create one**, `<YYYY-MM-DD>-<initials>.md`.
+- **Otherwise → create one**, `<YYYY-MM-DD>-<initials>.md`, or
+  `<YYYY-MM-DD>-<initials>-2.md` when that author already has a file for that
+  day from another session (above).
+- **Never inside someone else's companion.** On a shared plan branch, a change
+  you make is recorded in your own companion, even when it follows from theirs
+  ("Collaborative plan branches", below).
 - **Add the pointer to the plan's review index** in the same commit, so the
   companion is reachable from the document it explains. A companion nothing
   links to is a file nobody opens.
@@ -371,6 +397,39 @@ position it supersedes. If a change only reverses something you wrote an hour
 ago, that still counts — a superseded position of your own is exactly what the
 next reader needs, because otherwise the corrected version reads as though it
 were obvious from the start.
+
+## Collaborative plan branches
+
+A plan PR's branch is shared: anyone on the team may push commits directly to
+another person's plan branch, to fix, extend or answer it, rather than only
+commenting.
+
+- **Fast-forward only.** Never rewrite another person's commits. A force-push
+  needs the word of every person whose commits it would rewrite, each named
+  (the stacked-PR process below, "When a lower PR merges", avoids needing one).
+- **Before pushing,** fetch and merge (never rebase) the others' new commits,
+  then check your new decision numbers, review-index rows and companion
+  filenames against the branches stacked above yours, so two stacked PRs do not
+  both claim `D42` or `2026-11-25-bam.md`.
+- **Attribution comes from three things that must agree:** the commit's author,
+  the companion's initials, and the person's name in the decisions register and
+  any credits. So whoever makes a substantive change on a shared branch records
+  it in their **own** dated companion in the same push, with its review-index
+  row ("Every substantive change writes a companion", above), never inside
+  someone else's.
+- **A dated companion is edited only by its author**, except for mechanical
+  renumbering and link fixes (a decision renumbered to avoid a collision, a
+  renamed companion's link). A correction to someone else's companion goes in a
+  new companion that says what it corrects.
+- **Name the person, never the role.** A decision, review, rule or ask is
+  credited to the person who made it, by name ("Brendan", "Alberto", "Brendan
+  and Alberto"), never as "the user", "the product owner" or "the owner".
+  Several people and their agents write these plans, and to each agent "the
+  user" is whoever it is working for, so the same title names a different
+  person depending on who wrote the line, and a later reader cannot tell whose
+  decision it was. In a plan's own text "the owner" still means the product's
+  user (the person who owns an agent, a room or a VTA), never a plan's author.
+  The checker flags a role in a `**Decisions made**` table's Who cell.
 
 ## Three kinds of content, kept apart
 
@@ -427,14 +486,6 @@ fact about an external spec, not about our history.
 - **Flag conditional designs.** If an approach depends on a decision that has not
   been made, say so at the approach, not only in an open-questions list. A plan
   that quietly assumes its own precondition reads as settled.
-- **Name the person, never the role.** A decision, review, rule or ask is
-  credited to the person who made it, by name ("Brendan", "Alberto", "Brendan
-  and Alberto"), never as "the user", "the product owner" or "the owner".
-  Several people and their agents write these plans, and to each agent "the
-  user" is whoever it is working for, so the same title names a different
-  person depending on who wrote the line, and a later reader cannot tell whose
-  decision it was. In a plan's own text "the owner" still means the product's
-  user (the person who owns an agent, a room or a VTA), never a plan's author.
 
 ## Writing a dated companion
 
@@ -475,25 +526,35 @@ Write the summary last, with the humanizer skill, as for a plan.
 
 ## Implementing a plan: stacked PRs
 
-A plan is implemented as a **stack of PRs**, so a person can review the whole
-plan one step at a time, in the order the plan was written.
+A plan is a feature, and it is implemented on one **feature branch**
+(`feat/<plan-name>`, cut from `main`) as a **stack of PRs**, so a person can
+review the whole plan one step at a time, in the order the plan was written,
+and `main` takes the feature in one merge. This applies once the one-codebase
+fold has landed on `main` (see [`../DEVELOPMENT.md`](../DEVELOPMENT.md), "When
+this applies").
 
 - **One PR per step.** Each PR implements one reviewable step of the plan's
   steps section (§7 in [`PLAN_TEMPLATE.md`](./PLAN_TEMPLATE.md)), in the plan's
   order. Keep it small; a step too big to review splits into sub-steps, and the
   plan says so.
-- **Each PR is based on the previous PR's branch**; the first is based on
-  `main`. A PR's diff is then its own step only.
+- **Each PR is based on the previous PR's branch**; the first is based on the
+  feature branch. A PR's diff is then its own step only. When every step has
+  merged into the feature branch, one PR merges the feature branch into `main`.
 - **The description says where it sits.** It links the plan section it
   implements (path and `§`, at a commit permalink when the plan may move), and
   gives its place in the stack: `Stack: 2 of 5. Base: <branch> (#N), at <sha8>.`,
-  plus the PRs above and below it. The `Base:` line is the form already used on
+  plus the PRs above and below it, and its tier, lane, owner and "can start
+  after" from the plan's stack table. PRs that do not depend on each other
+  proceed in parallel; a PR never waits on a later tier. The `Base:` line is the form already used on
   stacked PRs in this repo (e.g. #931).
 - **Checks before opening each PR, and no PR if any fail.** Run, as the change
   needs: `yarn lint`, `yarn prettier` and `yarn typecheck` at the root; the
-  tests for what changed (`yarn test`, or the package's own `yarn test` under
-  `bifold/packages/*`); and the build the change could break (a native build
-  when it touches `app/ios`, `app/android`, native modules or patches). The
+  tests related to the files the PR changes, not the whole suite (for example
+  `cd app && TZ=GMT yarn jest --findRelatedTests <changed files>`, or the
+  changed test files under `bifold/packages/*`); and the build the change could
+  break (a native build when it touches `app/ios`, `app/android`, native
+  modules or patches). Tests stay minimal: they cover what the PR changes. CI
+  runs the broad suites. The
   tiers and exact commands are in [`../TESTING.md`](../TESTING.md). Put what
   you ran, and its result, in the PR description (the PR template,
   `.github/pull_request_template.md`, has the stack fields and this
@@ -513,42 +574,47 @@ plan one step at a time, in the order the plan was written.
   skips only the push hook, and the commit hooks and signing still apply. A PR
   that also changes anything outside `docs/` (a script, a workflow, app or
   bifold code) is not plan-only and follows the checks above.
-- **Heavy operations follow the shared-machine rules** in `/srv/dev/CLAUDE.md`
-  ("Heavy operations", "Disk space in /var/tmp"): check memory and CPU first,
-  run `vartmp-tidy check`, and prefix builds, tests and typechecks with
-  `nice -n 10`.
+- **Heavy operations follow the rules of the machine they run on.** On a shared
+  machine, run one heavy suite or build at a time with few workers, and send
+  broad runs to CI.
 - **Commits** follow the root `CLAUDE.md` "Commit conventions" (conventional
-  commits, signed, `Signed-off-by:`). A step that changes `bifold/packages/*`
-  is a paired PR in `keyring-bifold`, with its own sign-off rules there and the
-  order in [`release-flow-plan.md`](./release-flow-plan.md) §5 (bifold merges
-  first; the wallet PR bumps the pin).
-- **Hot fixes are exempt.** A hot fix goes straight to its own PR against
-  the branch it fixes (`main`, or a `hotfix/*` branch), without a plan or a
-  stack.
+  commits, signed, `Signed-off-by:`). `bifold/` is part of this repository
+  since the one-codebase fold, so a step that changes `bifold/packages/*` is one
+  PR here, with no paired PR and no pin to bump.
+- **Hot fixes and quick fixes are exempt.** A hot fix, a quick fix or a small
+  ask from the Keyring feedback channel goes straight to its own PR against the
+  branch it fixes (`main`, or a `hotfix/*` branch), without a plan or a stack,
+  ships over the air when `tier.mjs` allows, and needs only minimal tests with a
+  control (see [`../DEVELOPMENT.md`](../DEVELOPMENT.md), "Hot fixes and quick
+  fixes").
 
-**When a lower PR merges.** The repos do not delete branches on merge, so
-GitHub does not retarget the PR above it; do it by hand. Merge bottom-up.
-After PR 1 merges into `main`:
+**When a lower PR merges.** Merge bottom-up into the feature branch. The repos
+do not delete branches on merge, so GitHub does not retarget the PR above it;
+do it by hand, without rewriting history. After PR 1 merges into the feature
+branch:
 
 ```sh
 git fetch origin
-git rebase --onto origin/main <PR-1 branch tip before merge> <PR-2 branch>
-git push --force-with-lease origin <PR-2 branch>
-gh pr edit <PR-2> --base main
+gh pr edit <PR-2> --base <feature branch>
+git switch <PR-2 branch>
+git merge -S --signoff origin/<feature branch>   # a signed merge commit with sign-off
+git push origin <PR-2 branch>              # a fast-forward; no force-push
 ```
 
-`--onto` drops PR 1's commits, which are already on `main` (they arrive with new
-hashes when PR 1 was squash-merged, and a plain rebase would replay them). Then
-update PR 2's `Base:` line, and do the same for each PR above it, each onto its
-new base. The alternative also used here, merging each PR into a long-lived
-feature branch and that branch into `main` once (the `feat/sedi-state-office`
-stack), needs no retargeting but leaves one large final merge; use it only when
-the steps cannot reach `main` one at a time.
+Then update PR 2's `Base:` line, and do the same for each PR above it. The
+squash merge of each PR keeps the feature branch's history one commit per
+step. A force-push needs the word of every person whose commits it would
+rewrite, each named, every time ("Collaborative plan branches"), so the default
+path never needs one; `git rebase --onto` with `--force-with-lease` is for when
+that word has been given.
+
+When every step has merged, open the feature branch's PR into `main` and merge
+it once, after its required checks pass and it has been reviewed.
 
 ### When the plan is done
 
-A plan is done when the last PR of its stack
-merges, and that PR (or one straight after it) does two things:
+A plan is done when its feature branch has merged into `main`, and that PR
+(or one straight after it) does two things:
 
 - updates the plan's `**Status:**` line, and its row in
   [`README.md`](./README.md), to `Implemented`, naming the merged PRs; and
@@ -559,6 +625,55 @@ merges, and that PR (or one straight after it) does two things:
   line; it is a small companion.
 
 Until both are in, the plan is "Accepted, building", however much has merged.
+
+## Tiers, lanes and upstream asks
+
+A plan with `<!-- plan-format: tiers -->` in its header block (every new plan
+carries it; it is opt-in so older plans keep passing until their next
+substantive edit) follows these rules, and the checker enforces what it can.
+
+**P0, P1 and P2 are iterative MVPs.**
+
+- Each tier is a complete, working, demonstrable product that builds on the
+  previous one: if time runs out after any tier, what exists works. A tier's
+  exit criterion is "ships and works on its own", shown by a named demo or test
+  (the tiers table in §7.0), never "all its items are done".
+- **No later-tier dependency.** No tier, and no step, depends on a later tier.
+  The stack table's "can start after" never names a PR of a later tier
+  (checked).
+- Within a tier, steps are ordered so that stopping after any step leaves a
+  coherent product; steps that cannot be separated are merged into one.
+- **Fallback for upstream-dependent items.** A tier item that needs an upstream
+  change states, in the same step (`**Fallback:**`), what works in the same tier
+  without it. The upstream change improves a later tier (checked: a step that
+  names a `VTI-` id has a `**Fallback:**` line).
+
+**Upstream asks are recorded, not filed.** The plan records each ask in §10,
+"Upstream asks and blocked on whom", as `| Ask | Id | Blocks (step, tier) |
+Fallback meanwhile |`: the id (`VTI-Qn` or `VTI-NN`, registered in
+[`../VTI_UPSTREAM_FINDINGS.md`](../VTI_UPSTREAM_FINDINGS.md) under the plan's
+feature, per the checklist), what it blocks, and the fallback. The plan does
+not have to file it upstream or track a response, and has no filed, link,
+status or response columns. The checker fails a `VTI-` id the findings file
+does not contain, a step's id missing from the table, and a row with no tier
+or fallback.
+
+**Lanes, owners and the graph.** §7.0, `### 7.0 Tiers, lanes and order`, opens
+§7 with: the tiers table `| Tier | Exit criterion | Demo or test |` (rows P0,
+P1, P2); the lanes table `| Lane | Owner | Steps |` (parallel workstreams such
+as UI/UX, core, plugin or another repo, upstream, test); a ` ```mermaid `
+dependency graph with the critical path marked; and the stack table
+`| PR n of N | Step | Tier | Base | Can start after |`, one row per step, cells
+like `3 of 7`, `7.3`, `P1`, and `PR 1, PR 2` or `none`. Two steps can proceed
+in parallel when neither is in the other's "can start after". Every other
+`###` heading in §7 is a step ending in its tier, `### 7.3 Step title (P1)`,
+and has a `**Owner:** <name or role>` line. The stack table's tier must agree
+with the heading's, and every step has a row.
+
+**Decisions made.** The Overview carries `**Decisions made**` beside the open
+decisions: `| Decision | Who | When | Why |` (one row "None yet" is allowed).
+Open decisions move there when decided; the argument stays in a dated
+companion.
 
 ## Checking a plan's structure
 
@@ -584,6 +699,11 @@ format, so a reviewer can spend their time on the content:
   `sheet.manifest.json` matches the SVGs' hashes, the token fingerprint and the
   sheet layout; otherwise it fails with the regeneration command. This is a
   hash compare: the check needs no browser, and regenerating is a local step.
+
+- **Plans with `<!-- plan-format: tiers -->`:** the extra rules in "Tiers, lanes
+  and upstream asks" above, and a person's name, not a role, in each Who cell of
+  `**Decisions made**` ("Collaborative plan branches"). Plans without the marker
+  are not asked for them.
 
 **Which files it checks.** A plan or subtask plan is checked once it has a
 `## Overview` heading, which is exactly what migrating it adds; a dated

@@ -19,15 +19,18 @@
 
 Keyring is a mobile wallet for iOS and Android. You keep your identity and your
 credentials on your phone. You meet people and record those relationships as
-signed credentials. You join communities, chat, and share in community rooms,
-through an agent that you control.
+signed credentials. You manage your own verifiable trust agent (VTA), and through
+it join and interact with verifiable trust communities (VTCs): you chat and share
+in community rooms.
 
 Keyring was built at the [Applied Social Media Lab](https://asml.cyber.harvard.edu/)
 of Harvard's [Berkman Klein Center for Internet & Society](https://cyber.harvard.edu/),
 and its development continues at the [Applied Technology Lab](https://www.appliedtechnologylab.org)
 at the Harvard John A. Paulson School of Engineering and Applied Sciences (SEAS).
-It is one of the first mobile wallets for the
-[OpenVTC](https://github.com/OpenVTC) / First Person Project ecosystem.
+It is built as a reference mobile app for the
+[OpenVTC](https://github.com/OpenVTC) / First Person Project ecosystem, and builds
+on the Trust over IP [Decentralized Trust Graph (DTG)](https://github.com/trustoverip/dtgwg-cred-spec)
+specifications.
 
 > **Beta.** Keyring is in active development and is not ready for production use.
 > Testers get new builds every few days, and data or behaviour may change between
@@ -206,7 +209,7 @@ keyring-wallet/
 │   ├── src/
 │   ├── android/          # Android project
 │   └── ios/              # iOS project (workspace AriesBifold.xcworkspace)
-├── bifold/               # Git submodule: berkmancenter/keyring-bifold
+├── bifold/               # the framework (was the keyring-bifold submodule; folded in 2026-11)
 │   └── packages/
 │       ├── core/                       # UI, navigation, and the modules below
 │       │   └── src/modules/            #   vrc, trust-tasks, chat, rooms, directory, ...
@@ -228,9 +231,10 @@ keyring-wallet/
 └── docs/                 # Guides, design notes and plans
 ```
 
-`app/` is the only Yarn workspace. `@bifold/*` packages resolve to the submodule
+`app/` is the only Yarn workspace. `@bifold/*` packages resolve to `bifold/packages/*`
 through `portal:` links, so changes under `bifold/packages/` show up in the app
-without a build step during development.
+without a build step during development. `bifold/` is part of this repository
+(it was a git submodule until 2026-11; its history is on the `history/bifold` ref).
 
 ## Getting started
 
@@ -251,12 +255,45 @@ without a build step during development.
 ### Install
 
 ```sh
-git clone --recurse-submodules https://github.com/berkmancenter/keyring-wallet.git
+git clone https://github.com/berkmancenter/keyring-wallet.git
 cd keyring-wallet
 yarn install
 ```
 
-`yarn install` also prepares the `bifold/` submodule.
+`yarn install` also installs and builds the framework under `bifold/`.
+
+#### Moving an existing checkout to the folded `main`
+
+A checkout made before 2026-11-22 has `bifold/` as an initialised **submodule**,
+and a plain `git checkout main` then fails with "untracked working tree files
+would be overwritten" under `bifold/…`, because `main` now carries those paths as
+ordinary files. The submodule's own repository lives in `.git/modules/bifold`,
+with its branches, stashes and reflogs; only its working folder is in the way.
+In order:
+
+```sh
+git -C bifold status --short                     # 1. local changes under bifold/?
+git -C bifold stash list                         #    stashes live in .git/modules/bifold and survive the steps below
+git -C bifold branch -r --contains HEAD | head   # 2. is bifold's HEAD on a remote? If this prints nothing:
+#    git -C bifold push origin HEAD:refs/heads/<your-branch>        (or save a patch: git -C bifold diff > /tmp/bifold.patch)
+#    an untracked file you want to keep (a lockfile, a note): copy it out, e.g. cp bifold/<file> /tmp/
+rm -rf bifold                                    # 3. the working folder only; NOT .git/modules/bifold
+git checkout main && git pull                    # 4. bifold/ comes back as part of main
+yarn install                                     # 5. reinstalls and builds the framework (its node_modules went with the folder)
+```
+
+Afterwards the old repository is still there: `git --git-dir=.git/modules/bifold
+--work-tree=. stash list` and `git --git-dir=.git/modules/bifold --work-tree=. log -1
+<branch>` read it (`--work-tree=.` because the module's own `core.worktree` names the
+folder you removed; on the folded `main` a `bifold/` folder exists again, but this
+works in either state). A change kept there is re-applied with
+`git am -p1 --directory=bifold` (a `format-patch` of the bifold commit) or
+`git apply --directory=bifold` (a plain diff); a stash has no worktree left to
+`stash apply` into, so take it as a patch first:
+`git --git-dir=.git/modules/bifold --work-tree=. stash show -p stash@{0} > /tmp/bifold-stash.patch`,
+then `git apply --directory=bifold /tmp/bifold-stash.patch`. Rehearsed end to end
+on 2026-11-22 in a disposable clone (companion `2026-11-22-al.md`). A worktree whose
+`bifold/` is an empty, never-initialised folder needs only step 4.
 
 ### The quick way: run a demo
 
@@ -391,14 +428,12 @@ We welcome issues and pull requests. Please read
   [Conventional Commits](https://www.conventionalcommits.org/) with a lower-case
   type: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`,
   `revert`. commitlint checks this.
-- **Signed commits.** Every commit on `main`, in both repositories, must be
-  signed (GPG or SSH) and verified by GitHub.
-- **DCO sign-off.** Add a `Signed-off-by:` line with `git commit -s`. In the
-  `bifold/` submodule it must be the last line of the message, and it names the
-  commit's own author.
-- **Framework changes** go to
-  [keyring-bifold](https://github.com/berkmancenter/keyring-bifold) as their own
-  pull request; the app then moves its submodule pin.
+- **Signed commits.** Every commit on `main` must be signed (GPG or SSH) and
+  verified by GitHub.
+- **DCO sign-off.** Add a `Signed-off-by:` line with `git commit -s`; it is the
+  message's last line, and it names the commit's own author.
+- **Framework changes** are ordinary pull requests here, under `bifold/packages/…`;
+  the `keyring-bifold` repository is read-only history.
 
 ## License
 

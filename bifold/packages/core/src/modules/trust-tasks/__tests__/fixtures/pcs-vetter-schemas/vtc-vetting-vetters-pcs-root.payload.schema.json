@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vtc/vetting/vetters/pcs-root/0.1",
+  "title": "VTC \u2014 Vetting PCS Root Credential \u2014 payload",
+  "description": "A vetter asks the community to blind-sign its class credential for a vetting period. What the community signs is a commitment it cannot open, so the credential it issues is one it cannot later recognise \u2014 which is what lets the vetter attest without being named.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "label",
+    "id",
+    "request"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "pattern": "^vetter/[0-9]{4}-[0-9]{2}$",
+      "description": "The class label asked for, `vetter/<YYYY-MM>`. A community issues under its current label only; a stale client is refused rather than silently served under another."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+      "description": "The vetter's PCS identifier, multibase base58btc. Recorded once and required again at every later label: a member holding two identifiers could be counted twice in one proof."
+    },
+    "request": {
+      "type": "object",
+      "description": "The blinded root request, as the suite serialises it. Opaque to the community beyond verifying it; its members are fixed by the suite named in the criterion's parameters, not by this schema.",
+      "properties": {
+        "encoding": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+          "description": "The issuance encoding the suite carries."
+        },
+        "t0": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+          "description": "The request's tag under the root context."
+        },
+        "proof": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+          "description": "The proof that the commitment is well formed and the requester holds its secret."
+        }
+      },
+      "required": [
+        "proof"
+      ]
+    },
+    "ext": {
+      "$ref": "../../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "VTC Vetting PCS Root Credential \u2014 response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "preCredential"
+      ],
+      "description": "The blind pre-credential. The vetter unblinds it into a credential the community has never seen.",
+      "properties": {
+        "label": {
+          "type": "string",
+          "pattern": "^vetter/[0-9]{4}-[0-9]{2}$",
+          "description": "The label signed under \u2014 the one asked for."
+        },
+        "preCredential": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+          "description": "The pre-credential, multibase base58btc. Useless to anyone but the holder of the request's blinding state."
+        },
+        "ext": {
+          "$ref": "../../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

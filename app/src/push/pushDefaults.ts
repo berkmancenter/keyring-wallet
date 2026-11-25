@@ -8,7 +8,7 @@
  * build shows only when it names a gateway. Without permission there is no
  * token, and the phone is simply not made wakeable.
  */
-import { GenericRecordsIdentityStore, ToastType, vtaAgent } from '@bifold/core'
+import { GenericRecordsIdentityStore, setMailboxWakeHandle, ToastType, vtaAgent } from '@bifold/core'
 import type { Agent } from '@credo-ts/core'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import i18n from 'i18next'
@@ -179,6 +179,9 @@ export function appPushWakeDeps(agent: Agent): PushWakeDeps {
         }
       ),
     handles: appWakeHandles,
+    // The wallet mailbox (bifold walletMailbox.ts): its mediator as a trigger, and the handle left there.
+    mailboxMediatorDid: Config.MAILBOX_MEDIATOR_DID || undefined,
+    setMailboxWake: (wake) => setMailboxWakeHandle(agent, wake),
   }
 }
 

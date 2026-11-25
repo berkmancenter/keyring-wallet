@@ -69,7 +69,7 @@ xcuserdata/
 app/vendor/bundle/**
 
 # child packages
-# bifold is now tracked as a git submodule
+# bifold/ is part of this repository (history on the history/bifold ref); its own .gitignore covers its tree.
 aries-oca-bundles/
 credo-ts/
 app/vendor/

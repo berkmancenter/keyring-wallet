@@ -1,0 +1,286 @@
+name: Framework quality
+
+# The framework's own checks (bifold/, the former keyring-bifold repository), ported
+# job by job from its .github/workflows/quality.yaml when the repository was folded
+# in (docs/plans/single-codebase-plan.md, Phase 3). Everything here runs with
+# bifold/ as the working directory: that tree keeps its own yarn install and build
+# until Phase 2 gives the repository one dependency tree.
+#
+# Job names: "Framework lint and format", "Framework tests" (the one the ruleset
+# requires; it passes only when every part passes), "Framework tests scope · …",
+# "Type check (ratchet)". The wallet's own "Lint+Format+Types" and "Testing" in
+# quality.yml are unchanged and separate.
+
+on:
+  pull_request:
+    # Every base branch, not only main, like Code Quality and Commit Requirements: a stacked PR (into a feature
+    # branch, or into the PR below it) gets the same framework checks as one into main. The main ruleset still only
+    # requires them for PRs into main. "edited" covers the retarget to main after the PR below merges, so the two
+    # required framework checks report on the new base.
+    types: [opened, synchronize, reopened, labeled, edited]
+  push:
+    branches: [main]
+    paths:
+      - "bifold/**"
+      - ".github/workflows/framework.yml"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # bifold/scripts/ci/select-tests.mjs diffs --relative to its root, so this default is what makes its selection the
+    # framework's files: move it and the selection silently becomes empty (no framework test runs), the quiet failure.
+    working-directory: bifold
+
+jobs:
+  lint:
+    runs-on: ubuntu-22.04
+    name: Framework lint and format
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The changed-files step diffs the PR against its base with a three-dot range,
+          # which needs the merge base; a shallow checkout has none.
+          fetch-depth: 0
+
+      - name: Changed files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          set -euo pipefail
+          # The formatter and linter check only the framework files this PR changes (the
+          # repo-wide runs carry pre-existing debt). The list is computed once, here, and any
+          # failure to compute it fails the job instead of leaving an empty list that the
+          # steps below would read as "nothing to check". Paths are relative to bifold/
+          # (--relative), as the framework's tools expect.
+          BASE="origin/${BASE_REF}"
+          if ! git merge-base "$BASE" HEAD >/dev/null; then
+            echo "::error::No merge base between $BASE and HEAD; the checkout is too shallow to diff the PR"
+            exit 1
+          fi
+          git diff --name-only --relative "$BASE...HEAD" -- . > "$RUNNER_TEMP/changed-files-all.txt"
+          # The whole repository's list, for the guard below: no --relative here, since --relative also FILTERS the diff
+          # to bifold/, and a wallet-only PR into the integration branch then read as "GitHub lists files, the diff is
+          # empty" and failed this step (first seen on the third PR of the stack).
+          git diff --name-only "$BASE...HEAD" > "$RUNNER_TEMP/changed-files-repo.txt"
+          if [ ! -s "$RUNNER_TEMP/changed-files-repo.txt" ] && [ "${PR_CHANGED_FILES:-0}" -gt 0 ]; then
+            echo "::error::The diff against $BASE is empty, but GitHub lists $PR_CHANGED_FILES changed files in this PR; refusing to pass without checking anything"
+            git diff --stat "$BASE...HEAD" || true
+            exit 1
+          fi
+          # Deleted files cannot be formatted or linted; keep added, copied, modified, renamed, type-changed.
+          git diff --name-only --relative --diff-filter=ACMRT "$BASE...HEAD" -- . > "$RUNNER_TEMP/changed-files.txt"
+          echo "Framework files changed against $BASE ($(wc -l < "$RUNNER_TEMP/changed-files.txt" | tr -d ' ') to check):"
+          cat "$RUNNER_TEMP/changed-files.txt"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup NodeJS
+        uses: ./.github/workflows/actions/setup-node
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build Workspace
+        run: yarn build
+
+      - name: Run formatter
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED="$(grep -E '\.(js|jsx|mjs|cjs|json|ts|tsx|md|yml|yaml)$' "$RUNNER_TEMP/changed-files.txt" | grep -vE '^(samples/app/(ios|android)/|.*/node_modules/)' || true)"
+            if [ -z "$CHANGED" ]; then
+              echo "No formattable framework files changed; skipping prettier"
+              exit 0
+            fi
+            # One path per line: a framework file with a space in its name (docs/design-guidelines/design guidelines.md)
+            # word-split into two arguments and was never checked (review of the fold, 2026-11-22).
+            echo "$CHANGED" | xargs -d '\n' npx prettier --check
+          else
+            yarn prettier --check || echo "::warning::Repo-wide prettier check failed (known debt); not blocking main pushes yet"
+          fi
+
+      - name: Run linter
+        run: |
+          # Full lint of the framework has pre-existing debt. On PRs, lint changed JS/TS only.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED="$(grep -E '\.(js|jsx|mjs|cjs|ts|tsx)$' "$RUNNER_TEMP/changed-files.txt" || true)"
+            if [ -z "$CHANGED" ]; then
+              echo "No framework JS/TS files changed; skipping lint"
+              exit 0
+            fi
+            # Through yarn: eslint is a workspace dev dependency, not on the runner's PATH.
+            echo "$CHANGED" | xargs -d '\n' yarn eslint --color
+          else
+            yarn lint || echo "::warning::Full framework lint failed (known debt); not blocking main pushes yet"
+          fi
+
+      - name: testids extractor tests
+        run: node --test packages/core/scripts/gen-testids.test.mjs
+
+      - name: testids manifest is current
+        run: |
+          # packages/core/testids.json lists every testID key in core; the e2e drivers read it
+          # (e2e/lib/testids.json is its synced copy, checked by quality.yml). A PR that adds,
+          # removes or renames a testID must regenerate it (`yarn testids` in bifold/packages/core).
+          node packages/core/scripts/gen-testids.mjs --check
+
+      - name: emoji data tests
+        run: node --test packages/core/scripts/emoji/generate-emoji-data.test.mjs
+
+      - name: emoji data is current
+        run: node packages/core/scripts/emoji/generate-emoji-data.mjs --check
+
+      - name: test selector tests
+        run: node --test scripts/ci/select-tests.test.mjs
+
+      - name: every other framework node test
+        run: |
+          # A *.test.mjs under bifold/ that no step names still runs here: an explicit list
+          # silently leaves a new one out. The wallet's own *.test.mjs (e2e/, scripts/) run in
+          # quality.yml through scripts/ci/find-tests.mjs, which does not descend into bifold/.
+          named=$(grep -ohE 'node --test [^ ]+\.test\.mjs' ../.github/workflows/framework*.yml | awk '{print $3}' | sort -u)
+          files=$(git ls-files '*.test.mjs' | grep -vxF "$named" || true)
+          echo "Not named by any step:"
+          echo "${files:-  (none)}"
+          if [ -n "$files" ]; then node --test $files; fi
+
+  # On a PR, the framework's tests run only the suites the change can reach, plus every
+  # guard (bifold/scripts/ci/select-tests.mjs says which and why), in four parts at once.
+  # The whole suite with coverage runs on every push to main that touches bifold/, nightly,
+  # and on dispatch: framework-full.yml.
+  test-part:
+    runs-on: ubuntu-22.04
+    name: Framework tests part ${{ matrix.part }}/4
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3, 4]
+    outputs:
+      scope: ${{ steps.run.outputs.scope || steps.plan.outputs.scope }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup NodeJS
+        uses: ./.github/workflows/actions/setup-node
+
+      - name: Select tests
+        id: plan
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: node scripts/ci/select-tests.mjs plan --base "origin/${BASE_REF}" --out "$RUNNER_TEMP/test-plan.json"
+
+      - name: Restore dependencies
+        if: steps.plan.outputs.work == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            bifold/node_modules
+            bifold/packages/*/node_modules
+            bifold/samples/*/node_modules
+            bifold/.yarn/cache
+            bifold/.yarn/install-state.gz
+          key: framework-deps-v1-${{ runner.os }}-${{ hashFiles('bifold/yarn.lock', 'bifold/.yarnrc.yml', 'bifold/.yarn/patches/**', 'bifold/package.json', 'bifold/packages/*/package.json', 'bifold/samples/*/package.json', '.github/workflows/actions/setup-node/action.yml') }}
+
+      - name: Install dependencies
+        if: steps.plan.outputs.work == 'true'
+        run: yarn install --immutable
+
+      - name: Build what the tests load
+        if: steps.plan.outputs.work == 'true' && steps.plan.outputs.build != ''
+        env:
+          BUILD: ${{ steps.plan.outputs.build }}
+        run: |
+          if [ "$BUILD" = all ]; then
+            yarn build
+          else
+            set -- $BUILD
+            args=()
+            for name in "$@"; do args+=(--include "$name"); done
+            yarn workspaces foreach --all --topological-dev -p "${args[@]}" run build
+          fi
+
+      - name: Restore jest's cache
+        if: steps.plan.outputs.work == 'true'
+        uses: actions/cache@v4
+        with:
+          path: bifold/packages/core/.jest/cache
+          key: framework-jest-v1-${{ runner.os }}-${{ hashFiles('bifold/yarn.lock', 'bifold/packages/core/babel.config.js', 'bifold/packages/core/jest.config.js') }}-part${{ matrix.part }}-${{ github.ref }}
+          restore-keys: |
+            framework-jest-v1-${{ runner.os }}-${{ hashFiles('bifold/yarn.lock', 'bifold/packages/core/babel.config.js', 'bifold/packages/core/jest.config.js') }}-part${{ matrix.part }}-
+
+      - name: Automated testing
+        id: run
+        if: steps.plan.outputs.work == 'true'
+        env:
+          PART: ${{ matrix.part }}/4
+        run: node scripts/ci/select-tests.mjs run --plan "$RUNNER_TEMP/test-plan.json" --part "$PART"
+
+  test:
+    runs-on: ubuntu-22.04
+    name: Framework tests
+    needs: test-part
+    if: always() && github.event_name == 'pull_request'
+    outputs:
+      scope: ${{ needs.test-part.outputs.scope }}
+    steps:
+      - name: Every part passed
+        working-directory: .
+        env:
+          RESULT: ${{ needs.test-part.result }}
+          SCOPE: ${{ needs.test-part.outputs.scope }}
+        run: |
+          echo "Framework tests ran: ${SCOPE:-unknown}; parts: $RESULT"
+          test "$RESULT" = success
+
+  scope:
+    name: Framework tests scope · ${{ needs.test.outputs.scope || 'unknown' }}
+    needs: test
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Scope
+        working-directory: .
+        env:
+          SCOPE: ${{ needs.test.outputs.scope }}
+          RESULT: ${{ needs.test.result }}
+        run: |
+          echo "Framework tests ran: ${SCOPE:-unknown} (result: $RESULT)"
+          test "$RESULT" = success
+
+  typecheck:
+    runs-on: ubuntu-22.04
+    name: Type check (ratchet)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup NodeJS
+        uses: ./.github/workflows/actions/setup-node
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Build Workspace
+        run: yarn build
+
+      - name: tsc-ratchet tests
+        run: node --test scripts/tsc-ratchet.test.mjs
+
+      - name: No new type errors in @bifold/core
+        run: node scripts/tsc-ratchet.mjs --package packages/core --project tsconfig.ratchet.json

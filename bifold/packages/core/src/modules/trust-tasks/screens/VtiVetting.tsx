@@ -1,0 +1,2204 @@
+/**
+ * Vetting — the two seats of peer identity vetting on one screen, decided by
+ * what this phone holds: a vetter grant for the community makes it the
+ * vetter's desk; otherwise it is the applicant's application. Both ride the
+ * persona's community session; both are the reference client's flows
+ * (design §8–§10) with the terminal taken out of the room.
+ *
+ * The seat is said out loud before anything else on the screen — a badge, a
+ * heading and one sentence — because the two people at a vetting hold phones
+ * that look alike, and which of them is checking whom is the one thing
+ * neither should have to infer.
+ *
+ * @module trust-tasks/screens/VtiVetting
+ */
+
+import { useAgent } from '@bifold/react-hooks'
+import Clipboard from '@react-native-clipboard/clipboard'
+import { useHeaderHeight } from '@react-navigation/elements'
+import { useNavigation } from '@react-navigation/native'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import {
+  ActivityIndicator,
+  DeviceEventEmitter,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native'
+import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
+
+import QRRenderer from '../../../components/misc/QRRenderer'
+import { useTheme } from '../../../contexts/theme'
+import { Screens } from '../../../types/navigators'
+import { testIdWithKey } from '../../../utils/testable'
+import { VETTER_HEADER } from '../../../components/views/VetterHeaderBackground'
+import { GenericRecordsCommunityStore, isCurrentMembership, type VtiHeldCredential } from '../module/VtiCommunityStore'
+import { useCommunityChanged, VTI_PERSONA_MESSAGE_WAITING_EVENT } from '../module/communityChanged'
+import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
+import { sameIdentity } from '../module/didScid'
+import { HIDDEN_VETTING_SUITE, hiddenVettingSuite } from '../module/joinManifest'
+import { openJoinRequestOf, vtiAgent, type VtiManifest } from '../module/vtiAgent'
+import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
+import { deliveredCardCheck } from '../module/vtiDeliveredCheck'
+import { receiveIssue } from '../module/vtiInbox'
+import {
+  GenericRecordsVettingStore,
+  VettingTicketError,
+  VtiApplicant,
+  checkTicketFor,
+  isPrivateVettingRequest,
+  VtiVetterDesk,
+  type VettingApplication,
+  type VettingDeskRequest,
+  type VettingVetterProfile,
+  type VettingTicket,
+} from '../module/vtiVetting'
+import { ensurePersonaFor, stopVetting } from '../module/vtiJoin'
+import { isMissingKeyCopy, PersonaAgentUnreachable } from '../module/vtiPersonaInbox'
+import StopVettingSheet, { STOP_REFUSED_WORDS } from './StopVettingSheet'
+import { pendingVettingTicket } from '../module/vtiLinks'
+import { requestBiometricConfirmationWithUI } from '../../vrc/vrc-biometric'
+
+import { InWords, sayFailure, type Said } from './plainError'
+import SaidFailure from './SaidFailure'
+import { agentHomeScreen } from './agentHome'
+import { useMeasuredKeyboardOffset } from './keyboardOffset'
+import { openScanner } from './openScanner'
+import { communityTarget } from '../module/vtiCommunityLink'
+import { pickOwnVetterGrant, type VetterGrantState } from '../module/vtiGrantState'
+import { joinKnown, useCommunityJourney } from '../module/communityJourney'
+import { joinSeed } from '../module/vtiJoinSeed'
+import { offeredProfileName, useJoinAsOptions } from './JoinAs'
+
+import { useCommunityDid } from './useCommunity'
+import { communityLabelOf, communityLabelStartOf, identityWord } from './communityName'
+import { hiddenVettingSeam, pcsErrorCode } from './hiddenVettingSeam'
+import { PrivateVettingBadge } from './PrivateVettingBadge'
+import { hiddenVetterSeam, type HiddenVetterStanding } from './hiddenVetterSeam'
+import { hiddenVetterErrorKey } from './VtiHiddenVetter'
+import { hiddenVettingErrorKey } from './VtiHiddenVetting'
+import { VETTING_NOT_SUPPORTED_KEY, vettingNotSupportedFor } from './joinWays'
+import { DidDetails } from './DidDetails'
+import { claimList, needWords } from './claimWords'
+import { DirectoryConsent } from './DirectoryConsent'
+import { DirectoryDisclosureCard } from './DirectoryDisclosureCard'
+import { readShownThenConfirm } from '../module/directoryDisclosure'
+import { EligibilityNote } from './EligibilityNote'
+import { EnvelopeRefusalNote } from './EnvelopeRefusalNote'
+import { RefusalNote } from './RefusalNote'
+import { ticketRefusalWords } from './ticketWords'
+import { vetterStandingLine } from './vetterStanding'
+import { useVtaDid } from './VtaStatus'
+import { applicantPrimary, deskPrimary, type ApplicantStep, type VetterStep } from './vettingPrimary'
+import { useRoomAboveTabBar } from './aboveTabBar'
+import { localDate } from './localTime'
+import { VtiVettingIds, type VtiVettingId } from './VtiVetting.ids'
+import { appDateWords, dateTime, phoneUses24HourClock, timeLabel } from '../../../utils/localDay'
+
+/**
+ * A short, stable name for one vetting request: the tail of its request
+ * document's id. A second request to the same vetter replaces the first with a
+ * new id, so this is what tells the two apart when their answers read the same.
+ * It is for tests, not people — it rides in the testID, never on screen.
+ */
+export const requestRef = (requestDocumentId: string) => requestDocumentId.replace(/[^A-Za-z0-9]/g, '').slice(-8)
+
+/** The testID of a request's "Sent" line: the fixed key, then which request it is. */
+export const requestTestKey = (requestDocumentId: string) => `VettingRequestId.${requestRef(requestDocumentId)}`
+
+export interface VtiVettingProps {
+  config?: { mediatorDid?: string; communityDid?: string; vtaDid?: string }
+}
+
+// The header's height, for the keyboard offset; a screen shown without a
+// header (a test render) has none to report, and throws.
+const useSafeHeaderHeight = (): number => {
+  try {
+    return useHeaderHeight()
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * A moment on a request card: the time when it is today, and the date with it
+ * when it is not. "Sent 04:21 PM" read as the card's time on a phone whose
+ * clock said 06:59; it was the request's, sent hours earlier (2026-09-25).
+ */
+/** The legal name a finished request's card carried: what the vetter confirmed when it attested. */
+export function confirmedNameOf(request: { card?: { claims?: unknown } }): string | undefined {
+  const claims = (request.card?.claims as { type?: string; value?: unknown }[] | undefined) ?? []
+  const name = claims.find((c) => c.type === 'name.legal')?.value
+  return typeof name === 'string' && name.trim() ? name.trim() : undefined
+}
+
+/** Today's time, "16:01"; another day's date and time, "15 Oct, 16:01", with the year once it is not this year. */
+export const whenShown = (iso: string, now: Date = new Date()): string => {
+  const at = new Date(iso)
+  const words = appDateWords()
+  const use24h = phoneUses24HourClock()
+  return at.toDateString() === now.toDateString()
+    ? timeLabel(at, words, use24h)
+    : dateTime(at, words, use24h, 'auto', now)
+}
+
+/**
+ * Words for a private-vetting refusal the agent or the module gave a step of
+ * this flow, by its code; undefined for anything else, which is said as any
+ * failure is.
+ */
+/** A desk request that asked to be vetted privately: the module's own answer, which `attest` acts on too. */
+const isPrivateRequest = (request: VettingDeskRequest) => isPrivateVettingRequest(request)
+
+function privateVettingWords(e: unknown): string | undefined {
+  const code = pcsErrorCode(e)
+  if (!code) return undefined
+  const vetterSide = /hidden-vetter|vta\/pcs\/(attest|root-request|root-accept|tokens|vetter)/.test(code)
+  const key = vetterSide ? hiddenVetterErrorKey(code) : hiddenVettingErrorKey(code)
+  return key.endsWith('ErrorGeneric') ? undefined : key
+}
+
+const VtiVetting: React.FC<VtiVettingProps> = ({ config }) => {
+  const headerHeight = useSafeHeaderHeight()
+  const keyboard = useMeasuredKeyboardOffset(headerHeight)
+  // The tab bar draws over the page: the last line scrolls clear of it.
+  const roomAboveTabBar = useRoomAboveTabBar()
+  const { t } = useTranslation()
+  // i18next escapes interpolated values for HTML by default, and React Native
+  // renders them as plain text — so a locale date reads "9&#x2F;21&#x2F;26" and a
+  // legal name like O'Brien reads "O&#39;Brien" on the card preview. Nothing on
+  // this screen is HTML; every interpolation goes through here.
+  const tp = (key: string, values: Record<string, unknown>) =>
+    t(key, { ...values, interpolation: { escapeValue: false } }) as string
+  const { ColorPalette, TextTheme } = useTheme()
+  const { agent } = useAgent()
+  const communityDid = useCommunityDid(config?.communityDid)
+  /** A refused ticket, in words: which community it is for, and why that matters. */
+  const ticketWords = useCallback((e: VettingTicketError) => ticketRefusalWords(e, communityDid, t), [t, communityDid])
+  const mediatorDid = config?.mediatorDid
+  const vtaDid = useVtaDid(config?.vtaDid)
+
+  const [persona, setPersona] = useState<VtiPersona>()
+  // The community whose identity has been read from this phone. Until it is
+  // this one, the identity is not known: "none" (Create identity) and "not
+  // read yet" were the same undefined, so every open showed Create identity,
+  // with a working button, to someone who had one.
+  const [personaReadFor, setPersonaReadFor] = useState<string>()
+  const personaRead = Boolean(communityDid) && personaReadFor === communityDid
+  const [grant, setGrant] = useState<VtiHeldCredential>()
+  // Whether the seat has been read for this identity yet. The identity is
+  // read from this phone at once; the vetter grant only after its status is
+  // checked over the network. Until then the seat is not known: guessing the
+  // applicant's put a seated vetter on "Getting vetted" for seconds on a cold
+  // start (vetterDeskRelaunch, 255).
+  const [seatRead, setSeatRead] = useState(false)
+  // How the vetter knows the person, per private request: asked, never assumed.
+  /**
+   * Whether this phone is a vetter *now*, not merely whether it holds a grant.
+   * The desk used to seat anyone with a grant and say nothing about its
+   * standing, so a vetter whose grant was revoked or re-granted (a re-grant is
+   * a new credential, and the new one may never have arrived) sat at a desk
+   * that would refuse to sign, with nothing on screen to explain it.
+   */
+  const [standing, setStanding] = useState<VetterGrantState>({ state: 'none' })
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState<Said>()
+  /** Row V: Stop this vetting's confirm is open (V4). */
+  const [stopAsked, setStopAsked] = useState(false)
+  /** Row V6: the vetting's own identity could not sign in (its agent gone, unreachable, or its sign-in let go). */
+  const [cantSignIn, setCantSignIn] = useState(false)
+  // The community answered that an application is already open (and which).
+  const [alreadyOpen, setAlreadyOpen] = useState(false)
+  // Off unless the person turns it on (VTI-Q14).
+  const [listMe, setListMe] = useState(false)
+  const [busy, setBusy] = useState<string>()
+  const [tick, setTick] = useState(0)
+  const bump = useCallback(() => setTick((n) => n + 1), [])
+
+  // desk
+  const [tickets, setTickets] = useState<(VettingTicket & { link: string })[]>([])
+  const [desk, setDesk] = useState<VettingDeskRequest[]>([])
+  const [profile, setProfile] = useState<VettingVetterProfile>()
+  const [profileName, setProfileName] = useState('')
+  // application
+  const [application, setApplication] = useState<VettingApplication>()
+  // The community's manifest. Join read it a moment ago: shown from that read at once (the Private badge was
+  // missing until this screen's own read came back, then popped in), and read afresh once per visit.
+  const [manifest, setManifest] = useState<VtiManifest | undefined>(() =>
+    communityDid ? vtiAgent.lastManifest(communityDid) : undefined
+  )
+  const [legalName, setLegalName] = useState('')
+  /**
+   * Which seat's holdings have been read once: the desk's profile, tickets and
+   * requests, or the applicant's application and checklist. Until the seat
+   * being shown has them, the screen holds its place. Shown before them, the
+   * desk said Step 1 ("new ticket") to a vetter mid-request, the apply step
+   * said "0 of N", and the name field filled in after it had shown empty
+   * (report #18).
+   */
+  const [heldReadFor, setHeldReadFor] = useState<'vetter' | 'applicant'>()
+  // The profile chosen at Join as fills the name in, once (seed by copy).
+  const seed = communityDid ? joinSeed.get(communityDid) : undefined
+  useEffect(() => {
+    if (seed?.legalName) setLegalName((v) => v || seed.legalName)
+  }, [seed?.legalName])
+  // Opened from a vetter's ticket there is no "Join as", so nothing seeds the
+  // name: the field was empty and the profile from onboarding nowhere ("I don't
+  // see my profile", TestFlight 231). A profile's name is how the person shows
+  // up, not necessarily their legal name, so it is offered, never filled in.
+  const { options: profileOptions, defaultId: profileDefault } = useJoinAsOptions()
+  const offeredName = offeredProfileName(seed, profileOptions, profileDefault)
+  const [usedOffered, setUsedOffered] = useState(false)
+  const [ticketLink, setTicketLink] = useState('')
+  // When a ticket last reached this screen: a member from before then has no use for it.
+  const [ticketTakenAt, setTicketTakenAt] = useState<number>()
+  const navigation = useNavigation()
+  const { width } = useWindowDimensions()
+  // A QR sized for a phone held at arm's length, not for the whole width of an
+  // iPad: past ~240 pt it only gets harder to fit in another camera's frame.
+  const ticketQrSize = Math.min(240, width - 80)
+  const [linkCopied, setLinkCopied] = useState(false)
+  // Which sessions this person has confirmed the match code for — what they
+  // answered on this screen, not protocol state.
+  const [matchConfirmed, setMatchConfirmed] = useState<Record<string, true>>({})
+  /**
+   * The desk's "Statement issued" and "share this ticket" steps are this
+   * visit's, held here rather than read from the store: a desk that derived
+   * "done" from the newest stored request opened every later visit on the
+   * last finished vetting (Step 5 of 5) instead of on a new ticket.
+   */
+  const [justAttested, setJustAttested] = useState<string>()
+  const [issuedTicketId, setIssuedTicketId] = useState<string>()
+  // The raw ticket link and the finished requests: both one tap away, not on the page.
+  const [ticketLinkShown, setTicketLinkShown] = useState(false)
+  const [finishedOpen, setFinishedOpen] = useState(false)
+
+  // A ticket scanned or pasted anywhere lands here (vtiLinks): fill it in.
+  // The applicant still asks for vetting themselves.
+  useEffect(() => {
+    const takePending = () => {
+      const ticket = pendingVettingTicket.take()
+      if (!ticket) return
+      setTicketLink(ticket)
+      setTicketTakenAt(Date.now())
+    }
+    takePending()
+    return pendingVettingTicket.subscribe(takePending)
+  }, [])
+
+  // A ticket for this community, once there is an application to keep it
+  // with, outlives the screen (see VettingApplication.pendingTicket).
+  useEffect(() => {
+    const ticket = ticketLink.trim()
+    if (!ticket || !application || !communityDid || application.pendingTicket === ticket) return
+    if (!checkTicketFor(ticket, communityDid).ok) return
+    void applicantRef.current?.keepTicket(ticket).catch(() => undefined)
+  }, [ticketLink, application, communityDid])
+
+  // Step 2's own "Scan": a ticket that comes back from it is asked with at
+  // once, as a scan acts elsewhere in Keyring. A pasted link still waits for
+  // "Use this link" (TestFlight 236).
+  const scanAsked = useRef(false)
+  const onScanTicket = useCallback(() => {
+    scanAsked.current = true
+    openScanner(navigation)
+  }, [navigation])
+  const [checklist, setChecklist] = useState<{
+    held: number
+    needed: number
+    counted: number
+    meets: boolean
+    discounted: number
+    needs: { kind: 'statements' | 'method'; method?: string; n: number }[]
+    independenceOk: boolean
+    exceededCaps: { relationship: string; limit: number; seen: number }[]
+    unreadableMaxAge?: string
+    unchecked: { vetterDid: string; reason: string }[]
+    /** Private (hidden) vetting: the same steps; `counted` is the vouches the agent accepted. */
+    mode?: 'private'
+  }>()
+  const [membershipRole, setMembershipRole] = useState<string>()
+  // The membership lands here the moment it is stored (the apply's own wait,
+  // the persona inbox), not on the seat's next 3 s read.
+  const { journey } = useCommunityJourney(agent, communityDid)
+  // A join whose read failed is unknown, not "not a member" (joinKnown).
+  const knownJoin = joinKnown(journey)
+  // This identity's, or one that names none. Making an identity announces nothing, so the reading can be from before
+  // it: a record the phone held for someone else said "You're a member" to a person who had just left (RCZZ-V2XZ).
+  const ownMembership =
+    knownJoin?.kind === 'member' &&
+    persona &&
+    (!knownJoin.membership.personaDid || sameIdentity(knownJoin.membership.personaDid, persona.did))
+      ? knownJoin.membership
+      : undefined
+  const memberRole = membershipRole ?? (ownMembership ? (ownMembership.role ?? 'member') : undefined)
+  // Scanned by someone who was a member by then. A person admitted through this ticket was not, and hears nothing.
+  const ticketNotNeeded =
+    ownMembership !== undefined && ticketTakenAt !== undefined && Date.parse(ownMembership.grantedAt) < ticketTakenAt
+
+  const stores = useMemo(
+    () =>
+      agent
+        ? {
+            identity: new GenericRecordsIdentityStore(agent),
+            community: new GenericRecordsCommunityStore(agent),
+            vetting: new GenericRecordsVettingStore(agent),
+          }
+        : undefined,
+    [agent]
+  )
+  const deskRef = useRef<VtiVetterDesk | undefined>(undefined)
+  const applicantRef = useRef<VtiApplicant | undefined>(undefined)
+  // Which seat the last read gave this persona, so a re-run listens again at once (the desk effect, below).
+  const seated = useRef<{ did: string; side: 'vetter' | 'applicant' } | undefined>(undefined)
+
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
+    fill: { flex: 1 },
+    content: { padding: 24, paddingBottom: 24 + roomAboveTabBar, gap: 18 },
+    card: { backgroundColor: ColorPalette.brand.secondaryBackground, borderRadius: 12, padding: 18, gap: 8 },
+    h: { ...TextTheme.headingFour, color: TextTheme.normal.color },
+    label: { ...TextTheme.labelSubtitle, color: ColorPalette.grayscale.mediumGrey },
+    value: { ...TextTheme.normal, color: TextTheme.normal.color },
+    code: {
+      fontSize: 40,
+      fontWeight: '700',
+      letterSpacing: 4,
+      color: TextTheme.normal.color,
+      textAlign: 'center',
+      paddingVertical: 8,
+    },
+    // 'Courier' is an iOS face; Android has no font by that name, and asking
+    // for one it cannot resolve takes the whole Text — and its siblings — out
+    // of the rendered tree, so the ticket card came out as three empty views
+    // with no testIDs and the run could never find the link inside it.
+    mono: {
+      fontFamily: Platform.select({ ios: 'Courier', android: 'monospace', default: 'monospace' }),
+      fontSize: 12,
+      color: ColorPalette.grayscale.mediumGrey,
+    },
+    button: {
+      backgroundColor: ColorPalette.brand.primary,
+      borderRadius: 8,
+      paddingVertical: 12,
+      // A label that wraps on two lines keeps clear of the edges.
+      paddingHorizontal: 16,
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    buttonText: { ...TextTheme.bold, color: '#FFFFFF', flexShrink: 1, textAlign: 'center' },
+    buttonSecondary: {
+      borderWidth: 1,
+      borderColor: ColorPalette.brand.primary,
+      borderRadius: 8,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    buttonSecondaryText: { ...TextTheme.bold, color: ColorPalette.brand.primary, flexShrink: 1, textAlign: 'center' },
+    // Row V: Stop this vetting, a red text button; and the can't-sign-in card (V6).
+    stopLink: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+    stopLinkText: { ...TextTheme.bold, color: ColorPalette.semantic.error },
+    cantSignIn: { borderColor: ColorPalette.semantic.error, gap: 8 },
+    buttonDimmed: { opacity: 0.4 },
+    input: {
+      borderWidth: 1,
+      borderColor: ColorPalette.grayscale.lightGrey,
+      borderRadius: 8,
+      padding: 10,
+      color: TextTheme.normal.color,
+      backgroundColor: ColorPalette.brand.primaryBackground,
+    },
+    error: { ...TextTheme.normal, color: ColorPalette.semantic.error },
+    errorBar: {
+      flexGrow: 0,
+      maxHeight: 160,
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+      borderTopWidth: 1,
+      borderTopColor: ColorPalette.semantic.error,
+    },
+    errorBarContent: { paddingHorizontal: 24, paddingVertical: 12 },
+    row: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+    seat: { backgroundColor: ColorPalette.brand.primary, borderRadius: 16, padding: 18, gap: 8 },
+    seatBadge: {
+      alignSelf: 'flex-start',
+      borderRadius: 999,
+      paddingVertical: 4,
+      paddingHorizontal: 12,
+      backgroundColor: '#FFFFFF',
+    },
+    seatBadgeText: { ...TextTheme.labelSubtitle, color: ColorPalette.brand.primary, fontWeight: '700' },
+    seatTitle: { ...TextTheme.headingThree, color: '#FFFFFF' },
+    seatText: { ...TextTheme.normal, color: '#FFFFFF' },
+    step: {
+      ...TextTheme.labelSubtitle,
+      color: ColorPalette.brand.primary,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+    },
+  })
+
+  /**
+   * What the phone's vetter standing means for the person sitting at the desk.
+   * Revoked and expired lead to the same request of an admin but are not the
+   * same thing to read, and someone who believes they are a vetter must not be
+   * told they never were. Nothing is claimed about what happens next: a
+   * re-granted vetter's new grant may not have arrived at all, so "try again"
+   * would be a promise the app cannot keep.
+   */
+  /** Whether this phone can actually vet right now, not merely sit at the desk. */
+  const canVet = standing.state === 'active'
+
+  const standingNotice = (() => {
+    const said = vetterStandingLine(standing)
+    if (!said) return null
+    return (
+      <View style={styles.card} testID={testIdWithKey(VtiVettingIds.standing)}>
+        <View style={styles.row}>
+          <Icon name="alert-circle-outline" size={24} color={ColorPalette.semantic.error} />
+          <Text style={styles.value} testID={testIdWithKey(VtiVettingIds.standingLine)}>
+            {t(said.line)}
+          </Text>
+        </View>
+        {said.ask ? (
+          <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.standingAsk)}>
+            {t('Vetting.StandingAsk')}
+          </Text>
+        ) : null}
+        <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.standingNoTicket)}>
+          {t('Vetting.StandingNoTicket')}
+        </Text>
+      </View>
+    )
+  })()
+
+  /** A button's look: filled when it is the step's one next action, outlined otherwise (vettingPrimary). */
+  const look = (id: VtiVettingId, primary?: VtiVettingId) =>
+    id === primary
+      ? { button: styles.button, text: styles.buttonText, spinner: '#FFFFFF' }
+      : { button: styles.buttonSecondary, text: styles.buttonSecondaryText, spinner: ColorPalette.brand.primary }
+
+  /**
+   * The seat banner: who this phone is at the vetting, in three lines. Brief
+   * (title and badge, no sentence) on the match step, where the sentence
+   * pushed "Codes match" under the tab bar on a 6.3" phone.
+   */
+  const seatBanner = (which: 'vetter' | 'applicant', brief = false) => (
+    <View style={styles.seat} testID={testIdWithKey(VtiVettingIds.seatBanner)} accessibilityRole="header">
+      <View style={styles.row}>
+        <Icon name={which === 'vetter' ? 'account-check' : 'account-search'} size={28} color="#FFFFFF" />
+        <Text style={styles.seatTitle}>
+          {which === 'vetter' ? t('Vetting.DeskTitle') : t('Vetting.ApplicantTitle')}
+        </Text>
+      </View>
+      <View style={styles.seatBadge} testID={testIdWithKey(VtiVettingIds.roleBadge)}>
+        <Text style={styles.seatBadgeText}>
+          {which === 'vetter' ? t('Vetting.SeatVetter') : t('Vetting.SeatApplicant')}
+        </Text>
+      </View>
+      {brief ? null : (
+        <Text style={styles.seatText} testID={testIdWithKey(VtiVettingIds.seatHint)}>
+          {which === 'vetter' ? t('Vetting.SeatVetterHint') : t('Vetting.SeatApplicantHint')}
+        </Text>
+      )}
+    </View>
+  )
+
+  // Another identity (a different community, Join again): its seat is read afresh.
+  const personaDid = persona?.did
+  useEffect(() => {
+    setSeatRead(false)
+  }, [personaDid])
+
+  // Load what the phone holds, and connect the persona's session with an inbox.
+  useEffect(() => {
+    if (!agent || !stores || !communityDid) return
+    let cancelled = false
+    void (async () => {
+      const p = await stores.identity.getPersona(communityDid)
+      if (cancelled) return
+      // The same persona read again keeps its object (an optimisation: the comparison is by serialised value, so
+      // it is only as good as one store path's key order; the early re-listen in the desk effect is the guarantee). A new one re-ran every effect keyed on it, and the desk's
+      // cleanup unhooked the desk each time this connect ran again: the MESSAGE_WAITING bump below brought a
+      // vetting request back exactly while the desk was unhooked (277.7, 0.69 gate kk, 2026-11-03).
+      setPersona((was) => (was && p && JSON.stringify(was) === JSON.stringify(p) ? was : p))
+      setPersonaReadFor(communityDid)
+      if (!p?.kmsKeyIds?.keyAgreement) return
+      try {
+        // Always ask: `connect` returns immediately when its socket is still
+        // open for this persona, and reconnects when it is not. Guarding on
+        // the DID alone trusted state that outlives the socket — after the
+        // mediator dropped the stream, the screen saw a matching DID, skipped
+        // the connect, and reported itself connected with nothing underneath.
+        // Anything sent to the persona then went nowhere: not delivered, not
+        // even queued, because the mediator had deregistered it.
+        await vtiAgent.connect(agent, mediatorDid, {
+          persona: p,
+          peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
+        })
+        setConnected(true)
+        setCantSignIn(false)
+      } catch (e) {
+        // Row V6: an identity that cannot sign in says so, with Try again, Start over and Stop, not only an error line.
+        if (
+          isMissingKeyCopy(e) ||
+          e instanceof PersonaAgentUnreachable ||
+          (e as Error)?.name === 'VtiSignInTimedOut' ||
+          (e as Error)?.name === 'VtiSignInResting'
+        )
+          setCantSignIn(true)
+        setError(sayFailure(e))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [agent, stores, communityDid, mediatorDid, tick])
+
+  // A message for this persona waits on the mediator, left by its listener because only the shared session's
+  // handlers (this screen's desk, the applicant's wait) can take it: sign in as the persona again, and it is
+  // delivered here. On 276.10 a vetting request reached a vetter's listener while another community held the
+  // session, and was lost (vtiIdentityListeners.keepFromListener).
+  useEffect(() => {
+    if (!personaDid) return
+    const sub = DeviceEventEmitter.addListener(VTI_PERSONA_MESSAGE_WAITING_EVENT, (e: { did?: string }) => {
+      if (e?.did === personaDid && vtiAgent.did !== personaDid) bump()
+    })
+    return () => sub.remove()
+  }, [personaDid, bump])
+
+  // The seat's read, for a change announced by the stores (below).
+  const seatRefresh = useRef<(() => Promise<void>) | undefined>(undefined)
+  // Whatever this phone keeps for the community (a ticket, a request, a statement,
+  // a grant, an inbox delivery) is announced by the store that keeps it: read the
+  // seat again at once, not on the next 3 s read.
+  useCommunityChanged(() => void seatRefresh.current?.(), communityDid)
+
+  // Whatever the community or a vetter delivers, keep it; then decide the seat.
+  //
+  // Deliberately NOT gated on `connected`. Opening the session drains whatever
+  // the mediator has been holding, and those messages are emitted while
+  // `connect` is still in flight — measured at roughly 900ms before it
+  // returned, which is when `connected` becomes true. A listener attached
+  // after that misses the entire backlog: the mediator counts the messages as
+  // delivered and drops them, so a vetter grant issued while the app was shut
+  // arrives once, is heard by nobody, and never comes again. The seat then
+  // never appears and the community looks at fault, having done everything
+  // right. Registering before the connect costs nothing — `onInbound` is a
+  // listener on the agent, not on a session — and closes the window.
+  useEffect(() => {
+    if (!agent || !stores || !persona) return
+    // A statement goes through the applicant's full check (receiveStatement)
+    // before it is kept — never stored straight from the inbox.
+    const acceptStatement = (m: Parameters<typeof receiveIssue>[2]) =>
+      new VtiApplicant(agent, persona, stores.vetting, stores.community).receiveStatement(m)
+    const stopIssue = vtiAgent.onInbound(async (m) => {
+      const got = await receiveIssue(stores.community, persona.did, m, {
+        acceptStatement,
+        checkCard: deliveredCardCheck(agent),
+      })
+      if (got.length) bump()
+    })
+    // A desk or applicant already seated for this persona listens again before anything here is awaited. The
+    // cleanup below unhooked it, and the seat read can take seconds (a status read); a message delivered in between
+    // reached no desk and was acknowledged, so a vetting request was lost (277.7, 0.69 gate kk, 2026-11-03).
+    // listen() replaces its own registration, so the read's own listen() below adds no second one.
+    if (seated.current?.did === persona.did) {
+      if (seated.current.side === 'vetter') deskRef.current?.listen()
+      else applicantRef.current?.listen()
+    }
+    let cancelled = false
+    const refreshSeat = async () => {
+      const grants = await stores.community.listHeldCredentials('vetter-grant', persona.communityDid)
+      const mine = grants.filter((x) => x.subjectDid === persona.did)
+      // One chooser for the desk and for signing: `pickOwnVetterGrant` picks
+      // the grant the app will actually sign under and says what it is, so the
+      // desk cannot seat someone under one grant while the signature is made
+      // under another — or refused.
+      const picked = await pickOwnVetterGrant(agent, mine, { allowInsecureLocal: __DEV__ })
+      // Left while this was reading: starting a listener now would outlive the
+      // screen (see the cleanup below).
+      if (cancelled) return
+      setGrant(picked.held)
+      setStanding(picked.state)
+      setSeatRead(true)
+      const m = await stores.community.getMembership(persona.communityDid)
+      if (cancelled) return
+      // A membership the community removed gives no role here (#166).
+      setMembershipRole(m && isCurrentMembership(m) ? m.role : undefined)
+      // Seated at the desk for any grant it holds, live or not — a vetter
+      // whose grant was revoked should find the desk and be told why it will
+      // not work, rather than be quietly returned to the applicant's chair as
+      // though they had never been a vetter.
+      if (picked.held) {
+        if (!deskRef.current)
+          deskRef.current = new VtiVetterDesk(agent, persona, stores.vetting, stores.community, bump)
+        deskRef.current.listen()
+        // One side listens: a seat that changed side must not leave the other taking deliveries it cannot serve.
+        applicantRef.current?.stopListening()
+        seated.current = { did: persona.did, side: 'vetter' }
+        const p = await stores.vetting.getProfile(persona.communityDid)
+        setProfile(p)
+        setProfileName((v) => v || p?.displayName || '')
+        const ts = await stores.vetting.listTickets(persona.communityDid)
+        setTickets(ts.map((x) => ({ ...x, link: deskRef.current!.linkFor(x) })))
+        // This community's requests only: the store keeps every desk's (240).
+        setDesk((await stores.vetting.listDesk()).filter((r) => r.communityDid === persona.communityDid))
+        setHeldReadFor('vetter')
+      } else {
+        if (!applicantRef.current)
+          applicantRef.current = new VtiApplicant(agent, persona, stores.vetting, stores.community, bump)
+        applicantRef.current.listen()
+        // A desk left listening after its grant went would take a vetting request, have it acknowledged, and be
+        // unable to serve it: the loss this seat's early re-listen exists to prevent.
+        deskRef.current?.stopListening()
+        seated.current = { did: persona.did, side: 'applicant' }
+        const a = await stores.vetting.getApplication(persona.communityDid)
+        setApplication(a)
+        // A ticket kept from an earlier visit (camera, link, paste) is still here.
+        if (a?.pendingTicket) setTicketLink((v) => v || a.pendingTicket!)
+        if (a) {
+          setLegalName((v) => v || a.claims['name.legal'] || '')
+          setChecklist(await applicantRef.current.checklist())
+        }
+        setHeldReadFor('applicant')
+      }
+    }
+    void refreshSeat()
+    seatRefresh.current = refreshSeat
+    // The 3 s read stays, for two reasons. What no write here announces: the
+    // grant's standing, checked over the network (a community can revoke it while
+    // the screen is open). And a change announced while this read is not
+    // registered (before this effect runs, or between its cleanup and its next
+    // run) is otherwise lost: the announcement is not repeated.
+    const timer = setInterval(() => void refreshSeat(), 3000)
+    return () => {
+      cancelled = true
+      seatRefresh.current = undefined
+      clearInterval(timer)
+      stopIssue()
+      // The desk's and the applicant's listeners go with the screen. They were
+      // left registered: each mount makes a new desk, so leaving Vetting and
+      // coming back put two desks on one persona, both answering every request
+      // (the double acceptance of 2026-09-25; vetterDeskListeners.test.tsx).
+      deskRef.current?.stopListening()
+      applicantRef.current?.stopListening()
+    }
+  }, [agent, stores, persona, connected, bump])
+
+  const run = useCallback(
+    async (name: string, fn: () => Promise<unknown>) => {
+      setBusy(name)
+      setError(undefined)
+      try {
+        await fn()
+      } catch (e) {
+        const privately = privateVettingWords(e)
+        setError(
+          e instanceof VettingTicketError
+            ? { words: ticketWords(e) }
+            : privately
+              ? {
+                  words: t(privately, {
+                    community: communityLabelOf(communityDid ?? '', t),
+                    interpolation: { escapeValue: false },
+                  }) as string,
+                }
+              : sayFailure(e)
+        )
+      } finally {
+        setBusy(undefined)
+        bump()
+      }
+    },
+    [bump, ticketWords, communityDid, t]
+  )
+
+  // Vetting this version cannot do (private vetting, an unsupported critical
+  // extension) is never started, asked of a vetter, or sent: the community
+  // would refuse the named statements. Said as Join says it (IN-264). The
+  // manifest, read once.
+  // Whether this build carries private vetting at all, which is what #405's
+  // refusal is really about. The seam is registered by the applicant module, so
+  // this is the same question VtiJoin asks (`privateVettingAvailable`) — and
+  // asking it differently in the two places is what let a build that carries
+  // the module still refuse on this screen (254).
+  const carriesPrivate = Boolean(hiddenVettingSeam())
+
+  const vettingManifest = useCallback(
+    async (digest?: string): Promise<VtiManifest> => {
+      if (!communityDid) throw new Error('no community to apply to')
+      const m = manifest ?? (await vtiAgent.fetchManifest(communityDid))
+      if (!manifest) setManifest(m)
+      // A private way this build carries goes on through these same steps:
+      // the module makes them private (Alberto, 2026-10-15: one flow). Only
+      // what this build cannot do is refused.
+      const notSupported = vettingNotSupportedFor(m, digest, { privateVettingAvailable: carriesPrivate })
+      if (notSupported) {
+        throw new InWords(
+          t(VETTING_NOT_SUPPORTED_KEY[notSupported], {
+            community: communityLabelOf(communityDid, t),
+            interpolation: { escapeValue: false },
+          }) as string
+        )
+      }
+      return m
+    },
+    [manifest, communityDid, t, carriesPrivate]
+  )
+
+  useEffect(() => {
+    const ticket = ticketLink.trim()
+    if (!scanAsked.current || !ticket || !application || !communityDid || busy) return
+    scanAsked.current = false
+    // A ticket for another community is not asked with: the field shows why.
+    if (!checkTicketFor(ticket, communityDid).ok) return
+    void run('request', async () => {
+      const m = await vettingManifest(application.requirementsDigest)
+      await applicantRef.current!.requestVetter({ link: ticket, manifest: m })
+    })
+  }, [ticketLink, application, communityDid, busy, run, vettingManifest])
+
+  // Whose side this is, in the header: the vetter's desk has its own title and
+  // the theme's gradient with one end changed; the applicant keeps the usual
+  // header. The two read alike otherwise (Alberto, 10-06).
+  const side: 'vetter' | 'applicant' | undefined =
+    persona && !seatRead ? undefined : grant ? 'vetter' : persona ? 'applicant' : undefined
+
+  // Whether this is private (hidden) vetting: the same steps, with the one mark
+  // that says so. Once an application exists the module's checklist is the
+  // single answer; before one does, the way in this community offers.
+  const privateCriterion = manifest?.criteria.find(
+    (c) =>
+      hiddenVettingSuite(c) === HIDDEN_VETTING_SUITE &&
+      (!application?.requirementsDigest || c.requirementsDigest === application.requirementsDigest)
+  )
+  // The way in counts as well as the checklist: an application with no private
+  // record for its own join DID yet reads as named, and the mark stays.
+  const privateHere = carriesPrivate && (checklist?.mode === 'private' || Boolean(privateCriterion))
+  // The manifest, read in a build that carries private vetting: the
+  // applicant's mark from the first step, and the vetter's private way. Read
+  // afresh even when one from earlier is shown: the community's answer now counts.
+  useEffect(() => {
+    if (!side || !(carriesPrivate || hiddenVetterSeam()) || !communityDid) return
+    let live = true
+    vtiAgent
+      .fetchManifest(communityDid)
+      .then((m) => live && setManifest(m))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [side, carriesPrivate, communityDid])
+
+  // A vetter where a way is private: where they stand to vouch, read once when
+  // the desk opens. Never on a poll or a redraw: it asks their agent, whose
+  // policy may ask an approver. "Never enrolled" is no line, not an error.
+  const [vetterStanding, setVetterStanding] = useState<HiddenVetterStanding>()
+  const standingRead = useRef(false)
+  const vetterPrivateWay = manifest?.criteria.find((c) => hiddenVettingSuite(c) === HIDDEN_VETTING_SUITE)
+  useEffect(() => {
+    const seam = hiddenVetterSeam()
+    if (side !== 'vetter' || !agent || !communityDid || !vetterPrivateWay || !seam || standingRead.current) return
+    standingRead.current = true
+    let live = true
+    seam
+      .standing(agent, communityDid, vetterPrivateWay)
+      .then((st) => live && setVetterStanding(st))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [side, agent, communityDid, vetterPrivateWay])
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: t(
+        side === 'vetter' ? 'Screens.VetterDesk' : side === 'applicant' ? 'Screens.GettingVetted' : 'Screens.Vetting'
+      ),
+      headerVariant: side === 'vetter' ? VETTER_HEADER : undefined,
+    } as object)
+  }, [navigation, side, t])
+
+  // Say what is missing and offer the way to it — a store build names neither.
+  if (!vtaDid || !communityDid) {
+    const go = (screen: Screens) => (navigation as unknown as { navigate: (name: string) => void }).navigate(screen)
+    return (
+      <SafeAreaView
+        style={styles.container}
+        edges={['left', 'right']}
+        testID={testIdWithKey(`VettingApplicantStep_${!vtaDid ? 'noAgent' : 'noCommunity'}`)}
+      >
+        <View style={styles.content}>
+          <Text
+            style={styles.value}
+            testID={testIdWithKey(!vtaDid ? VtiVettingIds.needsAgent : VtiVettingIds.needsCommunity)}
+          >
+            {!vtaDid ? t('Join.NeedsAgent') : t('Vetting.NeedsCommunity')}
+          </Text>
+          <Pressable
+            style={styles.button}
+            accessibilityRole="button"
+            onPress={() => go(!vtaDid ? Screens.VtaLink : Screens.VtiJoin)}
+            testID={testIdWithKey(!vtaDid ? VtiVettingIds.linkAgent : VtiVettingIds.joinCommunity)}
+          >
+            <Text style={styles.buttonText}>{!vtaDid ? t('VtaLink.LinkYourAgent') : t('Vetting.JoinCommunity')}</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  // Nothing is said about the seat until it is known: the identity, then the
+  // grant, then what the seat holds. One placeholder for all three.
+  const seatLoading = (
+    <SafeAreaView style={styles.container} edges={['left', 'right']} testID={testIdWithKey(VtiVettingIds.seatLoading)}>
+      <ActivityIndicator color={ColorPalette.brand.primary} style={{ marginTop: 40 }} />
+    </SafeAreaView>
+  )
+  if (!personaRead) return seatLoading
+
+  // No persona yet: the join DID is chosen before gathering, so this is step one.
+  if (!persona) {
+    return (
+      <SafeAreaView
+        style={styles.container}
+        edges={['left', 'right']}
+        testID={testIdWithKey(VtiVettingIds.applicantStepIdentity)}
+      >
+        <ScrollView contentContainerStyle={styles.content}>
+          {seatBanner('applicant')}
+          <Text style={styles.value}>{t('Vetting.NeedIdentity')}</Text>
+          <Pressable
+            style={styles.button}
+            testID={testIdWithKey(VtiVettingIds.createIdentityButton)}
+            accessibilityRole="button"
+            disabled={!!busy}
+            onPress={() =>
+              run('identity', async () => {
+                if (agent && stores) {
+                  await ensurePersonaFor({ agent, identityStore: stores.identity, vtaDid, communityDid })
+                  communityTarget.choose(communityDid)
+                }
+              })
+            }
+          >
+            {busy === 'identity' ? <ActivityIndicator color="#FFFFFF" /> : null}
+            <Text style={styles.buttonText}>{t('MyAgent.CreateIdentity')}</Text>
+          </Pressable>
+          {error ? <SaidFailure said={error} testID={VtiVettingIds.error} style={styles.error} /> : null}
+        </ScrollView>
+      </SafeAreaView>
+    )
+  }
+
+  // ------------------------------------------------------------ shared pieces
+  const stepHeader = (n: number, of: number, title: string) => (
+    <View style={{ gap: 4 }}>
+      <Text style={styles.step} testID={testIdWithKey(VtiVettingIds.stepIndicator)}>
+        {tp('Vetting.StepOf', { n, of })}
+      </Text>
+      <Text style={styles.h} accessibilityRole="header">
+        {title}
+      </Text>
+    </View>
+  )
+
+  // The ticket and legal-name fields sit low on a long page, and the app draws
+  // under the system bars (KeyboardProvider), so neither platform moves them
+  // out of the keyboard's way by itself: while a ticket was pasted, the field,
+  // its "can't read this" line and "Use this link" were all behind the
+  // keyboard (221 gate, iOS and Android). The page makes room for the keyboard
+  // and scrolls the focused field up with what follows it in view: the line
+  // under it and the button, plus the pinned error when there is one.
+  const keyboardAware = {
+    contentContainerStyle: styles.content,
+    keyboardShouldPersistTaps: 'handled' as const,
+    bottomOffset: error ? 260 : 150,
+  }
+
+  // Pinned under the scroll, not at its end: a step's buttons sit anywhere in a
+  // long page, and a failure written at the bottom fell below the fold on
+  // Android, so the button looked like it did nothing (221).
+  /**
+   * Row V (Alberto, 11-17): stop the vetting under way. `leave` goes back (Stop this vetting); `stay` reads the screen
+   * again, which starts over at the first step with a new identity (V6, Start over). Refused, and said so, when the
+   * request already went to the community: that one is withdrawn, not forgotten.
+   */
+  const stopThis = (then: 'leave' | 'stay') =>
+    run('stop', async () => {
+      if (!stores || !communityDid) return
+      const done = await stopVetting(
+        { identityStore: stores.identity, communityStore: stores.community, vettingStore: stores.vetting },
+        communityDid
+      )
+      setStopAsked(false)
+      if (done !== 'stopped')
+        throw new InWords(
+          t(STOP_REFUSED_WORDS[done], {
+            community: communityLabelOf(communityDid, t),
+            interpolation: { escapeValue: false },
+          })
+        )
+      setCantSignIn(false)
+      applicantRef.current = undefined
+      if (then === 'leave') navigation.goBack()
+    })
+  /** Stop this vetting (V2, V6): only while nothing has gone to the community. */
+  const stopLink =
+    application && !application.submission ? (
+      <Pressable
+        style={styles.stopLink}
+        onPress={() => setStopAsked(true)}
+        disabled={!!busy}
+        accessibilityRole="button"
+        testID={testIdWithKey(VtiVettingIds.stopVetting)}
+      >
+        <Text style={styles.stopLinkText}>{t('Vetting.StopVetting')}</Text>
+      </Pressable>
+    ) : null
+
+  const errorLine = error ? (
+    <ScrollView style={styles.errorBar} contentContainerStyle={styles.errorBarContent}>
+      <SaidFailure said={error} testID={VtiVettingIds.error} style={styles.error} />
+    </ScrollView>
+  ) : null
+
+  /**
+   * The match code, answered on both phones (plan §5.3–5.4). Sized so the
+   * answers sit on screen under it: at 56 pt the code wrapped to two lines and
+   * "Codes match" fell under the tab bar on a 6.3" phone (402×874 pt).
+   */
+  const matchStep = (code: string, question: string, onMatch: () => void, onDiffer: () => void) => (
+    <View
+      style={[styles.card, { alignItems: 'center', paddingVertical: 16 }]}
+      testID={testIdWithKey(VtiVettingIds.matchStep)}
+    >
+      <Text style={styles.label}>{t('Vetting.MatchCodeHint')}</Text>
+      <Text
+        style={[styles.code, { fontSize: 40, paddingVertical: 4 }]}
+        testID={testIdWithKey(VtiVettingIds.matchCode)}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        selectable
+      >
+        {code}
+      </Text>
+      <Text style={[styles.value, { textAlign: 'center' }]}>{question}</Text>
+      <View style={{ alignSelf: 'stretch', gap: 12 }}>
+        <Pressable
+          style={styles.button}
+          testID={testIdWithKey(VtiVettingIds.codesMatch)}
+          accessibilityRole="button"
+          disabled={!!busy}
+          onPress={onMatch}
+        >
+          <Text style={styles.buttonText}>{t('Vetting.CodesMatch')}</Text>
+        </Pressable>
+        <Pressable
+          style={look(VtiVettingIds.codesDiffer).button}
+          testID={testIdWithKey(VtiVettingIds.codesDiffer)}
+          accessibilityRole="button"
+          disabled={!!busy}
+          onPress={onDiffer}
+        >
+          <Text style={look(VtiVettingIds.codesDiffer).text}>{t('Vetting.CodesDiffer')}</Text>
+        </Pressable>
+      </View>
+    </View>
+  )
+
+  /**
+   * Every signing act asks for the person's face or fingerprint (plan
+   * principle 9). The counterparty is named in words — the sheet shows it
+   * large, and a DID there was a code where a person belongs (#12).
+   */
+  const confirmWithBiometrics = async (counterparty: string, act: 'Send' | 'Attest' | 'Apply') => {
+    if (!agent) return false
+    // Say what is being signed: the shared modal otherwise speaks of a
+    // relationship credential, which none of these is.
+    const result = await requestBiometricConfirmationWithUI(agent, counterparty, 'vetting', {
+      title: t(`Vetting.Confirm${act}Title`),
+      description: t(`Vetting.Confirm${act}Body`),
+    })
+    return result.success
+  }
+
+  // ---------------------------------------------------------------- the desk
+  // The seat is not known yet, or not what it holds: neither the desk nor the applicant's steps.
+  if (!seatRead || heldReadFor !== (grant ? 'vetter' : 'applicant')) return seatLoading
+
+  if (grant) {
+    // The desk lists requests newest first; the one in progress is the step.
+    const current = desk.find((r) => r.status !== 'attested' && r.status !== 'declined')
+    // Only a statement signed on this visit is "done"; older ones are finished
+    // requests, listed folded away under the step.
+    const attestedHere = justAttested
+      ? desk.find((r) => r.requestId === justAttested && r.status === 'attested')
+      : undefined
+    const finished = desk.filter((r) => r.status === 'attested' || r.status === 'declined')
+    const liveTickets = tickets.filter((x) => x.usesLeft > 0)
+    const freshTicket = issuedTicketId ? liveTickets.find((x) => x.ticketId === issuedTicketId) : undefined
+    const vetterStep: VetterStep = current
+      ? current.status === 'accepted'
+        ? 'request'
+        : !(matchConfirmed[current.requestId] || current.matchConfirmedAt)
+          ? 'match'
+          : current.status === 'cardReceived'
+            ? 'check'
+            : 'waitCard'
+      : attestedHere
+        ? 'done'
+        : freshTicket
+          ? 'share'
+          : 'ticket'
+    const stepNumber = { ticket: 1, share: 1, request: 2, match: 3, waitCard: 3, check: 4, done: 5 }[vetterStep]
+    const deskPrimaryId = deskPrimary(vetterStep)
+    const request = vetterStep === 'done' ? attestedHere : current
+    // The ticket on show: the one just cut, else the newest still open.
+    const shownTicket = freshTicket ?? liveTickets.slice(-1)[0]
+
+    return (
+      <SafeAreaView
+        style={styles.container}
+        edges={['left', 'right']}
+        testID={testIdWithKey(`VettingVetterStep_${vetterStep}`)}
+      >
+        <KeyboardAvoidingView
+          ref={keyboard.ref}
+          onLayout={keyboard.onLayout}
+          style={styles.fill}
+          behavior="padding"
+          keyboardVerticalOffset={keyboard.offset}
+        >
+          <KeyboardAwareScrollView {...keyboardAware}>
+            {seatBanner('vetter', vetterStep === 'match')}
+            {standingNotice}
+            {/* How many people this vetter can vouch for privately now, read
+                once when the desk opens (it is an agent round trip). */}
+            {/* The agent was enrolled under another identity by an earlier
+                build and cannot be changed: said plainly, instead of a token
+                count of 0 that reads as "wait for the next draw". */}
+            {vetterStanding?.stuck === 'memberMismatch' ? (
+              <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.vouchStuck)}>
+                {t('Vetting.Vouch.MemberMismatch')}
+              </Text>
+            ) : null}
+            {vetterStanding?.enrolled ? (
+              <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.vouchTokens)}>
+                {tp('Vetting.Vouch.Tokens', { count: vetterStanding.tokens })}
+                {vetterStanding.nextDrawAt
+                  ? ` · ${tp('Vetting.Vouch.NextDraw', { date: localDate(vetterStanding.nextDrawAt) })}`
+                  : ''}
+              </Text>
+            ) : null}
+            <Text style={styles.value} testID={testIdWithKey(VtiVettingIds.youVetFor)}>
+              {tp('Vetting.YouVetFor', { community: communityLabelOf(persona.communityDid, t) })}
+            </Text>
+
+            {vetterStep === 'ticket' || vetterStep === 'share' ? (
+              <>
+                {stepHeader(stepNumber, 5, t('Vetting.DeskStep1'))}
+                {/* A ticket is the invitation to begin: handing one out with no
+                  live grant starts a ceremony that cannot finish — codes
+                  matched, card sent, statement issued, and only then does the
+                  applicant learn none of it counted. The applicant is a
+                  stranger to this problem, so the desk does not start one. */}
+                <Pressable
+                  style={look(VtiVettingIds.newTicketButton, deskPrimaryId).button}
+                  testID={testIdWithKey(VtiVettingIds.newTicketButton)}
+                  accessibilityRole="button"
+                  disabled={!!busy || !canVet}
+                  accessibilityState={{ disabled: !!busy || !canVet }}
+                  onPress={() =>
+                    run('ticket', async () => {
+                      const cut = await deskRef.current!.issueTicket()
+                      // On screen now, not on the next read of the store: the
+                      // step moves to handing it over.
+                      setTickets((ts) => [...ts.filter((x) => x.ticketId !== cut.ticketId), cut])
+                      setIssuedTicketId(cut.ticketId)
+                      setLinkCopied(false)
+                      setTicketLinkShown(false)
+                    })
+                  }
+                >
+                  {busy === 'ticket' ? (
+                    <ActivityIndicator color={look(VtiVettingIds.newTicketButton, deskPrimaryId).spinner} />
+                  ) : null}
+                  <Text style={look(VtiVettingIds.newTicketButton, deskPrimaryId).text}>{t('Vetting.NewTicket')}</Text>
+                </Pressable>
+                {shownTicket
+                  ? [shownTicket].map((x) => (
+                      <View key={x.ticketId} style={styles.card} testID={testIdWithKey(VtiVettingIds.ticketCard)}>
+                        <Text style={styles.label}>{t('Vetting.ReadAloud')}</Text>
+                        <Text style={styles.code} testID={testIdWithKey(VtiVettingIds.ticketCode)}>
+                          {x.code}
+                        </Text>
+                        <Text style={styles.label}>{t('Vetting.OrScan')}</Text>
+                        <View style={{ alignItems: 'center' }} testID={testIdWithKey(VtiVettingIds.ticketQr)}>
+                          <QRRenderer value={x.link} size={ticketQrSize} />
+                        </View>
+                        <Pressable
+                          style={look(VtiVettingIds.copyTicketLink, deskPrimaryId).button}
+                          testID={testIdWithKey(VtiVettingIds.copyTicketLink)}
+                          accessibilityRole="button"
+                          onPress={() => {
+                            Clipboard.setString(x.link)
+                            setLinkCopied(true)
+                          }}
+                        >
+                          <Text style={look(VtiVettingIds.copyTicketLink, deskPrimaryId).text}>
+                            {linkCopied ? t('Vetting.LinkCopied') : t('Vetting.CopyLink')}
+                          </Text>
+                        </Pressable>
+                        {/* The raw vetting-ticket: text is for whoever needs it,
+                          not something to read: one tap away. */}
+                        <Pressable
+                          onPress={() => setTicketLinkShown((was) => !was)}
+                          accessibilityRole="button"
+                          accessibilityState={{ expanded: ticketLinkShown }}
+                          testID={testIdWithKey(VtiVettingIds.ticketLinkDetailsToggle)}
+                        >
+                          <Text style={styles.label}>
+                            {ticketLinkShown ? t('Vetting.HideTicketLink') : t('Vetting.ShowTicketLink')}
+                          </Text>
+                        </Pressable>
+                        {ticketLinkShown ? (
+                          <Text style={styles.mono} testID={testIdWithKey(VtiVettingIds.ticketLink)} selectable>
+                            {x.link}
+                          </Text>
+                        ) : null}
+                        <Text style={styles.label}>
+                          {tp('Vetting.TicketValid', { uses: x.usesLeft, until: localDate(x.expiresAt) })}
+                        </Text>
+                      </View>
+                    ))
+                  : null}
+                <Text style={styles.value} testID={testIdWithKey(VtiVettingIds.deskEmpty)}>
+                  {t('Vetting.DeskEmpty')}
+                </Text>
+
+                {/* Optional, and not part of a session: how people looking for a vetter find you. */}
+                <Text style={styles.h}>{t('Vetting.YourProfile')}</Text>
+                <View style={styles.card}>
+                  <Text style={styles.label}>{t('Vetting.ProfileHint')}</Text>
+                  <TextInput
+                    style={styles.input}
+                    testID={testIdWithKey(VtiVettingIds.profileNameInput)}
+                    value={profileName}
+                    onChangeText={setProfileName}
+                    placeholder={t('Vetting.ProfileNamePlaceholder')}
+                    placeholderTextColor={ColorPalette.grayscale.mediumGrey}
+                    autoCapitalize="words"
+                  />
+                  <Pressable
+                    style={look(VtiVettingIds.publishProfileButton).button}
+                    testID={testIdWithKey(VtiVettingIds.publishProfileButton)}
+                    accessibilityRole="button"
+                    disabled={!!busy || !connected}
+                    onPress={() =>
+                      run('profile', async () => {
+                        await deskRef.current!.publishProfile({
+                          listed: true,
+                          displayName: profileName.trim() || undefined,
+                        })
+                        setProfile(await stores!.vetting.getProfile(persona.communityDid))
+                      })
+                    }
+                  >
+                    {busy === 'profile' ? (
+                      <ActivityIndicator color={look(VtiVettingIds.publishProfileButton).spinner} />
+                    ) : null}
+                    <Text style={look(VtiVettingIds.publishProfileButton).text}>{t('Vetting.PublishProfile')}</Text>
+                  </Pressable>
+                  {profile ? (
+                    <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.profilePublished)}>
+                      {tp('Vetting.ProfilePublished', {
+                        when: dateTime(new Date(profile.publishedAt), appDateWords(), phoneUses24HourClock()),
+                      })}
+                    </Text>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
+
+            {request && vetterStep !== 'ticket' ? (
+              // One request at a time, in its own container: the runner scopes its
+              // lookups to the current VettingDeskRequest.
+              <View style={{ gap: 18 }} testID={testIdWithKey(VtiVettingIds.deskRequest)}>
+                <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.deskStatus)}>
+                  {t(`Vetting.Status.${request.status}`)}
+                </Text>
+                {/* The same mark as the applicant sees: this request is private. */}
+                {isPrivateRequest(request) ? (
+                  <PrivateVettingBadge
+                    community={communityLabelOf(request.communityDid, t)}
+                    explain
+                    testIdStem="VettingDeskPrivate"
+                  />
+                ) : null}
+                <RefusalNote kind="Card" refusal={request.cardRefusal} style={styles.label} errorStyle={styles.error} />
+                <EnvelopeRefusalNote
+                  refusal={request.envelopeRefusal}
+                  side="vetter"
+                  style={styles.label}
+                  errorStyle={styles.error}
+                />
+
+                {vetterStep === 'request' ? (
+                  <>
+                    {stepHeader(stepNumber, 5, t('Vetting.SomeoneWantsVetting'))}
+                    {/* Who, as an identifier, for whoever needs it — not as the line (#12). */}
+                    <DidDetails
+                      did={request.applicantDid}
+                      label={t('Vetting.TheirIdentity')}
+                      hint={t('Vetting.TheirIdentityHint')}
+                      copy
+                      testIdStem="VettingDeskApplicant"
+                    />
+                    <Pressable
+                      style={look(VtiVettingIds.openSessionButton, deskPrimaryId).button}
+                      testID={testIdWithKey(VtiVettingIds.openSessionButton)}
+                      accessibilityRole="button"
+                      disabled={!!busy}
+                      onPress={() =>
+                        run('session', () =>
+                          deskRef.current!.openSession(
+                            request.requestId,
+                            ['name.legal'],
+                            request.preferredMethod ?? 'inPerson'
+                          )
+                        )
+                      }
+                    >
+                      <Text style={look(VtiVettingIds.openSessionButton, deskPrimaryId).text}>
+                        {t('Vetting.OpenSession')}
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : null}
+
+                {vetterStep === 'match' && request.session ? (
+                  <>
+                    {stepHeader(stepNumber, 5, t('Vetting.CompareCodes'))}
+                    {matchStep(
+                      request.session.matchCode,
+                      t('Vetting.MatchQuestionVetter'),
+                      () => {
+                        setMatchConfirmed((m) => ({ ...m, [request.requestId]: true }))
+                        // Kept for a relaunch; the screen has already moved on.
+                        void deskRef.current?.confirmMatch(request.requestId).catch(() => undefined)
+                      },
+                      // The vetter's decline reaches the applicant: the session ends on both phones.
+                      () => run('decline', () => deskRef.current!.decline(request.requestId, 'match code differs'))
+                    )}
+                  </>
+                ) : null}
+
+                {vetterStep === 'waitCard' ? (
+                  <>
+                    {stepHeader(stepNumber, 5, t('Vetting.CompareCodes'))}
+                    <View style={styles.row}>
+                      <ActivityIndicator color={ColorPalette.brand.primary} />
+                      <Text style={styles.value}>{t('Vetting.WaitingForCard')}</Text>
+                    </View>
+                  </>
+                ) : null}
+
+                {vetterStep === 'check' && request.card ? (
+                  <>
+                    {stepHeader(stepNumber, 5, t('Vetting.CheckTheirId'))}
+                    <View style={styles.card}>
+                      <Text style={styles.label}>{t('Vetting.CardReceived')}</Text>
+                      {((request.card.claims as { type: string; value: string }[]) ?? []).map((c) => (
+                        <Text
+                          key={c.type}
+                          style={[styles.value, { fontSize: 22 }]}
+                          testID={testIdWithKey(VtiVettingIds.cardClaim)}
+                        >
+                          {c.type}: {String(c.value)}
+                        </Text>
+                      ))}
+                      {/* Whom the statement will be about, as the community sees them. */}
+                      <DidDetails
+                        did={request.applicantDid}
+                        label={t('Vetting.TheirIdentity')}
+                        hint={t('Vetting.TheirIdentityHint')}
+                        copy
+                        testIdStem="VettingCheckApplicant"
+                      />
+                    </View>
+                    <Pressable
+                      style={look(VtiVettingIds.attestButton, deskPrimaryId).button}
+                      testID={testIdWithKey(VtiVettingIds.attestButton)}
+                      accessibilityRole="button"
+                      // A private Attest cannot work from an agent stuck under
+                      // another identity: the notice above says why.
+                      disabled={!!busy || (isPrivateRequest(request) && vetterStanding?.stuck !== undefined)}
+                      onPress={() =>
+                        run('attest', async () => {
+                          if (!(await confirmWithBiometrics('', 'Attest'))) return
+                          await deskRef.current!.attest(request.requestId, {
+                            documentClasses: ['passport'],
+                            claimsVerified: ['name.legal'],
+                            livenessConfirmed: true,
+                            // No relationship question, private or named: the desk
+                            // sends `none`, as the named flow and openvtc's form do.
+                          })
+                          // Straight to "Statement issued", not on the next read.
+                          setDesk(
+                            (await stores!.vetting.listDesk()).filter((r) => r.communityDid === request.communityDid)
+                          )
+                          setJustAttested(request.requestId)
+                        })
+                      }
+                    >
+                      {busy === 'attest' ? (
+                        <ActivityIndicator color={look(VtiVettingIds.attestButton, deskPrimaryId).spinner} />
+                      ) : null}
+                      <Text style={look(VtiVettingIds.attestButton, deskPrimaryId).text}>{t('Vetting.Attest')}</Text>
+                    </Pressable>
+                  </>
+                ) : null}
+
+                {vetterStep === 'request' || vetterStep === 'waitCard' || vetterStep === 'check' ? (
+                  // A session the vetter cannot finish — the person left, the wrong
+                  // ticket, anything — ends here; the decline reaches the applicant.
+                  <Pressable
+                    style={look(VtiVettingIds.endSession).button}
+                    testID={testIdWithKey(VtiVettingIds.endSession)}
+                    accessibilityRole="button"
+                    disabled={!!busy}
+                    onPress={() =>
+                      run('decline', () => deskRef.current!.decline(request.requestId, 'session ended by the vetter'))
+                    }
+                  >
+                    <Text style={look(VtiVettingIds.endSession).text}>{t('Vetting.EndSession')}</Text>
+                  </Pressable>
+                ) : null}
+
+                {vetterStep === 'done' ? (
+                  <>
+                    {stepHeader(stepNumber, 5, t('Vetting.StatementIssued'))}
+                    <View style={styles.row}>
+                      <Icon name="check-circle" size={28} color={ColorPalette.semantic.success} />
+                      <Text style={styles.value} testID={testIdWithKey(VtiVettingIds.statementIssued)}>
+                        {t('Vetting.StatementIssued')}
+                      </Text>
+                    </View>
+                    <Pressable
+                      style={look(VtiVettingIds.vetSomeoneElse, deskPrimaryId).button}
+                      testID={testIdWithKey(VtiVettingIds.vetSomeoneElse)}
+                      accessibilityRole="button"
+                      onPress={() => setJustAttested(undefined)}
+                    >
+                      <Text style={look(VtiVettingIds.vetSomeoneElse, deskPrimaryId).text}>
+                        {t('Vetting.VetSomeoneElse')}
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : null}
+              </View>
+            ) : null}
+
+            {finished.length > 0 && (vetterStep === 'ticket' || vetterStep === 'share' || vetterStep === 'done') ? (
+              // Finished requests are history, not the step: folded under it,
+              // with the way to clear them inside.
+              <View style={{ gap: 12 }} testID={testIdWithKey(VtiVettingIds.deskFinished)}>
+                <Pressable
+                  style={styles.row}
+                  onPress={() => setFinishedOpen((was) => !was)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: finishedOpen }}
+                  testID={testIdWithKey(VtiVettingIds.deskFinishedToggle)}
+                >
+                  <Icon
+                    name={finishedOpen ? 'chevron-down' : 'chevron-right'}
+                    size={22}
+                    color={ColorPalette.brand.primary}
+                  />
+                  <Text style={styles.value}>{tp('Vetting.FinishedRequests', { count: finished.length })}</Text>
+                </Pressable>
+                {finishedOpen ? (
+                  <>
+                    {finished.map((r) => (
+                      <View
+                        key={r.requestId}
+                        style={styles.card}
+                        testID={testIdWithKey(VtiVettingIds.deskFinishedRequest)}
+                      >
+                        <Text style={styles.label}>
+                          {/* Status.attested is the applicant's "Statement received". */}
+                          {r.status === 'attested'
+                            ? t('Vetting.StatementIssued')
+                            : t(`Vetting.Status.${r.status}`)} · {whenShown(r.receivedAt)}
+                        </Text>
+                        {/* Who it was, as the community's join requests show them: the
+                            name the vetter confirmed and the identity's word, the DID
+                            behind it (IN-127, 10-06). */}
+                        {r.status === 'attested' && confirmedNameOf(r) ? (
+                          <Text style={styles.value} testID={testIdWithKey(VtiVettingIds.deskFinishedName)}>
+                            {tp('Vetting.FinishedName', { name: confirmedNameOf(r) as string })}
+                          </Text>
+                        ) : null}
+                        <Text style={styles.value} testID={testIdWithKey(VtiVettingIds.deskFinishedIdentity)}>
+                          {tp('Vetting.FinishedIdentity', { name: identityWord(r.applicantDid) })}
+                        </Text>
+                        <DidDetails
+                          did={r.applicantDid}
+                          label={t('Vetting.TheirIdentity')}
+                          copy
+                          testIdStem="VettingDeskFinishedApplicant"
+                        />
+                      </View>
+                    ))}
+                    <Pressable
+                      style={look(VtiVettingIds.deskClearButton).button}
+                      testID={testIdWithKey(VtiVettingIds.deskClearButton)}
+                      accessibilityRole="button"
+                      disabled={!!busy}
+                      onPress={() =>
+                        run('clear', async () => {
+                          await stores!.vetting.clearDesk(persona.communityDid)
+                          setDesk([])
+                          setJustAttested(undefined)
+                          setFinishedOpen(false)
+                        })
+                      }
+                    >
+                      <Text style={look(VtiVettingIds.deskClearButton).text}>{t('Vetting.ClearDesk')}</Text>
+                    </Pressable>
+                  </>
+                ) : null}
+              </View>
+            ) : null}
+          </KeyboardAwareScrollView>
+          {errorLine}
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    )
+  }
+
+  // ---------------------------------------------------------- the application
+  const requests = application?.requests ?? []
+  const active = requests.find((r) =>
+    ['sent', 'accepted', 'session', 'cardSent', 'statementRefused'].includes(r.status)
+  )
+  const ended = requests.filter((r) => r.status === 'refused' || r.status === 'declined')
+  const attestedCount = requests.filter((r) => r.status === 'attested').length
+  const applicantStep: ApplicantStep = memberRole
+    ? 'member'
+    : !application
+      ? 'name'
+      : active
+        ? active.status === 'sent' || active.status === 'accepted'
+          ? 'waiting'
+          : active.status === 'cardSent' || active.status === 'statementRefused'
+            ? 'checking'
+            : !(matchConfirmed[active.vetterDid] || active.matchConfirmedAt)
+              ? 'match'
+              : 'send'
+        : attestedCount > 0 || application.submission
+          ? 'apply'
+          : 'ticket'
+  const applicantNumber = { name: 1, ticket: 2, waiting: 3, match: 3, send: 4, checking: 4, apply: 5, member: 5 }[
+    applicantStep
+  ]
+
+  /**
+   * A ticket for another community is refused before anything is signed or
+   * sent: using it would show this person's identity to that community (220;
+   * openvtc's TicketUriError). Said as the link is pasted, and again if the
+   * request itself refuses it.
+   */
+  const ticketCheck = ticketLink.trim() && communityDid ? checkTicketFor(ticketLink.trim(), communityDid) : undefined
+  const ticketRefused = ticketCheck && !ticketCheck.ok ? ticketCheck.error : undefined
+  const applicantPrimaryId = applicantPrimary(applicantStep, {
+    ticketLinkReady: !!ticketLink.trim() && !ticketRefused,
+    meets: !!checklist?.meets,
+  })
+
+  /** Ask a vetter: scan their ticket, or paste it. */
+  const ticketInputs = (
+    <View style={styles.card}>
+      <Pressable
+        style={look(VtiVettingIds.scanTicketButton, applicantPrimaryId).button}
+        testID={testIdWithKey(VtiVettingIds.scanTicketButton)}
+        accessibilityRole="button"
+        onPress={onScanTicket}
+      >
+        <Text style={look(VtiVettingIds.scanTicketButton, applicantPrimaryId).text}>{t('Vetting.ScanTicket')}</Text>
+      </Pressable>
+      <Text style={styles.label}>{t('Vetting.PasteTicket')}</Text>
+      <TextInput
+        style={styles.input}
+        testID={testIdWithKey(VtiVettingIds.ticketInput)}
+        value={ticketLink}
+        onChangeText={setTicketLink}
+        placeholder="vetting-ticket:?v=1&…"
+        placeholderTextColor={ColorPalette.grayscale.mediumGrey}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      {ticketRefused ? (
+        <Text style={styles.error} testID={testIdWithKey(VtiVettingIds.ticketRefused)}>
+          {ticketWords(ticketRefused)}
+        </Text>
+      ) : null}
+      {/* The paste box's own button, not a second main action: outlined, and
+          dimmed until there is a link to use (218 feedback). */}
+      <Pressable
+        style={[
+          look(VtiVettingIds.requestButton, applicantPrimaryId).button,
+          !ticketLink.trim() || busy || ticketRefused ? styles.buttonDimmed : undefined,
+        ]}
+        testID={testIdWithKey(VtiVettingIds.requestButton)}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !!busy || !ticketLink.trim() || !!ticketRefused }}
+        disabled={!!busy || !ticketLink.trim() || !!ticketRefused}
+        onPress={() =>
+          run('request', async () => {
+            const m = await vettingManifest(application?.requirementsDigest)
+            await applicantRef.current!.requestVetter({ link: ticketLink.trim(), manifest: m })
+          })
+        }
+      >
+        {busy === 'request' ? (
+          <ActivityIndicator color={look(VtiVettingIds.requestButton, applicantPrimaryId).spinner} />
+        ) : null}
+        <Text style={look(VtiVettingIds.requestButton, applicantPrimaryId).text}>{t('Vetting.UseThisLink')}</Text>
+      </Pressable>
+    </View>
+  )
+
+  // Numbered by its place among all requests, so the same vetter keeps the same
+  // number whichever list (ended, active, all) shows the card.
+  const requestCard = (r: (typeof requests)[number]) => (
+    // Keyed by the request, not the vetter: asking the same vetter again is a
+    // new request, and mounts a new card rather than relabelling the old one.
+    <View key={r.requestDocumentId} style={styles.card} testID={testIdWithKey(VtiVettingIds.requestCard)}>
+      <Text style={styles.value} testID={testIdWithKey(VtiVettingIds.requestVetter)}>
+        {requests.length > 1 ? t('Vetting.YourVetterN', { n: requests.indexOf(r) + 1 }) : t('Vetting.YourVetter')}
+      </Text>
+      <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.requestStatus)}>
+        {r.stoppedAt ? t('Vetting.Status.stopped') : t(`Vetting.Status.${r.status}`)}
+        {r.eligibilityOk ? ` · ${t('Vetting.EligibleVetter')}` : ''}
+      </Text>
+      <RefusalNote kind="Session" refusal={r.sessionRefusal} style={styles.label} errorStyle={styles.error} />
+      <EnvelopeRefusalNote
+        refusal={r.envelopeRefusal}
+        side="applicant"
+        style={styles.label}
+        errorStyle={styles.error}
+      />
+      {/* When it was sent is what a person can use to tell two requests apart;
+          which request it is rides in the testID, for tests only. Requests
+          stored before sentAt existed show no line. */}
+      {r.sentAt ? (
+        <Text style={styles.label} testID={testIdWithKey(requestTestKey(r.requestDocumentId))}>
+          {t('Vetting.AskedAt', { time: whenShown(r.sentAt) })}
+        </Text>
+      ) : null}
+      {r.cardSentAt ? (
+        <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.cardSentAt)}>
+          {t('Vetting.CardSentAt', { time: whenShown(r.cardSentAt) })}
+        </Text>
+      ) : null}
+      {/* Advisory, as the spec makes the eligibility check: the step goes on,
+          but the person is told this vetter could not be confirmed, and why
+          (keyring-bifold#125). A legacy acceptance is logged, never shown. */}
+      <EligibilityNote request={r} style={styles.label} />
+      <DidDetails did={r.vetterDid} testIdStem={VtiVettingIds.requestVetter} />
+      {/* The identity this person is vetted as: the one the vetter and the
+          community's admins see (IN-120). */}
+      {persona ? (
+        <DidDetails
+          did={persona.did}
+          label={t('Vetting.YourIdentity')}
+          hint={t('Vetting.YourIdentityHint')}
+          copy
+          testIdStem="VettingRequestMine"
+        />
+      ) : null}
+    </View>
+  )
+
+  // Send the application with the statements gathered. `replace`: an earlier
+  // request sent without them is still open (asked from Join before the
+  // vetting), and the community refuses a second one; the person chose to
+  // replace it, so it is withdrawn and this one sent (IN-127, 10-06).
+  const sendApplication = (replace: boolean) =>
+    run(replace ? 'replace' : 'apply', async () => {
+      // The directory statement on screen when Apply was pressed (manifest/0.4).
+      const shown = manifest?.directoryDisclosure?.statementDigest
+      // Before the confirmation: nothing is asked for an application that is
+      // not sent. A statement the person has not seen yet (it arrived with
+      // this read) is shown now, and the request waits for them to send again.
+      const m = await readShownThenConfirm(
+        shown,
+        () => vettingManifest(application?.requirementsDigest),
+        () => confirmWithBiometrics(communityLabelStartOf(communityDid, t), 'Apply')
+      )
+      if (!m) return
+      // Ask about the grants now, not when the statements were
+      // gathered: the community applies the status at intake,
+      // so a vetter revoked since is the case this catches.
+      await applicantRef.current!.refreshGrantStatus()
+      const { statements } = await applicantRef.current!.checklist()
+      const stopInbox = vtiAgent.onInbound(async (msg) => {
+        await receiveIssue(stores!.community, persona.did, msg, {
+          via: 'vetting',
+          acceptStatement: (m) => applicantRef.current!.receiveStatement(m),
+          checkCard: deliveredCardCheck(agent),
+        })
+      })
+      try {
+        // Submits, or answers an open deferral in place — a
+        // second submit while one is open would be refused.
+        let verdict
+        try {
+          verdict = await applicantRef.current!.submit(m, statements, application?.requirementsDigest, listMe, {
+            replacePending: replace,
+            disclosureSeen: shown,
+          })
+        } catch (e) {
+          // Already applied (requestAlreadyOpen): not an error. The
+          // open request is now recorded on the application, and the
+          // card below says where it stands and what can be done.
+          if (openJoinRequestOf(e)) {
+            setAlreadyOpen(true)
+            return
+          }
+          throw e
+        }
+        // A deferral or a referral leaves the request open;
+        // the submission card says where it stands and what
+        // the applicant can do. Only a verdict that closes it
+        // without admitting them is an error.
+        if (verdict.effect === 'requestMore' || verdict.effect === 'refer') return
+        if (verdict.effect !== 'allow')
+          throw new InWords(
+            verdict.needs.length
+              ? t('Vetting.ApplyRefusedNeeds', {
+                  needs: verdict.needs.map((need) => needWords(need, t)).join(', '),
+                  interpolation: { escapeValue: false },
+                })
+              : t('Vetting.ApplyRefused')
+          )
+        for (let i = 0; i < 20; i++) {
+          const mem = await stores!.community.getMembership(communityDid)
+          // An ended membership from before is not the one this is waiting for.
+          if (mem && isCurrentMembership(mem)) {
+            if (mem.via === 'unknown') await stores!.community.saveMembership({ ...mem, via: 'vetting' })
+            break
+          }
+          await new Promise((res) => setTimeout(res, 1500))
+        }
+      } finally {
+        setTimeout(stopInbox, 30000)
+      }
+    })
+
+  return (
+    // Which step the page is on, for whoever drives it: the step text says
+    // "Step 4 of 5", which cannot tell "waiting for the statement" from a
+    // screen that moved on (openvtc interop harness, keyring-wallet#150).
+    <SafeAreaView
+      style={styles.container}
+      edges={['left', 'right']}
+      testID={testIdWithKey(`VettingApplicantStep_${applicantStep}`)}
+    >
+      <KeyboardAvoidingView
+        ref={keyboard.ref}
+        onLayout={keyboard.onLayout}
+        style={styles.fill}
+        behavior="padding"
+        keyboardVerticalOffset={keyboard.offset}
+      >
+        <KeyboardAwareScrollView {...keyboardAware}>
+          {applicantStep === 'member' ? null : seatBanner('applicant', applicantStep === 'match')}
+          {privateHere && applicantStep !== 'member' ? (
+            <PrivateVettingBadge
+              community={communityLabelOf(communityDid ?? '', t)}
+              explain
+              testIdStem="VettingPrivate"
+            />
+          ) : null}
+
+          {applicantStep === 'member' ? (
+            <View style={styles.card} testID={testIdWithKey(VtiVettingIds.memberDone)}>
+              <View style={styles.row}>
+                <Icon name="check-circle" size={28} color={ColorPalette.semantic.success} />
+                {/* The same line whether the person was admitted a moment ago or
+                long since: never "already", which read as an error to someone
+                just admitted (Farm vetting run, 2026-09-23). The role is named
+                only when it says more than "member". (The testID is kept for
+                the runners that read this line.) */}
+                <Text style={styles.value} testID={testIdWithKey(VtiVettingIds.alreadyMember)}>
+                  {memberRole && memberRole !== 'member'
+                    ? tp('Vetting.MemberAs', { community: communityLabelOf(communityDid ?? '', t), role: memberRole })
+                    : tp('Vetting.Member', { community: communityLabelOf(communityDid ?? '', t) })}
+                </Text>
+              </View>
+              {ticketNotNeeded ? <Text style={styles.value}>{t('Vetting.MemberTicketNotNeeded')}</Text> : null}
+              <Pressable
+                style={look(VtiVettingIds.goToMyAgent, applicantPrimaryId).button}
+                testID={testIdWithKey(VtiVettingIds.goToMyAgent)}
+                accessibilityRole="button"
+                onPress={() =>
+                  (navigation as unknown as { navigate: (name: string) => void }).navigate(agentHomeScreen())
+                }
+              >
+                <Text style={look(VtiVettingIds.goToMyAgent, applicantPrimaryId).text}>{t('Vetting.GoToMyAgent')}</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {applicantStep === 'name' ? (
+            <>
+              {stepHeader(applicantNumber, 5, t('Vetting.YourFace'))}
+              <View style={styles.card}>
+                <Text style={styles.label}>{t('Vetting.LegalName')}</Text>
+                <TextInput
+                  style={styles.input}
+                  testID={testIdWithKey(VtiVettingIds.legalNameInput)}
+                  value={legalName}
+                  onChangeText={setLegalName}
+                  placeholder={t('Vetting.LegalNamePlaceholder')}
+                  placeholderTextColor={ColorPalette.grayscale.mediumGrey}
+                  autoCapitalize="words"
+                />
+                {seed?.legalName && legalName.trim() === seed.legalName ? (
+                  <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.nameFromProfile)}>
+                    {seed.profileLabel
+                      ? tp('Join.FromProfile', { profile: seed.profileLabel })
+                      : t('Join.FromYourProfile')}
+                  </Text>
+                ) : null}
+                {offeredName && !legalName.trim() ? (
+                  <>
+                    <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.legalNameWhy)}>
+                      {t('Vetting.LegalNameWhy')}
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        setLegalName(offeredName.legalName)
+                        setUsedOffered(true)
+                      }}
+                      accessibilityRole="button"
+                      testID={testIdWithKey(VtiVettingIds.useProfileName)}
+                    >
+                      <Text style={[styles.label, { color: ColorPalette.brand.link, textDecorationLine: 'underline' }]}>
+                        {tp('Vetting.UseProfileName', { name: offeredName.legalName })}
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : null}
+                {usedOffered && offeredName && legalName.trim() === offeredName.legalName ? (
+                  <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.nameFromProfile)}>
+                    {offeredName.profileLabel
+                      ? tp('Join.FromProfile', { profile: offeredName.profileLabel })
+                      : t('Join.FromYourProfile')}
+                  </Text>
+                ) : null}
+                <Text style={styles.label}>{t('Vetting.FaceNote')}</Text>
+                <Pressable
+                  style={look(VtiVettingIds.startButton, applicantPrimaryId).button}
+                  testID={testIdWithKey(VtiVettingIds.startButton)}
+                  accessibilityRole="button"
+                  disabled={!!busy || !connected || !legalName.trim()}
+                  onPress={() =>
+                    run('start', async () => {
+                      const m = await vettingManifest()
+                      await applicantRef.current!.start(
+                        m,
+                        { 'name.legal': legalName.trim() },
+                        { ticket: ticketLink.trim() || undefined }
+                      )
+                    })
+                  }
+                >
+                  {busy === 'start' || !connected ? (
+                    <ActivityIndicator color={look(VtiVettingIds.startButton, applicantPrimaryId).spinner} />
+                  ) : null}
+                  <Text style={look(VtiVettingIds.startButton, applicantPrimaryId).text}>
+                    {!connected ? t('Vetting.Connecting') : t('Vetting.StartApplication')}
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          ) : null}
+
+          {application && applicantStep !== 'name' && applicantStep !== 'member' ? (
+            <Text style={styles.value} testID={testIdWithKey(VtiVettingIds.requirements)}>
+              {application.requiredClaims.length
+                ? tp('Vetting.Requirements', {
+                    count: application.minStatements,
+                    claims: claimList(application.requiredClaims, t),
+                  })
+                : tp('Vetting.RequirementsAnyone', { count: application.minStatements })}
+            </Text>
+          ) : null}
+
+          {applicantStep === 'ticket' ? (
+            <>
+              {stepHeader(applicantNumber, 5, t('Vetting.AskAVetter'))}
+              {ended.some((r) => r.stoppedAt) ? (
+                // Row V3: this person stopped waiting for a vetter, to use a new ticket; the app did not tell them.
+                <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.stoppedWaiting)}>
+                  {t('Vetting.StoppedWaiting')}
+                </Text>
+              ) : ended.length ? (
+                <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.sessionEnded)}>
+                  {t('Vetting.CodesDifferEnded')}
+                </Text>
+              ) : null}
+              {ticketInputs}
+              {ended.map((r) => requestCard(r))}
+            </>
+          ) : null}
+
+          {applicantStep === 'waiting' && active ? (
+            <>
+              {stepHeader(applicantNumber, 5, t('Vetting.AskAVetter'))}
+              <View style={styles.row}>
+                <ActivityIndicator color={ColorPalette.brand.primary} />
+                <Text style={styles.value}>{t('Vetting.WaitingForVetter')}</Text>
+              </View>
+              {requestCard(active)}
+              {/* Row V2 (Alberto, 11-17): step 3 had no way out (11-16 demo): a vetter's new ticket had nowhere to go. */}
+              <View style={{ gap: 8 }} testID={testIdWithKey(VtiVettingIds.waitingWays)}>
+                <Text style={styles.label}>{t('Vetting.WaitingHint')}</Text>
+                <Pressable
+                  style={look(VtiVettingIds.useNewTicket).button}
+                  onPress={() => run('newTicket', () => applicantRef.current!.stopWaiting(active.vetterDid))}
+                  disabled={!!busy}
+                  accessibilityRole="button"
+                  testID={testIdWithKey(VtiVettingIds.useNewTicket)}
+                >
+                  <Text style={look(VtiVettingIds.useNewTicket).text}>{t('Vetting.UseNewTicket')}</Text>
+                </Pressable>
+                {stopLink}
+              </View>
+            </>
+          ) : null}
+
+          {applicantStep === 'match' && active?.session ? (
+            <>
+              {stepHeader(applicantNumber, 5, t('Vetting.CompareCodes'))}
+              {matchStep(
+                active.session.matchCode,
+                t('Vetting.MatchQuestionApplicant'),
+                () => {
+                  setMatchConfirmed((m) => ({ ...m, [active.vetterDid]: true }))
+                  void applicantRef.current?.confirmMatch(active.vetterDid).catch(() => undefined)
+                },
+                () => run('abandon', () => applicantRef.current!.abandonSession(active.vetterDid))
+              )}
+              {requestCard(active)}
+            </>
+          ) : null}
+
+          {applicantStep === 'send' && active ? (
+            <>
+              {stepHeader(applicantNumber, 5, t('Vetting.SendNameTitle'))}
+              <View style={styles.card}>
+                <Text style={styles.value}>
+                  {tp('Vetting.CardPreview', { name: legalName || application?.claims['name.legal'] || '' })}
+                </Text>
+                <Pressable
+                  style={look(VtiVettingIds.sendCardButton, applicantPrimaryId).button}
+                  testID={testIdWithKey(VtiVettingIds.sendCardButton)}
+                  accessibilityRole="button"
+                  disabled={!!busy}
+                  onPress={() =>
+                    run('card', async () => {
+                      // No name for the vetter here, so the sheet shows none rather than "your vetter".
+                      if (!(await confirmWithBiometrics('', 'Send'))) return
+                      await applicantRef.current!.sendCard(active.vetterDid)
+                    })
+                  }
+                >
+                  {busy === 'card' ? (
+                    <ActivityIndicator color={look(VtiVettingIds.sendCardButton, applicantPrimaryId).spinner} />
+                  ) : null}
+                  <Text style={look(VtiVettingIds.sendCardButton, applicantPrimaryId).text}>
+                    {t('Vetting.SendCard')}
+                  </Text>
+                </Pressable>
+              </View>
+              {requestCard(active)}
+            </>
+          ) : null}
+
+          {applicantStep === 'checking' && active ? (
+            <>
+              {stepHeader(applicantNumber, 5, t('Vetting.SendNameTitle'))}
+              {active.status === 'statementRefused' ? (
+                // The statement came and could not be kept: say so, rather than
+                // keep "checking" on screen for a statement that has arrived.
+                <View testID={testIdWithKey(VtiVettingIds.statementRefused)}>
+                  <Text style={styles.error}>{t('Vetting.StatementRefused')}</Text>
+                  {active.statementRefusal ? (
+                    <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.statementRefusedDetails)}>
+                      {t(`Vetting.StatementRefusedReason.${active.statementRefusal}`)}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : (
+                <View style={styles.row}>
+                  <ActivityIndicator color={ColorPalette.brand.primary} />
+                  <Text style={styles.value}>{t('Vetting.WaitingForStatement')}</Text>
+                </View>
+              )}
+              {active.session ? <Text style={styles.code}>{active.session.matchCode}</Text> : null}
+              {requestCard(active)}
+            </>
+          ) : null}
+
+          {applicantStep === 'apply' && application ? (
+            <>
+              {stepHeader(applicantNumber, 5, t('Vetting.Checklist'))}
+              <View style={styles.card}>
+                <Text style={styles.value} testID={testIdWithKey(VtiVettingIds.checklist)}>
+                  {checklist?.mode === 'private'
+                    ? tp('Vetting.ChecklistVouched', {
+                        held: checklist.counted,
+                        needed: checklist.needed,
+                      })
+                    : tp('Vetting.ChecklistLine', {
+                        held: checklist?.held ?? 0,
+                        needed: checklist?.needed ?? application.minStatements,
+                      })}
+                  {checklist?.meets ? ` · ${t('Vetting.Meets')}` : ''}
+                </Text>
+                {checklist?.discounted ? (
+                  <Text style={styles.error} testID={testIdWithKey(VtiVettingIds.discounted)}>
+                    {tp('Vetting.Discounted', { count: checklist.discounted })}
+                  </Text>
+                ) : null}
+                {/*
+                A grant we could not reach is said out loud rather than folded
+                into the count above. The applicant can still submit — being
+                offline is not a finding — but they should not be told the
+                statement is good when nobody asked.
+              */}
+                {checklist?.unchecked?.length ? (
+                  <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.grantUnchecked)}>
+                    {tp('Vetting.GrantUnchecked', { count: checklist.unchecked.length })}
+                  </Text>
+                ) : null}
+                {/* The reason stays in the record; a developer build says it. */}
+                {__DEV__ && checklist?.unchecked?.length ? (
+                  <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.grantUncheckedReason)}>
+                    {checklist.unchecked.map((u) => u.reason).join('\n')}
+                  </Text>
+                ) : null}
+                {/*
+                What is still missing, in the community's own terms — a count
+                alone cannot say "one of them has to be in person".
+              */}
+                {checklist?.needs?.length ? (
+                  <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.needs)}>
+                    {checklist.needs
+                      .map((need) =>
+                        need.kind === 'method'
+                          ? tp('Vetting.NeedsMethod', { n: need.n, method: t(`Vetting.Method.${need.method}`) })
+                          : tp('Vetting.NeedsStatements', { count: need.n })
+                      )
+                      .join(' · ')}
+                  </Text>
+                ) : null}
+                {/*
+                An exceeded relationship cap is a referral, not a refusal: the
+                application still stands and a human will look at it. Saying so
+                is kinder than letting the delay look like a fault.
+              */}
+                {checklist && !checklist.independenceOk ? (
+                  <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.independence)}>
+                    {tp('Vetting.IndependenceCapped', {
+                      relationships: checklist.exceededCaps.map((c) => c.relationship).join(', '),
+                    })}
+                  </Text>
+                ) : null}
+                {checklist?.unreadableMaxAge ? (
+                  <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.unreadableAge)}>
+                    {tp('Vetting.UnreadableMaxAge', { value: checklist.unreadableMaxAge })}
+                  </Text>
+                ) : null}
+                {/* Asked with a fresh application; a supplement keeps the consent given when it was sent. */}
+                {/* What its directory would show, before the request goes (manifest/0.4). */}
+                {checklist?.meets && manifest?.directoryDisclosure ? (
+                  <DirectoryDisclosureCard
+                    disclosure={manifest.directoryDisclosure}
+                    community={communityLabelOf(communityDid ?? '', t)}
+                  />
+                ) : null}
+                {checklist?.meets && application?.submission?.state !== 'deferred' ? (
+                  <DirectoryConsent communityDid={communityDid} value={listMe} onChange={setListMe} disabled={!!busy} />
+                ) : null}
+                {checklist?.meets ? (
+                  <Pressable
+                    style={look(VtiVettingIds.applyButton, applicantPrimaryId).button}
+                    testID={testIdWithKey(VtiVettingIds.applyButton)}
+                    accessibilityRole="button"
+                    disabled={!!busy}
+                    onPress={() => sendApplication(false)}
+                  >
+                    {busy === 'apply' ? (
+                      <ActivityIndicator color={look(VtiVettingIds.applyButton, applicantPrimaryId).spinner} />
+                    ) : null}
+                    <Text style={look(VtiVettingIds.applyButton, applicantPrimaryId).text}>
+                      {application?.submission?.state === 'deferred'
+                        ? t('Vetting.AddWhatTheyAsked')
+                        : t('MyAgent.Apply')}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {/*
+                Where the join request stands, once there is one. A deferral is
+                the community asking for more, not a failure: the applicant can
+                gather and send again, or close it and be free to apply anew.
+              */}
+                {application?.submission ? (
+                  <View testID={testIdWithKey(VtiVettingIds.submission)}>
+                    {alreadyOpen ? (
+                      <Text style={styles.value} testID={testIdWithKey(VtiVettingIds.alreadyApplied)}>
+                        {t('Vetting.AlreadyApplied')}
+                      </Text>
+                    ) : null}
+                    {/* The open request went without the vetting (asked from Join
+                        first): the community will not take the statements as a
+                        second request. Offer to replace it with one that has them. */}
+                    {alreadyOpen && application.submission.state === 'pending' && checklist?.meets ? (
+                      <View style={{ gap: 8 }} testID={testIdWithKey(VtiVettingIds.replaceRequestCard)}>
+                        <Text style={styles.value}>{t('Vetting.ReplaceRequestExplains')}</Text>
+                        <Pressable
+                          style={look(VtiVettingIds.replaceRequest, VtiVettingIds.replaceRequest).button}
+                          testID={testIdWithKey(VtiVettingIds.replaceRequest)}
+                          accessibilityRole="button"
+                          disabled={!!busy}
+                          onPress={() => sendApplication(true)}
+                        >
+                          {busy === 'replace' ? (
+                            <ActivityIndicator
+                              color={look(VtiVettingIds.replaceRequest, VtiVettingIds.replaceRequest).spinner}
+                            />
+                          ) : null}
+                          <Text style={look(VtiVettingIds.replaceRequest, VtiVettingIds.replaceRequest).text}>
+                            {t('Vetting.ReplaceRequest')}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
+                    <Text style={styles.label} testID={testIdWithKey(VtiVettingIds.submissionState)}>
+                      {application.submission.state === 'deferred'
+                        ? tp('Vetting.SubmissionDeferred', {
+                            needs:
+                              (application.submission.needs ?? []).map((need) => needWords(need, t)).join(', ') || '—',
+                          })
+                        : application.submission.state === 'pending'
+                          ? t('Vetting.SubmissionPending')
+                          : application.submission.state === 'withdrawn'
+                            ? t('Vetting.SubmissionWithdrawn')
+                            : tp('Vetting.SubmissionDecided', { effect: application.submission.effect ?? '—' })}
+                    </Text>
+                    {application.submission.state === 'deferred' || application.submission.state === 'pending' ? (
+                      <Pressable
+                        style={look(VtiVettingIds.withdrawButton).button}
+                        testID={testIdWithKey(VtiVettingIds.withdrawButton)}
+                        accessibilityRole="button"
+                        disabled={!!busy}
+                        onPress={() =>
+                          run('withdraw', async () => {
+                            const outcome = await applicantRef.current!.withdraw()
+                            if (outcome === 'nothingOpen') throw new InWords(t('Vetting.WithdrawNothingOpen'))
+                          })
+                        }
+                      >
+                        {busy === 'withdraw' ? (
+                          <ActivityIndicator color={look(VtiVettingIds.withdrawButton).spinner} />
+                        ) : null}
+                        <Text style={look(VtiVettingIds.withdrawButton).text}>{t('Vetting.Withdraw')}</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+              {/* Not enough yet: ask another vetter from here. */}
+              {!checklist?.meets ? (
+                <>
+                  <Text style={styles.h}>{t('Vetting.AskAnotherVetter')}</Text>
+                  {ticketInputs}
+                </>
+              ) : null}
+              {requests.map((r) => requestCard(r))}
+            </>
+          ) : null}
+
+          {cantSignIn && applicantStep !== 'member' && applicantStep !== 'name' ? (
+            // Row V6: the vetting's own identity cannot sign in, so a vetter's session cannot reach this phone.
+            <View style={[styles.card, styles.cantSignIn]} testID={testIdWithKey(VtiVettingIds.cantSignIn)}>
+              <Text style={[styles.value, { fontWeight: '700' }]}>{t('Vetting.CantSignInTitle')}</Text>
+              <Text style={styles.value}>{t('Vetting.CantSignInBody')}</Text>
+              <Text style={styles.label}>{t('Vetting.CantSignInHint')}</Text>
+              <Pressable
+                style={look(VtiVettingIds.tryAgain, VtiVettingIds.tryAgain).button}
+                onPress={() => {
+                  setCantSignIn(false)
+                  setError(undefined)
+                  bump()
+                }}
+                disabled={!!busy}
+                accessibilityRole="button"
+                testID={testIdWithKey(VtiVettingIds.tryAgain)}
+              >
+                <Text style={look(VtiVettingIds.tryAgain, VtiVettingIds.tryAgain).text}>{t('Vetting.TryAgain')}</Text>
+              </Pressable>
+              {application && !application.submission ? (
+                <Pressable
+                  style={look(VtiVettingIds.startOver).button}
+                  onPress={() => void stopThis('stay')}
+                  disabled={!!busy}
+                  accessibilityRole="button"
+                  testID={testIdWithKey(VtiVettingIds.startOver)}
+                >
+                  <Text style={look(VtiVettingIds.startOver).text}>{t('Vetting.StartOver')}</Text>
+                </Pressable>
+              ) : null}
+              {stopLink}
+            </View>
+          ) : !connected && applicantStep !== 'member' ? (
+            <View style={styles.row}>
+              <ActivityIndicator color={ColorPalette.brand.primary} />
+              <Text style={styles.value}>{t('MyAgent.Authenticating')}</Text>
+            </View>
+          ) : null}
+        </KeyboardAwareScrollView>
+        {errorLine}
+        <StopVettingSheet
+          visible={stopAsked}
+          community={communityLabelOf(communityDid ?? '', t)}
+          busy={busy === 'stop'}
+          onStop={() => void stopThis('leave')}
+          onKeep={() => setStopAsked(false)}
+        />
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  )
+}
+
+export default VtiVetting

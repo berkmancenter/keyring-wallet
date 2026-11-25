@@ -1,0 +1,17 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="com.localityperipheral">
+  <!--
+    Self-declared so this module works without the consuming app
+    remembering to add them — Gradle's manifest merger folds these into
+    the app's final manifest. BLUETOOTH_ADVERTISE/BLUETOOTH_CONNECT are
+    the API 31+ runtime-requested permissions the peripheral role needs
+    (no BLUETOOTH_SCAN — this module never scans, only advertises and
+    serves a GATT server; scanning is the witness's own role).
+    BLUETOOTH/BLUETOOTH_ADMIN are the legacy, install-time-granted
+    permissions the same APIs need pre-31.
+  -->
+  <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+  <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+  <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+</manifest>

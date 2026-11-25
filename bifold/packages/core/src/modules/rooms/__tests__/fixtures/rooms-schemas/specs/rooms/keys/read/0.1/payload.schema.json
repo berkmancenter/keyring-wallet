@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/rooms/keys/read/0.1",
+  "title": "Rooms Keys Read \u2014 payload",
+  "description": "TODO: what the request payload of rooms/keys/read carries. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, proof) are owned by the framework \u2014 SPEC \u00a76.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "roomId",
+    "host",
+    "key"
+  ],
+  "properties": {
+    "roomId": {
+      "type": "string",
+      "description": "The room to read from. The recipient MUST already hold group state for it."
+    },
+    "host": {
+      "type": "string",
+      "description": "The host to read from, as a DID. Named by the caller because nothing maps a room to its host \u2014 a room is portable, so a remembered host goes stale silently, and a room may be registered with more than one. A caller who names the wrong host learns so as a refusal from a party that does not serve this room, which is loud and immediate."
+    },
+    "key": {
+      "type": "string",
+      "maxLength": 512,
+      "description": "The record to read."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.1/framework.schema.json#/$defs/Ext",
+      "description": "Ecosystem-defined extension members per SPEC.md \u00a74.5.1."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "roomId",
+        "key",
+        "version",
+        "verification"
+      ],
+      "description": "Success response to rooms/keys/read. Type https://trusttasks.org/spec/rooms/keys/read/0.1#response.",
+      "properties": {
+        "roomId": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The record's version at the host."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "deprecated",
+            "retracted"
+          ],
+          "description": "Curation state, passed through. A `retracted` record has no body: the tombstone is the answer, not a failure."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "author": {
+          "type": "string",
+          "description": "The member who wrote it, where the tier discloses one. Absent on `private`, where authorship is inside the body the recipient just opened."
+        },
+        "plaintext": {
+          "type": "string",
+          "description": "The opened record, base64url \u2014 the sealed tiers. **Never the key**, which is the whole reason this task exists rather than the record being handed to the member to open. Spelled as `rooms/keys/open` spells it, because it is the same bytes by the same route."
+        },
+        "cleartext": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "The record body on an `open` room, where there is nothing to open. Carried as itself rather than base64url so that the shape says which tier the member is on \u2014 a member ought to be able to tell that this room's host can read what they just read."
+        },
+        "verification": {
+          "$ref": "../../../_shared/0.1/room.schema.json#/$defs/ReadVerification",
+          "description": "What the recipient checked and what it found. REQUIRED: an agent that returns a record without saying what it checked has made the member's decision for them."
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.1/framework.schema.json#/$defs/Ext"
+        }
+      },
+      "title": "Rooms Keys Read \u2014 response payload"
+    }
+  }
+}

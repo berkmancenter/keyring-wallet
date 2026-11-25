@@ -1,0 +1,650 @@
+/**
+ * Join, for a community that answers manifest 0.3: the screen lists its ways
+ * in and what follows each, and the main button does what the way the phone
+ * meets leads to — never "join" where an administrator decides. A 0.2
+ * community keeps today's screen (VtiJoinScreen.test.tsx).
+ */
+import { useNavigation } from '@react-navigation/native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
+import React from 'react'
+import { StyleSheet } from 'react-native'
+
+import { useAgent } from '@bifold/react-hooks'
+
+import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { Screens } from '../../../types/navigators'
+import { testIdWithKey } from '../../../utils/testable'
+import { TAB_BAR_CLEARANCE } from '../screens/aboveTabBar'
+import type { JoinAsks, JoinWay } from '../module/joinManifest'
+import { vtaAgent } from '../module/vtaAgent'
+import { VtiRefusal, VtiSentNoAnswer, vtiAgent } from '../module/vtiAgent'
+import { communityTarget } from '../module/vtiCommunityLink'
+import VtiJoin, { identityWord } from '../screens/VtiJoin'
+import { registerHiddenVetting, type HiddenVettingSeam } from '../screens/hiddenVettingSeam'
+
+jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+jest.mock('../../vrc/vrc-biometric', () => ({
+  requestBiometricConfirmationWithUI: jest.fn(async () => ({ success: true, reason: 'confirmed' })),
+}))
+const mockEnsurePersona = jest.fn(async () => ({ did: 'did:webvh:QmPersona:p' }))
+const mockReadJoinState = jest.fn(async (): Promise<unknown> => ({ kind: 'none' }))
+const mockJoinCommunity = jest.fn(async (): Promise<unknown> => ({ verdict: { effect: 'refer' } }))
+jest.mock('../module/vtiJoin', () => ({
+  ensurePersonaFor: (...args: unknown[]) => mockEnsurePersona(...(args as [])),
+  readJoinState: (...args: unknown[]) => mockReadJoinState(...(args as [])),
+  joinCommunity: (...args: unknown[]) => mockJoinCommunity(...(args as [])),
+}))
+// What the reader makes of the manifest, and what the phone holds: given by each test.
+const mockJoinAsks = jest.fn()
+jest.mock('../module/joinManifest', () => ({
+  ...jest.requireActual('../module/joinManifest'),
+  joinAsks: (...args: unknown[]) => mockJoinAsks(...args),
+}))
+const mockHolds = jest.fn(async () => ({}))
+jest.mock('../screens/joinHolds', () => ({ readJoinHolds: (...args: unknown[]) => mockHolds(...(args as [])) }))
+
+type Setter = { set(next: Record<string, unknown>): void }
+const community = 'did:webvh:QmSuggested:vtc.suggested.example'
+const config = { mediatorDid: 'did:peer:2:mediator', communityDid: community }
+const id = (key: string) => testIdWithKey(key)
+
+const way = (over: Partial<JoinWay> & Pick<JoinWay, 'id'>): JoinWay => ({
+  admission: 'automatic',
+  requires: { invitation: false },
+  requiresNothing: false,
+  usable: true,
+  meets: 'yes',
+  digest: `digest-${over.id}`,
+  ...over,
+})
+const invited = way({ id: 'invited', requires: { invitation: true } })
+const memberCredential = way({
+  id: 'member-credential',
+  requires: { invitation: false, credentials: { issuers: 'recognised', types: ['MembershipCredential'] } },
+  meets: 'unknown',
+})
+const review = way({ id: 'review', admission: 'review', requiresNothing: true })
+const vetted = way({
+  id: 'vetted-member',
+  meets: 'no',
+  requires: { invitation: false, vetting: { statements: 1, claims: ['name.legal'], methods: [] } },
+})
+const defaults: JoinAsks = {
+  wire: '0.3',
+  accepting: true,
+  ways: [{ ...invited, meets: 'no' }, memberCredential, review],
+  suggested: review,
+  outcomeIfMet: 'reviewed',
+}
+
+describe('Join, at manifest 0.3', () => {
+  let navigation: { navigate: jest.Mock }
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    communityTarget.clear()
+    mockEnsurePersona.mockClear()
+    mockJoinCommunity.mockClear()
+    mockReadJoinState.mockImplementation(async () => ({ kind: 'none' }))
+    mockHolds.mockImplementation(async () => ({}))
+    mockJoinAsks.mockReset()
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({ wire: '0.3', criteria: [] } as never)
+    ;(useAgent as jest.Mock).mockReturnValue({
+      agent: {
+        config: { logger: { info: jest.fn(), error: jest.fn() } },
+        // A store that holds nothing: the identities on the phone are read, and there are none.
+        genericRecords: { findAllByQuery: async () => [] },
+      },
+    })
+    const controller = vtaAgent as unknown as Setter
+    controller.set({
+      link: {
+        kind: 'linked',
+        vtaDid: 'did:webvh:example:vta',
+        label: 'bob',
+        linkedAt: '2026-10-02T00:00:00Z',
+        connection: { kind: 'online', since: 0 },
+      },
+    })
+    navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
+
+  /** Render, and go on to "what it asks". */
+  const toAsks = async (asks: JoinAsks) => {
+    mockJoinAsks.mockReturnValue(asks)
+    const tree = render(
+      <BasicAppContext>
+        <VtiJoin config={config} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinThisCommunity'))))
+    return tree
+  }
+
+  // IN-264: a community that runs private (hidden) vetting refuses named
+  // statements. Keyring started named vetting for it anyway, and the join was
+  // turned down with no reason the person could see.
+  describe('a community that runs private vetting', () => {
+    const privateVetting = {
+      ...vetted,
+      usable: false,
+      unusableBecause: 'vettingPrivate' as const,
+      unusableDetail: 'org.openvtc.hidden-vetting',
+    }
+
+    it('offers no vetting, and says this version does not support private vetting yet', async () => {
+      const tree = await toAsks({ wire: '0.3', accepting: true, ways: [privateVetting] })
+      expect(tree.getByTestId(id('JoinWaysVettingNotSupported'))).toHaveTextContent('Join.Ways.PrivateVetting')
+      expect(tree.queryByTestId(id('JoinStart'))).toBeNull()
+      expect(tree.queryByTestId(id('JoinWayStart_vetted-member'))).toBeNull()
+      expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiVetting)
+    })
+
+    it('beside a review way: "Ask to join" stays, "Meet a vetter" does not appear', async () => {
+      const tree = await toAsks({
+        wire: '0.3',
+        accepting: true,
+        ways: [privateVetting, review],
+        suggested: review,
+        outcomeIfMet: 'reviewed',
+      })
+      expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent(/Join\.Ways\.ButtonAsk/)
+      expect(tree.queryByText(/Join\.Ways\.ButtonVetting/)).toBeNull()
+      expect(tree.getByTestId(id('JoinWaysVettingNotSupported'))).toBeTruthy()
+    })
+
+    // 242: in a build that carries hidden vetting, the private way is offered.
+    // The person's agent is asked only on the tap; then the identity is made
+    // as for any vetting, and its own screen opens.
+    // Alberto, 2026-10-15: one flow. A private way is "Meet a vetter", marked
+    // as private; the agent is asked on that tap; then the identity and the
+    // ordinary vetting screen, never a separate one.
+    it('in a build that carries it: marked private, "Meet a vetter" asks the agent, then the ordinary vetting', async () => {
+      const check = jest.fn(async () => ({ ok: true as const }))
+      registerHiddenVetting({ check } as unknown as HiddenVettingSeam)
+      try {
+        const offered = { ...privateVetting, hiddenVetting: { suite: 'ps-ddh-bls12381' } }
+        jest
+          .spyOn(vtiAgent, 'fetchManifest')
+          .mockResolvedValue({ wire: '0.3', criteria: [{ id: 'vetted-member' }] } as never)
+        const tree = await toAsks({ wire: '0.3', accepting: true, ways: [offered] })
+        expect(check).not.toHaveBeenCalled()
+        expect(tree.getByTestId(id('JoinWayPrivate_vetted-member'))).toHaveTextContent(/Vetting\.Private\.Badge/)
+        // The mark only (276.10, option B): what private means is said on Get vetted, not here as well.
+        expect(tree.queryByTestId(id('JoinWayPrivate_vetted-memberExplain'))).toBeNull()
+        expect(tree.getByTestId(id('JoinWay_vetted-member'))).not.toHaveTextContent(/Private\.Explain/)
+        expect(tree.queryByTestId(id('JoinWaysVettingNotSupported'))).toBeNull()
+        expect(tree.queryByTestId(id('JoinPrivateVettingStart_vetted-member'))).toBeNull()
+        await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+        expect(check).toHaveBeenCalled()
+        await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+        expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
+        expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiHiddenVetting, expect.anything())
+      } finally {
+        registerHiddenVetting(undefined)
+      }
+    })
+
+    it('the agent says no: the reason in place, and no identity step', async () => {
+      const check = jest.fn(async () => ({ ok: false as const, reason: 'agentTooOld' as const }))
+      registerHiddenVetting({ check } as unknown as HiddenVettingSeam)
+      try {
+        const offered = { ...privateVetting, hiddenVetting: { suite: 'ps-ddh-bls12381' } }
+        jest
+          .spyOn(vtiAgent, 'fetchManifest')
+          .mockResolvedValue({ wire: '0.3', criteria: [{ id: 'vetted-member' }] } as never)
+        const tree = await toAsks({ wire: '0.3', accepting: true, ways: [offered] })
+        await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+        expect(tree.getByTestId(id('JoinPrivateVettingRefused'))).toHaveTextContent(
+          'Join.Ways.PrivateVettingAgentTooOld'
+        )
+        expect(tree.queryByTestId(id('JoinAsContinue'))).toBeNull()
+      } finally {
+        registerHiddenVetting(undefined)
+      }
+    })
+
+    // 0.69 gate, hv, 2026-11-04: on a slow agent "Meet a vetter" only dimmed for its wait, and its refusal was written
+    // after the ways, below the fold, so the tap looked like it did nothing; nor did the log say why.
+    describe('the tap says what is happening', () => {
+      const offered = { ...privateVetting, hiddenVetting: { suite: 'ps-ddh-bls12381' } }
+      const open = async (check: jest.Mock) => {
+        registerHiddenVetting({ check } as unknown as HiddenVettingSeam)
+        jest
+          .spyOn(vtiAgent, 'fetchManifest')
+          .mockResolvedValue({ wire: '0.3', criteria: [{ id: 'vetted-member' }] } as never)
+        return toAsks({ wire: '0.3', accepting: true, ways: [offered] })
+      }
+      afterEach(() => registerHiddenVetting(undefined))
+
+      it('while the agent is asked: the button says so, a second tap asks nothing, and a long wait is said on screen', async () => {
+        let answer: (value: { ok: true }) => void = () => undefined
+        const check = jest.fn(() => new Promise((resolve) => (answer = resolve)))
+        const tree = await open(check)
+        expect(tree.getByTestId(id('JoinStart'))).not.toHaveTextContent('Join.Ways.PrivateVettingChecking')
+        await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+        expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent('Join.Ways.PrivateVettingChecking')
+        await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+        expect(check).toHaveBeenCalledTimes(1)
+        expect(tree.queryByTestId(id('PreparingSlow'))).toBeNull()
+        await act(async () => {
+          jest.advanceTimersByTime(20_000)
+        })
+        // Outside the scroll, so the page's length cannot put it out of sight.
+        expect(tree.getByTestId(id('PreparingSlow'))).toHaveTextContent('Invited.PreparingSlow')
+        expect(within(tree.getByTestId(id('JoinScroll'))).queryByTestId(id('PreparingSlow'))).toBeNull()
+        await act(async () => answer({ ok: true }))
+        expect(tree.getByTestId(id('JoinAsContinue'))).toBeTruthy()
+      })
+
+      it.each([
+        ['the agent says no', jest.fn(async () => ({ ok: false, reason: 'agentTooOld' })), 'agentTooOld'],
+        ['the check throws', jest.fn(async () => Promise.reject(new Error('did:webvh:secret-agent'))), 'cannotTell'],
+      ])(
+        '%s: the refusal stays in sight, outside the scroll, and the log names its kind alone',
+        async (_w, check, kind) => {
+          const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+          const tree = await open(check as jest.Mock)
+          await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+          expect(tree.getByTestId(id('JoinPrivateVettingRefused'))).toBeTruthy()
+          expect(within(tree.getByTestId(id('JoinScroll'))).queryByTestId(id('JoinPrivateVettingRefused'))).toBeNull()
+          expect(warn).toHaveBeenCalledWith(`[Join] the private way in was not started: ${kind}`)
+          expect(warn.mock.calls.flat().join(' ')).not.toContain('secret-agent')
+          // The button is back, to try again.
+          expect(tree.getByTestId(id('JoinStart'))).not.toHaveTextContent('Join.Ways.PrivateVettingChecking')
+          warn.mockRestore()
+        }
+      )
+    })
+
+    it('at manifest 0.2 too: the message, and no way to start', async () => {
+      const tree = await toAsks({ wire: '0.2', accepting: true, ways: [{ ...privateVetting, admission: 'unstated' }] })
+      expect(tree.getByTestId(id('JoinVettingNotSupported'))).toHaveTextContent('Join.Ways.PrivateVetting')
+      expect(tree.queryByTestId(id('JoinStart'))).toBeNull()
+    })
+  })
+
+  it('leaves room at its foot for the tab bar, with its buttons in the page', async () => {
+    const tree = await toAsks(defaults)
+    const room = (testId: string, prop: 'style' | 'contentContainerStyle') =>
+      StyleSheet.flatten(tree.getByTestId(id(testId)).props[prop])?.paddingBottom ?? 0
+    // The ways: their buttons are in the page, which leaves the room.
+    expect(tree.queryByTestId(id('JoinActions'))).toBeNull()
+    expect(room('JoinScroll', 'contentContainerStyle')).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
+    // Making the identity: its button scrolls with the page, after it, so
+    // nothing hides behind it (239, iPhone); the room is under the page.
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+    expect(within(tree.getByTestId(id('JoinScroll'))).getByTestId(id('JoinActions'))).toBeTruthy()
+    expect(room('JoinScroll', 'contentContainerStyle')).toBeGreaterThanOrEqual(TAB_BAR_CLEARANCE)
+  })
+
+  it('a new community, a phone holding nothing: its three ways, and "Ask to join"', async () => {
+    const tree = await toAsks(defaults)
+    expect(tree.getByTestId(id('JoinWaysTitle'))).toHaveTextContent(/Join\.Ways\.Title/)
+    expect(tree.getByTestId(id('JoinWays'))).toBeTruthy()
+    // Today's card is for a community that states no admission.
+    expect(tree.queryByTestId(id('JoinAsks'))).toBeNull()
+    expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent(/Join\.Ways\.ButtonAsk/)
+    // No vetting way: one button, as before.
+    expect(tree.queryByTestId(id('JoinAsk'))).toBeNull()
+  })
+
+  it('asking sends a plain request once the identity is made, and never opens vetting', async () => {
+    const tree = await toAsks(defaults)
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+    expect(tree.getByTestId(id('JoinMakeIdentity'))).toBeTruthy()
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+    expect(mockJoinCommunity).toHaveBeenCalledTimes(1)
+    const [deps, invitation] = mockJoinCommunity.mock.calls[0] as unknown as [Record<string, unknown>, unknown]
+    expect(deps).toMatchObject({ communityDid: community, mediatorDid: config.mediatorDid })
+    expect(invitation).toBeUndefined()
+    expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiVetting)
+  })
+
+  it('once asked under review: says an administrator will review it, not that the community "is deciding"', async () => {
+    const tree = await toAsks(defaults)
+    mockReadJoinState.mockImplementation(async () => ({ kind: 'pending', submission: { withInvitation: false } }))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(id('JoinStandingText'))).toHaveTextContent(/Join\.Ways\.SentForReview/)
+  })
+
+  // Alberto, 10-06: in a demo the applicant says "I'm term-benefit" and the
+  // operator finds it in the console's join requests.
+  it('once asked: says the identity it was sent as, in a word, with the whole DID and Copy behind a toggle', async () => {
+    const personaDid = 'did:webvh:QmPersona:vta.example.org:term-benefit'
+    const tree = await toAsks(defaults)
+    mockReadJoinState.mockImplementation(async () => ({
+      kind: 'pending',
+      submission: { withInvitation: false, personaDid },
+    }))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    // "Request sent", what follows, and "You asked to join as" the word, whole (Alberto, 238).
+    expect(tree.getByTestId(id('JoinRequestSent'))).toHaveTextContent('Join.RequestSentTitle')
+    expect(tree.getByTestId(id('JoinWillShow'))).toHaveTextContent('Join.WillShowWhenAccepted')
+    expect(tree.getByTestId(id('JoinStandingIdentity'))).toHaveTextContent(/Join\.AskedAs/)
+    expect(tree.getByTestId(id('JoinStandingIdentityName'))).toHaveTextContent(/^term-benefit$/)
+    expect(tree.getByTestId(id('JoinStandingIdentityToggle'))).toHaveTextContent(/Join\.SeeFullPersonaId/)
+    expect(tree.queryByTestId(id('JoinWays'))).toBeNull()
+    // The word: the last of its DID's path, else its last characters.
+    expect(identityWord(personaDid)).toBe('…term-benefit')
+    expect(identityWord('did:key:z6MkABCDEFGH12345678')).toBe('…12345678')
+    expect(tree.queryByTestId(id('JoinStandingIdentityDid'))).toBeNull()
+    fireEvent.press(tree.getByTestId(id('JoinStandingIdentityToggle')))
+    expect(tree.getByTestId(id('JoinStandingIdentityDid'))).toHaveTextContent(personaDid)
+    expect(tree.getByTestId(id('JoinStandingIdentityCopy'))).toBeTruthy()
+  })
+
+  it('a member is not shown the identity line: it is for a request still open', async () => {
+    const tree = await toAsks(defaults)
+    mockReadJoinState.mockImplementation(async () => ({
+      kind: 'member',
+      submission: { withInvitation: false, personaDid: 'did:webvh:QmPersona:vta.example.org:term-benefit' },
+    }))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.queryByTestId(id('JoinStandingIdentity'))).toBeNull()
+  })
+
+  it('a phone holding the invitation: "Join", through "I was invited", where the invitation is', async () => {
+    mockHolds.mockImplementation(async () => ({ invitation: true }))
+    const tree = await toAsks({
+      ...defaults,
+      ways: [invited, memberCredential, review],
+      suggested: invited,
+      outcomeIfMet: 'joined',
+    })
+    expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent(/Join\.Ways\.ButtonJoin/)
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiInvited)
+    expect(mockJoinCommunity).not.toHaveBeenCalled()
+  })
+
+  /**
+   * The ordinary vetting community: an invitation way, a vetting way, and a
+   * review way that asks nothing — which every phone meets. Vetting must be
+   * what the screen leads with; asking is the other door.
+   */
+  describe('a vetting way beside a review way', () => {
+    const vettingCommunity: JoinAsks = {
+      wire: '0.3',
+      accepting: true,
+      ways: [{ ...invited, meets: 'no' }, vetted, review],
+      suggested: review,
+      outcomeIfMet: 'reviewed',
+    }
+
+    it('offers both: "Meet a vetter" first, "Ask to join" beside it, and the vetting row says it can be started', async () => {
+      const tree = await toAsks(vettingCommunity)
+      expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent(/Join\.Ways\.ButtonVetting/)
+      expect(tree.getByTestId(id('JoinAsk'))).toHaveTextContent(/Join\.Ways\.ButtonAsk/)
+      // The vetting way says what comes next in its own row; the button under it already says "Meet a vetter".
+      expect(tree.getByTestId(id('JoinWayStart_vetted-member'))).toHaveTextContent('Join.AsksNext')
+      expect(tree.getAllByText('Join.AsksNext')).toHaveLength(1)
+      // What follows each way is still said on its own row.
+      expect(tree.getByTestId(id('JoinWayFollows_vetted-member'))).toHaveTextContent('Join.Ways.FollowsAutomatic')
+      expect(tree.getByTestId(id('JoinWayFollows_review'))).toHaveTextContent('Join.Ways.FollowsReview')
+    })
+
+    it('puts each button under the way it acts on, and nothing fixed under the list', async () => {
+      // Two buttons under the list covered the last way's lines on a phone.
+      const tree = await toAsks(vettingCommunity)
+      const vettingRow = within(tree.getByTestId(id('JoinWay_vetted-member')))
+      const reviewRow = within(tree.getByTestId(id('JoinWay_review')))
+      expect(vettingRow.getByTestId(id('JoinStart'))).toBeTruthy()
+      expect(vettingRow.queryByTestId(id('JoinAsk'))).toBeNull()
+      expect(reviewRow.getByTestId(id('JoinAsk'))).toBeTruthy()
+      // What follows each way is right above its button.
+      expect(reviewRow.getByTestId(id('JoinWayFollows_review'))).toHaveTextContent('Join.Ways.FollowsReview')
+      expect(tree.queryByTestId(id('JoinActions'))).toBeNull()
+      // "A different community" is still on the screen, with the list.
+      expect(tree.getByTestId(id('JoinScanCommunity'))).toBeTruthy()
+    })
+
+    // IN-104: one fixed button under the list covered the last way on a
+    // small phone. It sits under the way it acts on, as two do.
+    it('one thing to do sits under its way too: "Ask to join" under the way the phone meets', async () => {
+      const tree = await toAsks(defaults)
+      expect(within(tree.getByTestId(id('JoinWay_review'))).getByTestId(id('JoinStart'))).toHaveTextContent(
+        /Join\.Ways\.ButtonAsk/
+      )
+      expect(tree.queryByTestId(id('JoinActions'))).toBeNull()
+      expect(tree.getByTestId(id('JoinScanCommunity'))).toBeTruthy()
+    })
+
+    it('"Start" under the vetting way, and "I was invited" under the invitation way', async () => {
+      const vettingOnly = await toAsks({ wire: '0.3', accepting: true, ways: [vetted] })
+      expect(within(vettingOnly.getByTestId(id('JoinWay_vetted-member'))).getByTestId(id('JoinStart'))).toBeTruthy()
+      vettingOnly.unmount()
+      const invitationOnly = await toAsks({ wire: '0.3', accepting: true, ways: [{ ...invited, meets: 'no' }] })
+      expect(within(invitationOnly.getByTestId(id('JoinWay_invited'))).getByTestId(id('JoinGoInvited'))).toBeTruthy()
+    })
+
+    it('a community whose ways never ask a vetter says so; one that has a vetting way does not', async () => {
+      const none = await toAsks(defaults)
+      expect(none.getByTestId(id('JoinNoVetting'))).toHaveTextContent(/Join\.Ways\.NoVetting/)
+      none.unmount()
+      const withVetting = await toAsks(vettingCommunity)
+      expect(withVetting.queryByTestId(id('JoinNoVetting'))).toBeNull()
+    })
+
+    // IN-104 path B: under the removed standing the row buttons were still
+    // there, and "Meet a vetter" went on under the old identity without
+    // "Join again". Under where the person stands, the ways are only shown.
+    /** The screen as a link opens it: straight on the community's ways. */
+    const openedByLink = async (state: unknown) => {
+      mockReadJoinState.mockImplementation(async () => state)
+      mockJoinAsks.mockReturnValue(vettingCommunity)
+      communityTarget.set({ communityDid: community, name: 'Keyring Lab Community' })
+      const tree = render(
+        <BasicAppContext>
+          <VtiJoin config={config} />
+        </BasicAppContext>
+      )
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      return tree
+    }
+
+    it('under a removal: the ways are shown, with no "Meet a vetter" or "Ask to join"', async () => {
+      const tree = await openedByLink({ kind: 'removed', membership: {}, at: '2026-10-03T02:42:26Z' })
+      expect(tree.getByTestId(id('JoinStandingText'))).toBeTruthy()
+      expect(tree.getByTestId(id('JoinWays'))).toBeTruthy()
+      for (const key of ['JoinStart', 'JoinAsk', 'JoinWayStart_vetted-member']) {
+        expect(tree.queryByTestId(id(key))).toBeNull()
+      }
+    })
+
+    // Alberto, 238: once asked, or once a member, what the community asks is
+    // behind the person; said again, it pushed "Check again" below the fold.
+    it.each([
+      ['a member', { kind: 'member', membership: {} }],
+      ['a request open', { kind: 'pending', submission: { withInvitation: false } }],
+    ])('under %s: the ways are not repeated, and there is nothing to start', async (_, state) => {
+      const tree = await openedByLink(state)
+      expect(tree.getByTestId(id('JoinStandingText'))).toBeTruthy()
+      expect(tree.queryByTestId(id('JoinWays'))).toBeNull()
+      for (const key of ['JoinStart', 'JoinAsk']) {
+        expect(tree.queryByTestId(id(key))).toBeNull()
+      }
+    })
+
+    it('after "Join again" from the removed standing, the two buttons are back', async () => {
+      const tree = await openedByLink({ kind: 'removed', membership: {}, at: '2026-10-03T02:42:26Z' })
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAgain'))))
+      expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent(/Join\.Ways\.ButtonVetting/)
+      expect(tree.getByTestId(id('JoinAsk'))).toBeTruthy()
+    })
+
+    it('"Meet a vetter" makes the identity and opens vetting; no request is sent', async () => {
+      const tree = await toAsks(vettingCommunity)
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+      expect(mockEnsurePersona).toHaveBeenCalledTimes(1)
+      expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
+      expect(mockJoinCommunity).not.toHaveBeenCalled()
+    })
+
+    it('"Ask to join" sends the plain request, and never opens vetting', async () => {
+      const tree = await toAsks(vettingCommunity)
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsk'))))
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+      expect(mockJoinCommunity).toHaveBeenCalledTimes(1)
+      const [, invitation] = mockJoinCommunity.mock.calls[0] as unknown as [unknown, unknown]
+      expect(invitation).toBeUndefined()
+      expect(navigation.navigate).not.toHaveBeenCalledWith(Screens.VtiVetting)
+    })
+
+    it('having asked once does not turn "Meet a vetter" into a request: each button does its own thing', async () => {
+      const tree = await toAsks(vettingCommunity)
+      // The ask comes back to the ways (the community changed what it asks).
+      mockJoinCommunity.mockRejectedValueOnce(new VtiRefusal('vtc/join-requests/submit:criterionUnknown', 'unknown'))
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsk'))))
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      expect(mockJoinCommunity).toHaveBeenCalledTimes(1)
+      // Now vetting: the identity and the Vetting screen, and no second request ahead of it.
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+      await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+      expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
+      expect(mockJoinCommunity).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  // IN-104: a removed member's "Join again" read the ways with what the earlier
+  // identity held, and was offered "Join, admitted straight away".
+  it('"Join again" after a removal reads the ways as a new identity holding nothing', async () => {
+    mockHolds.mockImplementation(async () => ({ statements: 1 }))
+    mockReadJoinState.mockImplementation(async () => ({ kind: 'removed', membership: {}, at: '2026-10-03T01:20:00Z' }))
+    mockJoinAsks.mockReturnValue(defaults)
+    const tree = render(
+      <BasicAppContext>
+        <VtiJoin config={config} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(id('JoinStandingText'))).toHaveTextContent(/Join\.StandingRemoved/)
+    // A removal says "You can ask to join again." itself: not said twice, and no new identity promised.
+    expect(tree.queryByTestId(id('JoinStandingAgain'))).toBeNull()
+    expect(mockJoinAsks).toHaveBeenLastCalledWith(expect.anything(), { statements: 1 })
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinAgain'))))
+    expect(mockJoinAsks).toHaveBeenLastCalledWith(expect.anything(), {})
+    // The ways are shown again, with what a new identity can do.
+    expect(tree.getByTestId(id('JoinWays'))).toBeTruthy()
+  })
+
+  it('invitation only, no invitation: no Start; the way to "I was invited"', async () => {
+    const tree = await toAsks({ wire: '0.3', accepting: true, ways: [{ ...invited, meets: 'no' }] })
+    expect(tree.queryByTestId(id('JoinStart'))).toBeNull()
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinGoInvited'))))
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiInvited)
+  })
+
+  it('vetting to do: "Start", then the identity, then vetting, as today', async () => {
+    const tree = await toAsks({ wire: '0.3', accepting: true, ways: [vetted] })
+    expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent('Join.Start')
+    expect(tree.queryByTestId(id('JoinAsk'))).toBeNull()
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
+    expect(mockJoinCommunity).not.toHaveBeenCalled()
+  })
+
+  it('only a credential way: nothing to press', async () => {
+    const tree = await toAsks({ wire: '0.3', accepting: true, ways: [memberCredential] })
+    expect(tree.queryByTestId(id('JoinStart'))).toBeNull()
+    expect(tree.queryByTestId(id('JoinGoInvited'))).toBeNull()
+    // It is one Keyring can't use yet: one line, the way itself behind "See them".
+    expect(tree.getByTestId(id('JoinWaysOthers'))).toBeTruthy()
+    fireEvent.press(tree.getByTestId(id('JoinWaysOthersToggle')))
+    expect(tree.getByTestId(id('JoinWay_member-credential'))).toHaveTextContent(/Join\.Ways\.CredentialNotYet/)
+  })
+
+  it('a community that accepts no applications says so, with nothing to start', async () => {
+    const tree = await toAsks({ wire: '0.3', accepting: false, ways: [] })
+    expect(tree.getByTestId(id('JoinNotAccepting'))).toHaveTextContent(/Join\.Ways\.NotAccepting/)
+    expect(tree.queryByTestId(id('JoinStart'))).toBeNull()
+    expect(tree.queryByTestId(id('JoinWays'))).toBeNull()
+  })
+
+  it('a community whose join version this app cannot read says so, not "unreachable"', async () => {
+    jest.spyOn(vtiAgent, 'fetchManifest').mockRejectedValue(new VtiRefusal('unsupportedVersion', 'no such version'))
+    const tree = await toAsks(defaults)
+    expect(tree.getByTestId(id('JoinVersionUnsupported'))).toHaveTextContent(/Join\.Ways\.VersionUnsupported/)
+    expect(tree.queryByTestId(id('JoinStart'))).toBeNull()
+  })
+
+  // 7b's R5, 10-06: the answer came 0.2 s after the 30 s clock, and the screen
+  // sat on "sent, hasn't answered yet" with Continue for four minutes.
+  it('a request sent with no answer in time: shows where it stands, asking the community, not an error', async () => {
+    const tree = await toAsks(defaults)
+    mockJoinCommunity.mockRejectedValueOnce(
+      new VtiSentNoAnswer('https://trusttasks.org/spec/vtc/join-requests/submit/0.3', 'urn:uuid:r', 0, community)
+    )
+    mockReadJoinState.mockImplementation(async () => ({ kind: 'sent', submission: { withInvitation: false } }))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(id('JoinStanding'))).toBeTruthy()
+    expect(tree.queryByTestId(id('JoinError'))).toBeNull()
+    expect(tree.queryByTestId(id('JoinAsContinue'))).toBeNull()
+    // Asked the community where it stands (a poll), not only what this phone holds.
+    expect(mockReadJoinState).toHaveBeenCalledWith(
+      expect.anything(),
+      community,
+      expect.objectContaining({ poll: true, mediatorDid: config.mediatorDid })
+    )
+    expect(mockJoinCommunity).toHaveBeenCalledTimes(1)
+  })
+
+  it('the community changed what it asks while the request went: says so, and reads it again', async () => {
+    const tree = await toAsks(defaults)
+    mockJoinCommunity.mockRejectedValueOnce(new VtiRefusal('vtc/join-requests/submit:criterionUnknown', 'unknown'))
+    const fetch = jest.spyOn(vtiAgent, 'fetchManifest')
+    const before = fetch.mock.calls.length
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinStart'))))
+    await act(async () => fireEvent.press(tree.getByTestId(id('JoinAsContinue'))))
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(id('JoinChanged'))).toHaveTextContent(/Join\.Ways\.Changed/)
+    // Back on what it asks, read afresh.
+    expect(tree.getByTestId(id('JoinWays'))).toBeTruthy()
+    expect(fetch.mock.calls.length).toBeGreaterThan(before)
+  })
+
+  it('a 0.2 community: today’s card and today’s Start', async () => {
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({
+      criteria: [{ vetting: { minStatements: 1, requiredClaims: ['name.legal'] } }],
+    } as never)
+    const tree = await toAsks({ wire: '0.2', accepting: true, ways: [{ ...vetted, admission: 'unstated' }] })
+    expect(tree.getByTestId(id('JoinAsks'))).toBeTruthy()
+    expect(tree.queryByTestId(id('JoinWays'))).toBeNull()
+    expect(tree.getByTestId(id('JoinStart'))).toHaveTextContent('Join.Start')
+  })
+})
