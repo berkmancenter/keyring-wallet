@@ -239,7 +239,9 @@ export async function resolveDidDocumentRetrying(
           error instanceof Error ? error.message : String(error)
         }`
       )
-      await new Promise((resolve) => setTimeout(resolve, 800 * (i + 1)))
+      // No pause after the last attempt: there is nothing it would wait for, and it held every caller's error back
+      // by 3.2 s (the fourth pause) on a resolve that was never going to answer.
+      if (i + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 800 * (i + 1)))
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError))
