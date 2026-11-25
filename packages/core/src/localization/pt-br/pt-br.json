@@ -3315,7 +3315,7 @@
     "AddYourName": "Adicionar seu nome",
     "PetnameLabel": "{{name}} (nome dado por você)",
     "PetnameSource": "Seu nome para este membro, guardado neste telefone",
-    "DirectoryNameLabel": "{{name}} (o próprio nome)",
+    "DirectoryNameLabel": "{{name}} (membro)",
     "NameTheirOwn": "O próprio nome em {{community}}",
     "NameThem": "Dar um nome",
     "Rename": "Renomear",
