@@ -533,15 +533,25 @@ export function sayDeliveryFailed(agent: Agent, connectionId: string, exchangeId
     } catch {
       // the name is a courtesy; the dialog reads without it
     }
-    vrcFlowStore.setError(connectionId, {
-      type: 'send-failed',
-      message: error.message,
-      contactName,
-      onRetry: async () => {
-        await deliverVrcViaTrustTaskForExchange(agent, connectionId, exchangeId)
-        vrcFlowStore.clearError(connectionId)
-      },
-    })
+    const say = (cause: string) =>
+      vrcFlowStore.setError(connectionId, {
+        type: 'send-failed',
+        message: cause,
+        contactName,
+        onRetry: async () => {
+          // The dialog does not await this (its prop is `() => void`): a retry that fails again must say so here, or
+          // the dialog would stay open on the FIRST cause with the second one neither logged nor shown.
+          try {
+            await deliverVrcViaTrustTaskForExchange(agent, connectionId, exchangeId)
+            vrcFlowStore.clearError(connectionId)
+          } catch (again) {
+            const cause = (again as Error).message
+            agent.config.logger.warn(`${LOG_PREFIX} VRC delivery retry failed: ${cause}`)
+            say(cause)
+          }
+        },
+      })
+    say(error.message)
   })()
 }
 
@@ -1550,9 +1560,15 @@ async function deliverVrcViaTrustTaskForExchangeInner(
     await sendTrustTaskDocument(agent, connectionId, signed)
   } catch (e) {
     retained.undelivered = true
+    // Should this write fail too, the record stays an unmarked prior and the next trigger answers "already issued",
+    // the pre-change behaviour: a degradation to live with, said in the log, never a reason to lose the send's error.
     await documentRepository
       .update(agent.context, retained)
-      .catch((err: Error) => logger.warn(`${LOG_PREFIX} could not mark the issue undelivered: ${err.message}`))
+      .catch((err: Error) =>
+        logger.warn(
+          `${LOG_PREFIX} could not mark the issue undelivered (a retry will read it as issued): ${err.message}`
+        )
+      )
     throw e
   }
   // Diagnostic only (e2e checker): the VRC this party just issued, as sent.
@@ -1579,9 +1595,14 @@ async function resendRetainedIssue(
   vrcFlowStore.setStatus(connectionId, 'preparing-offer', vrcFlowStore.isWitnessedFlow(connectionId))
   await sendTrustTaskDocument(agent, connectionId, prior.document)
   prior.undelivered = undefined
+  // A delivery that succeeded is not failed by its bookkeeping: should this write fail, the mark stays and the next
+  // trigger sends the same document once more (the other side's receipt handling takes a repeat as a no-op), until a
+  // write succeeds. Said in the log so a repeat has its cause.
   await documentRepository
     .update(agent.context, prior)
-    .catch((err: Error) => logger.warn(`${LOG_PREFIX} could not clear the issue's undelivered mark: ${err.message}`))
+    .catch((err: Error) =>
+      logger.warn(`${LOG_PREFIX} could not clear the issue's undelivered mark (it may be sent again): ${err.message}`)
+    )
   logIssuedVrcJson('ISSUER', exchangeId, '-', (prior.document.payload as { vrc?: unknown } | undefined)?.vrc)
   vrcFlowStore.setStatus(connectionId, 'offer-sent', false)
   logger.info(`${LOG_PREFIX} issue sent on the retry (exchange ${exchangeId}) on connection ${connectionId}`)

@@ -1540,8 +1540,16 @@ async function announceRelationshipDid(
         message: lastSendError,
         contactName: connectionRecord.theirLabel ?? undefined,
         onRetry: async () => {
-          await announceRelationshipDid(agent, connectionRecord, logger)
-          if (vrcFlowStore.getStatus(connectionRecord.id) === 'connecting') vrcFlowStore.clearError(connectionRecord.id)
+          // Not awaited by the dialog: a retry that fails on every try again sets a fresh error itself (this branch
+          // runs again inside announceRelationshipDid), so the dialog never stays on a stale cause; one that throws
+          // before the tries is logged here rather than left an unhandled rejection.
+          try {
+            await announceRelationshipDid(agent, connectionRecord, logger)
+            if (vrcFlowStore.getStatus(connectionRecord.id) === 'connecting')
+              vrcFlowStore.clearError(connectionRecord.id)
+          } catch (again) {
+            logger.warn(`Relationship DID retry failed before sending: ${(again as Error).message}`)
+          }
         },
       })
     }
