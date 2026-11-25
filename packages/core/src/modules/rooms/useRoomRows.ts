@@ -325,7 +325,8 @@ async function readRoom(service: RoomsService, room: RoomSummary, track: Track |
       // Its listing entry says who and when; the words wait for a newer post.
     }
     const post = postOf(read, actingAs)
-    if (placeOf(post) === 'nowhere') {
+    // Nor is one this client can't show: the row quotes words, and it has none.
+    if (placeOf(post) === 'nowhere' || post.notShown) {
       if (candidate.key === next.lastKey) {
         next.last = undefined
         next.lastKey = undefined

@@ -3365,6 +3365,7 @@
     "PostRemoved": "Removed",
     "PostUnread": "This message couldn't be read.",
     "PostCannotOpen": "This message can't be opened.",
+    "PostNotShown": "This message can't be shown here.",
     "QuoteUnavailable": "Original message isn't available",
     "QuoteNote": "Note",
     "QuoteNoAuthor": "A member",

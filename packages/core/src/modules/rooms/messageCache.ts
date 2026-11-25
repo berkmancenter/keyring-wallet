@@ -7,6 +7,7 @@ import { PersistentStorage } from '../../services/storage'
 import { VTA_UNLINKING_EVENT } from '../trust-tasks/module/unlinkEvent'
 import { VTI_REMOVED_EVENT } from '../trust-tasks/module/vtiCommunityNotices'
 import { toInertText } from './inertText'
+import { isCutRecordJson, isRecordJson } from './roomPosts'
 import type { RoomsService } from './types'
 import { dropRowPreviews, onRoomsListed, readRowPreviewsWith, type RowPreview } from './useRoomRows'
 
@@ -183,6 +184,10 @@ function postOf(raw: unknown): CachedPost | undefined {
   for (const k of ['kind', 'author', 'inReplyTo', 'verdict'] as const)
     if (p[k] !== undefined && typeof p[k] !== 'string') return undefined
   if (p.cut !== undefined && p.cut !== true) return undefined
+  // A whole signed record kept as a post's words by a bundle from before IN-725's fix (roomPosts `isRecordJson`), or
+  // the cut start of one: not a post to draw. Left out of the copy, so its room reads the record again and shows what
+  // it is. Words a person typed that happen to be JSON are not that, and stay.
+  if (isRecordJson(p.body) || (p.cut === true && isCutRecordJson(p.body))) return undefined
   let reactions: Record<string, number> | undefined
   if (p.reactions !== undefined) {
     if (!p.reactions || typeof p.reactions !== 'object' || Array.isArray(p.reactions)) return undefined

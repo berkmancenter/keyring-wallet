@@ -190,3 +190,22 @@ describe('RoomPostBubble: when a post on its way says so', () => {
     expect(opacity(tree)).toBe(0.7)
   })
 })
+
+// IN-725: a record this client read and cannot show is one quiet line, never the record's JSON.
+describe('RoomPostBubble: a post that cannot be shown', () => {
+  test('says so in one line, with none of the record', () => {
+    const { getByTestId, getByText, queryByTestId, queryByText } = show({
+      post: post({ notShown: true, text: toInertText('') }),
+    })
+    expect(getByTestId(id('RoomPostNotShown'))).toBeTruthy()
+    expect(getByText('Rooms.PostNotShown')).toBeTruthy()
+    expect(queryByTestId(id('RoomPostUnread'))).toBeNull()
+    expect(queryByText(/DataIntegrityProof|verificationMethod|roomId/)).toBeNull()
+  })
+
+  test('a post with words has no such line (control)', () => {
+    const { queryByTestId, getByText } = show({})
+    expect(queryByTestId(id('RoomPostNotShown'))).toBeNull()
+    expect(getByText('Hi all')).toBeTruthy()
+  })
+})
