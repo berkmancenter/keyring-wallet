@@ -40,7 +40,7 @@ export const MOCKUPS: Mockup[] = [
       s.primaryButton('Continue', BOTTOM)
       s.tabBar('myAgent')
     },
-    notes: ['The grey bar stands for the name field.', '"Memory it can use" is the memory picker (§3.15): checkbox rows (boxes not drawn), any number or none, and "New memory". Sample memories.', 'The line under the rows is the binding (§3.15): the VTA keeps the agent to the picked set; a different set in a room is another agent.', 'Purposes by their descriptions (D43), one row each. No expiry choice: 4 hours, temporary (D41); the helper is drawn as the row\'s second line.'],
+    notes: ['The grey bar stands for the name field.', '"Memory it can use" is the memory picker (§3.15): checkbox rows (boxes not drawn), any number or none, and "New memory". Sample memories.', 'The line under the rows is the binding (§3.15): the VTA keeps the agent to the picked set; a different set in a room is another agent.', 'Purposes by their descriptions (D44), one row each. No expiry choice: 4 hours, temporary (D42); the helper is drawn as the row\'s second line.'],
   },
   {
     file: '02-connect-scan.svg',
@@ -99,7 +99,7 @@ export const MOCKUPS: Mockup[] = [
       s.primaryButton('Approve', BOTTOM)
       s.tabBar('myAgent')
     },
-    notes: ['Shown after the right number was typed. "Approve" asks for the phone’s face or fingerprint check (§3.2 step 6).', 'HCP\'s checklist as it applies here (D41). With no memory picked the memories line reads "It will have no memory." and the purposes are omitted. The time and the memories are samples. Nothing here elects persistence.', 'The line "It can read a room only after you add it to one." is the P1 form; P0, with no rooms, omits it.'],
+    notes: ['Shown after the right number was typed. "Approve" asks for the phone’s face or fingerprint check (§3.2 step 6).', 'HCP\'s checklist as it applies here (D42). With no memory picked the memories line reads "It will have no memory." and the purposes are omitted. The time and the memories are samples. Nothing here elects persistence.', 'The line "It can read a room only after you add it to one." is the P1 form; P0, with no rooms, omits it.'],
   },
   {
     file: '06-agent-list.svg',

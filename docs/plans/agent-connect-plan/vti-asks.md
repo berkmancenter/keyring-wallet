@@ -32,7 +32,7 @@ Fields: **id**; **what we hit**; **evidence** (a path at a named commit, or a me
 | AC-25 | VTI-Q38 |
 | AC-09, AC-10, AC-11 | VTI-Q36 |
 
-Not registered, with the reason: AC-12 and AC-13 (starter-image decisions, for openvti-starter), AC-14 (a question for the DTG working group, not for VTI), AC-15 (a cross-reference nit), AC-17 (a TypeScript library gap), AC-18 (a note on coexistence), AC-19 (a comparison of two sign-in forms), AC-20 (Anthropic, not VTI).
+Not registered, with the reason: AC-12 and AC-13 (starter-image decisions, for openvti-starter), AC-14 (a question for the DTG working group, not for VTI), AC-15 (a cross-reference nit), AC-17 (a TypeScript library gap), AC-18 (a note on coexistence), AC-19 (a comparison of two sign-in forms), AC-20 (Anthropic, not VTI), AC-36 (VTI's own `auth/oob` specification, not yet filed as a draft: it is proposed only on Brendan's yes, and it answers VTI-Q27 when filed; plan D48), AC-37 and AC-38 (OpenVTC's `vta-agent-memory`, not VTI code; plan D45).
 
 Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale working tree), `external/dtgwg-cred-spec` `94af2d8` and the starter mediator `mediator-buildathon:e6e2c636` (0.48.0, DIDComm v2, built with `tsp,secrets-aws`, measured 2026-11-20 on the lab, not on the VTA Farm).
 
@@ -44,6 +44,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Evidence:** `vta-sdk/src/agent_connect.rs` (module docs); `docs/02-vta/vta-mcp.md` §4; `docs/02-vta/examples/agent-memory-with-vta-mcp.md` §3.1; `git grep` for "qr", "pairing", "trigger" in `vta-mcp/` and `vta-sdk/src/agent*` finds nothing.
 - **Extension:** a VTA-side pairing task (for example `agent/pair`), or the `agent-connect` trigger flow registered in the links specification with its Trust Task type URIs (plan §3.2).
 - **Severity:** P0 works around (the plugin carries the pairing code and the message types are Keyring's placeholders); P1 none.
+- **Status (2026-11-25):** the extension chosen is VTI's own `auth/oob` with the purpose `deviceEnrol`, the owner's VTA as the service (plan D48; the specification change is AC-36). Until it is served, P0 uses the fallback of plan §3.2.
 
 ### AC-02 `acl/grant` carries no consumer kind
 
@@ -168,6 +169,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Evidence:** `docs/05-design-notes/trigger-link-design.md`; plan §4 and §11 (link length).
 - **Extension:** register the flow; a shorter way to reference a pairing contact that carries its transport (or a statement that a `did:key` contact plus a known mediator is acceptable for a flow).
 - **Severity:** P0 works around (draft flow behind a developer flag; the link is 198 bytes by count and measured in Phase 0 step 0.1(h)); P1 none.
+- **Status (2026-11-25):** narrowed by plan D48. Pairing uses the `auth/oob` link with the VTA's DID in `_from`, and no message is sent to a `did:key` contact; the draft `agent-connect` flow remains only for the P0 fallback, whose `_from` is the agent's `did:key` and whose link also carries the requested scope (its length measured in step 0.1(h)).
 
 ### AC-17 `@openvtc/pnm-core` has the approver half only
 
@@ -182,6 +184,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Evidence:** `OpenVTC/vta-agent-memory` `main` at `c9b80d26` (read through `gh api`, no local clone); `vta-mcp/README.md`.
 - **Extension:** none needed for P0 (the plugin is the channel server); noted so the two plugins can coexist.
 - **Severity:** none.
+- **Status (2026-11-25):** superseded by plan D45: the plugin is `vta-agent-memory` itself, extended, so the channel is added to it rather than run beside it (AC-37).
 
 ### AC-19 `vtc-mcp` approves by comparing a number, the browser flow by typing one
 
@@ -213,12 +216,14 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Extension:** an event or notification an administrator session can subscribe to when an entry's subject changes.
 - **Severity:** P0 works around (reconcile on app start sets `keyChanged`); P1 none.
 
-### AC-23 Which task types an entry's `stepUp` gates is undocumented
+### AC-23 How an owner's wallet approves an agent's act (reframed 2026-11-25)
 
-- **Hit:** an ACL entry has `stepUp` (`approver`, `require`) and `personal-ai-agents.md` Step 5 describes passkey step-up as "the guardrail", but not whether it gates memory writes and room tasks for an `application` entry, or what `require` accepts.
-- **Evidence:** `vta-sdk/src/client/acl.rs` (`stepUp`); `docs/02-vta/personal-ai-agents.md` Step 5; unmeasured (plan §2.3 item 12, step 0.1(n)).
-- **Extension:** document the gated task types and the `require` values.
-- **Severity:** P1 works around (the plugin's hook is the primary control; step-up is used only if measured to gate); P2 none.
+- **Hit (as first written):** an ACL entry has `stepUp` (`approver`, `require`) and `personal-ai-agents.md` Step 5 describes passkey step-up as "the guardrail", but not whether it gates memory writes and room tasks for an `application` entry, or what `require` accepts.
+- **Re-read at the pin `f7b78e29d` on 2026-11-25:** the entry's `stepUp` fields are stored by the ACL operations and gate nothing at runtime; step-up is only ever self-approval (`initiate_self_step_up`, `trust_tasks/policy_gate.rs:250`; the disclosure step-up, `trust_tasks/persona.rs:3110`); `maybe_push_step_up` returns early when the recipient is the caller (`trust_tasks/step_up.rs:1127`); and `step_up.rs:1276-1282` says delegated step-up was removed and "Someone-else-approves is the consent flow's job (`requireConsent` + an approver set)". So the question is now the consent flow's.
+- **Evidence:** the files above; `vta-service/src/operations/acl.rs:28-31,1112-1116`; `trust_tasks/policy_gate.rs:1-16` (policy rules, enforced only when `config.policy.enforcement` is on). Read, not run. Unmeasured: plan §2.3 item 12, step 0.1(n).
+- **Read at `3ee07a12` on 2026-11-25 (the push is confirmed):** a `requireConsent` disposition raises a pending (`policy_gate.rs:277`, `:376`, 900 s); the VTA signs `task-consent/request/0.1` per approver (`consent_request.rs:58`) and pushes it, only for a newly raised pending, through its push engine (TSP, DIDComm, REST; `policy_gate.rs:700`, `step_up.rs:1048`), then rings once (`step_up.rs:1193`); the approver answers with `task-consent/decision/0.2`, signed for `assertionMethod` (`received.rs:196,227`, `task_consent.rs:118`). Delivery receipts and the mediator wake exist only from `3ee07a12` (not at the pin `f7b78e29d`), and the wake likely needs mediator 0.52. Keyring already keeps and answers such a request from its own VTA (`vtaAgent.ts:571-590`, `keepManagerMessage`; `decide`, `vtaAgent.ts:3987-4019`, behind `confirmOwner`, on `main` at `c65701c91`). Source: `/srv/dev/scratch/2026-11-25-bam-vti-consent-push-findings.md`, spot-checked.
+- **Extension:** a documented way for an owner (not only the operator) to put an `application` entry's memory and room writes under `requireConsent` with the owner's wallet in the approver set: which task types those writes are held under, and who may write the rule when `[policy] enforcement` is off by default (`vta-config/src/lib.rs:211-216`). The push format is no longer part of the ask. Documenting that the entry's `stepUp` fields are inert (or removing them) would avoid the misreading this plan made on 2026-11-25.
+- **Severity:** P1 works around (the plugin's hook is the primary control; the consent flow is used only once measured, plan D46); P2 none.
 
 ## Not for upstream: local items to resolve elsewhere
 
@@ -283,7 +288,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 
 ### AC-34 No typed credential value type for agent memory
 
-- **Hit:** a memory value is UTF-8 text of at most 64 KiB (`operations/app_state.rs:94,558-575`); no blob type was found in `vta/memory/*` (the maintainers' "blob" type is a question for Alberto). A credential given to an agent's memory is a JSON text envelope (plan §3.15, D36).
+- **Hit:** a memory value is UTF-8 text of at most 64 KiB (`operations/app_state.rs:94,558-575`); no blob type was found in `vta/memory/*`. **Re-checked at the pin `f7b78e29d` on 2026-11-25:** still absent (`MAX_VALUE_BYTES = 65_536`, text only), as Alberto confirmed for the maintainers' "blob" type, so the ask stands as written. A credential given to an agent's memory is a JSON text envelope (plan §3.15, D36).
 - **Evidence:** `vta-service/src/operations/memory.rs:79-100`; the credential vault is separate (`vta-vault/src/model.rs:1-40`, `present.rs:1-40`, `trust_tasks/cred_vault.rs:492-540`), at `4e5861d95`, 2026-11-24.
 - **Extension:** a typed credential value for `vta/memory/*` beside text: typed verification, status awareness, a larger cap or a reference.
 - **Severity:** P1 works around (the text envelope); not a dependency. Registered as VTI-Q47.
@@ -294,3 +299,28 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Evidence:** `docs/02-vta/data-rooms.md:588-640`; `docs/05-design-notes/data-rooms-joining.md:11-25,122-131` (a proposal that recommends waiting), at `4e5861d95`, 2026-11-24.
 - **Extension:** `rooms/join/request/0.1`.
 - **Severity:** P2 works around (a Keyring-defined join message and the existing VIC flow; a community room uses `vtc/rooms/offers`). Registered as VTI-Q48.
+
+## OpenVTC `vta-agent-memory` and VTI's `auth/oob` (2026-11-25)
+
+Added with plan D45: the plugin extends OpenVTC's `vta-agent-memory` rather than living in a repository of ours, and revised the same day with plan D48 (pairing is VTI's `auth/oob` `deviceEnrol`) ([`2026-11-25-bam-2.md`](./2026-11-25-bam-2.md)). Evidence is `OpenVTC/vta-agent-memory` at `80047d95619ed504f2d7793f00c5501f1ed4f5dd`, read through `gh api` (no local clone).
+
+### AC-36 Extend `auth/oob` with the purpose `deviceEnrol`
+
+- **Hit:** pairing is VTI's `auth/oob` ceremony with the owner's VTA as the service (plan D48, §3.2), but `deviceEnrol` is only reserved: `vti-oob-server` serves `login` alone, and a new purpose needs new versions of every task that names `Purpose`, so an agent host and a wallet have nothing to implement against. (This entry first recorded Keyring's own pairing messages as a placeholder to be proposed as a Trust Task specification; D48 replaced those messages with VTI's ceremony.)
+- **Evidence:** `specs/auth/oob/_shared/0.1/CONVENTIONS.md:51` (`deviceEnrol` reserved), `:60` (`push` reserved), `:84` (keys used once only), `:89` (authority only through `redeem`); `oob.schema.json:13` (a new purpose means a new version) and `MatchNumber` (`^[0-9]{2}$`), on `dtgwg-trust-tasks-tf` `feat/hcp-phase1`; VTI `vti-oob-server/src/tasks.rs:439` (only `login` served), `host.rs:241,268` (the `gate` and `complete` hooks), at `3ee07a12`; `device/register/0.2/spec.md:96,106` (the device must already be in the ACL). Design: `/srv/dev/scratch/2026-11-25-bam-agent-pairing-design-review.md`.
+- **Extension:** `auth/oob/_shared` 0.2 (`Purpose` gains `deviceEnrol`, its CONVENTIONS §3 row, a rule 5.1 exception for `K_t` until swapped), `request` 0.3 (`requestedScope`, `consumerKind`), `claim` 0.3, `prove`, `respond` and `grant` 0.4 (`aclScope`, checked against `requestedScope`; the signer administers the VTA), `redeem` 0.3 (an `Enrolment` result `{ vtaDid, aclEntry, mustSwapBy }`); optionally, `device/register` refuses another consumer kind for an entry `deviceEnrol` created; the trigger link is the sign-in flow with `_from` the VTA. Open with it: whether VTI accepts a VTA as an `OobHost` and a non-session `complete` result, and whether `deviceEnrol` carries a longer number (plan §11 Q8). Push pairing (no QR, `mode: push`) stays reserved.
+- **Severity:** P0 works around: the fallback (a QR of the agent's `did:key`, an `acl/grant` by Keyring, the agent retrying connect), with no number match and no relay signals (plan §3.2). The draft is on a local branch `spec/auth-oob-device-enrol` of `dtgwg-trust-tasks-tf`; **recorded, not filed**: a draft PR is opened only on Brendan's yes.
+
+### AC-37 `vta-agent-memory` has no inbound-message channel or sender gate
+
+- **Hit:** the plugin needs a way to tell a session that a message arrived (the agent's chat and room mentions) and a gate on the sender. `vta-agent-memory` has neither: its only hook is `SessionStart` (`hooks/hooks.json`), its MCP server has nine memory tools (`src/server.rs`). Pairing is no longer part of this ask: it is the starter side of VTI's `auth/oob` `deviceEnrol` (AC-36, plan D48), which lands in `vta-agent-memory` beside its existing `connect` once VTI specifies it.
+- **Evidence:** `.claude-plugin/plugin.json` (0.8.2), `marketplace.json`, `.mcp.json`, `src/server.rs`, `src/enrol.rs`, `src/rooms.rs`, `src/fence.rs`, `hooks/hooks.json`, README, at `80047d95`.
+- **Extension:** the channel and `inbox`, the sender gate and `HostContract`, contributed as pull requests (plan §3.12, §3.18, steps 7.6, 7.15, 7.19, 7.24, 7.25).
+- **Severity:** P0 works around: a fork branch of `vta-agent-memory` that we build and test against while a merge lags (plan D45, §7.0).
+
+### AC-38 One context per agent in `vta-agent-memory`, against a memory set
+
+- **Hit:** `vta-agent-memory` grants one context per agent and has it created by its own setup (`init` prints `pnm contexts create` and `pnm acl create --role application --contexts <one> --purposes personalisation`; `setup` makes the grant through `pnm`; the configuration holds one `context_id`), while the plan binds an agent to a fixed set of top-level memories (plan D31, D32, D35). **Narrowed 2026-11-25 by plan D48:** who makes the grant is no longer a question for its maintainers. Under `deviceEnrol` the VTA creates the entry from the `aclScope` Keyring signs, whose `contexts` is a list (the specification allows a set; that the VTA enforces it is asked with AC-36), and `redeem` hands the entry to the agent; in the fallback Keyring grants with `acl/grant`. What remains is the plugin's side: a configuration and tools that hold the set of contexts the entry names, and which memory a save goes to. Its rotation goes through `vti_secrets` `IntegrationOnboarding`; no `device/register` call was found in the files read, while the plan registers the `aiAgent` consumer kind (plan §3.2 step 9).
+- **Evidence:** `src/enrol.rs` (lines 98-115, 148-195, 233), `src/config.rs:142`, `src/setup.rs:278`, `src/store.rs:83`, at `80047d95`.
+- **Extension:** a configuration and tools that hold a set of contexts read from the redeemed entry; the consumer kind registered at enrolment. Questions, not a defect: plan §11 Q6.
+- **Severity:** P0 works around (the fork branch carries the plan's design); the maintainers' answer decides the upstream merge of step 7.6.
