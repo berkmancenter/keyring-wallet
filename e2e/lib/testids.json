@@ -1401,7 +1401,6 @@
     "RoomPostSending": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostTime": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostUnread": ["src/modules/rooms/components/RoomPostBubble.tsx"],
-    "RoomPostWithdrawn": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPosts": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPostsFailed": ["src/modules/rooms/screens/Room.tsx"],
     "RoomPostsIncomplete": ["src/modules/rooms/screens/Room.tsx"],
