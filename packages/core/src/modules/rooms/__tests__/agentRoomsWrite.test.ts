@@ -539,6 +539,18 @@ describe('a post sent again', () => {
     expect(acted(agentTask)[0].payload).toMatchObject({ key: postKey('post-1'), expectedVersion: 0 })
   })
 
+  // IN-736: the outbox knows a post's key before anything is sent, and the room's list showing it clears the post
+  // whatever its answer said. That holds only if the key said ahead is the key written.
+  it('says that key ahead, before anything is sent, and it is the key the write then puts', async () => {
+    const { service, agentTask } = setup()
+    const ahead = service.postKeyFor('post-7')
+    expect(agentTask).not.toHaveBeenCalled()
+    expect(ahead).toBe(postKey('post-7'))
+    const preview = await service.prepareWrite(OPEN_ROOM, { title: '', body: 'hi', idempotencyKey: 'post-7' })
+    expect((await service.confirmWrite(preview.token)).key).toBe(ahead)
+    expect(acted(agentTask)[0].payload).toMatchObject({ key: ahead })
+  })
+
   // The host stores what it is sent; the first answer never reaches the phone.
   const lossyHost = () => {
     const versions: Record<string, number> = {}

@@ -1493,6 +1493,10 @@ export class AgentRoomsService implements RoomsService {
     this.watches.want(roomId, room.community.personaDid, room.host, sinceVersion, options)
   }
 
+  public postKeyFor(idempotencyKey: string): string {
+    return postKey(idempotencyKey)
+  }
+
   public renewRoomWatch(roomId: string): void {
     this.watches.renew(roomId)
   }
