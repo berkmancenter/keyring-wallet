@@ -469,3 +469,13 @@ test('tiers: the upstream section and its table are exact, and an ask carries ti
 test('tiers: the Overview needs the decisions register', () => {
   assert.ok(tmsgs(tiered(STEPS, ASKS, 'Overview text.\n')).some((m) => m.includes('Decisions made')))
 })
+
+test('tiers: a Decisions made Who cell names the person, never the role', () => {
+  const row = (who: string): string => OVERVIEW_OK.replace('| None yet | | | |', `| Use X (D1) | ${who} | 2026-11-25 | because |`)
+  assert.deepEqual(tmsgs(tiered(STEPS, ASKS, row('Brendan and Alberto'))), [])
+  for (const who of ['the user', 'Product owner (Alberto)', 'the owner']) {
+    assert.ok(tmsgs(tiered(STEPS, ASKS, row(who))).some((m) => m.includes('name the person who decided')), who)
+  }
+  // Only the Who cell is read: the decision's own text may speak of the owner.
+  assert.deepEqual(tmsgs(tiered(STEPS, ASKS, OVERVIEW_OK.replace('| None yet | | | |', '| The owner approves (D2) | Brendan | 2026-11-25 | the user asked |'))), [])
+})

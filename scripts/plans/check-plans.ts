@@ -28,7 +28,8 @@
 //               `### 7.0 Tiers, lanes and order` holding a tiers table, a lanes table, a ```mermaid dependency graph and a
 //               stack table; every other `###` step heading ends in a tier `(P0)`, `(P1)` or `(P2)` and has an
 //               `**Owner:**` line; no step starts after a later-tier step; a step that names a `VTI-` id has a
-//               `**Fallback:**` line; the Overview has a `**Decisions made**` table; the upstream section is
+//               `**Fallback:**` line; the Overview has a `**Decisions made**` table whose Who cells name a person, never
+//               "the user", "the product owner" or "the owner"; the upstream section is
 //               "Upstream asks and blocked on whom" with the table `Ask | Id | Blocks (step, tier) | Fallback meanwhile`;
 //               every `VTI-Q…` / `VTI-NN` the plan names is registered in docs/VTI_UPSTREAM_FINDINGS.md and every one
 //               named in §7 is in that table. The marker is opt-in, so plans written before it keep passing.
@@ -636,6 +637,8 @@ export const LANES_COLUMNS = ['Lane', 'Owner', 'Steps']
 export const STACK_COLUMNS = ['PR n of N', 'Step', 'Tier', 'Base', 'Can start after']
 export const ASKS_COLUMNS = ['Ask', 'Id', 'Blocks (step, tier)', 'Fallback meanwhile']
 export const DECISIONS_COLUMNS = ['Decision', 'Who', 'When', 'Why']
+/** A role where a decisions register's Who cell should name a person. */
+export const ROLE_CREDIT = /\b(?:the user|(?:the )?product owner|the owner)\b/i
 
 /** The lines of a `##` section: after its heading, up to the next `##`. */
 const sectionLines = (lines: Line[], h2: Heading[], at: Heading): Line[] => {
@@ -662,6 +665,13 @@ const checkTiers = (
     else {
       const t = tablesIn(ov.slice(at))[0]
       if (!t || !headerIs(t, DECISIONS_COLUMNS)) missing('Decisions made', ov[at].n, 'the table is `| Decision | Who | When | Why |`')
+      else {
+        // Name the person, never the role ("Collaborative plan branches"): only the Who cell is read.
+        for (const r of t.rows) {
+          const role = (r.cells[1] ?? '').match(ROLE_CREDIT)
+          if (role) problem(r.n, `Decisions made: the Who cell says "${role[0]}"; name the person who decided ("Brendan", "Alberto"), never the role`)
+        }
+      }
     }
   }
 

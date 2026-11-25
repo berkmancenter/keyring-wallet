@@ -338,8 +338,9 @@ same commit. A superseded mockup is not kept in the folder: the dated companion
 that records the change links the old version by commit permalink.
 
 **Dates go on point-in-time artifacts, not on living ones.** A dated companion
-records what someone concluded on a day and is never revised afterwards, so the
-date is part of its identity. A plan — including a subtask plan — is revised
+records what someone concluded on a day and is never revised afterwards (beyond
+the mechanical fixes in "Collaborative plan branches"), so the date is part of
+its identity. A plan — including a subtask plan — is revised
 continuously, so a date in its filename is wrong the moment it is edited, and
 worse, it advertises a currency the file may not have.
 
@@ -347,7 +348,10 @@ worse, it advertises a currency the file may not have.
 are of the person or people behind it. A session that produces both a review of
 the plan and design decisions for a subtask writes *one* file with two parts —
 splitting by topic instead duplicates whatever the two share, and the reader has
-no way to tell which file is authoritative on the overlap.
+no way to tell which file is authoritative on the overlap. A second working
+session by the same author on the same day writes its own file with a suffix,
+`<YYYY-MM-DD>-<initials>-2.md`, then `-3`, and its header says why it is a
+separate session.
 
 **There is no running changelog, and do not add one.** Three artifacts already
 cover the ground: the plan holds current design, the dated documents hold
@@ -372,7 +376,12 @@ obligation is on the change rather than on the author's discretion.
 - **Same author, same working session → update that day's file.** One file per
   author per session still holds; a second change that afternoon extends the
   morning's document rather than starting a new one.
-- **Otherwise → create one**, `<YYYY-MM-DD>-<initials>.md`.
+- **Otherwise → create one**, `<YYYY-MM-DD>-<initials>.md`, or
+  `<YYYY-MM-DD>-<initials>-2.md` when that author already has a file for that
+  day from another session (above).
+- **Never inside someone else's companion.** On a shared plan branch, a change
+  you make is recorded in your own companion, even when it follows from theirs
+  ("Collaborative plan branches", below).
 - **Add the pointer to the plan's review index** in the same commit, so the
   companion is reachable from the document it explains. A companion nothing
   links to is a file nobody opens.
@@ -388,6 +397,39 @@ position it supersedes. If a change only reverses something you wrote an hour
 ago, that still counts — a superseded position of your own is exactly what the
 next reader needs, because otherwise the corrected version reads as though it
 were obvious from the start.
+
+## Collaborative plan branches
+
+A plan PR's branch is shared: anyone on the team may push commits directly to
+another person's plan branch, to fix, extend or answer it, rather than only
+commenting.
+
+- **Fast-forward only.** Never rewrite another person's commits. A force-push
+  needs the word of every person whose commits it would rewrite, each named
+  (the stacked-PR process below, "When a lower PR merges", avoids needing one).
+- **Before pushing,** fetch and merge (never rebase) the others' new commits,
+  then check your new decision numbers, review-index rows and companion
+  filenames against the branches stacked above yours, so two stacked PRs do not
+  both claim `D42` or `2026-11-25-bam.md`.
+- **Attribution comes from three things that must agree:** the commit's author,
+  the companion's initials, and the person's name in the decisions register and
+  any credits. So whoever makes a substantive change on a shared branch records
+  it in their **own** dated companion in the same push, with its review-index
+  row ("Every substantive change writes a companion", above), never inside
+  someone else's.
+- **A dated companion is edited only by its author**, except for mechanical
+  renumbering and link fixes (a decision renumbered to avoid a collision, a
+  renamed companion's link). A correction to someone else's companion goes in a
+  new companion that says what it corrects.
+- **Name the person, never the role.** A decision, review, rule or ask is
+  credited to the person who made it, by name ("Brendan", "Alberto", "Brendan
+  and Alberto"), never as "the user", "the product owner" or "the owner".
+  Several people and their agents write these plans, and to each agent "the
+  user" is whoever it is working for, so the same title names a different
+  person depending on who wrote the line, and a later reader cannot tell whose
+  decision it was. In a plan's own text "the owner" still means the product's
+  user (the person who owns an agent, a room or a VTA), never a plan's author.
+  The checker flags a role in a `**Decisions made**` table's Who cell.
 
 ## Three kinds of content, kept apart
 
@@ -561,7 +603,8 @@ git push origin <PR-2 branch>              # a fast-forward; no force-push
 
 Then update PR 2's `Base:` line, and do the same for each PR above it. The
 squash merge of each PR keeps the feature branch's history one commit per
-step. Force-pushes need the product owner's word every time, so the default
+step. A force-push needs the word of every person whose commits it would
+rewrite, each named, every time ("Collaborative plan branches"), so the default
 path never needs one; `git rebase --onto` with `--force-with-lease` is for when
 that word has been given.
 
@@ -658,7 +701,9 @@ format, so a reviewer can spend their time on the content:
   hash compare: the check needs no browser, and regenerating is a local step.
 
 - **Plans with `<!-- plan-format: tiers -->`:** the extra rules in "Tiers, lanes
-  and upstream asks" above. Plans without the marker are not asked for them.
+  and upstream asks" above, and a person's name, not a role, in each Who cell of
+  `**Decisions made**` ("Collaborative plan branches"). Plans without the marker
+  are not asked for them.
 
 **Which files it checks.** A plan or subtask plan is checked once it has a
 `## Overview` heading, which is exactly what migrating it adds; a dated
