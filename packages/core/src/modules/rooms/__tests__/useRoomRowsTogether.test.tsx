@@ -13,13 +13,13 @@ import { newEventId } from '../../chat/eventId'
 import { toInertText } from '../inertText'
 import { ROOMS_PARTIAL_LISTING } from '../partialListingSwitch'
 import { chatMessageBody } from '../roomPosts'
+import { ROOMS_ROWS_TOGETHER, ROWS_READ_TOGETHER } from '../rowsTogetherSwitch'
 import type { Note, NoteList, NoteSummary, RoomsService, RoomSummary } from '../types'
 import {
   refreshRoomRows,
   resetRoomRows,
   ROOMS_HIDDEN_KEY,
   ROOMS_SEEN_KEY,
-  ROWS_READ_TOGETHER,
   useRoomRows,
   useRoomRowsPoll,
 } from '../useRoomRows'
@@ -120,6 +120,8 @@ beforeEach(async () => {
   jest.spyOn(AppState, 'addEventListener').mockImplementation((() => ({ remove: jest.fn() })) as never)
 })
 afterEach(() => {
+  ROOMS_ROWS_TOGETHER.on = true
+  ROOMS_ROWS_TOGETHER.remoteOff = false
   ROOMS_PARTIAL_LISTING.on = true
   ROOMS_PARTIAL_LISTING.remoteOff = false
   jest.useRealTimers()
@@ -166,6 +168,60 @@ describe('a read of every room', () => {
     const r = rooms(['a', 'b', 'c', 'd'])
     await mount(r.service)
     expect(r.asked()).toEqual(['a', 'b', 'c'])
+  })
+})
+
+describe('rooms read together, each met for the first time', () => {
+  test("keep every room's seen mark, whatever order the storage finishes its writes in", async () => {
+    const real = AsyncStorage.setItem.bind(AsyncStorage)
+    let release: (() => void) | undefined
+    let seenWrites = 0
+    jest.spyOn(AsyncStorage, 'setItem').mockImplementation(async (key: string, value: string) => {
+      if (key === ROOMS_SEEN_KEY && ++seenWrites === 1) await new Promise<void>((go) => (release = go))
+      return real(key, value)
+    })
+    const r = rooms(['a', 'b', 'c'])
+    await mount(r.service)
+    expect(r.asked()).toEqual(['a', 'b', 'c'])
+    // a's mark is being written, slowly; b's and c's are asked meanwhile.
+    await r.answer('a')
+    await flush()
+    await r.answer('b')
+    await flush()
+    await r.answer('c')
+    await flush()
+    await act(async () => release?.())
+    await flush()
+    const kept = JSON.parse((await AsyncStorage.getItem(ROOMS_SEEN_KEY)) ?? '{}')
+    expect(Object.keys(kept)).toHaveLength(3)
+  })
+})
+
+describe('switched off (rooms/rowsTogetherSwitch), every room is read one after another as listed, as before', () => {
+  test.each([
+    ['remoteOff, whatever on says', { on: true, remoteOff: true }],
+    ['on false', { on: false, remoteOff: false }],
+  ])('%s', async (_name, value) => {
+    Object.assign(ROOMS_ROWS_TOGETHER, value)
+    const r = rooms(['a', 'b', 'c', 'd'])
+    r.open('d')
+    const row = await mount(r.service)
+    // The room on screen is not put first, and the next room waits for the last.
+    expect(r.asked()).toEqual(['a'])
+    await r.answer('a')
+    await flush()
+    expect(row('a')?.reading).toBeUndefined()
+    expect(r.asked()).toEqual(['a', 'b'])
+    await r.answer('b')
+    await flush()
+    expect(r.asked()).toEqual(['a', 'b', 'c'])
+  })
+
+  test('a partial listing too', async () => {
+    ROOMS_ROWS_TOGETHER.remoteOff = true
+    const r = rooms(['a', 'b', 'c'], { partial: ['a', 'b'] })
+    await mount(r.service)
+    expect(r.asked()).toEqual(['a'])
   })
 })
 

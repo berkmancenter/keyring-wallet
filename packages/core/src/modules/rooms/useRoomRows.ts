@@ -64,6 +64,7 @@ import { isNote, newestFirst, placeOf, postOf } from './roomPosts'
 import type { Identity, NoteSummary, RoomsService, RoomSummary } from './types'
 import { isRoomWatchWheneverOpenOn } from './watchWheneverOpenSwitch'
 import { isRoomsPartialListingOn } from './partialListingSwitch'
+import { isRoomsRowsTogetherOn, ROWS_READ_TOGETHER } from './rowsTogetherSwitch'
 import { isRoomsNewestFirstOn, ROOM_HEAD_WINDOW } from './newestFirstSwitch'
 
 /** While Messages is in view: about the offers poll's idle pace, never faster. */
@@ -223,13 +224,32 @@ const readSeen = () =>
     hiddenUntil = await versionsAt(ROOMS_HIDDEN_KEY)
   })())
 
-// Written whole each time, never removed key by key: a room's entry goes by writing the rest.
-const keep = async (key: string, versions: Record<string, number> | undefined) => {
-  try {
-    await AsyncStorage.setItem(key, JSON.stringify(versions ?? {}))
-  } catch {
-    // Kept in memory for this run; a relaunch starts from what was last kept.
-  }
+// Written whole each time, never removed key by key: a room's entry goes by writing the rest. One write of a key at a
+// time, so the newest lands last whatever the storage's own order: a write asked while one is out waits for it, and
+// only the newest of those asked meanwhile is written (rooms read together ask at once).
+const writing = new Map<string, Promise<void>>()
+const toWrite = new Map<string, string>()
+const write = (key: string, value: string): Promise<void> => {
+  const done = (async () => {
+    try {
+      await AsyncStorage.setItem(key, value)
+    } catch {
+      // Kept in memory for this run; a relaunch starts from what was last kept.
+    }
+    const next = toWrite.get(key)
+    toWrite.delete(key)
+    if (next === undefined) writing.delete(key)
+    else await write(key, next)
+  })()
+  writing.set(key, done)
+  return done
+}
+const keep = (key: string, versions: Record<string, number> | undefined): Promise<void> => {
+  const value = JSON.stringify(versions ?? {})
+  const out = writing.get(key)
+  if (!out) return write(key, value)
+  toWrite.set(key, value)
+  return out
 }
 const keepSeen = () => keep(ROOMS_SEEN_KEY, seenVersions)
 const keepHidden = () => keep(ROOMS_HIDDEN_KEY, hiddenUntil)
@@ -447,16 +467,6 @@ type Listed = (service: RoomsService, rooms: RoomSummary[]) => void
 const listedListeners = new Set<Listed>()
 
 /**
- * How many rooms a read of every room reads at once. One at a time, 281.2 took 26 s to read four rooms (IN-724), every
- * row reading until its turn came, while the agent's read lane (VtaClient, VTA_READ_LANE_SIZE) runs three reads beside
- * each other. Each room's own read stays in order (its listing, then its newest post), and its row is drawn the moment
- * it ends. Where the lane is one, the agent's queue still runs them one at a time.
- *
- * ROLLBACK: set to 1 (an OTA can ship that alone); rooms are then read one after another, in the order below.
- */
-export const ROWS_READ_TOGETHER = 3
-
-/**
  * The order rooms are read in: the room open on screen first (its reads go ahead of the agent's queue too:
  * RoomsService.roomInView), then the most recently active as last read or last kept, so the rows at the top of Messages
  * stop reading first; the rest as listed.
@@ -475,6 +485,21 @@ function readOrder<R extends { roomId: string }>(
     .map(({ room }) => room)
 }
 
+/**
+ * Reads `rooms` with `read`: up to {@link ROWS_READ_TOGETHER} at once in {@link readOrder}'s order while
+ * rooms/rowsTogetherSwitch is on, and one after another as listed, as before, when it is off.
+ */
+function readRooms<R extends { roomId: string }>(
+  service: RoomsService,
+  rooms: readonly R[],
+  known: Map<string, Track>,
+  read: (room: R) => Promise<void>
+): Promise<void> {
+  return isRoomsRowsTogetherOn()
+    ? readTogether(readOrder(service, rooms, known), ROWS_READ_TOGETHER, read)
+    : readTogether(rooms, 1, read)
+}
+
 /** Runs `read` over `items`, at most `together` at once, in their order; settles when every one has. */
 async function readTogether<T>(items: readonly T[], together: number, read: (item: T) => Promise<void>): Promise<void> {
   let next = 0
@@ -490,7 +515,7 @@ export function onRoomsListed(listener: Listed): () => void {
   return () => void listedListeners.delete(listener)
 }
 
-/** Reads every room once, one after another. A room that can't be read keeps what was read of it before. */
+/** Reads every room once (rooms/rowsTogetherSwitch: how many at once). A room that can't be read keeps what was read of it before. */
 async function readAll(service: RoomsService): Promise<void> {
   feed.asking = true
   feed.lastAsk = Date.now()
@@ -537,7 +562,7 @@ async function readAll(service: RoomsService): Promise<void> {
       partial = { rooms: answeredRooms, answered: new Set(answered) }
       showPartial()
       readingPartial = readingPartial.then(() =>
-        readTogether(readOrder(service, answeredRooms, known), ROWS_READ_TOGETHER, async (room) => {
+        readRooms(service, answeredRooms, known, async (room) => {
           if (listingEnded || feed.service !== service) return
           if (room.joined === false || readThisAsk.has(room.roomId)) return
           readThisAsk.add(room.roomId)
@@ -603,7 +628,7 @@ async function readAll(service: RoomsService): Promise<void> {
     if (feed.service === service) feed.listed = new Map(rooms.map((room) => [room.roomId, room]))
     if (feed.service !== service) return
     show()
-    await readTogether(readOrder(service, rooms, byRoom), ROWS_READ_TOGETHER, async (room) => {
+    await readRooms(service, rooms, byRoom, async (room) => {
       if (feed.service !== service) return
       // Not joined: there are no keys to read it with, and asking again every poll only fails again. Read already for
       // a partial answer of this listing: once is enough.
