@@ -27,6 +27,8 @@ Fields: **id**; **what we hit**; **evidence** (a path at a named commit, or a me
 | AC-31 | VTI-Q44 |
 | AC-32 | VTI-Q45 |
 | AC-33 | VTI-Q46 |
+| AC-34 | VTI-Q47 |
+| AC-35 | VTI-Q48 |
 | AC-25 | VTI-Q38 |
 | AC-09, AC-10, AC-11 | VTI-Q36 |
 
@@ -278,3 +280,17 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Evidence:** `docs/02-vta/vta-mcp.md` lines 116 to 117 at `4e5861d95`, 2026-11-24.
 - **Extension:** correct the sentence.
 - **Severity:** none; a documentation correction. Registered as VTI-Q46.
+
+### AC-34 No typed credential value type for agent memory
+
+- **Hit:** a memory value is UTF-8 text of at most 64 KiB (`operations/app_state.rs:94,558-575`); no blob type was found in `vta/memory/*` (the maintainers' "blob" type is a question for Alberto). A credential given to an agent's memory is a JSON text envelope (plan §3.15, D36).
+- **Evidence:** `vta-service/src/operations/memory.rs:79-100`; the credential vault is separate (`vta-vault/src/model.rs:1-40`, `present.rs:1-40`, `trust_tasks/cred_vault.rs:492-540`), at `4e5861d95`, 2026-11-24.
+- **Extension:** a typed credential value for `vta/memory/*` beside text: typed verification, status awareness, a larger cap or a reference.
+- **Severity:** P1 works around (the text envelope); not a dependency. Registered as VTI-Q47.
+
+### AC-35 No join request for a data room
+
+- **Hit:** admission is push-shaped (VIC, key package, group add, Welcome); a person scanning a code to join has no `rooms/join/request` to send (plan §3.17, D37).
+- **Evidence:** `docs/02-vta/data-rooms.md:588-640`; `docs/05-design-notes/data-rooms-joining.md:11-25,122-131` (a proposal that recommends waiting), at `4e5861d95`, 2026-11-24.
+- **Extension:** `rooms/join/request/0.1`.
+- **Severity:** P2 works around (a Keyring-defined join message and the existing VIC flow; a community room uses `vtc/rooms/offers`). Registered as VTI-Q48.
