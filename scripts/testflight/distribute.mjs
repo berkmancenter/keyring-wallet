@@ -13,6 +13,7 @@
 
 import { readFileSync } from 'node:fs'
 import { createSign } from 'node:crypto'
+import { addToGroup } from './addToGroup.mjs'
 
 const env = (name, fallback) => {
   const value = process.env[name] ?? fallback
@@ -132,27 +133,10 @@ const main = async () => {
   }
   console.log(`What to Test set (${held.join(', ')})`)
 
-  // App Store Connect can report a build VALID and then answer 404 for that same build id here
-  // for a while (build 282 did, with no other change): wait and try again for a few minutes.
-  const ADD_TRIES = 10
-  const addToGroup = async (group) => {
-    for (let attempt = 1; ; attempt++) {
-      try {
-        return await api('POST', `/v1/betaGroups/${group.id}/relationships/builds`, {
-          data: [{ type: 'builds', id: build.id }],
-        })
-      } catch (error) {
-        if (error.status !== 404 || attempt === ADD_TRIES) throw error
-        console.log(`"${group.attributes.name}" does not see the build yet (attempt ${attempt}); trying again in 30 s`)
-        await sleep(30_000)
-      }
-    }
-  }
-
   let external = false
   for (const group of groups) {
     const name = group.attributes.name
-    await addToGroup(group)
+    await addToGroup(api, { groupId: group.id, groupName: name, buildId: build.id, sleep })
     external ||= !group.attributes.isInternalGroup
     console.log(`Added to "${name}" (${group.attributes.isInternalGroup ? 'internal' : 'external'})`)
   }
