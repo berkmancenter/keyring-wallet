@@ -630,6 +630,9 @@ export class VtiMediatorSession {
    * close the socket start's retry just opened, or bring back a session whose open failed and that nothing holds.
    */
   private starting = false
+  /** The current start's beginning and its stamps so far (startOnce): read by `start` when the start fails. */
+  private startBegan = 0
+  private startStamps: string[] = []
 
   constructor(
     private readonly agent: Agent,
@@ -796,6 +799,15 @@ export class VtiMediatorSession {
     this.starting = true
     try {
       await this.startOnce()
+    } catch (error) {
+      // The stamps a successful start prints on its "collecting for" line, for a start that did not get there: where
+      // it died is where its time went, and that start is the one a report is about.
+      releaseWarn(
+        `${LOG_PREFIX} ${this.where}: start failed after ${Date.now() - this.startBegan} ms (${
+          this.startStamps.join(', ') || 'before the token'
+        }): ${(error as Error)?.message ?? String(error)}`
+      )
+      throw error
     } finally {
       this.starting = false
     }
@@ -821,9 +833,14 @@ export class VtiMediatorSession {
     // freshly-minted token that is refused is a real failure and is reported.
     const hadCachedToken = this.accessToken !== undefined
     // Stamped at the end, one line: where a start's time went (the challenge and its key, the socket, live delivery),
-    // since a sign-in that took 5.8 s on a tester's launch (IN-724, 281.2) was one figure with nothing inside it.
+    // since a sign-in that took 5.8 s on a tester's launch (IN-724, 281.2) was one figure with nothing inside it. One
+    // line rather than VtaClient's line per step, for the log's sake: a reopen of a dropped socket starts again
+    // (keepOpen), and a bad night would print this many times. The stamps live on the instance so a start that FAILS
+    // says them too (`start`): a slow start and a failing one are often the same start.
     const began = Date.now()
-    const stamps: string[] = []
+    this.startBegan = began
+    this.startStamps = []
+    const stamps = this.startStamps
     const stamp = (what: string) => stamps.push(`${what} +${Date.now() - began} ms`)
     await this.ensureAccessToken()
     stamp(hadCachedToken ? 'token (cached)' : 'token')
