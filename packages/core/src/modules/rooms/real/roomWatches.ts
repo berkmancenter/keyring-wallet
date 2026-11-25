@@ -41,7 +41,10 @@ export const WATCH_ROOMS_MAX = 64
 export const WATCH_LEASE_SECONDS = 7 * 24 * 60 * 60
 /** How long an arming is waited on. The agent arms the rooms one after another, each a request to the host. */
 export const WATCH_TIMEOUT_MS = 60_000
-/** The lease asked for a live watch: the most a host gives one, counted from each renewal (`rooms/watch/0.2`). */
+/**
+ * The lease asked for a live watch: the most a host gives one, counted from each renewal. The task's schema, on
+ * `leaseSeconds` (`rooms/keys/watch/0.2`, vta-service 0.84.0): "a host grants a live watch at most 120 seconds".
+ */
 export const LIVE_LEASE_SECONDS = 120
 /** A live watch is renewed once less than this is left of its lease: about once a minute. */
 export const LIVE_RENEW_BEFORE_MS = 60_000
@@ -55,6 +58,11 @@ export const LIVE_NO_ANSWER_MS = 60_000
  * down to the one before when the agent refuses a version as not served (`arm`): the payload is the same at either
  * (0.2 is 0.1 plus `live`), so an agent that serves one of them alone is still watched. A live watch is asked at 0.2
  * only, the one version that has it (`liveMay`).
+ *
+ * A request without `live` is 0.2's own one-shot form, by its schema at the release the Farm's agents run
+ * (`vti-specs-rooms/trust-tasks/rooms/keys/watch/0.2.bundle.json`, vta-service 0.84.0: it extends 0.1, requires only
+ * `member`, `host` and `rooms`, and says of `live`: "Only `true` is meaningful, so only `true` is accepted; a one-shot
+ * request omits the member."). At 0.84.0 and 0.87.0 both versions go to the one handler (`room_key_watch::handle_watch`).
  *
  * @versionLadder rooms/keys/watch
  */
