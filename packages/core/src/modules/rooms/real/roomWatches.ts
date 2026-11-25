@@ -209,8 +209,7 @@ export class RoomWatches {
     this.chain = this.chain.then(() =>
       this.deps
         .agentTask(
-          // version-pinned: a one-shot watch is the 0.1 task, served wherever 0.2 is; 0.2 is asked only for a live watch (armLive)
-          ROOMS_TASK.keysWatch01,
+          ROOMS_TASK.keysWatch01, // version-pinned: one-shot is the 0.1 task, served wherever 0.2 is
           { member: w.member, host: w.host, rooms: [{ roomId }], cancel: true },
           { timeoutMs: WATCH_TIMEOUT_MS, waitForConsent: false }
         )
@@ -439,8 +438,7 @@ export class RoomWatches {
     try {
       answer = parseWatch(
         await this.deps.agentTask(
-          // version-pinned: a one-shot watch is the 0.1 task, served wherever 0.2 is; 0.2 is asked only for a live watch (armLive)
-          ROOMS_TASK.keysWatch01,
+          ROOMS_TASK.keysWatch01, // version-pinned: one-shot is the 0.1 task, served wherever 0.2 is
           {
             member,
             host,
