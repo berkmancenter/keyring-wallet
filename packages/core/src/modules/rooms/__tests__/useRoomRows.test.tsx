@@ -1404,7 +1404,7 @@ describe("read markers kept by the person's agent", () => {
     expect(list.result.current.rows.rows[0].unread).toBe(2)
     expect(await keptSeen()).toEqual([1])
     // Read as a room met for the first time is, not from the newest version held: those posts were never counted.
-    expect(s.listNotes.mock.calls.length).toBe(reads + 1)
+    expect(s.listNotes.mock.calls).toHaveLength(reads + 1)
     expect(s.listNotes.mock.calls[reads][1]?.sinceVersion).toBeUndefined()
   })
 })

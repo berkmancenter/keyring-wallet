@@ -89,6 +89,14 @@ export const ROOMS_TASK = {
 } as const
 
 /**
+ * The `rooms/keys/list` versions this client speaks, newest first: the agent is asked at the newest it serves
+ * (agentRoomsService `readHeldRooms`, which says when 0.3 is passed over).
+ *
+ * @versionLadder rooms/keys/list
+ */
+export const KEYS_LIST_TYPES: readonly string[] = [ROOMS_TASK.keysList03, ROOMS_TASK.keysList02, ROOMS_TASK.keysList01]
+
+/**
  * The `rooms/keys/act` versions this client speaks, newest first: the agent is asked at the newest it serves.
  *
  * @versionLadder rooms/keys/act

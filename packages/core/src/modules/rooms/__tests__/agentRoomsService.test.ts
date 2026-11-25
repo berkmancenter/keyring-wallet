@@ -1130,6 +1130,23 @@ describe("read markers kept by the person's agent", () => {
     expect(service.roomReadMarker(ROOM)).toBeUndefined()
   })
 
+  it.each([
+    ['the switch on', () => undefined],
+    ['the switch off: it is the one version the agent has', () => void (ROOMS_READ_MARKER.on = false)],
+  ])(
+    'an agent that serves the key list at 0.3 alone is asked at 0.3 (%s), and its rooms are listed',
+    async (_, set) => {
+      set()
+      const { b, agentTask } = serving03()
+      b.agentServedTypes = async () => [ROOMS_TASK.keysList03]
+      const service = new AgentRoomsService(b)
+      expect((await service.listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+      expect(listTypes(agentTask)).toEqual([ROOMS_TASK.keysList03])
+      // Off, the marker the list brought is not taken.
+      expect(service.roomReadMarker(ROOM)).toEqual(ROOMS_READ_MARKER.on ? { version: 7 } : undefined)
+    }
+  )
+
   it('an agent that does not serve 0.3 is asked at 0.2 (control: every agent before vta-service 0.84)', async () => {
     const { b, agentTask } = backend()
     await new AgentRoomsService(b).listMyRooms()

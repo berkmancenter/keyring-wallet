@@ -112,6 +112,7 @@ import {
   parseCurate,
   parseFileKey,
   parseKeyPackage,
+  KEYS_LIST_TYPES,
   parseKeysList,
   parseMemberships,
   parseOffers,
@@ -875,8 +876,9 @@ export class AgentRoomsService implements RoomsService {
   }
 
   /**
-   * 0.3 where the release keeps read markers at the agent and the agent serves it: the same list, with each room's
-   * marker beside its label. An agent that refuses 0.3 as not served, whatever its list says, is asked at 0.2 from then
+   * The newest version the agent serves. 0.3 is the same list with each room's read marker beside its label, so where
+   * the release keeps no read markers at the agent (readMarkerSwitch.ts) it is asked only of an agent that serves no
+   * older one. An agent that refuses 0.3 as not served, whatever its list says, is asked at the one before from then
    * on: the key list is what every room hangs on, and a marker is not worth losing it.
    *
    * @versionLadder rooms/keys/list
@@ -884,22 +886,30 @@ export class AgentRoomsService implements RoomsService {
   private async readHeldRooms(): Promise<HeldRoom[]> {
     const served = this.served?.types ?? []
     const askedAt = this.now()
+    const usable = KEYS_LIST_TYPES.filter(
+      (type) => served.includes(type) && !(type === ROOMS_TASK.keysList03 && this.keysList03Refused)
+    )
+    const ladder =
+      isRoomReadMarkerOn() || usable.length < 2 ? usable : usable.filter((type) => type !== ROOMS_TASK.keysList03)
     let held: HeldRoom[] | undefined
-    if (isRoomReadMarkerOn() && !this.keysList03Refused && served.includes(ROOMS_TASK.keysList03)) {
+    for (const [i, type] of ladder.entries()) {
       try {
-        held = parseKeysList(await this.agentTask(ROOMS_TASK.keysList03, { includePersonal: true }))
+        held = parseKeysList(
+          await this.agentTask(type, type === ROOMS_TASK.keysList01 ? {} : { includePersonal: true })
+        )
+        break
       } catch (e) {
         const code = refusalCode(e)
-        if (code !== 'unsupportedVersion' && code !== 'unsupportedType') throw e
+        const stepsDown = type === ROOMS_TASK.keysList03 && i + 1 < ladder.length
+        if (!stepsDown || (code !== 'unsupportedVersion' && code !== 'unsupportedType')) throw e
         this.keysList03Refused = true
         this.backend.warn(
           'rooms: the agent does not serve the key list at the version it lists: asked at the one before'
         )
       }
     }
-    held ??= served.includes(ROOMS_TASK.keysList02)
-      ? parseKeysList(await this.agentTask(ROOMS_TASK.keysList02, { includePersonal: true }))
-      : parseKeysList(await this.agentTask(ROOMS_TASK.keysList01, {}))
+    // An agent whose list names none of them is asked at 0.1, as it always was.
+    held ??= parseKeysList(await this.agentTask(ROOMS_TASK.keysList01, {}))
     const by = new Map<string, Set<string>>()
     for (const h of held) if (h.member) by.set(h.roomId, (by.get(h.roomId) ?? new Set()).add(h.member))
     this.heldBy = by
