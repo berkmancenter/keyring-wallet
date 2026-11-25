@@ -1,0 +1,39 @@
+diff --git a/dist/browser/lib/PEX.js b/dist/browser/lib/PEX.js
+index 07e065fd164eaf55a184fc5acbf1844f12ac57d9..bb4936abb653a5a2774081bb13d525484796906c 100644
+--- a/dist/browser/lib/PEX.js
++++ b/dist/browser/lib/PEX.js
+@@ -208,7 +208,7 @@ class PEX {
+                 ? opts.basePresentationPayload['@context']
+                 : [opts.basePresentationPayload['@context']]
+             : [];
+-        if (!context.includes('https://www.w3.org/2018/credentials/v1')) {
++        if (context.length === 0) {
+             context.push('https://www.w3.org/2018/credentials/v1');
+         }
+         if (opts === null || opts === void 0 ? void 0 : opts.presentationSubmission) {
+diff --git a/dist/main/lib/PEX.js b/dist/main/lib/PEX.js
+index 07e065fd164eaf55a184fc5acbf1844f12ac57d9..bb4936abb653a5a2774081bb13d525484796906c 100644
+--- a/dist/main/lib/PEX.js
++++ b/dist/main/lib/PEX.js
+@@ -208,7 +208,7 @@ class PEX {
+                 ? opts.basePresentationPayload['@context']
+                 : [opts.basePresentationPayload['@context']]
+             : [];
+-        if (!context.includes('https://www.w3.org/2018/credentials/v1')) {
++        if (context.length === 0) {
+             context.push('https://www.w3.org/2018/credentials/v1');
+         }
+         if (opts === null || opts === void 0 ? void 0 : opts.presentationSubmission) {
+diff --git a/dist/module/lib/PEX.js b/dist/module/lib/PEX.js
+index a6bda3f17a0566ea9971286b54ba48e278ab2e2e..b96c9b9a68988c39f9606293d792c2d717ef68ac 100644
+--- a/dist/module/lib/PEX.js
++++ b/dist/module/lib/PEX.js
+@@ -205,7 +205,7 @@ export class PEX {
+                 ? opts.basePresentationPayload['@context']
+                 : [opts.basePresentationPayload['@context']]
+             : [];
+-        if (!context.includes('https://www.w3.org/2018/credentials/v1')) {
++        if (context.length === 0) {
+             context.push('https://www.w3.org/2018/credentials/v1');
+         }
+         if (opts?.presentationSubmission) {

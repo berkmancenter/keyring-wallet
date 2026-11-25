@@ -1,0 +1,146 @@
+/**
+ * "Something this phone knows about a community changed" — one event, from the
+ * stores themselves, so a screen showing a community can re-read it the moment
+ * it changes instead of on its next poll.
+ *
+ * The journey screens each kept their own copy of where the person stood and
+ * refreshed it on a timer or not at all: a member was offered "Apply to join",
+ * a finished step still read as pending, and a new membership reached My Agent
+ * only after a background/foreground. The stores are where every change lands —
+ * a screen's own action, the persona inbox with no screen mounted, a join in
+ * flight — so the stores announce it.
+ *
+ * The emit is deferred and cannot throw: a listener's failure must never reach
+ * the store call that already succeeded (in the persona inbox that would
+ * withhold the mediator ack and process the message again), and deferring lets
+ * a writer finish a sequence of writes (a membership, then its role card)
+ * before anyone re-reads.
+ *
+ * @module trust-tasks/module/communityChanged
+ */
+
+import { useEffect, useRef } from 'react'
+import { DeviceEventEmitter } from 'react-native'
+
+import type { VtiHeldCredential } from './VtiCommunityStore'
+
+export const COMMUNITY_CHANGED_EVENT = 'vti:community-changed'
+
+/** The persona inbox's own event: a delivery it stored (kept here so both can be heard without an import cycle). */
+export const VTI_PERSONA_DELIVERIES_EVENT = 'vti:persona-deliveries'
+
+/**
+ * A community answered where a join request stands after the ask's clock ran
+ * out (`{ communityDid }`). The answer is kept for the next caller; a screen
+ * that shows the request asks again and gets it at once (238: a request lost
+ * on the way left Join on "Sent" with the answer already in hand).
+ */
+export const VTI_JOIN_STATUS_LATE_EVENT = 'vti:join-status-late'
+
+/**
+ * An identity's keys are back in memory (`{ did }`) — after an unlock or a
+ * restart nothing signs as it until then, so its inbox signs in on this cue
+ * instead of at its next look.
+ */
+export const VTI_PERSONA_KEYS_HELD_EVENT = 'vti:persona-keys-held'
+
+/**
+ * A listener left a message on the mediator that only the shared session can take (`{ did, communityDid, type }`):
+ * a vetting request, a vetter's answer, an answer to an ask. A screen that serves that identity signs the shared
+ * session in as it, and the mediator delivers it there (vtiIdentityListeners.keepFromListener).
+ */
+export const VTI_PERSONA_MESSAGE_WAITING_EVENT = 'vti:persona-message-waiting'
+
+export type CommunityChange =
+  | 'membership'
+  | 'submission'
+  | 'departure'
+  | 'invitation'
+  | 'application'
+  | 'desk'
+  | 'ticket'
+  | 'profile'
+  | 'grant'
+  | 'forgotten'
+
+export interface CommunityChangedEvent {
+  communityDid: string
+  what: CommunityChange
+}
+
+/** Announce a change to one community, after the write that made it. Never throws. */
+export function emitCommunityChanged(communityDid: string | undefined, what: CommunityChange): void {
+  if (!communityDid) return
+  setTimeout(() => {
+    try {
+      DeviceEventEmitter.emit(COMMUNITY_CHANGED_EVENT, { communityDid, what } satisfies CommunityChangedEvent)
+    } catch {
+      // A listener's failure is the listener's; the write already stands.
+    }
+  }, 0)
+}
+
+/**
+ * A community's card look was kept (VtiCommunityStore `saveCommunityBrand`). Its own event, not a community change:
+ * every manifest read keeps it, and community screens have nothing to redo for it; only what draws a look listens.
+ */
+export const COMMUNITY_BRAND_EVENT = 'vti:community-brand'
+
+/** Announce a kept card look, after the write. Never throws. */
+export function emitCommunityBrandSaved(communityDid: string): void {
+  setTimeout(() => {
+    try {
+      DeviceEventEmitter.emit(COMMUNITY_BRAND_EVENT, { communityDid })
+    } catch {
+      // A listener's failure is the listener's; the write already stands.
+    }
+  }, 0)
+}
+
+/** What a held credential changes: a vetter grant is the vetter's standing, a role card the membership. */
+export function changeOfHeldCredential(kind: VtiHeldCredential['kind']): CommunityChange {
+  switch (kind) {
+    case 'vetter-grant':
+      return 'grant'
+    case 'role':
+    case 'identity-check':
+    case 'badge':
+      return 'membership'
+    default:
+      return 'application'
+  }
+}
+
+/**
+ * Call `refresh` whenever something about `communityDid` changes (any community
+ * when none is given): a store write here, or a delivery the persona inbox
+ * stored. Changes that land together call it once, and never after unmount.
+ */
+export function useCommunityChanged(refresh: () => void, communityDid?: string): void {
+  // The latest refresh, read when the change is handled — so a screen whose
+  // callback changes between a change and its tick is still refreshed. (The
+  // subscription used to be torn down with the old callback, and a change
+  // already queued was then dropped: the new subscription never saw it.)
+  const latest = useRef(refresh)
+  latest.current = refresh
+  useEffect(() => {
+    let live = true
+    let queued = false
+    const onChange = (e?: { communityDid?: string }) => {
+      if (communityDid && e?.communityDid && e.communityDid !== communityDid) return
+      if (queued) return
+      queued = true
+      setTimeout(() => {
+        queued = false
+        if (live) latest.current()
+      }, 0)
+    }
+    const subs = [COMMUNITY_CHANGED_EVENT, VTI_PERSONA_DELIVERIES_EVENT].map((name) =>
+      DeviceEventEmitter.addListener(name, onChange)
+    )
+    return () => {
+      live = false
+      subs.forEach((s) => s.remove())
+    }
+  }, [communityDid])
+}

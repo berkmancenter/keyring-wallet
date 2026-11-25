@@ -1,0 +1,83 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Chat Screen Renders correctly 1`] = `
+<RNCSafeAreaView
+  edges={
+    Object {
+      "bottom": "additive",
+      "left": "additive",
+      "right": "additive",
+      "top": "off",
+    }
+  }
+  style={
+    Object {
+      "backgroundColor": "#F5F5F5",
+      "flex": 1,
+    }
+  }
+>
+  <View
+    style={
+      Object {
+        "backgroundColor": "#F5F5F5",
+        "flex": 1,
+      }
+    }
+  >
+    <View
+      style={
+        Object {
+          "flex": 1,
+        }
+      }
+    >
+      <View
+        style={
+          Object {
+            "flex": 1,
+          }
+        }
+      >
+        <View
+          onLayout={[Function]}
+          style={
+            Array [
+              Object {
+                "flex": 1,
+              },
+              Object {
+                "overflow": "hidden",
+              },
+            ]
+          }
+          testID="GC_WRAPPER"
+        >
+          <View
+            behavior="translate-with-padding"
+            keyboardVerticalOffset={100}
+            style={
+              Object {
+                "flex": 1,
+              }
+            }
+          >
+            <View
+              style={
+                Array [
+                  Object {
+                    "flex": 1,
+                  },
+                  Object {
+                    "opacity": 0,
+                  },
+                ]
+              }
+            />
+          </View>
+        </View>
+      </View>
+    </View>
+  </View>
+</RNCSafeAreaView>
+`;

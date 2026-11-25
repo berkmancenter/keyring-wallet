@@ -1,0 +1,1071 @@
+import Config from 'react-native-config'
+import { LocalStorageKeys } from '../../constants'
+import { storeLoginAttempt } from '../../services/keychain'
+import { PersistentStorage } from '../../services/storage'
+import {
+  Authentication as AuthenticationState,
+  Lockout as LockoutState,
+  LoginAttempt as LoginAttemptState,
+  Migration as MigrationState,
+  Onboarding as OnboardingState,
+  Preferences,
+  Preferences as PreferencesState,
+  State,
+  Tours as ToursState,
+} from '../../types/state'
+import { generateRandomWalletName } from '../../utils/helpers'
+import lodash from 'lodash'
+import { BannerMessage } from '../../components/views/Banner'
+
+enum StateDispatchAction {
+  STATE_DISPATCH = 'state/stateDispatch',
+}
+
+enum OnboardingDispatchAction {
+  ONBOARDING_UPDATED = 'onboarding/onboardingStateLoaded',
+  DID_SEE_PREFACE = 'onboarding/didSeePreface',
+  DID_COMPLETE_TUTORIAL = 'onboarding/didCompleteTutorial',
+  DID_AGREE_TO_TERMS = 'onboarding/didAgreeToTerms',
+  DID_CREATE_PIN = 'onboarding/didCreatePIN',
+  DID_CONFIRM_PIN = 'onboarding.didConfirmPIN',
+  DID_NAME_WALLET = 'onboarding/didNameWallet',
+  DID_SETUP_R_CARD = 'onboarding/didSetupRCard',
+  DID_COMPLETE_ONBOARDING = 'onboarding/didCompleteOnboarding',
+  ONBOARDING_VERSION = 'onboarding/onboardingVersion',
+}
+
+enum MigrationDispatchAction {
+  DID_MIGRATE_TO_ASKAR = 'migration/didMigrateToAskar',
+  MIGRATION_UPDATED = 'migration/migrationStateLoaded',
+}
+
+enum LockoutDispatchAction {
+  LOCKOUT_UPDATED = 'lockout/lockoutUpdated',
+}
+
+enum LoginAttemptDispatchAction {
+  ATTEMPT_UPDATED = 'loginAttempt/loginAttemptUpdated',
+}
+
+enum PreferencesDispatchAction {
+  ENABLE_DEVELOPER_MODE = 'preferences/enableDeveloperMode',
+  USE_BIOMETRY = 'preferences/useBiometry',
+  USE_PUSH_NOTIFICATIONS = 'preferences/usePushNotifications',
+  PREFERENCES_UPDATED = 'preferences/preferencesStateLoaded',
+  USE_VERIFIER_CAPABILITY = 'preferences/useVerifierCapability',
+  USE_CONNECTION_INVITER_CAPABILITY = 'preferences/useConnectionInviterCapability',
+  USE_DEV_VERIFIER_TEMPLATES = 'preferences/useDevVerifierTemplates',
+  ENABLE_WALLET_NAMING = 'preferences/enableWalletNaming',
+  UPDATE_WALLET_NAME = 'preferences/updateWalletName',
+  ACCEPT_DEV_CREDENTIALS = 'preferences/acceptDevCredentials',
+  USE_DATA_RETENTION = 'preferences/useDataRetention',
+  USE_HARDWARE_ATTESTATION = 'preferences/useHardwareAttestation',
+  PREVENT_AUTO_LOCK = 'preferences/preventAutoLock',
+  USE_SHAREABLE_LINK = 'preferences/useShareableLink',
+  UPDATE_ALTERNATE_CONTACT_NAMES = 'preferences/updateAlternateContactNames',
+  AUTO_LOCK_TIME = 'preferences/autoLockTime',
+  KEEP_MESSAGES = 'preferences/keepMessages',
+  SET_THEME = 'preferences/setTheme',
+  SET_SELECTED_MEDIATOR = 'preferences/setSelectedMediator',
+  ADD_AVAILABLE_MEDIATOR = 'preferences/addAvailableMediator',
+  RESET_MEDIATORS = 'preferences/resetMediators',
+  BANNER_MESSAGES = 'preferences/bannerMessages',
+  GENERIC_ERROR_MESSAGES = 'preferences/genericErrorMessages',
+  REMOVE_BANNER_MESSAGE = 'REMOVE_BANNER_MESSAGE',
+  USE_WITNESSING = 'preferences/useWitnessing',
+  USE_LOCALITY_CONFIRMATION = 'preferences/useLocalityConfirmation',
+  MARK_LOCALITY_PREFLIGHT_SEEN = 'preferences/markLocalityPreflightSeen',
+  FEATURE_ROOMS = 'preferences/featureRooms',
+}
+
+enum ToursDispatchAction {
+  TOUR_DATA_UPDATED = 'tours/tourDataUpdated',
+  UPDATE_SEEN_TOUR_PROMPT = 'tours/seenTourPrompt',
+  ENABLE_TOURS = 'tours/enableTours',
+  UPDATE_SEEN_HOME_TOUR = 'tours/seenHomeTour',
+  UPDATE_SEEN_CREDENTIALS_TOUR = 'tours/seenCredentialsTour',
+  UPDATE_SEEN_CREDENTIAL_OFFER_TOUR = 'tours/seenCredentialOfferTour',
+  UPDATE_SEEN_CONTACT_OFFER_TOUR = 'tours/seenContactOfferTour',
+  UPDATE_SEEN_PROOF_REQUEST_TOUR = 'tours/seenProofRequestTour',
+  UPDATE_SEEN_CONTACTS_TOUR = 'tours/seenContactsTour',
+}
+
+enum AuthenticationDispatchAction {
+  DID_AUTHENTICATE = 'authentication/didAuthenticate',
+}
+
+enum DeepLinkDispatchAction {
+  ACTIVE_DEEP_LINK = 'deepLink/activeDeepLink',
+}
+
+enum AppStatusDispatchAction {
+  SET_VERSION_INFO = 'appStatus/checkVersionUpdate',
+}
+
+enum AttestationDispatchAction {
+  SET_ATTESTATION_COMPLETED = 'attestation/setAttestationCompleted',
+}
+
+enum RCardDispatchAction {
+  R_CARD_TEMPLATE_STAGED = 'rCard/templateStaged',
+  R_CARD_CREDENTIAL_SYNCED = 'rCard/credentialSynced',
+  R_CARD_CREDENTIAL_CLEARED = 'rCard/credentialCleared',
+  R_CARD_PROFILES_LOADED = 'rCard/profilesLoaded',
+  R_CARD_PROFILE_DELETED = 'rCard/profileDeleted',
+  R_CARD_ACTIVE_PROFILE_SET = 'rCard/activeProfileSet',
+}
+
+enum WitnessDispatchAction {
+  UPDATE_WITNESS_SETTINGS = 'witness/updateSettings',
+}
+
+export type DispatchAction =
+  | StateDispatchAction
+  | OnboardingDispatchAction
+  | LoginAttemptDispatchAction
+  | LockoutDispatchAction
+  | PreferencesDispatchAction
+  | ToursDispatchAction
+  | AuthenticationDispatchAction
+  | DeepLinkDispatchAction
+  | MigrationDispatchAction
+  | AppStatusDispatchAction
+  | AttestationDispatchAction
+  | RCardDispatchAction
+  | WitnessDispatchAction
+
+export const DispatchAction = {
+  ...StateDispatchAction,
+  ...OnboardingDispatchAction,
+  ...LoginAttemptDispatchAction,
+  ...LockoutDispatchAction,
+  ...PreferencesDispatchAction,
+  ...ToursDispatchAction,
+  ...AuthenticationDispatchAction,
+  ...DeepLinkDispatchAction,
+  ...MigrationDispatchAction,
+  ...AppStatusDispatchAction,
+  ...AttestationDispatchAction,
+  ...RCardDispatchAction,
+  ...WitnessDispatchAction,
+}
+
+export interface ReducerAction<R> {
+  type: R
+  payload?: Array<any>
+}
+
+export const reducer = <S extends State>(state: S, action: ReducerAction<DispatchAction>): S => {
+  switch (action.type) {
+    case AppStatusDispatchAction.SET_VERSION_INFO: {
+      const info = (action.payload || []).pop()
+      const versionInfo = { ...state.versionInfo, ...info }
+
+      return { ...state, versionInfo }
+    }
+    case StateDispatchAction.STATE_DISPATCH: {
+      const newState: State = (action?.payload || []).pop()
+      return { ...state, ...newState, stateLoaded: true }
+    }
+    case RCardDispatchAction.R_CARD_TEMPLATE_STAGED: {
+      // Stages a single RCard template in Redux state only, before an agent
+      // exists to persist it to Credo. Only ever reached pre-agent, when there
+      // are no other profiles yet, so this replaces the list outright rather
+      // than upserting. Does NOT set lastSyncedAt, allowing the migration hook
+      // to detect and persist to Credo later.
+      const template = (action?.payload || []).pop()
+      const rCard = {
+        profiles: [template],
+        activeProfileId: template.id,
+        lastSyncedAt: state.rCard?.lastSyncedAt, // Preserve existing value if any
+      }
+      return {
+        ...state,
+        rCard,
+      }
+    }
+    case RCardDispatchAction.R_CARD_CREDENTIAL_SYNCED: {
+      // A single profile is confirmed persisted to Credo (the initial sync,
+      // an edit, or a newly created profile) - upsert it into the list by id,
+      // and set lastSyncedAt. The first profile a wallet ever gets becomes
+      // active by default; later profiles don't change what's active.
+      const template = (action?.payload || []).pop()
+      const existing = state.rCard?.profiles ?? []
+      const profiles = existing.some((p) => p.id === template.id)
+        ? existing.map((p) => (p.id === template.id ? template : p))
+        : [...existing, template]
+      const rCard = {
+        profiles,
+        activeProfileId: state.rCard?.activeProfileId ?? template.id,
+        lastSyncedAt: new Date().toISOString(),
+      }
+      return {
+        ...state,
+        rCard,
+      }
+    }
+    case RCardDispatchAction.R_CARD_CREDENTIAL_CLEARED: {
+      const rCard = {
+        profiles: [],
+        activeProfileId: undefined,
+        lastSyncedAt: new Date().toISOString(),
+      }
+      return {
+        ...state,
+        rCard,
+      }
+    }
+    case RCardDispatchAction.R_CARD_PROFILES_LOADED: {
+      // Replaces the whole list at once - the full sync/adopt-on-read path,
+      // as opposed to R_CARD_CREDENTIAL_SYNCED's single-profile upsert.
+      const [profiles, activeProfileId] = action?.payload ?? [[], undefined]
+      const rCard = {
+        profiles,
+        activeProfileId,
+        lastSyncedAt: new Date().toISOString(),
+      }
+      return {
+        ...state,
+        rCard,
+      }
+    }
+    case RCardDispatchAction.R_CARD_PROFILE_DELETED: {
+      const profileId = (action?.payload || []).pop()
+      const rCard = {
+        ...state.rCard,
+        profiles: (state.rCard?.profiles ?? []).filter((p) => p.id !== profileId),
+      }
+      return {
+        ...state,
+        rCard,
+      }
+    }
+    case RCardDispatchAction.R_CARD_ACTIVE_PROFILE_SET: {
+      const activeProfileId = (action?.payload || []).pop()
+      const rCard = {
+        ...state.rCard,
+        activeProfileId,
+      }
+      return {
+        ...state,
+        rCard,
+      }
+    }
+    case PreferencesDispatchAction.ENABLE_DEVELOPER_MODE: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = { ...state.preferences, developerModeEnabled: choice }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return {
+        ...state,
+        preferences,
+      }
+    }
+    case PreferencesDispatchAction.USE_BIOMETRY: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = {
+        ...state.preferences,
+        useBiometry: choice,
+        // Turning biometrics on also enables hardware-backed signing. These were
+        // two independent preferences, and useHardwareAttestation defaults to
+        // false, so a user who opted into biometrics during onboarding still had
+        // secure exchange switched off and signed in software without ever being
+        // told (reported on device 2026-08-28).
+        //
+        // Only ever turned ON here. Turning biometrics off does not turn it back
+        // off: the hardware key needs a secure lock screen, not biometrics
+        // specifically — iOS signs happily with the device passcode — so
+        // disabling biometrics is not a reason to silently downgrade signing.
+        // The dedicated toggle in Settings remains the way to switch it off.
+        useHardwareAttestation: choice ? true : state.preferences.useHardwareAttestation,
+      }
+      const onboarding = {
+        ...state.onboarding,
+        didConsiderBiometry: true,
+      }
+      const newState = {
+        ...state,
+        onboarding,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Onboarding, onboarding)
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.USE_PUSH_NOTIFICATIONS: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = {
+        ...state.preferences,
+        usePushNotifications: choice,
+      }
+      const onboarding = {
+        ...state.onboarding,
+        didConsiderPushNotifications: true,
+      }
+      const newState = {
+        ...state,
+        onboarding,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Onboarding, onboarding)
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.USE_VERIFIER_CAPABILITY: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = {
+        ...state.preferences,
+        useVerifierCapability: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.USE_CONNECTION_INVITER_CAPABILITY: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = {
+        ...state.preferences,
+        useConnectionInviterCapability: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.USE_DEV_VERIFIER_TEMPLATES: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = {
+        ...state.preferences,
+        useDevVerifierTemplates: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.ACCEPT_DEV_CREDENTIALS: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = {
+        ...state.preferences,
+        acceptDevCredentials: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.GENERIC_ERROR_MESSAGES: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = {
+        ...state.preferences,
+        genericErrorMessages: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.USE_DATA_RETENTION: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = {
+        ...state.preferences,
+        useDataRetention: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.USE_HARDWARE_ATTESTATION: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = {
+        ...state.preferences,
+        useHardwareAttestation: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.USE_WITNESSING: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = {
+        ...state.preferences,
+        useWitnessing: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.USE_LOCALITY_CONFIRMATION: {
+      // Default true (locality-plan.md §8.1) — deliberately NOT the `?? false`
+      // pattern used above, which is fine there only because that flag's
+      // AsyncStorage read path also defaults false; this one's must default
+      // true everywhere or it repeats keyring-bifold#38.
+      const choice = (action?.payload ?? []).pop() ?? true
+      const preferences = {
+        ...state.preferences,
+        useLocalityConfirmation: choice,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.MARK_LOCALITY_PREFLIGHT_SEEN: {
+      // One-way: the witness-connect pre-flight sheet (§8.4 row 2, §10.3
+      // item 8) fires at most once per install, whichever way the user
+      // answers it — there is no un-seeing it.
+      const preferences = {
+        ...state.preferences,
+        hasSeenLocalityPreflight: true,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.PREFERENCES_UPDATED: {
+      const preferences: PreferencesState = (action?.payload || []).pop()
+      // For older wallets that haven't explicitly named their wallet yet
+      if (!preferences.walletName) {
+        preferences.walletName = generateRandomWalletName()
+      }
+      // For older wallets initialized before data retention option was created
+      if (preferences.useDataRetention === undefined) {
+        preferences.useDataRetention = true
+      }
+
+      if (!preferences.alternateContactNames) {
+        preferences.alternateContactNames = {}
+      }
+
+      return {
+        ...state,
+        preferences,
+      }
+    }
+    case PreferencesDispatchAction.ENABLE_WALLET_NAMING: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = { ...state.preferences, enableWalletNaming: choice }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return {
+        ...state,
+        preferences,
+      }
+    }
+    case PreferencesDispatchAction.UPDATE_WALLET_NAME: {
+      // We should never see 'My Wallet - 123', that's just there to let us know something went wrong while saving the wallet name
+      const name = (action?.payload ?? []).pop() ?? 'My Wallet - 123'
+      const preferences = {
+        ...state.preferences,
+        walletName: name,
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.PREVENT_AUTO_LOCK: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = { ...state.preferences, preventAutoLock: choice }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return {
+        ...state,
+        preferences,
+      }
+    }
+    case PreferencesDispatchAction.FEATURE_ROOMS: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = { ...state.preferences, featureRooms: choice }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return {
+        ...state,
+        preferences,
+      }
+    }
+    case PreferencesDispatchAction.USE_SHAREABLE_LINK: {
+      const choice = (action?.payload ?? []).pop() ?? false
+      const preferences = { ...state.preferences, enableShareableLink: choice }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return {
+        ...state,
+        preferences,
+      }
+    }
+    case PreferencesDispatchAction.UPDATE_ALTERNATE_CONTACT_NAMES: {
+      const idNamePair = (action?.payload ?? []).pop() ?? {}
+      const preferences = {
+        ...state.preferences,
+        alternateContactNames: {
+          ...state.preferences.alternateContactNames,
+          ...idNamePair,
+        },
+      }
+      const newState = {
+        ...state,
+        preferences,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return newState
+    }
+    case PreferencesDispatchAction.SET_THEME: {
+      const theme = (action?.payload ?? []).pop() ?? ''
+      const preferences = { ...state.preferences, theme }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+
+      return {
+        ...state,
+        preferences,
+      }
+    }
+    case ToursDispatchAction.UPDATE_SEEN_TOUR_PROMPT: {
+      const seenToursPrompt: ToursState = (action?.payload ?? []).pop() ?? false
+      const tours = {
+        ...state.tours,
+        seenToursPrompt,
+      }
+      const newState = {
+        ...state,
+        tours,
+      }
+
+      return newState
+    }
+    case ToursDispatchAction.TOUR_DATA_UPDATED: {
+      const tourData: ToursState = (action?.payload ?? []).pop() ?? {}
+      const tours = {
+        ...state.tours,
+        ...tourData,
+      }
+      const newState = {
+        ...state,
+        tours,
+      }
+
+      return newState
+    }
+    case ToursDispatchAction.ENABLE_TOURS: {
+      const enableTours = (action?.payload ?? []).pop() ?? false
+      const tours = {
+        ...state.tours,
+      }
+      if (enableTours) {
+        tours.enableTours = enableTours
+        tours.seenHomeTour = false
+        tours.seenCredentialsTour = false
+        tours.seenCredentialOfferTour = false
+        tours.seenProofRequestTour = false
+        tours.seenContactsTour = false
+        tours.seenContactOfferTour = false
+      } else {
+        tours.enableTours = enableTours
+      }
+      const newState = {
+        ...state,
+        tours,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Tours, tours)
+
+      return newState
+    }
+    case ToursDispatchAction.UPDATE_SEEN_HOME_TOUR: {
+      const seenHomeTour = (action?.payload ?? []).pop() ?? false
+      const tours = {
+        ...state.tours,
+        seenHomeTour,
+      }
+
+      if (seenHomeTour && tours.seenCredentialsTour && tours.seenCredentialOfferTour && tours.seenProofRequestTour) {
+        tours.enableTours = false
+      }
+
+      const newState = {
+        ...state,
+        tours,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Tours, tours)
+
+      return newState
+    }
+    case ToursDispatchAction.UPDATE_SEEN_CREDENTIALS_TOUR: {
+      const seenCredentialsTour = (action?.payload ?? []).pop() ?? false
+      const tours = {
+        ...state.tours,
+        seenCredentialsTour,
+      }
+
+      if (seenCredentialsTour && tours.seenHomeTour && tours.seenCredentialOfferTour && tours.seenProofRequestTour) {
+        tours.enableTours = false
+      }
+
+      const newState = {
+        ...state,
+        tours,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Tours, tours)
+
+      return newState
+    }
+    case ToursDispatchAction.UPDATE_SEEN_CREDENTIAL_OFFER_TOUR: {
+      const seenCredentialOfferTour = (action?.payload ?? []).pop() ?? false
+      const tours = {
+        ...state.tours,
+        seenCredentialOfferTour,
+      }
+
+      if (seenCredentialOfferTour && tours.seenHomeTour && tours.seenCredentialsTour && tours.seenProofRequestTour) {
+        tours.enableTours = false
+      }
+
+      const newState = {
+        ...state,
+        tours,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Tours, tours)
+
+      return newState
+    }
+    case ToursDispatchAction.UPDATE_SEEN_PROOF_REQUEST_TOUR: {
+      const seenProofRequestTour = (action?.payload ?? []).pop() ?? false
+      const tours = {
+        ...state.tours,
+        seenProofRequestTour,
+      }
+
+      if (seenProofRequestTour && tours.seenHomeTour && tours.seenCredentialOfferTour && tours.seenCredentialsTour) {
+        tours.enableTours = false
+      }
+
+      const newState = {
+        ...state,
+        tours,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Tours, tours)
+
+      return newState
+    }
+    case ToursDispatchAction.UPDATE_SEEN_CONTACTS_TOUR: {
+      const seenContactsTour = (action?.payload ?? []).pop() ?? false
+      const tours = {
+        ...state.tours,
+        seenContactsTour,
+        ...(seenContactsTour ? { seenContactOfferTour: true } : {}),
+      }
+
+      const newState = {
+        ...state,
+        tours,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Tours, tours)
+
+      return newState
+    }
+    case ToursDispatchAction.UPDATE_SEEN_CONTACT_OFFER_TOUR: {
+      const seenContactOfferTour = (action?.payload ?? []).pop() ?? false
+      const tours = {
+        ...state.tours,
+        seenContactOfferTour,
+        ...(seenContactOfferTour ? { seenContactsTour: true } : {}),
+      }
+
+      const newState = {
+        ...state,
+        tours,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Tours, tours)
+
+      return newState
+    }
+
+    case LoginAttemptDispatchAction.ATTEMPT_UPDATED: {
+      const loginAttempt: LoginAttemptState = (action?.payload || []).pop()
+      const newState = {
+        ...state,
+        loginAttempt,
+      }
+      storeLoginAttempt(loginAttempt)
+      return newState
+    }
+    case LockoutDispatchAction.LOCKOUT_UPDATED: {
+      const { displayNotification }: LockoutState = (action?.payload ?? []).pop() ?? { displayNotification: false }
+      const lockout: LockoutState = {
+        ...state.lockout,
+        displayNotification,
+      }
+
+      return {
+        ...state,
+        lockout,
+      }
+    }
+    case PreferencesDispatchAction.AUTO_LOCK_TIME: {
+      const autoLockTime = (action?.payload ?? []).pop() ?? 5
+      const preferences: Preferences = {
+        ...state.preferences,
+        autoLockTime,
+      }
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+      return {
+        ...state,
+        preferences,
+      }
+    }
+    case PreferencesDispatchAction.KEEP_MESSAGES: {
+      const preferences: Preferences = {
+        ...state.preferences,
+        keepMessages: (action?.payload ?? []).pop() ?? state.preferences.keepMessages,
+      }
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+      return {
+        ...state,
+        preferences,
+      }
+    }
+    case PreferencesDispatchAction.SET_SELECTED_MEDIATOR: {
+      const selectedMediator = (action?.payload ?? []).pop() ?? state.preferences.selectedMediator
+      const preferences: Preferences = {
+        ...state.preferences,
+        selectedMediator,
+      }
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+      return {
+        ...state,
+        preferences,
+      }
+    }
+    case PreferencesDispatchAction.ADD_AVAILABLE_MEDIATOR: {
+      const mediatorToAdd = (action?.payload ?? []).pop() ?? ''
+      if (!state.preferences.availableMediators.includes(mediatorToAdd)) {
+        const updatedAvailableMediators = [...state.preferences.availableMediators, mediatorToAdd]
+        const preferences: Preferences = {
+          ...state.preferences,
+          availableMediators: updatedAvailableMediators,
+        }
+        PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+        return {
+          ...state,
+          preferences,
+        }
+      }
+      return state
+    }
+    case PreferencesDispatchAction.RESET_MEDIATORS: {
+      const preferences: Preferences = {
+        ...state.preferences,
+        availableMediators: [Config.MEDIATOR_URL as string],
+        selectedMediator: Config.MEDIATOR_URL as string,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+      return {
+        ...state,
+        preferences,
+      }
+    }
+
+    case PreferencesDispatchAction.BANNER_MESSAGES: {
+      const newBannerMessages = action?.payload ?? []
+      const allBannerMessages = [...state.preferences.bannerMessages, ...newBannerMessages]
+      const uniqueBannerMessages = lodash.uniqBy<BannerMessage>(allBannerMessages, 'id')
+
+      // If there were no new unique messages, don't update state to avoid re-renders
+      if (allBannerMessages.length !== uniqueBannerMessages.length) {
+        return state
+      }
+
+      const preferences: Preferences = {
+        ...state.preferences,
+        bannerMessages: uniqueBannerMessages,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+      return {
+        ...state,
+        preferences,
+      }
+    }
+
+    case PreferencesDispatchAction.REMOVE_BANNER_MESSAGE: {
+      const keysToRemove = action?.payload ?? []
+      const newBannerMessages = state.preferences.bannerMessages.filter((msg) => !keysToRemove.includes(msg.id))
+      const preferences: Preferences = {
+        ...state.preferences,
+        bannerMessages: newBannerMessages,
+      }
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Preferences, preferences)
+      return {
+        ...state,
+        preferences,
+      }
+    }
+
+    case OnboardingDispatchAction.ONBOARDING_VERSION: {
+      const version = (action?.payload || []).pop()
+      const onboarding = {
+        ...state.onboarding,
+        onboardingVersion: version,
+      }
+      const newState = {
+        ...state,
+        onboarding,
+      }
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Onboarding, newState.onboarding)
+      return newState
+    }
+    case OnboardingDispatchAction.DID_COMPLETE_ONBOARDING: {
+      const onboarding = {
+        ...state.onboarding,
+        didCompleteOnboarding: true,
+      }
+      const newState = {
+        ...state,
+        onboarding,
+      }
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Onboarding, newState.onboarding)
+      return newState
+    }
+    case OnboardingDispatchAction.ONBOARDING_UPDATED: {
+      const onboarding: OnboardingState = (action?.payload || []).pop()
+      return {
+        ...state,
+        onboarding,
+      }
+    }
+    case OnboardingDispatchAction.DID_SEE_PREFACE: {
+      const onboarding = {
+        ...state.onboarding,
+        didSeePreface: true,
+      }
+      const newState = {
+        ...state,
+        onboarding,
+      }
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Onboarding, newState.onboarding)
+      return newState
+    }
+    case OnboardingDispatchAction.DID_COMPLETE_TUTORIAL: {
+      const payload = (action?.payload ?? [])?.pop()
+      const onboarding = {
+        ...state.onboarding,
+        didCompleteTutorial: payload?.didCompleteTutorial ?? true,
+      }
+      const newState = {
+        ...state,
+        onboarding,
+      }
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Onboarding, newState.onboarding)
+      return newState
+    }
+    case OnboardingDispatchAction.DID_AGREE_TO_TERMS: {
+      const terms = (action?.payload || []).pop()
+      const version = terms?.DidAgreeToTerms
+      const onboarding: OnboardingState = {
+        ...state.onboarding,
+        didAgreeToTerms: version ?? true,
+      }
+      const newState = {
+        ...state,
+        onboarding,
+      }
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Onboarding, newState.onboarding)
+      return newState
+    }
+    case OnboardingDispatchAction.DID_CREATE_PIN: {
+      const onboarding: OnboardingState = {
+        ...state.onboarding,
+        didCreatePIN: true,
+      }
+      // If the pin is created with this version (that includes Askar), we
+      // we can assume that a wallet using Indy SDK was never created. This
+      // allows us to skip the migration step. For wallets initialized using
+      // the indy sdk this won't be called, so the migration will be performed
+      const migration: MigrationState = {
+        ...state.migration,
+        didMigrateToAskar: true,
+      }
+
+      // Reset any login attempts and penalty in keychain
+      // Since the app is being reinstalled, we can erase the login attempts from keychain
+      // in the previous installation
+      const loginAttempt: LoginAttemptState = {
+        loginAttempts: 0,
+        lockoutDate: undefined,
+        servedPenalty: true,
+      }
+
+      const newState = {
+        ...state,
+        onboarding,
+        migration,
+        loginAttempt,
+      }
+
+      storeLoginAttempt(loginAttempt)
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Onboarding, newState.onboarding)
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Migration, newState.migration)
+
+      return newState
+    }
+    case OnboardingDispatchAction.DID_NAME_WALLET: {
+      const onboarding = {
+        ...state.onboarding,
+        didNameWallet: true,
+      }
+      const newState = {
+        ...state,
+        onboarding,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Onboarding, onboarding)
+
+      return newState
+    }
+    case OnboardingDispatchAction.DID_SETUP_R_CARD: {
+      const onboarding = {
+        ...state.onboarding,
+        didSetupRCard: true,
+      }
+      const newState = {
+        ...state,
+        onboarding,
+      }
+
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Onboarding, onboarding)
+
+      return newState
+    }
+    case MigrationDispatchAction.DID_MIGRATE_TO_ASKAR: {
+      const migration: MigrationState = {
+        ...state.migration,
+        didMigrateToAskar: true,
+      }
+      const newState = {
+        ...state,
+        migration,
+      }
+      PersistentStorage.storeValueForKey(LocalStorageKeys.Migration, newState.migration)
+      return newState
+    }
+    case MigrationDispatchAction.MIGRATION_UPDATED: {
+      const migration: MigrationState = (action?.payload || []).pop()
+      return {
+        ...state,
+        migration,
+      }
+    }
+    case AuthenticationDispatchAction.DID_AUTHENTICATE: {
+      const didAuthenticate: boolean = (action?.payload || []).pop() ?? true
+      const authentication: AuthenticationState = {
+        didAuthenticate,
+      }
+      return {
+        ...state,
+        authentication,
+      }
+    }
+    case DeepLinkDispatchAction.ACTIVE_DEEP_LINK: {
+      const value: string = (action?.payload || []).pop()
+      return {
+        ...state,
+        deepLink: value,
+      }
+    }
+    case AttestationDispatchAction.SET_ATTESTATION_COMPLETED: {
+      const isAttestationComplete: boolean = (action?.payload || []).pop() ?? false
+      return {
+        ...state,
+        attestation: {
+          isAttestationComplete,
+        },
+      }
+    }
+    case WitnessDispatchAction.UPDATE_WITNESS_SETTINGS: {
+      const incoming = (action?.payload || []).pop()
+      // Merge with existing to preserve any fields not included in the update
+      const witness = {
+        // Provide defaults for fields that may be absent in older persisted state
+        // (must come first so ...state.witness can override them if already set)
+        ...{ enableReporting: true, reportingDids: {} as Record<string, string> },
+        ...state.witness,
+        ...incoming,
+      }
+      const newState = { ...state, witness }
+      PersistentStorage.storeValueForKey(LocalStorageKeys.WitnessSettings, witness)
+      return newState
+    }
+    default:
+      return state
+  }
+}
+
+export default reducer

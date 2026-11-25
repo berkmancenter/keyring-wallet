@@ -97,9 +97,15 @@ export const bundlesFromAnnotations = (annotations) =>
       return m ? [{ platform: m[1], id: m[2], channel: m[3] }] : []
     })
 
-/** The screens a person would look at: the app's and bifold's .tsx screens and components, not tests. */
+/**
+ * The screens a person would look at: the app's and bifold's .tsx screens and components, not tests. Since the fold
+ * bifold/… paths are in the wallet range itself (tier.mjs's changedFiles reads no submodule for a range with the folded
+ * tree at both ends, so post-release.yml needs no bifold fetch); before it they came through the pin move. A range that
+ * crosses the fold has no readable bifold range: changedFiles marks it (`bifold@a..b (…crosses the fold…)`), and the
+ * marker is kept in the list, so the summary says the bifold screens are not listed rather than listing none.
+ */
 export const screensOf = (files) =>
-  files.filter((f) => /^(app\/src|bifold\/packages\/[^/]+\/src)\/(.*\/)?(screens|components)\/[^/]+\.tsx$/.test(f) && !/__tests__|\.test\./.test(f))
+  files.filter((f) => /^bifold@/.test(f) || (/^(app\/src|bifold\/packages\/[^/]+\/src)\/(.*\/)?(screens|components)\/[^/]+\.tsx$/.test(f) && !/__tests__|\.test\./.test(f)))
 
 /**
  * Where to measure the changed screens from: the newest earlier publish whose commit is an ancestor of this one
@@ -209,9 +215,11 @@ const realGh = (...args) => execFileSync('gh', args, { encoding: 'utf8', maxBuff
  * The whole post-release run. gh and sleep are injectable for tests. Every read that fails throws: the caller reports
  * an error, never a green smoke.
  */
-const gitOk = (...args) => { try { execFileSync('git', args, { stdio: 'ignore' }); return true } catch { return false } }
+// Replace refs (the fold's graft) are ignored by the ancestry and describe reads: they must see the real history.
+const NO_REPLACE = { ...process.env, GIT_NO_REPLACE_OBJECTS: '1' }
+const gitOk = (...args) => { try { execFileSync('git', args, { stdio: 'ignore', env: NO_REPLACE }); return true } catch { return false } }
 const realIsAncestor = (a, b) => gitOk('merge-base', '--is-ancestor', a, b)
-const realDescribe = (sha) => execFileSync('git', ['describe', '--tags', '--match', 'staging-v*', '--abbrev=0', sha], { encoding: 'utf8' }).trim()
+const realDescribe = (sha) => execFileSync('git', ['describe', '--tags', '--match', 'staging-v*', '--abbrev=0', sha], { encoding: 'utf8', env: NO_REPLACE }).trim()
 
 /**
  * What a failed gh call says: gh's own line from stderr (it names the HTTP status, e.g. "gh: Not Found (HTTP 404)"),

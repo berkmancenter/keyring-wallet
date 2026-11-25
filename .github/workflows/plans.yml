@@ -11,10 +11,14 @@ on:
       - docs/plans/**
       - scripts/plans/**
       - .github/workflows/plans.yml
-      # The mockup kit's tokens are read from the app theme and bifold components: a theme change re-runs
-      # the token test and flags mockups, and contact sheets, drawn with the old values.
+      # The mockup kit's tokens are read from the app theme and the framework's theme, strings and components
+      # (scripts/plans/mockup-kit/tokens.ts): a change there re-runs the token test and flags mockups, and
+      # contact sheets, drawn with the old values.
       - app/src/keyring-theme/**
-      - bifold
+      - bifold/packages/core/src/theme.ts
+      - bifold/packages/core/src/localization/en/**
+      - bifold/packages/core/src/components/**
+      - bifold/packages/core/src/modules/vrc/components/**
 
 permissions:
   contents: read
@@ -24,10 +28,9 @@ jobs:
     runs-on: ubuntu-22.04
     name: Plan structure
     steps:
+      # The token test reads framework sources under bifold/ (scripts/plans/mockup-kit/tokens.ts), which are part
+      # of this repository since the one-codebase fold: no submodule step.
       - uses: actions/checkout@v4
-        with:
-          # The token test reads bifold component sources (scripts/plans/mockup-kit/tokens.ts).
-          submodules: true
 
       # Node 22 runs the TypeScript checker with --experimental-strip-types; no install needed.
       - uses: actions/setup-node@v4

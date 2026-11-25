@@ -1,0 +1,845 @@
+/**
+ * My Agent — S1, S3 and S4 of `community_vetting_subtask.md` §7.1, which are
+ * one screen read at three moments: before an agent is connected, while it is
+ * connecting, and once it is.
+ *
+ * A community is reached through an agent, so this is where that relationship
+ * is made and shown. The primary action, *Connect my agent*, does the three
+ * things a phone needs before it can do anything with a community: sign in
+ * to its own VTA, get (or mint) its identity for the configured community,
+ * and open the community session as that identity. Until the agent is
+ * connected the screen shows only what is needed to get there — the manager
+ * identity to enrol, and the button; everything the agent holds (identity,
+ * approvals, invitations, communities, vetting) appears once it is.
+ *
+ * Vetting is the star of the connected screen: one prominent entry that says
+ * which seat this phone holds — the vetter's desk, or the applicant's — before
+ * the person opens it.
+ *
+ * @module trust-tasks/screens/MyAgent
+ */
+
+import { useIsFocused, useNavigation } from '@react-navigation/native'
+import type { StackNavigationProp } from '@react-navigation/stack'
+import { useAgent } from '@bifold/react-hooks'
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
+
+import Button, { ButtonType } from '../../../components/buttons/Button'
+import { useTheme } from '../../../contexts/theme'
+import { communityTarget } from '../module/vtiCommunityLink'
+import { Screens, type MyAgentStackParams } from '../../../types/navigators'
+import { testIdWithKey } from '../../../utils/testable'
+import {
+  GenericRecordsCommunityStore,
+  isCurrentMembership,
+  type VtiInvitation,
+  type VtiMembership,
+} from '../module/VtiCommunityStore'
+import { GenericRecordsIdentityStore, type VtiPersona } from '../module/VtiIdentityStore'
+import { ApprovalDetails } from './ApprovalDetails'
+import { MyAgentIds } from './MyAgent.ids'
+import { ErasedNotice, RemovedPhoneCard } from './RemovedPhoneCard'
+import { mayApprove } from '../module/afterStepDown'
+import { vtaAgent } from '../module/vtaAgent'
+import { vtiAgent } from '../module/vtiAgent'
+import { ownVetterGrantState } from '../module/vtiGrantState'
+import { useCommunityChanged } from '../module/communityChanged'
+import { ensurePersonaFor, joinCommunity, type VtiJoinStep } from '../module/vtiJoin'
+import { GenericRecordsTspPeerRevisionStore } from '../module/vtiTsp'
+import { shownApprovals } from '../module/waitingRequests'
+
+import { openScanner } from './openScanner'
+import { useChosenCommunityDid } from './useCommunity'
+import { useVtaDid } from './VtaStatus'
+import { sayFailure, type Said } from './plainError'
+import SaidFailure from './SaidFailure'
+import { localDate, localDateTime } from './localTime'
+import ApproverWaitNote from './ApproverWaitNote'
+
+/**
+ * Where an agent comes from, for a person with none yet: a hosting service
+ * (one example, run by a third party) or running your own. Links only, opened
+ * in the browser; neither is a default anywhere in the app.
+ */
+export const GET_AGENT_LINKS = {
+  hosted: 'https://vta.farm/',
+  selfHost: 'https://openvtc.net/',
+} as const
+
+/** Which seat this phone would take at a vetting: decided by what it holds. */
+type VettingSeat = 'vetter' | 'applicant'
+
+/** The DID is long and the host is what a person recognises, so lead with it. */
+const shortDid = (did?: string) => (did && did.length > 32 ? `${did.slice(0, 22)}…${did.slice(-8)}` : did)
+
+export interface MyAgentProps {
+  /** The mediator a VTI agent advertises, the community to offer, and the phone's own VTA. */
+  config?: { mediatorDid?: string; communityDid?: string; vtaDid?: string }
+}
+
+const MyAgent: React.FC<MyAgentProps> = ({ config }) => {
+  const { t } = useTranslation()
+  const { ColorPalette, TextTheme } = useTheme()
+  const { agent } = useAgent()
+  const navigation = useNavigation<StackNavigationProp<MyAgentStackParams>>()
+  const state = useSyncExternalStore(vtiAgent.subscribe, vtiAgent.getState)
+  const vta = useSyncExternalStore(vtaAgent.subscribe, vtaAgent.getState)
+  // Every way to link starts here and ends by going back here, and the tab
+  // chose this screen as its first while the phone was not linked. Once it is
+  // linked, the agent home is the screen (#11); hand over to it rather than
+  // leave the phone on this older panel (two-phone gate trial, 09-29).
+  //
+  // Before paint (a layout effect), and with nothing of this panel drawn while
+  // linked (below): a focus effect ran after paint, so the old panel showed
+  // "Connected", the host and the DIDs for a frame, then slid away
+  // (UI-smoothness plan, Phase 1c).
+  const linked = vta.link.kind === 'linked'
+  const isFocused = useIsFocused()
+  useLayoutEffect(() => {
+    if (linked && isFocused) navigation.replace(Screens.VtaAgent)
+  }, [linked, isFocused, navigation])
+
+  const mediatorDid = config?.mediatorDid
+  // The phone's community — not one a link is only showing.
+  const communityDid = useChosenCommunityDid(config?.communityDid)
+  // The agent the person linked by QR (plan §5.1) wins over the one a build
+  // bakes in; the baked one stays for builds and runners that predate linking.
+  const vtaDid = useVtaDid(config?.vtaDid)
+
+  // What the wallet holds towards communities (§2.4 B): the persona its VTA
+  // minted for this community, the invitations it was handed, the memberships
+  // it earned. Read from the stores; refreshed after anything that writes.
+  const [persona, setPersona] = useState<VtiPersona>()
+  const [getAgentShown, setGetAgentShown] = useState(false)
+  const [invitations, setInvitations] = useState<VtiInvitation[]>([])
+  const [memberships, setMemberships] = useState<VtiMembership[]>([])
+  const [seat, setSeat] = useState<VettingSeat>('applicant')
+  const grantCheck = useRef<{ key: string; at: number; vetter: boolean } | undefined>(undefined)
+  const [busy, setBusy] = useState<'identity' | 'join'>()
+  const [activity, setActivity] = useState<string[]>([])
+  const [holdingError, setHoldingError] = useState<Said>()
+  // The primary action: sign in to the VTA, ensure the persona, open the
+  // community session. Each step is named while it runs (S3).
+  const [connecting, setConnecting] = useState<{ step: string } | undefined>()
+  const [connectError, setConnectError] = useState<Said>()
+  const [managerDid, setManagerDid] = useState<string>()
+
+  const refresh = useCallback(async () => {
+    if (!agent) return
+    const identities = new GenericRecordsIdentityStore(agent)
+    const communities = new GenericRecordsCommunityStore(agent)
+    const [p, i, m, grants] = await Promise.all([
+      communityDid ? identities.getPersona(communityDid) : Promise.resolve(undefined),
+      communities.listInvitations(),
+      communities.listMemberships(),
+      communityDid ? communities.listHeldCredentials('vetter-grant', communityDid) : Promise.resolve([]),
+    ])
+    setPersona(p)
+    setInvitations(i.filter((x) => x.status === 'pending'))
+    // One the community removed is not a membership here (#166).
+    setMemberships(m.filter(isCurrentMembership))
+    // A vetter grant that still stands makes this phone the desk — a revoked or
+    // expired one does not. The status list is a network read, so it is asked
+    // again only when the grants change or once a minute, not on every refresh.
+    const own = p ? grants.filter((g) => g.subjectDid === p.did) : []
+    const key = own.map((g) => g.receivedAt).join(',')
+    const cached = grantCheck.current
+    if (!cached || cached.key !== key || Date.now() - cached.at > 60_000) {
+      const standing = await ownVetterGrantState(agent, own, { allowInsecureLocal: __DEV__ })
+      grantCheck.current = { key, at: Date.now(), vetter: standing.state === 'active' }
+    }
+    setSeat(grantCheck.current?.vetter ? 'vetter' : 'applicant')
+  }, [agent, communityDid])
+
+  useEffect(() => {
+    void refresh()
+    // Invitations arrive by deep link while this screen may be open.
+    const timer = setInterval(() => void refresh(), 4000)
+    return () => clearInterval(timer)
+  }, [refresh])
+  // A grant or a membership shows without waiting for the timer: stored by the
+  // persona inbox, or by this phone's own join, vetting or leave.
+  useCommunityChanged(refresh)
+
+  // Be reachable by the VTA as soon as this phone has a manager identity for
+  // it: a consent request can arrive at any time, and only an open session
+  // receives it.
+  useEffect(() => {
+    if (!agent || !vtaDid) return
+    void (async () => {
+      const manager = await new GenericRecordsIdentityStore(agent).getManager(vtaDid)
+      if (manager) {
+        setManagerDid(manager.did)
+        await vtaAgent.connect(agent, vtaDid).catch(() => undefined)
+      } else {
+        // Mint it so the person has something to enrol; connecting comes after.
+        const did = await vtaAgent
+          .client(agent, vtaDid)
+          .ensureManagerIdentity()
+          .catch(() => undefined)
+        if (did) setManagerDid(did)
+      }
+    })()
+  }, [agent, vtaDid])
+
+  const [deciding, setDeciding] = useState<string>()
+  const onDecide = useCallback(async (id: string, decision: 'approve' | 'deny') => {
+    setDeciding(id)
+    try {
+      await vtaAgent.decide(id, decision)
+    } catch {
+      // the failure is on the approval itself, from the controller's state
+    } finally {
+      setDeciding(undefined)
+    }
+  }, [])
+  const shortTask = (uri: string) => uri.replace('https://trusttasks.org/spec/', '')
+
+  const onCreateIdentity = useCallback(async () => {
+    if (!agent || !vtaDid || !communityDid) return
+    setBusy('identity')
+    setHoldingError(undefined)
+    try {
+      await ensurePersonaFor({ agent, identityStore: new GenericRecordsIdentityStore(agent), vtaDid, communityDid })
+      await refresh()
+    } catch (error) {
+      setHoldingError(sayFailure(error))
+    } finally {
+      setBusy(undefined)
+    }
+  }, [agent, vtaDid, communityDid, refresh])
+
+  const stepText = useCallback(
+    (step: VtiJoinStep, detail?: string) => {
+      switch (step) {
+        case 'persona':
+          return t('MyAgent.StepPersona')
+        case 'connecting':
+          return t('MyAgent.StepConnecting', { did: shortDid(detail) })
+        case 'manifest':
+          return t('MyAgent.StepManifest')
+        case 'submitting':
+          return t('MyAgent.StepSubmitting')
+        case 'verdict':
+          return t('MyAgent.StepVerdict', { effect: detail })
+        case 'stored':
+          return t('MyAgent.StepStored')
+      }
+    },
+    [t]
+  )
+
+  const onJoin = useCallback(
+    async (invitation: VtiInvitation) => {
+      if (!agent || !vtaDid) return
+      setBusy('join')
+      setHoldingError(undefined)
+      setActivity([])
+      try {
+        const result = await joinCommunity(
+          {
+            agent,
+            identityStore: new GenericRecordsIdentityStore(agent),
+            communityStore: new GenericRecordsCommunityStore(agent),
+            vtaDid,
+            mediatorDid,
+            communityDid: invitation.communityDid,
+            onStep: (step, detail) => setActivity((prev) => [...prev, stepText(step, detail)]),
+          },
+          invitation
+        )
+        if (result.membership) setActivity((prev) => [...prev, t('MyAgent.AddedToWallet')])
+        await refresh()
+      } catch (error) {
+        // The community has a directory statement, which this panel cannot
+        // show: the invitation opens where it is shown, rather than stopping
+        // here on a message the person could not act on (manifest/0.4).
+        if ((error as { code?: string })?.code === 'keyring/join/disclosureNotShown') {
+          communityTarget.choose(invitation.communityDid)
+          navigation.navigate(Screens.VtiInvited)
+          return
+        }
+        setHoldingError(sayFailure(error))
+      } finally {
+        setBusy(undefined)
+      }
+    },
+    [agent, vtaDid, mediatorDid, refresh, stepText, t, navigation]
+  )
+
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: ColorPalette.brand.primaryBackground },
+    content: { padding: 24, gap: 24 },
+    card: {
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+      borderRadius: 12,
+      padding: 20,
+      gap: 8,
+    },
+    label: { ...TextTheme.labelSubtitle, color: ColorPalette.grayscale.mediumGrey },
+    link: { ...TextTheme.normal, color: ColorPalette.brand.link, textDecorationLine: 'underline' },
+    value: { ...TextTheme.normal, color: TextTheme.normal.color },
+    button: {
+      backgroundColor: ColorPalette.brand.primary,
+      borderRadius: 8,
+      paddingVertical: 14,
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    buttonText: { ...TextTheme.bold, color: '#FFFFFF' },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    error: { ...TextTheme.normal, color: ColorPalette.semantic.error },
+    hero: {
+      backgroundColor: ColorPalette.brand.primary,
+      borderRadius: 16,
+      padding: 20,
+      gap: 10,
+    },
+    heroTitle: { ...TextTheme.headingThree, color: '#FFFFFF' },
+    heroText: { ...TextTheme.normal, color: '#FFFFFF' },
+    badge: {
+      alignSelf: 'flex-start',
+      borderRadius: 999,
+      paddingVertical: 4,
+      paddingHorizontal: 12,
+      backgroundColor: '#FFFFFF',
+    },
+    badgeText: { ...TextTheme.labelSubtitle, color: ColorPalette.brand.primary, fontWeight: '700' },
+    heroButton: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 8,
+      paddingVertical: 12,
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+      marginTop: 4,
+    },
+    heroButtonText: { ...TextTheme.bold, color: ColorPalette.brand.primary },
+    mono: { fontFamily: 'Courier', fontSize: 12, color: TextTheme.normal.color },
+  })
+
+  const onConnect = useCallback(async () => {
+    if (!agent) return
+    setConnectError(undefined)
+    try {
+      if (vtaDid) {
+        setConnecting({ step: t('MyAgent.StepSigningIn') })
+        await vtaAgent.connect(agent, vtaDid)
+        if (communityDid) {
+          setConnecting({ step: t('MyAgent.StepPersona') })
+          const p = await ensurePersonaFor({
+            agent,
+            identityStore: new GenericRecordsIdentityStore(agent),
+            vtaDid,
+            communityDid,
+          })
+          setConnecting({ step: t('MyAgent.StepConnecting', { did: shortDid(p.did) }) })
+          await vtiAgent.connect(agent, mediatorDid, {
+            persona: p,
+            peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
+          })
+        }
+      }
+      // No agent, no connect: a phone reaches a community through its agent.
+      // (A build-named mediator once let a phone mint its own did:peer here; a
+      // store build names none, and that path could only fail.)
+      await refresh()
+    } catch (error) {
+      setConnectError(sayFailure(error))
+    } finally {
+      setConnecting(undefined)
+    }
+  }, [agent, mediatorDid, vtaDid, communityDid, refresh, t])
+
+  // The agent is "connected" when the phone's own VTA session is up, and only
+  // then. A community's session being up is not an agent: with no agent linked
+  // (a store build names none), it stood in, and after the last agent was
+  // unlinked the panel said "Connected" over that community's session, with
+  // no way to link one (269 gate, agents R4). A removed phone is never
+  // connected, whatever its last session said: the removal is the screen
+  // (IN-350, run 1022-1822: the heartbeat removed the link and this panel kept
+  // showing "Connected" until a relaunch).
+  const agentConnected = vta.link.kind !== 'revoked' && Boolean(vtaDid) && vta.status === 'connected'
+
+  const viaText = (via: VtiMembership['via']) =>
+    via === 'invitation'
+      ? t('MyAgent.ViaInvitation')
+      : via === 'vetting'
+        ? t('MyAgent.ViaVetting')
+        : t('MyAgent.ViaApproval')
+
+  // The star of the connected screen: one entry, and the seat named before it
+  // is opened. A vetter grant makes this phone the desk; otherwise it is the
+  // applicant's side — being vetted is what most people come here to do.
+  const vettingHero =
+    vtaDid && communityDid ? (
+      <Pressable
+        style={styles.hero}
+        testID={testIdWithKey(MyAgentIds.vettingRow)}
+        accessibilityRole="button"
+        accessibilityLabel={`${t('Vetting.Title')}. ${seat === 'vetter' ? t('Vetting.SeatVetter') : t('Vetting.SeatApplicant')}`}
+        onPress={() => navigation.navigate(Screens.VtiVetting)}
+      >
+        <View style={styles.row}>
+          <Icon name={seat === 'vetter' ? 'account-check' : 'account-search'} size={28} color="#FFFFFF" />
+          <Text style={styles.heroTitle}>{t('Vetting.Title')}</Text>
+        </View>
+        <View style={styles.badge} testID={testIdWithKey(MyAgentIds.vettingSeat)}>
+          <Text style={styles.badgeText}>
+            {seat === 'vetter' ? t('Vetting.SeatVetter') : t('Vetting.SeatApplicant')}
+          </Text>
+        </View>
+        <Text style={styles.heroText}>{seat === 'vetter' ? t('Vetting.HeroVetter') : t('Vetting.HeroApplicant')}</Text>
+        <View style={styles.heroButton} testID={testIdWithKey(MyAgentIds.vettingOpen)}>
+          <Text style={styles.heroButtonText}>
+            {seat === 'vetter' ? t('Vetting.OpenDesk') : t('Vetting.GetVetted')}
+          </Text>
+          <Icon name="chevron-right" size={20} color={ColorPalette.brand.primary} />
+        </View>
+      </Pressable>
+    ) : null
+
+  const holdings = (
+    <>
+      {vettingHero}
+
+      {vtaDid && communityDid ? (
+        <>
+          <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Identity')}</Text>
+          <View style={styles.card} testID={testIdWithKey(MyAgentIds.identityCard)}>
+            {persona ? (
+              <>
+                <Text style={styles.value} testID={testIdWithKey(MyAgentIds.personaDid)}>
+                  {persona.did}
+                </Text>
+                <Text style={styles.label}>{t('MyAgent.ShareIdentity')}</Text>
+                {/* The community screen — and Leave community on it — whether or
+                    not this phone is a member yet: an applicant holds a persona
+                    and vetting state to leave too. */}
+                <Pressable
+                  testID={testIdWithKey(MyAgentIds.openCommunity)}
+                  accessibilityRole="link"
+                  onPress={() => navigation.navigate(Screens.VtiCommunity, { communityDid })}
+                >
+                  <Text style={[styles.label, { textDecorationLine: 'underline' }]}>{t('Community.Open')}</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.value}>{t('MyAgent.NoIdentity')}</Text>
+                <Pressable
+                  style={styles.button}
+                  testID={testIdWithKey(MyAgentIds.createIdentityButton)}
+                  accessibilityRole="button"
+                  disabled={busy !== undefined}
+                  onPress={onCreateIdentity}
+                >
+                  {busy === 'identity' ? <ActivityIndicator color="#FFFFFF" /> : null}
+                  <Text style={styles.buttonText}>
+                    {busy === 'identity' ? t('MyAgent.CreatingIdentity') : t('MyAgent.CreateIdentity')}
+                  </Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </>
+      ) : null}
+
+      {vtaDid ? (
+        <>
+          <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Approvals')}</Text>
+          {vta.awaitingConsentFor ? (
+            <View style={styles.row}>
+              <ActivityIndicator color={ColorPalette.brand.primary} />
+              <Text style={styles.value} testID={testIdWithKey(MyAgentIds.awaitingConsent)}>
+                {t('MyAgent.AwaitingConsent', {
+                  task: shortTask(vta.awaitingConsentFor),
+                  interpolation: { escapeValue: false },
+                })}
+              </Text>
+            </View>
+          ) : null}
+          {/* Which of this person's approvers it waits on, when it is theirs to approve; hidden otherwise. */}
+          <ApproverWaitNote />
+          {shownApprovals(vta.approvals).length === 0 ? (
+            <Text style={styles.value} testID={testIdWithKey(MyAgentIds.noApprovals)}>
+              {vta.status === 'connected'
+                ? `${t('MyAgent.NoApprovals')} ${t('MyAgent.AgentListening')}`
+                : t('MyAgent.NoApprovals')}
+            </Text>
+          ) : (
+            shownApprovals(vta.approvals).map((approval) => (
+              <View key={approval.id} style={styles.card} testID={testIdWithKey(MyAgentIds.approvalCard)}>
+                <Text style={styles.value}>
+                  {t('MyAgent.ApprovalAsks', {
+                    requester: shortDid(approval.requester),
+                    task: shortTask(approval.taskType),
+                    interpolation: { escapeValue: false },
+                  })}
+                </Text>
+                <Text style={styles.label}>
+                  {t('MyAgent.ApprovalExpires', { when: localDateTime(approval.expiresAt) })}
+                </Text>
+                <ApprovalDetails approval={approval} />
+                {approval.status === 'pending' ? (
+                  <View style={styles.row}>
+                    {mayApprove(approval) ? (
+                      <Pressable
+                        style={[styles.button, { flex: 1 }]}
+                        testID={testIdWithKey(MyAgentIds.approveConsentButton)}
+                        accessibilityRole="button"
+                        disabled={deciding !== undefined}
+                        onPress={() => onDecide(approval.id, 'approve')}
+                      >
+                        <Text style={styles.buttonText}>{t('MyAgent.Approve')}</Text>
+                      </Pressable>
+                    ) : null}
+                    <Pressable
+                      style={[styles.button, { flex: 1, backgroundColor: ColorPalette.grayscale.mediumGrey }]}
+                      testID={testIdWithKey(MyAgentIds.denyConsentButton)}
+                      accessibilityRole="button"
+                      disabled={deciding !== undefined}
+                      onPress={() => onDecide(approval.id, 'deny')}
+                    >
+                      <Text style={styles.buttonText}>{t('MyAgent.Deny')}</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Text
+                    style={approval.status === 'failed' ? styles.error : styles.value}
+                    testID={testIdWithKey(MyAgentIds.approvalDecided)}
+                  >
+                    {approval.status === 'approved'
+                      ? t('MyAgent.Approved')
+                      : approval.status === 'denied'
+                        ? t('MyAgent.Denied')
+                        : (approval.error ?? approval.status)}
+                  </Text>
+                )}
+              </View>
+            ))
+          )}
+        </>
+      ) : null}
+
+      <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Invitations')}</Text>
+      {invitations.length === 0 ? (
+        <Text style={styles.value} testID={testIdWithKey(MyAgentIds.noInvitations)}>
+          {t('MyAgent.NoInvitations')}
+        </Text>
+      ) : (
+        invitations.map((invitation) => (
+          <View key={invitation.id} style={styles.card} testID={testIdWithKey(MyAgentIds.invitationCard)}>
+            <Text style={styles.value}>{shortDid(invitation.communityDid)}</Text>
+            <Text style={styles.label}>{t('MyAgent.InvitedAs', { role: invitation.role })}</Text>
+            {persona && invitation.subjectDid !== persona.did ? (
+              <Text style={styles.error}>{t('MyAgent.InvitationNotForYou')}</Text>
+            ) : (
+              <Pressable
+                style={styles.button}
+                testID={testIdWithKey(MyAgentIds.joinCommunityButton)}
+                accessibilityRole="button"
+                disabled={busy !== undefined}
+                onPress={() => onJoin(invitation)}
+              >
+                {busy === 'join' ? <ActivityIndicator color="#FFFFFF" /> : null}
+                <Text style={styles.buttonText}>{busy === 'join' ? t('MyAgent.Joining') : t('MyAgent.Join')}</Text>
+              </Pressable>
+            )}
+          </View>
+        ))
+      )}
+
+      <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Communities')}</Text>
+      {memberships.map((m) => (
+        <Pressable
+          key={m.communityDid}
+          style={styles.card}
+          testID={testIdWithKey(MyAgentIds.membershipCard)}
+          accessibilityRole="button"
+          onPress={() => navigation.navigate(Screens.VtiCommunity, { communityDid: m.communityDid })}
+        >
+          <View style={styles.row}>
+            <Icon name="card-account-details" size={18} color={ColorPalette.semantic.success} />
+            <Text style={styles.value}>{t('MyAgent.Member')}</Text>
+          </View>
+          <Text style={styles.value}>{shortDid(m.communityDid)}</Text>
+          <Text style={styles.label} testID={testIdWithKey(MyAgentIds.membershipRole)}>
+            {m.role} · {viaText(m.via)}
+          </Text>
+          <Text style={styles.label}>{t('MyAgent.MemberSince', { date: localDate(m.grantedAt) })}</Text>
+        </Pressable>
+      ))}
+      {communityDid && !memberships.some((m) => m.communityDid === communityDid) ? (
+        <Pressable
+          style={styles.card}
+          testID={testIdWithKey(MyAgentIds.communityRow)}
+          accessibilityRole="button"
+          onPress={() => navigation.navigate(Screens.VtiCommunity, { communityDid })}
+        >
+          <Text style={styles.value}>{shortDid(communityDid)}</Text>
+          <Text style={styles.label}>{t('MyAgent.NotAMember')}</Text>
+        </Pressable>
+      ) : null}
+      {!communityDid && memberships.length === 0 ? (
+        <Text style={styles.value}>{t('MyAgent.NoCommunities')}</Text>
+      ) : null}
+
+      {activity.length > 0 || holdingError ? (
+        <>
+          <Text style={{ ...TextTheme.headingFour, color: TextTheme.normal.color }}>{t('MyAgent.Activity')}</Text>
+          <View style={styles.card} testID={testIdWithKey(MyAgentIds.activity)}>
+            {activity.map((line, i) => (
+              <Text key={i} style={styles.value}>
+                {line}
+              </Text>
+            ))}
+            {holdingError ? (
+              <SaidFailure said={holdingError} testID={MyAgentIds.holdingError} style={styles.error} />
+            ) : null}
+          </View>
+        </>
+      ) : null}
+    </>
+  )
+
+  // A build that names nothing (a store build: testers bring their own agent
+  // and community) falls through to "Link your agent" below. It used to stop
+  // here at "No agent is configured for this build", with the link doors
+  // behind it, so a fresh tester could not link at all.
+
+  // S3 — connecting. Each step is named, because "please wait" tells a person
+  // nothing about which leg is slow when one is.
+  const connectingStep =
+    connecting?.step ??
+    (vta.status === 'connecting'
+      ? t('MyAgent.StepSigningIn')
+      : state.status === 'resolving'
+        ? t('MyAgent.Resolving')
+        : state.status === 'authenticating'
+          ? t('MyAgent.Authenticating')
+          : undefined)
+  if (connectingStep) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        <View style={styles.content}>
+          <Text style={{ ...TextTheme.headingThree, color: TextTheme.normal.color }}>{t('MyAgent.Title')}</Text>
+          <View style={styles.row}>
+            <ActivityIndicator color={ColorPalette.brand.primary} />
+            <Text style={styles.value} testID={testIdWithKey(MyAgentIds.connecting)}>
+              {connectingStep}
+            </Text>
+          </View>
+          {vta.awaitingConsentFor ? (
+            <Text style={styles.label} testID={testIdWithKey(MyAgentIds.awaitingConsent)}>
+              {t('MyAgent.AwaitingConsent', {
+                task: shortTask(vta.awaitingConsentFor),
+                interpolation: { escapeValue: false },
+              })}
+            </Text>
+          ) : null}
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  // Linked: the agent home is the screen, and the hand-over above is on its way.
+  if (linked) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']} testID={testIdWithKey(MyAgentIds.handingOver)} />
+    )
+  }
+
+  // S4 — connected: the agent card, then everything it holds.
+  if (agentConnected) {
+    return (
+      <SafeAreaView style={styles.container} edges={['left', 'right']}>
+        <ScrollView contentContainerStyle={styles.content}>
+          {/* A linked phone never reaches this panel: it hands over to the agent
+              home before paint (above), which has "Open your agent"'s
+              destination and My devices itself (#484). */}
+          <View style={styles.card} testID={testIdWithKey(MyAgentIds.card)}>
+            <View style={styles.row}>
+              <Icon name="check-circle" size={18} color={ColorPalette.semantic.success} />
+              <Text style={styles.value}>{t('MyAgent.Connected')}</Text>
+            </View>
+            <Text style={styles.label}>{t('MyAgent.Host')}</Text>
+            <Text style={styles.value} testID={testIdWithKey(MyAgentIds.host)}>
+              {state.host ?? vta.vtaDid ?? ''}
+            </Text>
+            {vta.managerDid ? (
+              <>
+                <Text style={styles.label}>{t('MyAgent.ManagerIdentity')}</Text>
+                <Text style={styles.value} testID={testIdWithKey(MyAgentIds.managerDid)}>
+                  {shortDid(vta.managerDid)}
+                </Text>
+              </>
+            ) : null}
+            <Text style={styles.label}>{t('MyAgent.YourIdentity')}</Text>
+            <Text style={styles.value} testID={testIdWithKey(MyAgentIds.did)}>
+              {state.did ? shortDid(state.did) : t('MyAgent.NoCommunitySession')}
+            </Text>
+            {state.status === 'connected' && state.peerLeg ? (
+              <Text style={styles.label} testID={testIdWithKey(MyAgentIds.peerLeg)}>
+                {state.peerLeg === 'tsp' ? t('MyAgent.PeerLegTsp') : t('MyAgent.PeerLegDidComm')}
+              </Text>
+            ) : null}
+            {!state.did && communityDid ? (
+              <Pressable
+                style={styles.button}
+                testID={testIdWithKey(MyAgentIds.connectCommunityButton)}
+                accessibilityRole="button"
+                onPress={onConnect}
+              >
+                <Text style={styles.buttonText}>{t('MyAgent.ConnectCommunity')}</Text>
+              </Pressable>
+            ) : null}
+            {connectError ? <SaidFailure said={connectError} testID={MyAgentIds.error} style={styles.error} /> : null}
+          </View>
+
+          {holdings}
+        </ScrollView>
+      </SafeAreaView>
+    )
+  }
+
+  const onLinkAgent = () => {
+    // An attempt already under way is resumed where it is, not restarted.
+    if (vta.link.kind !== 'notLinked' && vta.link.kind !== 'linked') {
+      navigation.navigate(Screens.VtaLink)
+      return
+    }
+    openScanner(navigation)
+  }
+
+  // S1 — not connected (and the failed state, which says why and offers a retry).
+  // The connection's own error is its raw text too: said the same way. With no
+  // agent there is no connection to fail and no Try again: what a community's
+  // session or an earlier attempt left is not this phone's to report here.
+  const failure: Said | undefined = vtaDid
+    ? (connectError ?? (vta.error ? sayFailure(vta.error) : undefined))
+    : undefined
+  return (
+    <SafeAreaView style={styles.container} edges={['left', 'right']}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={{ ...TextTheme.headingThree, color: TextTheme.normal.color }}>{t('MyAgent.Title')}</Text>
+        <Text style={styles.value}>{t('MyAgent.WhatItIs')}</Text>
+        {/* A removed phone is told so here, where it lands, not only behind "Link your agent". */}
+        {vta.link.kind === 'revoked' ? <RemovedPhoneCard link={vta.link} /> : null}
+        {vta.link.kind !== 'linked' && vta.link.kind !== 'revoked' ? <ErasedNotice /> : null}
+        {vta.link.kind !== 'linked' && vta.link.kind !== 'revoked' ? (
+          <View style={styles.card} testID={testIdWithKey(MyAgentIds.linkCard)}>
+            {/* One sentence and one way in, then the way without a code
+                (Alberto, 239). The scanner takes every code there is: the
+                agent's page, its host's, or another phone's. "Set up a new
+                agent", "Add this phone to my agent" and "Link without a QR
+                code" were three buttons for two flows. */}
+            <Text style={styles.value}>{t('VtaLink.LinkYourAgentHint')}</Text>
+            {/* A link left part-way, picked back up (IN-135): its code is
+                showing again, so carrying on comes first. */}
+            {vta.link.kind === 'showingKey' ? (
+              <Button
+                title={t('VtaLink.ContinueLinking')}
+                buttonType={ButtonType.Primary}
+                onPress={() => navigation.navigate(Screens.VtaLink)}
+                testID={testIdWithKey(MyAgentIds.continueLink)}
+              />
+            ) : null}
+            <Button
+              title={t('VtaLink.ScanAgentCode')}
+              buttonType={ButtonType.Primary}
+              onPress={onLinkAgent}
+              testID={testIdWithKey(MyAgentIds.linkYourAgentButton)}
+            />
+            <Button
+              title={t('VtaLink.UseAgentAddress')}
+              buttonType={ButtonType.Tertiary}
+              onPress={() => navigation.navigate(Screens.VtaCreateAgent, { byAddress: true })}
+              testID={testIdWithKey(MyAgentIds.linkByAddressButton)}
+            />
+            {/* Adding this phone is done on the phone that already has the
+                agent: it shows the code this one scans. */}
+            <Text style={styles.label} testID={testIdWithKey(MyAgentIds.linkOtherPhoneHint)}>
+              {t('VtaLink.OtherPhoneHint')}
+            </Text>
+            {/* No agent yet: where one comes from. Generic first, like email (a
+                service or your own); a hosting service is named only in this
+                help, as an example, with who runs it (09-25 rule). Only links:
+                nothing becomes a default. */}
+            {vta.link.kind === 'notLinked' ? (
+              <>
+                <Pressable
+                  onPress={() => setGetAgentShown(!getAgentShown)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: getAgentShown }}
+                  testID={testIdWithKey(MyAgentIds.getAgentToggle)}
+                >
+                  <Text style={styles.link}>{t('MyAgent.GetAgentToggle')}</Text>
+                </Pressable>
+                {getAgentShown ? (
+                  <View style={{ gap: 8 }} testID={testIdWithKey(MyAgentIds.getAgentHelp)}>
+                    <Text style={styles.value}>{t('MyAgent.GetAgentBody')}</Text>
+                    <Pressable
+                      onPress={() => void Linking.openURL(GET_AGENT_LINKS.hosted)}
+                      accessibilityRole="link"
+                      testID={testIdWithKey(MyAgentIds.getAgentHosted)}
+                    >
+                      <Text style={styles.link}>{t('MyAgent.GetAgentHosted')}</Text>
+                      <Text style={styles.label}>{t('MyAgent.GetAgentHostedNote')}</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void Linking.openURL(GET_AGENT_LINKS.selfHost)}
+                      accessibilityRole="link"
+                      testID={testIdWithKey(MyAgentIds.getAgentSelfHost)}
+                    >
+                      <Text style={styles.link}>{t('MyAgent.GetAgentSelfHost')}</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </>
+            ) : null}
+          </View>
+        ) : null}
+        {vtaDid ? (
+          <View style={styles.card} testID={testIdWithKey(MyAgentIds.enrolCard)}>
+            <Text style={styles.label}>{t('MyAgent.ManagerIdentity')}</Text>
+            <Text style={styles.mono} testID={testIdWithKey(MyAgentIds.managerDid)} selectable>
+              {managerDid ?? '…'}
+            </Text>
+            <Text style={styles.label}>{t('MyAgent.EnrolHint')}</Text>
+          </View>
+        ) : null}
+        {/* A removed phone's card already says what happened and what to do; the
+            failed sign-in behind it is that removal, not a second, unknown failure. */}
+        {failure && vta.link.kind !== 'revoked' ? (
+          <SaidFailure said={failure} testID={MyAgentIds.error} style={styles.error} />
+        ) : null}
+        {/* Only when there is an agent to connect to — a linked one or one the
+            build names. With neither, "Link your agent" above is the way in,
+            and this could only fail. */}
+        {vtaDid ? (
+          <>
+            <Pressable
+              style={styles.button}
+              testID={testIdWithKey(MyAgentIds.connectMyAgentButton)}
+              accessibilityRole="button"
+              onPress={onConnect}
+            >
+              <Text style={styles.buttonText}>{failure ? t('MyAgent.TryAgain') : t('MyAgent.Connect')}</Text>
+            </Pressable>
+            <Text style={styles.label}>{t('MyAgent.ConnectExplains')}</Text>
+          </>
+        ) : null}
+      </ScrollView>
+    </SafeAreaView>
+  )
+}
+
+export default MyAgent

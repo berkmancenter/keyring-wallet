@@ -1,0 +1,659 @@
+/**
+ * vtiJoin — joining a community as a persona the wallet's VTA holds.
+ *
+ * The one place the two legs meet. `VtaClient` (phone ↔ its VTA) supplies the
+ * persona and its borrowed key; `vtiAgent` (phone ↔ community) presents it.
+ * The steps are named so a screen can show them and a test can assert them,
+ * and every side effect goes through the two stores, never straight to Credo.
+ *
+ *   ensure persona → connect as it → manifest → submit (with the invitation,
+ *   when there is one) → verdict → on `allow`, keep the card.
+ *
+ * @module trust-tasks/module/vtiJoin
+ */
+
+import { emitCommunityChanged } from './communityChanged'
+import { didPrefix } from './didPrefix'
+import { DisclosureNotShown, disclosureShown } from './directoryDisclosure'
+import type { Agent } from '@credo-ts/core'
+import { DeviceEventEmitter } from 'react-native'
+
+import { disclosedUnder, parseJoinNeed, recordAnswer, recordSent, recordStatus, type JoinNeed } from './joinSubmission'
+import { vtaAgent } from './vtaAgent'
+import {
+  GenericRecordsCommunityStore,
+  type JoinSubmission,
+  type VtiCommunityStore,
+  type VtiInvitation,
+  type VtiMembership,
+} from './VtiCommunityStore'
+import { GenericRecordsIdentityStore, type VtiIdentityStore, type VtiPersona } from './VtiIdentityStore'
+import { canSignAs, personaForCommunity, VtiKeysNotHeld, VtiNoIdentity } from './sharedIdentity'
+import { selfRemoveRefusal, vtiAgent, VtiSentNoAnswer, type JoinRequestStatus, type VtiVerdict } from './vtiAgent'
+import { cardStandingOf, recordCardRevocation } from './vtiCardStanding'
+import { checkDeliveredCard, deliveredCardCheck, VtiCardStatusUnreadable } from './vtiDeliveredCheck'
+import { reciprocateIfOwed } from './vtiReciprocate'
+import { receiveIssue, roleNameOf, VTI_CARD_REFUSED_EVENT } from './vtiInbox'
+import { checkCredentialStatus } from './vtiStatusList'
+import { GenericRecordsTspPeerRevisionStore } from './vtiTsp'
+
+export { parseJoinNeed, type JoinNeed } from './joinSubmission'
+
+export type VtiJoinStep = 'persona' | 'connecting' | 'manifest' | 'submitting' | 'verdict' | 'stored'
+
+export interface VtiJoinDeps {
+  agent: Agent
+  identityStore: VtiIdentityStore
+  communityStore: VtiCommunityStore
+  /**
+   * The phone's VTA, and a fallback mediator: the persona's own DID document
+   * names the mediator it is reached through, so this is only used when it
+   * names none.
+   */
+  vtaDid: string
+  mediatorDid?: string
+  communityDid: string
+  /** Whether the person asked to be listed in the community's public member directory. */
+  registryConsent?: boolean
+  /**
+   * The `statementDigest` of the directory statement the screen showed
+   * (manifest/0.4). Where the manifest carries one, the request is not sent
+   * unless it is this exact statement.
+   */
+  disclosureSeen?: string
+  onStep?: (step: VtiJoinStep, detail?: string) => void
+}
+
+export interface VtiJoinResult {
+  persona: VtiPersona
+  verdict: VtiVerdict
+  membership?: VtiMembership
+}
+
+/**
+ * The persona this wallet presents to a community — reused when one exists,
+ * minted on the VTA (and its key-agreement key borrowed) when not. One
+ * identity per community, kept: a person is recognised by it afterwards.
+ *
+ * `fresh` forgets the one on record first, so the community sees a new
+ * identity: "Join again" after a refusal or after leaving (openvtc's
+ * guidance). The old persona's keys stay on the VTA; only the phone's record
+ * of it goes.
+ */
+export async function ensurePersonaFor(
+  deps: Pick<VtiJoinDeps, 'agent' | 'identityStore' | 'vtaDid' | 'communityDid'>,
+  options: { fresh?: boolean } = {}
+): Promise<VtiPersona> {
+  if (options.fresh) await deps.identityStore.forgetPersona(deps.communityDid)
+  // The app's one session with its VTA: a granted notice must reach the
+  // client that waits for it, and a second socket for the same DID would not.
+  const client = vtaAgent.client(deps.agent, deps.vtaDid, deps.identityStore)
+  return client.ensurePersona({ communityDid: deps.communityDid })
+}
+
+export async function joinCommunity(
+  deps: VtiJoinDeps,
+  invitation?: VtiInvitation,
+  options: { freshPersona?: boolean } = {}
+): Promise<VtiJoinResult> {
+  const step = (s: VtiJoinStep, d?: string) => deps.onStep?.(s, d)
+
+  step('persona')
+  const persona = await ensurePersonaFor(deps, { fresh: options.freshPersona })
+  if (!persona.kmsKeyIds?.keyAgreement) throw new Error('vtiJoin: the persona has no borrowed key-agreement key')
+  if (invitation && invitation.subjectDid !== persona.did) {
+    throw new Error(`vtiJoin: the invitation is for ${invitation.subjectDid}, not this persona`)
+  }
+
+  step('connecting', persona.did)
+  await vtiAgent.connect(deps.agent, deps.mediatorDid, {
+    persona,
+    peerRevisionStore: new GenericRecordsTspPeerRevisionStore(deps.agent),
+  })
+
+  // Whatever the community delivers during the join — on the Eucalyptus
+  // train the card and the role arrive as separate messages after the verdict.
+  const via = invitation ? 'invitation' : 'approval'
+  // Returned, not fired and forgotten: the mediator is told the message was
+  // taken only once it is stored, and a failed store leaves it for redelivery.
+  const stopInbox = vtiAgent.onInbound(async (plaintext) => {
+    await receiveIssue(deps.communityStore, persona.did, plaintext, {
+      via,
+      checkCard: deliveredCardCheck(deps.agent),
+      onRefused: (item, refusal) =>
+        deps.agent.config?.logger?.warn?.(`[VTI] delivered ${item.kind} credential not kept (${refusal})`, {
+          from: String(plaintext.from ?? ''),
+        }),
+    })
+  })
+
+  step('manifest')
+  const manifest = await vtiAgent.fetchManifest(deps.communityDid, deps.agent)
+  // Before anything is recorded as sent: a request under a directory
+  // statement the person was not shown is not sent at all.
+  if (!disclosureShown(manifest, deps.disclosureSeen)) {
+    throw new DisclosureNotShown(manifest.directoryDisclosure!.statementDigest)
+  }
+
+  step('submitting', invitation ? 'with invitation' : 'empty')
+  await recordSent(deps.communityStore, {
+    communityDid: deps.communityDid,
+    personaDid: persona.did,
+    withInvitation: Boolean(invitation),
+    via: 'join',
+    ...disclosedUnder(manifest),
+  })
+  let verdict: VtiVerdict
+  try {
+    verdict = await vtiAgent.apply(deps.communityDid, manifest, {
+      credentials: invitation ? [invitation.credential] : [],
+      registryConsent: deps.registryConsent,
+      disclosureSeen: deps.disclosureSeen,
+    })
+  } catch (e) {
+    await recordAnswer(deps.communityStore, deps.communityDid, { refusal: e }).catch(() => undefined)
+    // The request went and its answer did not come in time: it may still. If
+    // it comes while the ask is held, it is recorded as an answer in time
+    // would have been, and the screens reading the request learn it (7b's R5,
+    // 10-06). Cards it brings still arrive by delivery: the inbox stays open
+    // as long.
+    if (e instanceof VtiSentNoAnswer) {
+      void vtiAgent
+        .lateVerdict(e)
+        .then((late) => late && recordAnswer(deps.communityStore, deps.communityDid, { verdict: late }))
+        .catch((refusal) => recordAnswer(deps.communityStore, deps.communityDid, { refusal }))
+        .catch(() => undefined)
+        .finally(stopInbox)
+    } else setTimeout(stopInbox, 30000)
+    throw e
+  }
+  await recordAnswer(deps.communityStore, deps.communityDid, { verdict }).catch(() => undefined)
+  step('verdict', verdict.effect)
+
+  let membership: VtiMembership | undefined
+  try {
+    if (verdict.effect === 'allow') {
+      membership = membershipFromVerdict(deps.communityDid, persona.did, verdict, via)
+      // The card in the verdict is checked as a delivered one is (vtiDeliveredCheck).
+      // One that does not hold up is not kept; if its status cannot be read now,
+      // the community's own delivery of it (retried until taken) is waited for.
+      if (membership) {
+        const refusal = await checkDeliveredCard(deps.agent, membership.vmc, deps.communityDid).catch((e) => {
+          if (e instanceof VtiCardStatusUnreadable) return 'statusUnreadable' as const
+          throw e
+        })
+        if (refusal) {
+          deps.agent.config?.logger?.warn?.(`[VTI] the membership card in the verdict was not kept (${refusal})`)
+          if (refusal !== 'statusUnreadable')
+            DeviceEventEmitter.emit(VTI_CARD_REFUSED_EVENT, {
+              communityDid: deps.communityDid,
+              kind: 'membership',
+              refusal,
+            })
+          membership = undefined
+        }
+      }
+      if (membership) {
+        membership = { ...membership, ...disclosedUnder(manifest) }
+        await deps.communityStore.saveMembership(membership)
+      } else {
+        // The card comes by delivery, not inline: give the outbox a moment.
+        for (let i = 0; i < 20 && !membership; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 1500))
+          membership = await deps.communityStore.getMembership(deps.communityDid, persona.did)
+        }
+      }
+      if (membership) {
+        if (invitation) await deps.communityStore.saveInvitation({ ...invitation, status: 'used' })
+        step('stored', membership.role)
+        // The member's half of the pair, closing the request (vtc/members/vmc/0.1).
+        // Best effort: never in the way of the membership itself.
+        void reciprocateIfOwed(deps.agent, deps.communityStore, persona, deps.communityDid)
+      }
+    }
+  } finally {
+    // Keep listening a little longer: the role endorsement can trail the card.
+    setTimeout(stopInbox, 30000)
+  }
+  return { persona, verdict, membership }
+}
+
+/**
+ * The card an `allow` carries inline: `with.vmc` and, when granted, the role
+ * card — `with.roleVec` (an endorsement), or `with.roleVac` (a DTG Credentials
+ * v1 VAC: vtc/join-requests/decide/0.1 as recast by tf #691 renames the field).
+ * Either is kept as the membership's role card.
+ */
+export function membershipFromVerdict(
+  communityDid: string,
+  personaDid: string,
+  verdict: VtiVerdict,
+  via: VtiMembership['via']
+): VtiMembership | undefined {
+  const w = (verdict.with ?? {}) as {
+    vmc?: Record<string, unknown>
+    roleVec?: Record<string, unknown>
+    roleVac?: Record<string, unknown>
+  }
+  if (!w.vmc) return undefined
+  const roleCard = w.roleVec ?? w.roleVac
+  return {
+    communityDid,
+    personaDid,
+    role: (roleCard && roleNameOf(roleCard)) ?? 'member',
+    vmc: w.vmc,
+    roleVec: roleCard,
+    grantedAt: typeof w.vmc.validFrom === 'string' ? w.vmc.validFrom : new Date().toISOString(),
+    validUntil: typeof w.vmc.validUntil === 'string' ? w.vmc.validUntil : undefined,
+    via,
+  }
+}
+
+/**
+ * Where this phone's join to a community stands (p220 item 1): what a screen
+ * shows instead of "You joined this one before".
+ *
+ * - `member` / `removed`: a card is held; `removed` when the community has
+ *   revoked it on its status list.
+ * - `sent`: a request went out and the community has not answered yet — its
+ *   answer may simply have been lost.
+ * - `pending` (the community owes the decision), `deferred` (it waits on the
+ *   applicant, and says for what), `rejected` (with its code and words),
+ *   `withdrawn`.
+ * - `left`: the member left the community on this phone (keyring-bifold, Leave).
+ * - `none`: nothing sent, nothing held.
+ *
+ * While a request is open it is polled with the community's status task —
+ * never resubmitted — unless `poll` is false; the poll resolves the request
+ * from the persona when no id is held, which recovers a lost first answer.
+ * Never throws: a poll that fails falls back to what the phone last knew.
+ */
+export type CommunityJoinState =
+  /**
+   * Nothing stands. `lost`: this phone sent a request and the community, asked,
+   * holds none — the send never reached it. Only ever from that answer (kept
+   * as the submission's `lostAt`), never from a request that is merely
+   * unanswered (238).
+   */
+  | { kind: 'none'; lost?: boolean }
+  | { kind: 'member'; membership: VtiMembership }
+  | { kind: 'removed'; membership: VtiMembership; at?: string }
+  | { kind: 'sent'; submission: JoinSubmission }
+  | { kind: 'pending'; submission: JoinSubmission }
+  | { kind: 'deferred'; submission: JoinSubmission; needs: JoinNeed[] }
+  | { kind: 'rejected'; submission: JoinSubmission; code: string; reason?: string; decidedAt?: string }
+  | { kind: 'withdrawn'; submission: JoinSubmission }
+  | { kind: 'left'; disposition: 'purge' | 'tombstone' | 'historical'; at: string }
+
+export interface ReadJoinStateOptions {
+  /** Ask the community while a request is open (default true). */
+  poll?: boolean
+  /**
+   * Only what this phone holds: no poll, and a card's revocation as last
+   * recorded (vtiCardStanding), never a status-list fetch — so a member reads
+   * as a member at once, not after the list answers (up to its timeout).
+   */
+  local?: boolean
+  mediatorDid?: string
+  communityStore?: VtiCommunityStore
+  identityStore?: VtiIdentityStore
+  /** The status poll; by default connects as the community's persona and asks. */
+  status?: StatusPoll
+  /** Whether a held card still stands; by default its status-list bit. */
+  cardStatus?: (membership: VtiMembership) => Promise<{ revoked: boolean; at?: string }>
+}
+
+/** One `join-requests/status` poll; `resendCredentials` only ever from `askForCardIfOwed`. */
+export type StatusPoll = (
+  communityDid: string,
+  requestId?: string,
+  ask?: { resendCredentials?: boolean }
+) => Promise<JoinRequestStatus | undefined>
+
+/** The status poll as the phone makes it: connected as the community's persona. */
+const statusPollOf =
+  (agent: Agent, options: { mediatorDid?: string; identityStore?: VtiIdentityStore }): StatusPoll =>
+  async (did, requestId, ask = {}) => {
+    const persona = await (options.identityStore ?? new GenericRecordsIdentityStore(agent)).getPersona(did)
+    // No identity to ask with is not an answer: nothing is known, so the
+    // request is not taken for lost.
+    if (!persona) throw new Error('vtiJoin: no identity to ask with')
+    await vtiAgent.connect(agent, options.mediatorDid, {
+      persona,
+      peerRevisionStore: new GenericRecordsTspPeerRevisionStore(agent),
+    })
+    return vtiAgent.status(did, { requestId, ...(ask.resendCredentials ? { resendCredentials: true } : {}) })
+  }
+
+export async function readJoinState(
+  agent: Agent,
+  communityDid: string,
+  options: ReadJoinStateOptions = {}
+): Promise<CommunityJoinState> {
+  const store = options.communityStore ?? new GenericRecordsCommunityStore(agent)
+
+  let membership = await store.getMembership(communityDid).catch(() => undefined)
+  let submission = await store.getSubmission?.(communityDid).catch(() => undefined)
+  // The store keeps one membership and one request per community, not per
+  // agent. When the current agent holds an identity here, what was kept for a
+  // different identity is another agent's standing, not this one's: with B
+  // current, A's membership read "You're a member" and hid B's refused
+  // request (several-agents device check, R5, 10-04).
+  const mine = await (options.identityStore ?? new GenericRecordsIdentityStore(agent))
+    .getPersona(communityDid)
+    .catch(() => undefined)
+  const anotherIdentity = (personaDid: string | undefined) => Boolean(mine && personaDid && personaDid !== mine.did)
+  if (membership && anotherIdentity(membership.personaDid)) membership = undefined
+  if (submission && anotherIdentity(submission.personaDid)) submission = undefined
+  // A request sent after the membership ended is where the person stands now:
+  // "removed you" above a request that went out hid it (IN-104).
+  const sentSince = (at: string | undefined) =>
+    Boolean(submission && at && Date.parse(submission.sentAt) > Date.parse(at))
+  // The community said so in a signed notice: removed, whatever the card says.
+  if (membership?.removal && !sentSince(membership.removal.decidedAt))
+    return { kind: 'removed', membership, at: membership.removal.decidedAt }
+  if (membership && !membership.removal) {
+    const cardStatus = options.local
+      ? async (m: VtiMembership) => {
+          const recorded = cardStandingOf(m.vmc as Record<string, unknown>)
+          return recorded.state === 'revoked' ? { revoked: true, at: recorded.at } : { revoked: false }
+        }
+      : (options.cardStatus ??
+        (async (m: VtiMembership) => {
+          const result = await checkCredentialStatus(agent, m.vmc, communityDid)
+          // What the list said is kept, so the Wallet and the screens can say
+          // where the card stands without reading it again (vtiCardStanding).
+          if (result.state === 'ok' || result.state === 'revoked' || result.state === 'none')
+            await recordCardRevocation(
+              agent,
+              String(m.vmc.id ?? ''),
+              result.state === 'revoked',
+              result.checkedAt
+            ).catch(() => undefined)
+          return result.state === 'revoked' ? { revoked: true, at: result.checkedAt } : { revoked: false }
+        }))
+    const card = await cardStatus(membership).catch(() => ({ revoked: false, at: undefined }))
+    if (!card.revoked) return { kind: 'member', membership }
+    // Revoked: a request sent since the membership began is the person asking again.
+    if (!sentSince(membership.grantedAt)) return { kind: 'removed', membership, at: card.at }
+  }
+
+  // Left on this phone, and nothing sent since: "You left", not "Join".
+  const departure = await store.getDeparture?.(communityDid).catch(() => undefined)
+  if (departure && (!submission || submission.sentAt <= departure.at)) {
+    return {
+      kind: 'left',
+      disposition: departure.disposition as 'purge' | 'tombstone' | 'historical',
+      at: departure.at,
+    }
+  }
+  if (!submission) return { kind: 'none' }
+
+  const open = !submission.acknowledgedAt || submission.status === 'pending' || submission.status === 'deferred'
+  if (open && options.poll !== false && !options.local) {
+    const poll = options.status ?? statusPollOf(agent, options)
+    try {
+      const polled = await poll(communityDid, submission.requestId)
+      // The community holds no such request: the send never reached it, or it
+      // was swept. There is nothing to wait for — the person can send again,
+      // and is told why (238).
+      if (!polled) {
+        // Kept, so a read that does not ask says so too; failing to keep it does not unsay the answer.
+        if (!submission.lostAt)
+          await store.saveSubmission?.({ ...submission, lostAt: new Date().toISOString() })?.catch(() => undefined)
+        return { kind: 'none', lost: true }
+      }
+      submission = (await recordStatus(store, communityDid, polled)) ?? submission
+    } catch {
+      // Keep what the phone last knew.
+    }
+  }
+  return stateOfSubmission(submission)
+}
+
+/** What Check again's ask for the card came to (`askForCardIfOwed`). */
+export interface CardAsk {
+  /**
+   * Whether the community's answer is already stored, so the screen reads it
+   * rather than asking again. Not when nothing here waits on a card, nor when
+   * the community holds no such request: the screen's own read records that.
+   */
+  polled: boolean
+  /**
+   * The community's answer to the re-send, when one was asked. `unsupported`:
+   * it named none, which the spec reads as re-delivery not supported.
+   * `notFound`: between the two polls, the community stopped holding the
+   * request.
+   */
+  resend?: 'queued' | 'notNeeded' | 'rateLimited' | 'unsupported' | 'notFound'
+  /**
+   * With `rateLimited`, when the community says: the earliest a re-send is
+   * honoured again. It only SHOULD say, so its absence is not a refusal.
+   */
+  retryAfter?: string
+}
+
+export type AskForCardOptions = Pick<
+  ReadJoinStateOptions,
+  'mediatorDid' | 'communityStore' | 'identityStore' | 'status'
+>
+
+/**
+ * Check again, for a request the community approved whose card never came.
+ *
+ * Approved with no card held reads as `pending` (`stateOfSubmission`), and the
+ * card comes only by delivery. For a request already known as approved, Check
+ * again asked the community nothing at all (`readJoinState` polls only an open
+ * request), and nothing asked for the card itself, so nothing sent it again
+ * (IN-617). The community re-sends what it already issued when asked
+ * (`resendCredentials`, vtc-service 0.12.0).
+ *
+ * What makes this fire: `credentialsDelivered` is true only once the community
+ * holds the member's ACKNOWLEDGEMENT of the card (vtc/members/vmc), not once
+ * the card was sent or collected. A card the phone collected and then did not
+ * keep is never acknowledged, so it stays false, and that is the case this is
+ * for. Do not read it as "the card was delivered".
+ *
+ * Only for a request this phone already knows as approved and holds no card
+ * for, and only after the community's own answer says `credentialsDelivered:
+ * false`. A community that predates the field omits it, and would refuse a
+ * poll carrying `resendCredentials` (its schema takes no unknown member). The
+ * person asks (Check again, Check now), with ONE exception: the join watch
+ * (`vtiJoinWatch`) asks on its own, for a `did:webs` community only, once per
+ * request while it runs, and still only after the community's own answer says
+ * `credentialsDelivered: false`. No other background caller may: a new one
+ * needs those same three guards and its own switch. The community rate-limits
+ * it too.
+ * Throws as a poll does; nothing is changed then.
+ */
+export async function askForCardIfOwed(
+  agent: Agent,
+  communityDid: string,
+  options: AskForCardOptions = {}
+): Promise<CardAsk> {
+  const store = options.communityStore ?? new GenericRecordsCommunityStore(agent)
+  const here = await readJoinState(agent, communityDid, {
+    local: true,
+    communityStore: store,
+    identityStore: options.identityStore,
+  })
+  if (here.kind !== 'pending' || here.submission.status !== 'approved') return { polled: false }
+  const poll = options.status ?? statusPollOf(agent, options)
+  const log = (line: string) =>
+    agent.config?.logger?.warn?.(`[VTI] join request at ${didPrefix(communityDid)}: ${line}`)
+  const first = await poll(communityDid, here.submission.requestId)
+  // The community holds no such request: Check again's own read says so.
+  if (!first) return { polled: false }
+  await recordStatus(store, communityDid, first)
+  if (first.status !== 'approved' || first.credentialsDelivered !== false) {
+    log(
+      `${first.status}, credentialsDelivered ${
+        first.credentialsDelivered === undefined ? 'absent' : String(first.credentialsDelivered)
+      }; the card was not asked for again`
+    )
+    return { polled: true }
+  }
+  const again = await poll(communityDid, first.requestId ?? here.submission.requestId, { resendCredentials: true })
+  // Gone between the two polls: not an answer to the re-send. The screen's own
+  // read finds it gone and says so, as for any request the community no longer holds.
+  if (!again) {
+    log('approved, credentialsDelivered false; asked for the card again: the community holds no such request now')
+    return { polled: false, resend: 'notFound' }
+  }
+  await recordStatus(store, communityDid, again)
+  const resend = again.credentialResend ?? 'unsupported'
+  log(
+    `approved, credentialsDelivered false; asked for the card again: credentialResend ${
+      again.credentialResend ?? 'absent'
+    }${again.retryAfter ? `, retryAfter ${again.retryAfter}` : ''}`
+  )
+  return { polled: true, resend, ...(again.retryAfter ? { retryAfter: again.retryAfter } : {}) }
+}
+
+/** A submission as a join state, from what the community last said about it. */
+export function stateOfSubmission(submission: JoinSubmission): CommunityJoinState {
+  if (submission.lostAt) return { kind: 'none', lost: true }
+  if (!submission.acknowledgedAt) return { kind: 'sent', submission }
+  switch (submission.status) {
+    case 'deferred':
+      return { kind: 'deferred', submission, needs: (submission.needs ?? []).map(parseJoinNeed) }
+    case 'rejected':
+      return {
+        kind: 'rejected',
+        submission,
+        code: submission.rejection?.code ?? 'rejected',
+        reason: submission.rejection?.reason,
+        decidedAt: submission.rejection?.decidedAt,
+      }
+    case 'withdrawn':
+      return { kind: 'withdrawn', submission }
+    // Approved but no card yet (it comes by delivery), a referral, or an answer
+    // that named no state: the community has it and owes the next step.
+    default:
+      return { kind: 'pending', submission }
+  }
+}
+
+/**
+ * Stop a vetting under way (row V, Alberto 11-17): this phone forgets the application and the identity made for it,
+ * so joining again starts fresh with a new ticket. Only while nothing has gone to the community: a request sent (or an
+ * application submitted) is the community's, and is withdrawn, not forgotten, so nothing is cleared and `sent` comes
+ * back. Nothing is sent to anyone: the community never heard of it, and the protocol gives the applicant no cancel
+ * to send a vetter (the screen asks the person to tell them). An identity also kept for another community stays that
+ * community's (`forgetPersona` removes this community's record only, as leaving does); one that holds a membership
+ * here is not this vetting's to forget.
+ */
+export async function stopVetting(
+  deps: {
+    identityStore: Pick<VtiIdentityStore, 'forgetPersona'>
+    communityStore: Pick<VtiCommunityStore, 'getMembership' | 'getSubmission'>
+    vettingStore: {
+      getApplication(communityDid: string): Promise<{ submission?: unknown } | undefined>
+      forgetApplication?(communityDid: string): Promise<void>
+    }
+  },
+  communityDid: string
+): Promise<'stopped' | 'sent' | 'unreadable' | 'partial'> {
+  // Fails toward refusing (ac, #1097): a false "sent" leaves a tester a vetting to finish or withdraw, a false
+  // "nothing sent" forgets an identity a community knows. So a read that fails, or a store that cannot say what was
+  // sent, is `unreadable`, and nothing is cleared. Never read as "nothing there".
+  if (!deps.communityStore.getSubmission) return 'unreadable'
+  let application: { submission?: unknown } | undefined
+  let submission: unknown
+  let membership: unknown
+  try {
+    ;[application, submission, membership] = await Promise.all([
+      deps.vettingStore.getApplication(communityDid),
+      deps.communityStore.getSubmission(communityDid),
+      deps.communityStore.getMembership(communityDid),
+    ])
+  } catch {
+    return 'unreadable'
+  }
+  if (application?.submission || submission) return 'sent'
+  // A clearing step that fails may have removed part of it (records go one by one): `partial`, so the person is never
+  // told nothing was removed when something may have been (ac, #1097).
+  try {
+    await deps.vettingStore.forgetApplication?.(communityDid)
+    if (!membership) await deps.identityStore.forgetPersona(communityDid) // tier-exempt(deletes stored records): 278.24 already runs forgetPersona (leaveCommunity) and forgetApplication (vtiPersonaInbox on 'removed'); a pre-#1097 bundle reads a stopped vetting as kind 'none' (readJoinState); reached only from the Stop control
+  } catch {
+    emitCommunityChanged(communityDid, 'forgotten')
+    return 'partial'
+  }
+  emitCommunityChanged(communityDid, 'forgotten')
+  return 'stopped'
+}
+
+export interface LeaveCommunityDeps {
+  agent: Agent
+  identityStore: VtiIdentityStore
+  communityStore: VtiCommunityStore
+  /** The vetting application for the community, cleared with the rest. */
+  vettingStore?: { forget(communityDid: string): Promise<void> }
+  mediatorDid?: string
+}
+
+/**
+ * Leave a community (p220 item 5): `members/self-remove/0.1`, as the
+ * community's persona, then clear what this phone held for it — the
+ * membership, invitations, held credentials, the vetting application and the
+ * persona record — so joining again starts from a fresh identity. Only this
+ * community's record goes: an identity also kept for another community stays
+ * that community's (sharedIdentity). A community
+ * that says the caller is not a member (`notMember`) is gone already: the
+ * phone clears the same way and says so (`alreadyGone`). Any other refusal —
+ * leaving as the last admin — throws, and nothing is cleared.
+ */
+export async function leaveCommunity(
+  deps: LeaveCommunityDeps,
+  communityDid: string,
+  options: { disposition?: 'purge' | 'tombstone' } = {}
+): Promise<{ disposition: string; alreadyGone: boolean }> {
+  // The identity kept for this community, or the one its membership names when the phone kept that identity only
+  // for another community (sharedIdentity, IN-517). With none the phone cannot sign the request: nothing is cleared.
+  const persona = await personaForCommunity(deps.identityStore, deps.communityStore, communityDid)
+  if (!persona) throw new VtiNoIdentity()
+  // Without both key copies the session cannot sign: the request would go unsigned, or not at all. The agent's
+  // session-open sweep borrows them (sharedIdentity); nothing is sent or cleared before then.
+  if (!canSignAs(persona)) throw new VtiKeysNotHeld()
+  await vtiAgent.connect(deps.agent, deps.mediatorDid, {
+    persona,
+    peerRevisionStore: new GenericRecordsTspPeerRevisionStore(deps.agent),
+  })
+  // TODO(TSP Rev 3): end the relationship with the community VTC too — send an
+  // XRFD (`packCancelRev3`, @bifold/trust-tasks) from the persona's TSP
+  // session, naming the relationship by the threadDigest of the XRFI we sent.
+  // That needs the invite digest persisted per peer when vtiAgent greets (its
+  // `greeted` set is in memory only today). Upstream accepts our cancel
+  // (ref-04s-rev3-relationship); the VTA's answering cancel fails upstream
+  // (VTI-38), which does not affect us. (Carried over from the local-only
+  // vtiLeave this replaces.)
+  let disposition: string = options.disposition ?? 'policydefault'
+  let alreadyGone = false
+  const ask = () => vtiAgent.selfRemove(communityDid, { disposition: options.disposition })
+  try {
+    try {
+      disposition = (await ask()).disposition
+    } catch (e) {
+      // The answer was lost, not the request: the community may have removed
+      // this member already. Asking again is safe — leaving is what the person
+      // asked for — and it tells us where things stand: a second self-remove
+      // either removes, or is answered "not a member" because the first did.
+      // No answer a second time throws, and nothing is cleared.
+      if (!(e instanceof Error && e.name === 'VtiSentNoAnswer')) throw e
+      disposition = (await ask()).disposition
+    }
+  } catch (e) {
+    if (selfRemoveRefusal(e) !== 'notMember') throw e
+    alreadyGone = true
+  }
+  // What the community no longer holds, the phone no longer shows. Each step
+  // on its own: one store failing must not leave the others half-cleared.
+  await deps.communityStore.forgetCommunity(communityDid, persona.did).catch(() => undefined)
+  await deps.vettingStore?.forget(communityDid).catch(() => undefined)
+  await deps.identityStore.forgetPersona(communityDid).catch(() => undefined)
+  await deps.communityStore
+    .saveDeparture?.({ communityDid, personaDid: persona.did, disposition, at: new Date().toISOString() })
+    .catch(() => undefined)
+  return { disposition, alreadyGone }
+}

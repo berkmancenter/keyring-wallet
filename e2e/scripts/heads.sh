@@ -13,10 +13,32 @@
 #
 #   e2e/scripts/heads.sh            # print, and fail if bifold ≠ the pinned commit
 #   ALLOW_UNPINNED=1 …              # print the gap and warn instead of failing
+#
+# Since the fold (docs/plans/single-codebase-plan.md), bifold/ is a directory of
+# this repository, not a submodule: there is no pin and no second head, the
+# wallet commit alone scopes a result, and this prints that and exits 0. The
+# pin logic below is kept for the release lines that still carry the gitlink
+# (release/255 and older), whose builds this script also guards.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 wallet=$(git -C "$ROOT" rev-parse HEAD)
-pinned=$(git -C "$ROOT" ls-tree HEAD bifold | awk '{print $3}')
+# The index entry for bifold: mode 160000 is the submodule's gitlink (its commit in column 2); anything else is the
+# folded tree. `ls-tree HEAD bifold` would give the tree's id after the fold, and a tree id never equals a commit id.
+entry=$(git -C "$ROOT" ls-files -s -- bifold | awk 'NR == 1')
+if [ "${entry:0:6}" != "160000" ]; then
+  # --verify --quiet: a plain rev-parse echoes an unresolvable "HEAD:bifold" back on stdout, which would land in the
+  # SUMMARY as a tree id and pass a checkout with no bifold at all (review of the fold).
+  tree=$(git -C "$ROOT" rev-parse --verify --quiet "HEAD:bifold") || {
+    echo "heads: HEAD has no bifold at all: not a wallet checkout, or an incomplete one" >&2
+    exit 1
+  }
+  dirty=""
+  [ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ] && dirty=" (tree dirty)"
+  echo "heads: wallet ${wallet:0:8} · bifold tree ${tree:0:8} (one codebase, no pin)${dirty}"
+  echo "heads: SUMMARY wallet ${wallet:0:8} · bifold tree ${tree:0:8} (one codebase: the wallet commit scopes the result)${dirty}"
+  exit 0
+fi
+pinned=$(echo "$entry" | awk '{print $2}')
 bifold=$(git -C "$ROOT/bifold" rev-parse HEAD)
 
 dirty=""
