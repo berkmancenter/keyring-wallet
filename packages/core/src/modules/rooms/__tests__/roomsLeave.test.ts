@@ -17,7 +17,11 @@ jest.mock('../../directory/names', () => ({ dropDirectoryNames: (a: unknown, d: 
 jest.mock('../../directory/myPhoto', () => ({
   keepSentPhoto: (a: unknown, d: string, s: unknown) => mockKeepPhoto(a, d, s),
 }))
-jest.mock('../useRoomRows', () => ({ refreshRoomRows: () => mockRefreshRows() }))
+jest.mock('../useRoomRows', () => ({
+  refreshRoomRows: () => mockRefreshRows(),
+  dropRowPreviews: jest.fn(),
+  readRowPreviewsWith: jest.fn(),
+}))
 const mockEmptyCache = jest.fn(async (..._args: unknown[]) => 0)
 jest.mock('../messageCache', () => ({
   isCacheWallet: () => true,

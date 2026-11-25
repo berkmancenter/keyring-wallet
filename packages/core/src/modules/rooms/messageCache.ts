@@ -6,7 +6,9 @@ import { LocalStorageKeys } from '../../constants'
 import { PersistentStorage } from '../../services/storage'
 import { VTA_UNLINKING_EVENT } from '../trust-tasks/module/unlinkEvent'
 import { VTI_REMOVED_EVENT } from '../trust-tasks/module/vtiCommunityNotices'
-import { onRoomsListed } from './useRoomRows'
+import { toInertText } from './inertText'
+import type { RoomsService } from './types'
+import { dropRowPreviews, onRoomsListed, readRowPreviewsWith, type RowPreview } from './useRoomRows'
 
 /**
  * A room's recent posts, kept on the phone in the agent's encrypted wallet so a room opens on them at once, and emptied
@@ -296,9 +298,14 @@ async function coveredBy(agent: CacheWallet, entry: JournalEntry): Promise<Recor
 }
 
 async function emptyRecords(agent: CacheWallet, records: RecordLike[]): Promise<number> {
+  const due = records.filter((record) => record.content?.emptied !== true)
+  if (due.length === 0) return 0
+  // Messages' previews of these rooms come down, and a read of one already out draws nothing, before the first copy is
+  // emptied (the review of #1011). A copy that does not say its room takes them all down.
+  const rooms = due.map((record) => record.content?.roomId)
+  dropRowPreviews(rooms.every(isText) ? rooms : undefined)
   let n = 0
-  for (const record of records) {
-    if (record.content?.emptied === true) continue
+  for (const record of due) {
     record.content = { ...EMPTIED }
     await agent.genericRecords.update(record)
     n++
@@ -460,6 +467,39 @@ export async function readRoomPostsBeforeRoom(
     })
   if (mine.length !== 1) return undefined
   return readRoomPosts(agent, mine[0].personaDid, roomId, now)
+}
+
+/** A kept post as Messages' row draws its newest post: its words inert again, the member's own said as theirs. */
+function previewOf(personaDid: string, post: CachedPost): RowPreview {
+  return {
+    post: {
+      ...(post.author ? { by: { did: post.author } } : {}),
+      mine: post.author === personaDid,
+      text: String(toInertText(post.body)),
+      kind: 'chat',
+    },
+    at: new Date(post.writtenAt),
+  }
+}
+
+/**
+ * What Messages reads its rows' previews with (useRoomRows `withPreview`): for the service built on the bound agent, the
+ * communities it acts in read once, then each room's copy as its row comes due, through
+ * {@link readRoomPostsBeforeRoom}, so a copy is drawn only by the one identity this phone acts as in its community, and
+ * under every check that read makes. Nothing when the cache is not allowed.
+ */
+async function rowPreviews(
+  service: RoomsService
+): Promise<((roomId: string) => Promise<RowPreview | undefined>) | undefined> {
+  const agent = bound
+  if (!agent || service.runsOn !== agent || !service.localCommunities) return undefined
+  const communities = await service.localCommunities()
+  return async (roomId) => {
+    if (bound !== agent) return undefined
+    const copy = await readRoomPostsBeforeRoom(agent, roomId, communities)
+    const newest = copy?.posts[0]
+    return copy && newest ? previewOf(copy.room.personaDid, newest) : undefined
+  }
 }
 
 function readInTurn(
@@ -651,6 +691,8 @@ export async function bindMessageCache(
   } catch {
     log?.('[Rooms:cache] the kept posts were not swept at start; the next start does')
   }
+  // Messages' rows read their previews from the copies only once the sweep has emptied what no longer stands.
+  readRowPreviewsWith(rowPreviews)
 }
 
 /** For tests: forget what is bound. */
