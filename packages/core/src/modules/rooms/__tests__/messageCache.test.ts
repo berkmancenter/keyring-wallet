@@ -100,12 +100,11 @@ describe('keeping and reading', () => {
 
   it(`keeps at most ${MSG_CACHE_POSTS} posts, the newest`, async () => {
     const w = wallet()
+    // 80 posts a minute apart, all within the day: what is dropped is dropped by count, the oldest first, never by age.
     const many = Array.from({ length: 80 }, (_, i) => post(`p${i}`, (i + 1) * 60_000))
-    await keepRoomPosts(w, room(), [...many, post('old', (MSG_CACHE_DAYS + 1) * DAY)], NOW)
+    await keepRoomPosts(w, room(), many, NOW)
     const read = await readRoomPosts(w, ME, ROOM, NOW)
-    expect(read?.posts).toHaveLength(MSG_CACHE_POSTS)
-    expect(read?.posts[0].key).toBe('p0')
-    expect(read?.posts.map((p) => p.key)).not.toContain('old')
+    expect(read?.posts.map((p) => p.key)).toEqual(many.slice(0, MSG_CACHE_POSTS).map((p) => p.key))
   })
 
   // IN-724 (281.2): Test Room's posts were from 4, 5, 16 and 17 Nov and 24 Nov 11:18, kept that evening; with a post's
