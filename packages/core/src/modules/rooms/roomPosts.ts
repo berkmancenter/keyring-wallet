@@ -99,15 +99,18 @@ export function isRecordJson(text: string): boolean {
 
 /**
  * The same for words cut short (`messageCache.ts` cuts long ones), which no longer parse: told by their start and by
- * naming one of a record's own members, never by their structure.
+ * naming a `proof` object, never by their structure.
  *
- * It leans on an order that is upstream's, not ours: a signed body is written with its members sorted, so `proof` and
- * `roomId` come early. A body with a large member that sorts before them (a file's manifest, say) can be cut before
- * either name, and is then missed. When this misses, an old record's JSON stays in the copy a while longer; it never
- * takes a person's words out. That is the direction it is allowed to fail in.
+ * `proof` alone, not `roomId`: a signed body is written with its members sorted (its proof is made over the canonical
+ * form), so `proof` comes before `roomId`, and any cut that still holds `roomId` holds `proof` too. Words a person
+ * pasted that merely name a room are then left alone, as {@link isRecordJson} leaves them when they are whole.
+ *
+ * That order is upstream's, not ours, and a body with a large member that sorts before `proof` (a `description`, a
+ * file's manifest) can be cut before it: such a record is missed. When this misses, an old record's JSON stays in the
+ * copy a while longer. It takes words out only where they start with a brace and name a `proof` object.
  */
 export const isCutRecordJson = (text: string): boolean =>
-  text.trimStart().startsWith('{') && /"(?:proof|roomId)"\s*:/.test(text)
+  text.trimStart().startsWith('{') && /"proof"\s*:\s*\{/.test(text)
 
 /** A chat message's text, if `body` is a keyring.chat/1 message event; otherwise undefined. */
 export function chatMessageText(body: string, now: number = Date.now()): string | undefined {

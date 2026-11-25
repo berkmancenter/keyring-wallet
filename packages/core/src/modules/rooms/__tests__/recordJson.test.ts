@@ -135,16 +135,36 @@ describe('isRecordJson', () => {
 })
 
 describe('isCutRecordJson, for words cut short that no longer parse', () => {
-  const whole = JSON.stringify(sealed({ description: 'x'.repeat(200) }))
-  it('the start of a signed record, told by a member it names', () => {
-    expect(isCutRecordJson(whole.slice(0, whole.indexOf('"roomId"') + 12))).toBe(true)
-    expect(isCutRecordJson(whole.slice(0, whole.indexOf('"proof"') + 10))).toBe(true)
+  /** As a signed body goes over the wire: its members sorted, so a large `description` comes before `proof`. */
+  const sorted = (body: Record<string, unknown>) =>
+    JSON.stringify(Object.fromEntries(Object.entries(body).sort(([a], [b]) => (a < b ? -1 : 1))))
+  const small = sorted(sealed({ title: 'Message 1' }))
+  const cutAfter = (text: string, member: string, more = 12) => text.slice(0, text.indexOf(`"${member}"`) + more)
+
+  it('members sorted, as on the wire: proof comes before roomId (what the rule leans on)', () => {
+    expect(Object.keys(JSON.parse(small))).toEqual(['author', 'key', 'proof', 'roomId', 'title', 'version'])
+  })
+
+  it('the start of a signed record, cut anywhere after its proof begins', () => {
+    expect(isCutRecordJson(cutAfter(small, 'proof'))).toBe(true)
+    expect(isCutRecordJson(cutAfter(small, 'roomId'))).toBe(true)
+  })
+
+  // The case the rule's comment declares: a large member that sorts before `proof` takes the cut. Missed, on purpose:
+  // an old record's JSON stays in the copy a while longer, which is the direction this is allowed to fail in.
+  it('a signed record cut inside a large member that sorts before its proof is missed', () => {
+    const large = sorted(sealed({ description: 'x'.repeat(9000) }))
+    expect(large.indexOf('"description"')).toBeLessThan(large.indexOf('"proof"'))
+    expect(isCutRecordJson(large.slice(0, 8 * 1024))).toBe(false)
   })
 
   it.each([
     ['a long story that starts with a brace', `{ ${'so it began '.repeat(20)}`],
     ['JSON a person typed, cut', '{"shopping":["eggs","flour","su'],
-    ['words that name roomId without a brace first', 'the "roomId": field is the room'],
+    // Whole, `{"roomId": …}` with no version is a person's words (isRecordJson). Cut, it must be too.
+    ['a pasted object that names a room and no proof', `{"roomId":"${ROOM}","settings":{"${'k'.repeat(40)}`],
+    ['a proof that is not an object', '{"proof":"see attached","notes":"so it went on'],
+    ['words that name a proof object without a brace first', 'the "proof": { part is the signature'],
   ])('%s: words (control)', (_, text) => expect(isCutRecordJson(text)).toBe(false))
 })
 

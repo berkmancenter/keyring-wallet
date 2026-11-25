@@ -110,12 +110,14 @@ describe('keeping and reading', () => {
     })
     const kept = [
       post('record', 60_000, { body: record }),
-      post('cut record', 120_000, { body: record.slice(0, record.indexOf('"roomId"') + 12), cut: true }),
+      post('cut record', 120_000, { body: record.slice(0, record.indexOf('"proof"') + 12), cut: true }),
       post('words', 180_000, { body: 'See you at 6' }),
       // Control (review of #1020): what a person typed, which only looks like structure.
       post('typed json', 240_000, { body: '{"a":1}' }),
       post('typed braces', 300_000, { body: '{}' }),
       post('cut words', 360_000, { body: '{ a long story that starts with a brace', cut: true }),
+      // Whole, an object naming a room and no version is a person's words; cut, it is still.
+      post('cut pasted object', 420_000, { body: `{"roomId":"${ROOM}","settings":{"k`, cut: true }),
     ]
     await keepRoomPosts(w, room(), kept, NOW)
     expect((await readRoomPosts(w, ME, ROOM, NOW))?.posts.map((p) => p.key)).toEqual([
@@ -123,6 +125,7 @@ describe('keeping and reading', () => {
       'typed json',
       'typed braces',
       'cut words',
+      'cut pasted object',
     ])
   })
 
