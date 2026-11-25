@@ -429,8 +429,9 @@ export async function runWitnessedExchange({
     console.log("[e2e] both wallets connected to the witness");
 
     const invitationUrl = await showRelationshipInvitation(sessionA);
-    // On a v2 run a 1.x invitation is 282's kill of v2 minting (#1018): SKIPPED with that reason (lib/v2Mint.js).
-    if (useDidCommV2) expectV2Invitation(invitationUrl);
+    // On a v2 run a 1.x invitation is 282's kill of v2 minting (#1018): SKIPPED with that reason (lib/v2Mint.js). Used
+    // as an assert here, its return discarded on purpose: the invitation is already in hand.
+    if (useDidCommV2) void expectV2Invitation(invitationUrl);
     await acceptInvitationViaPaste(sessionB, invitationUrl);
 
     // v4 consent: one bottom-sheet on the non-proposer wallet, no

@@ -51,7 +51,10 @@ its mint check and prints a **SKIPPED** banner with that reason, **exit code 77*
 so a wrapper reading only exit codes cannot count a run that never minted as a pass), instead of failing: the "Enable
 DIDComm v2" developer setting does not lift the kill, by design, and no setting here does either (`lib/v2Mint.js`).
 The runs come back on their own once the kill lifts by OTA. A SKIPPED banner is neither a pass nor a failure; read it
-as "not run".
+as "not run". **Never wire a runner that can SKIP into a gate leg that reads any non-zero exit as a failure, or 0 as a
+pass, without mapping 77 to "skipped" first.** What keeps the skip honest: `assertWalletMailboxOpen` runs before the
+mint check in every one of these runners, so a mailbox that failed to open (the one real bug that also yields a 1.x
+link) fails the run before the check could skip it.
 
 Every script above ends by printing a bordered pass/fail banner
 (`lib/banner.js`) so a completed run is easy to spot when scrolled back
