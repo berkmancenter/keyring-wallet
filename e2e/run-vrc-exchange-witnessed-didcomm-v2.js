@@ -52,7 +52,7 @@ import {
 } from "./lib/flows.js";
 import { startWitness, witnessLegFromEnv } from "./lib/witness.js";
 import { printSuccess, printFailure, printSkipped } from "./lib/banner.js";
-import { expectV2Invitation, RunSkipped } from "./lib/v2Mint.js";
+import { expectV2Invitation, RunSkipped, SKIPPED_EXIT_CODE } from "./lib/v2Mint.js";
 
 let a, b, witness;
 try {
@@ -103,9 +103,9 @@ try {
   process.exitCode = 0;
 } catch (err) {
   if (err instanceof RunSkipped) {
-    // Not run on this build, for the reason the banner says: no screenshots, exit 0 beside a SKIPPED banner.
+    // Not run on this build, for the reason the banner says: no screenshots; exit 77, the skip code, beside a SKIPPED banner.
     printSkipped("vrc-exchange-witnessed-didcomm-v2", err.message);
-    process.exitCode = 0;
+    process.exitCode = SKIPPED_EXIT_CODE;
   } else {
     printFailure("vrc-exchange-witnessed-didcomm-v2", err);
     for (const d of [a, b].filter(Boolean)) {

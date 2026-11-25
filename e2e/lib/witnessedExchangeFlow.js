@@ -43,7 +43,7 @@ import {
 } from "./flows.js";
 import { startWitness, witnessLegFromEnv } from "./witness.js";
 import { printSuccess, printFailure, printSkipped } from "./banner.js";
-import { expectV2Invitation, RunSkipped } from "./v2Mint.js";
+import { expectV2Invitation, RunSkipped, SKIPPED_EXIT_CODE } from "./v2Mint.js";
 
 const WITNESS_NAME = process.env.WITNESS_NAME || "e2e-witness";
 const IDENTITY_A = { firstName: "Alice", lastName: "Anderson" };
@@ -511,9 +511,9 @@ export async function runWitnessedExchange({
     dumpLogs([udidA, udidB].filter(Boolean));
   } catch (err) {
     if (err instanceof RunSkipped) {
-      // Not run on this build, for the reason the banner says: no screenshots or logs, exit 0 beside a SKIPPED banner.
+      // Not run on this build, for the reason the banner says: no screenshots or logs; exit 77, the skip code, beside a SKIPPED banner.
       printSkipped(name, err.message);
-      process.exitCode = 0;
+      process.exitCode = SKIPPED_EXIT_CODE;
     } else {
       printFailure(name, err);
       for (const d of [sessionA, sessionB].filter(Boolean)) {

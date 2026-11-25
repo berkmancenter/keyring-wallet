@@ -1,7 +1,11 @@
 // node --test e2e/lib/v2Mint.test.mjs
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { expectV2Invitation, mintedInvitation, RunSkipped, V2_MINT_KILL_REASON } from "./v2Mint.js";
+import { expectV2Invitation, mintedInvitation, RunSkipped, SKIPPED_EXIT_CODE, V2_MINT_KILL_REASON } from "./v2Mint.js";
+
+test("a skipped run exits 77, the skip code: neither the pass's 0 nor the failure's 1", () => {
+  assert.equal(SKIPPED_EXIT_CODE, 77);
+});
 
 const V2 = "https://wallet.asml.berkmancenter.org/invite?_oob=eyJ0eXBlIjoiaHR0cHM6Ly9kaWRjb21tLm9yZy9vdXQtb2YtYmFuZC8yLjAvaW52aXRhdGlvbiJ9";
 const V1 = "https://wallet.asml.berkmancenter.org/invite?oob=eyJAdHlwZSI6Imh0dHBzOi8vZGlkY29tbS5vcmcvb3V0LW9mLWJhbmQvMS4xL2ludml0YXRpb24ifQ";

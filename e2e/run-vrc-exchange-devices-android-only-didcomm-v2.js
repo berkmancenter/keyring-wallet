@@ -65,7 +65,7 @@ import {
 } from "./lib/flows.js";
 import { ANDROID_APK, ANDROID_UDID, ANDROID_UDID2, androidDeviceCaps } from "./lib/config.js";
 import { printSuccess, printFailure, printSkipped } from "./lib/banner.js";
-import { expectV2Invitation, RunSkipped } from "./lib/v2Mint.js";
+import { expectV2Invitation, RunSkipped, SKIPPED_EXIT_CODE } from "./lib/v2Mint.js";
 
 const IDENTITY_A = { firstName: "Alice", lastName: "Anderson" };
 const IDENTITY_B = { firstName: "Bob", lastName: "Baker" };
@@ -236,9 +236,9 @@ try {
   dumpAndroidAttestationLogs([udidA, udidB]);
 } catch (err) {
   if (err instanceof RunSkipped) {
-    // Not run on this build, for the reason the banner says: no screenshots or logs, exit 0 beside a SKIPPED banner.
+    // Not run on this build, for the reason the banner says: no screenshots or logs; exit 77, the skip code, beside a SKIPPED banner.
     printSkipped("vrc-exchange:devices:android-only:didcomm-v2", err.message);
-    process.exitCode = 0;
+    process.exitCode = SKIPPED_EXIT_CODE;
   } else {
     printFailure("vrc-exchange:devices:android-only:didcomm-v2", err);
     for (const d of [android, android2].filter(Boolean)) {

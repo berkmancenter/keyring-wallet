@@ -47,9 +47,11 @@ The same scripts exist inside this folder as `npm run vrc-exchange`,
 
 **While 282's kill of v2 invitation minting is on** (`DIDCOMM_V2_MINT_REMOTE_OFF`, wallet #1018: new invitations are
 out-of-band/1.x so a new contact keeps chat's reactions, timer and photos), every `didcomm-v2` runner above stops at
-its mint check and prints a **SKIPPED** banner with that reason, exit 0, instead of failing: the "Enable DIDComm v2"
-developer setting does not lift the kill, by design, and no setting here does either (`lib/v2Mint.js`). The runs come
-back on their own once the kill lifts by OTA. A SKIPPED banner is neither a pass nor a failure; read it as "not run".
+its mint check and prints a **SKIPPED** banner with that reason, **exit code 77** (the usual "skipped" code; never 0,
+so a wrapper reading only exit codes cannot count a run that never minted as a pass), instead of failing: the "Enable
+DIDComm v2" developer setting does not lift the kill, by design, and no setting here does either (`lib/v2Mint.js`).
+The runs come back on their own once the kill lifts by OTA. A SKIPPED banner is neither a pass nor a failure; read it
+as "not run".
 
 Every script above ends by printing a bordered pass/fail banner
 (`lib/banner.js`) so a completed run is easy to spot when scrolled back

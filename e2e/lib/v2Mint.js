@@ -10,6 +10,12 @@
  * Pure, so node --test can hold it.
  */
 
+/**
+ * The exit code of a skipped run: 77, the usual "skipped" code, never 0. A wrapper or a summary that reads only exit
+ * codes would otherwise count a run that never minted as a pass (the vacuous-zero trap); 1 would count it as a failure.
+ */
+export const SKIPPED_EXIT_CODE = 77;
+
 /** The kill, as the skip banner says it. */
 export const V2_MINT_KILL_REASON =
   "the build mints out-of-band/1.x invitations: DIDCOMM_V2_MINT_REMOTE_OFF is on for 282 (#1018), and the developer " +
