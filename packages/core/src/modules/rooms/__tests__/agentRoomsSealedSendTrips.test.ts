@@ -12,6 +12,7 @@ import {
   type RoomsBackend,
   type RoomsCommunity,
 } from '../real/agentRoomsService'
+import { RecordMembersNotPermitted } from '../real/recordWrites'
 import { ROOMS_TASK } from '../real/wire'
 
 const COMMUNITY: RoomsCommunity = { did: 'did:webvh:community:a', name: 'Garden club', personaDid: 'did:key:persona-a' }
@@ -250,7 +251,7 @@ describe('a write that fails forgets what it took on trust', () => {
         inReplyTo: { key: 'older', version: 4 },
         idempotencyKey: 'r1',
       })
-    ).rejects.toBeDefined()
+    ).rejects.toBeInstanceOf(RecordMembersNotPermitted)
     expect(s.sendCompleted).not.toHaveBeenCalled()
     const lists = s.count(ROOMS_TASK.keysList02)
     await s.send('then a message')
