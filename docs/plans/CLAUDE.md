@@ -429,7 +429,11 @@ commenting.
   person depending on who wrote the line, and a later reader cannot tell whose
   decision it was. In a plan's own text "the owner" still means the product's
   user (the person who owns an agent, a room or a VTA), never a plan's author.
-  The checker flags a role in a `**Decisions made**` table's Who cell.
+  The checker flags a role in a `**Decisions made**` table's Who cell, and
+  enforces the rule in decision credits, rationale and companions dated after
+  2026-11-25: a phrase that credits a role ("the product owner", "decided with
+  the user", "the user's word", "(the user,") or a Who, Owner, Decided by or By
+  cell that is only a role (text in backticks or double quotes is not read).
 
 ## Three kinds of content, kept apart
 

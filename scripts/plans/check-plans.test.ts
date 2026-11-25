@@ -7,7 +7,7 @@ import path from 'node:path'
 
 import { sha256, sheetManifest } from './mockup-kit/kit.ts'
 import { fingerprint } from './mockup-kit/tokens.ts'
-import { ASKS_COLUMNS, checkText, classify, TIERS_MARKER, mockupProblem, FORMAT_START, HUMAN_MARKER, isExternalRef, namedDocuments, PRECISION_MARKER, run, sectionRefs } from './check-plans.ts'
+import { ASKS_COLUMNS, checkText, classify, ROLE_CHECK_START, ROLE_CREDIT_ALLOW, ROLE_HINT, TIERS_MARKER, mockupProblem, FORMAT_START, HUMAN_MARKER, isExternalRef, namedDocuments, PRECISION_MARKER, run, sectionRefs } from './check-plans.ts'
 
 const HUMAN = `${HUMAN_MARKER}\n\n> **Human part: for people deciding and reviewing.** The precision part wins.\n`
 const PRECISION = `${PRECISION_MARKER}\n\n> **Precision part: for implementers and agents.** Implement from this.\n`
@@ -478,4 +478,71 @@ test('tiers: a Decisions made Who cell names the person, never the role', () => 
   }
   // Only the Who cell is read: the decision's own text may speak of the owner.
   assert.deepEqual(tmsgs(tiered(STEPS, ASKS, OVERVIEW_OK.replace('| None yet | | | |', '| The owner approves (D2) | Brendan | 2026-11-25 | the user asked |'))), [])
+})
+
+// Role credits beyond the Who cell: a living plan's text, and dated companions from ROLE_CHECK_START on.
+const roleHits = (file: string, kind: 'plan' | 'companion', text: string): number[] =>
+  checkText(file, kind, text, () => true, () => KIT_SVG)
+    .filter((p) => p.message.includes(ROLE_HINT))
+    .map((p) => p.line)
+const inPlan = (line: string): number[] => roleHits('docs/plans/x-plan.md', 'plan', plan(`## 1. Scope\n\n${line}\n`))
+const NEW_COMPANION = `docs/plans/x-plan/${ROLE_CHECK_START}-bam.md`
+
+test('roles: a phrase crediting a decision, ask or word to a role is flagged in a plan', () => {
+  for (const line of [
+    'The product owner\'s ask, 2026-11-23.',
+    'Decided with the product owner on 2026-11-23.',
+    'Shipped on the product owner\'s word.',
+    'Decided with the user on 2026-11-23.',
+    'This was suggested by the user.',
+    'Kept on the user\'s word.',
+    'Applied on the owner\'s word.',
+    'Decided (the user, 2026-11-25).',
+    'Alberto, as product owner, chose it.',
+  ]) {
+    assert.equal(inPlan(line).length, 1, line)
+  }
+  const m = checkText('docs/plans/x-plan.md', 'plan', plan('## 1. Scope\n\nDecided with the product owner.\n'), () => true, () => KIT_SVG)
+  assert.ok(m[0].message.includes('name the person, e.g. Brendan or Alberto') && m[0].message.includes('Collaborative plan branches'))
+})
+
+test('roles: the product\'s owner and the app\'s user, quoted or backticked phrases are not flagged', () => {
+  for (const line of [
+    'The owner\'s agent signs the request.',
+    'The user taps Approve and the owner is notified.',
+    'The name is confirmed by the user before it is stored.',
+    '"the product owner" in Alberto\'s files means Alberto.',
+    'The old text said “the product owner” throughout.',
+    'Write a name, not `the product owner`.',
+  ]) {
+    assert.deepEqual(inPlan(line), [], line)
+  }
+  // A fenced block is not prose.
+  assert.deepEqual(inPlan('```text\nDecided with the product owner.\n```'), [])
+})
+
+test('roles: a Who / Owner / Decided by / By cell that is just a role is flagged, in any table', () => {
+  const table = (col: string, v: string): string => `| Question | ${col} |\n|---|---|\n| Q1 | ${v} |`
+  for (const [col, v] of [['Owner', 'the user'], ['Who', 'The owner'], ['Decided by', '**the user**'], ['By', 'Product owner (the user)'], ['Owner', 'Product owner']]) {
+    assert.equal(inPlan(table(col, v)).length, 1, `${col}: ${v}`)
+  }
+  assert.deepEqual(inPlan(table('Owner', 'Alberto')), [])
+  assert.deepEqual(inPlan(table('Answer', 'the user')), []) // not a credit column
+})
+
+test('roles: companions are checked only from ROLE_CHECK_START on; allowlisted plans are exempt', () => {
+  const body = companion('Decided (the user, as product owner, 2026-11-25).\n\n| Item | Owner |\n|---|---|\n| apply | the user |\n')
+  assert.equal(roleHits(NEW_COMPANION, 'companion', body).length, 2)
+  assert.deepEqual(roleHits('docs/plans/x-plan/2026-11-22-al.md', 'companion', companion('The product owner read the plan.')), [])
+  assert.deepEqual(roleHits('docs/plans/x-plan/2026-11-25-bam.md', 'companion', companion('The product owner read the plan.')), [])
+  assert.ok(ROLE_CREDIT_ALLOW.size > 0)
+  const allowed = [...ROLE_CREDIT_ALLOW][0]
+  assert.deepEqual(roleHits(allowed, 'plan', plan('## 1. Scope\n\nDecided with the product owner.\n')), [])
+})
+
+test('roles: a tiers Who cell that names a role is reported once', () => {
+  const row = OVERVIEW_OK.replace('| None yet | | | |', '| Use X (D1) | the user | 2026-11-25 | decided with the product owner |')
+  const m = tmsgs(tiered(STEPS, ASKS, row)).filter((x) => x.includes(ROLE_HINT))
+  assert.equal(m.length, 1)
+  assert.ok(m[0].includes('name the person who decided'))
 })

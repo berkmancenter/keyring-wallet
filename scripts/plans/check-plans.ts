@@ -34,6 +34,11 @@
 //               every `VTI-Q…` / `VTI-NN` the plan names is registered in docs/VTI_UPSTREAM_FINDINGS.md and every one
 //               named in §7 is in that table. The marker is opt-in, so plans written before it keep passing.
 //
+//   roles:      a plan's text, and a dated companion's from ROLE_CHECK_START (2026-11-26) on, credits no decision, ask,
+//               review or word to a role ("the product owner", "decided with the user", "the user's word", "(the user,"),
+//               and a Who / Owner / Decided by / By table cell is never just a role; text in backticks or double quotes
+//               is not read. Plans in ROLE_CREDIT_ALLOW are exempt.
+//
 //   node --experimental-strip-types scripts/plans/check-plans.ts            → every plan under docs/plans/
 //   node --experimental-strip-types scripts/plans/check-plans.ts <file…>    → only these files
 //   (Node 22.6 or later; `bun scripts/plans/check-plans.ts` also works.) Exit 1 on any error.
@@ -640,6 +645,77 @@ export const DECISIONS_COLUMNS = ['Decision', 'Who', 'When', 'Why']
 /** A role where a decisions register's Who cell should name a person. */
 export const ROLE_CREDIT = /\b(?:the user|(?:the )?product owner|the owner)\b/i
 
+// Name the person, never the role (docs/plans/CLAUDE.md, "Collaborative plan branches"), beyond the Who cell:
+// phrases that credit a decision, ask, review or word to a role, in a living plan's text and in a dated
+// companion from ROLE_CHECK_START on. "The owner" (of an agent, a room, a VTA) and "the user" (of the app)
+// are ordinary product words, so only crediting phrases are flagged, never the words alone. Text inside
+// backticks or double quotes is not read: that is how a line names the phrase rather than uses it.
+
+/** Dated companions are point-in-time records, never edited; only those dated from this day on are checked for role credits. */
+export const ROLE_CHECK_START = '2026-11-26'
+
+/**
+ * Living plans that predate the role-credit check and still credit a role; listed so the check can ship
+ * without editing other people's plans. Paths are relative to the repository root. Remove an entry once
+ * that plan names people.
+ */
+export const ROLE_CREDIT_ALLOW = new Set<string>([
+  // Alberto's plan ("Reviewers: the product owner ...", the Product owner rows of its tables), written before this check.
+  'docs/plans/single-codebase-plan.md',
+  // Alberto's plan ("The product owner" in its header, review notes and tables), written before this check.
+  'docs/plans/data-rooms-performance-plan.md',
+])
+
+export const ROLE_HINT = 'name the person, e.g. Brendan or Alberto; see docs/plans/CLAUDE.md, Collaborative plan branches'
+
+/** Phrases that credit something to a role, read on a line with code spans and double-quoted strings removed. */
+export const ROLE_PHRASES: RegExp[] = [
+  /\b(?:the )?product owner\b/gi,
+  // "Confirmed by the user", "approved by the user" and "the user's decision" are also app behaviour (the app's
+  // user confirms a name, approves a request), so those are flagged only in their "with the user" form.
+  /\b(?:decided|asked|suggested|approved|reviewed|confirmed|chose|said|agreed) with the (?:user|owner)\b/gi,
+  /\b(?:decided|asked|suggested|reviewed|chose|said|agreed) by the (?:user|owner)\b/gi,
+  /\bthe (?:user|owner)'s (?:word|ask|instruction|yes|go-ahead|sign-off)\b/gi,
+  /\(the user[,)]/gi,
+]
+
+/** Column headers whose cells credit a person; a cell there that is exactly a role is flagged. */
+const CREDIT_COLUMN = /^(?:who|owner|decided by|by)$/i
+const ROLE_CELL = /^(?:the user|(?:the )?product owner|the owner)(?:\s*\([^)]*\))?$/i
+
+const unquoted = (s: string): string => withoutCode(s).replace(/"[^"]*"|\u201c[^\u201d]*\u201d/g, (q) => ' '.repeat(q.length))
+
+/** Whether role credits are checked in this file. `file` is relative to the repository root. */
+export const roleCreditsChecked = (file: string, kind: Kind): boolean => {
+  if (kind === 'skip' || ROLE_CREDIT_ALLOW.has(file)) return false
+  const dated = DATED.exec(path.basename(file))
+  return kind === 'plan' ? !dated : !!dated && dated[1] >= ROLE_CHECK_START
+}
+
+const checkRoleCredits = (lines: Line[], problem: (n: number, m: string) => void): void => {
+  const hits = new Map<number, string[]>()
+  const hit = (n: number, phrase: string): void => {
+    const h = hits.get(n) ?? []
+    if (!h.includes(phrase)) h.push(phrase)
+    hits.set(n, h)
+  }
+  for (const l of lines) {
+    if (l.inFence) continue
+    const t = unquoted(l.text)
+    for (const re of ROLE_PHRASES) for (const m of t.matchAll(re)) hit(l.n, m[0])
+  }
+  for (const t of tablesIn(lines)) {
+    const cols = t.header.map((c, i) => (CREDIT_COLUMN.test(c.replace(/[*_]/g, '').trim()) ? i : -1)).filter((i) => i >= 0)
+    for (const r of t.rows) {
+      for (const i of cols) {
+        const v = (r.cells[i] ?? '').replace(/[*_]/g, '').trim()
+        if (ROLE_CELL.test(v)) hit(r.n, v)
+      }
+    }
+  }
+  for (const [n, phrases] of hits) problem(n, `${phrases.map((p) => `"${p}"`).join(', ')} credits a role: ${ROLE_HINT}`)
+}
+
 /** The lines of a `##` section: after its heading, up to the next `##`. */
 const sectionLines = (lines: Line[], h2: Heading[], at: Heading): Line[] => {
   const next = h2.find((h) => h.n > at.n)
@@ -669,7 +745,7 @@ const checkTiers = (
         // Name the person, never the role ("Collaborative plan branches"): only the Who cell is read.
         for (const r of t.rows) {
           const role = (r.cells[1] ?? '').match(ROLE_CREDIT)
-          if (role) problem(r.n, `Decisions made: the Who cell says "${role[0]}"; name the person who decided ("Brendan", "Alberto"), never the role`)
+          if (role) problem(r.n, `Decisions made: the Who cell says "${role[0]}"; name the person who decided, never the role: ${ROLE_HINT}`)
         }
       }
     }
@@ -803,6 +879,13 @@ export const checkText = (
     } else checkParts('companion', lines, h2, problem)
     // A companion's bare `§` means its parent plan's, so it is not resolved here, only checked for ambiguity.
     checkSectionRefs(file, text, null, problem)
+  }
+  if (roleCreditsChecked(file, kind)) {
+    // One role message per line: a tiers Who cell already flagged is not reported twice.
+    const flagged = new Set(problems.filter((p) => p.message.includes(ROLE_HINT)).map((p) => p.line))
+    checkRoleCredits(lines, (n, m) => {
+      if (!flagged.has(n)) problem(n, m)
+    })
   }
   checkMermaid(lines, problem)
   checkAssets(file, lines, exists, problem, read)

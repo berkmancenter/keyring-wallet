@@ -1058,7 +1058,7 @@ Wireframes are in [`agent-connect-plan/mockups/`](./agent-connect-plan/mockups/)
 | Lane | Owner | Steps |
 |---|---|---|
 | Keyring core | Keyring maintainers (Brendan Miller) | 7.2 to 7.5, 7.7 to 7.10, 7.13, 7.14, 7.16, 7.18, 7.20 to 7.23, 7.26 (the logic of each) |
-| UI/UX | UI/UX lane (the product owner's designer) | The screens of 7.7, 7.8, 7.11, 7.13, 7.14, 7.16, 7.23, 7.26; the canvas (D41; redrawn for rev 6 at canvas version 40, §6) |
+| UI/UX | UI/UX lane (the designer Brendan and Alberto share) | The screens of 7.7, 7.8, 7.11, 7.13, 7.14, 7.16, 7.23, 7.26; the canvas (D41; redrawn for rev 6 at canvas version 40, §6) |
 | Plugin (`OpenVTC/vta-agent-memory`, extended; a fork branch while a merge lags, D45) | Plugin maintainer, with the `vta-agent-memory` maintainers reviewing upstream | 7.6, 7.15, 7.19, 7.24, 7.25 |
 | VTA and upstream recording | Keyring maintainers | 7.1 (findings), this plan's §10 and `vti-asks.md`; the lab's VTA; no filing required |
 | Test and lab | Test lane (the lab owner) | 7.1, 7.11, 7.12, 7.17, 7.24 (the conformance suite) |
