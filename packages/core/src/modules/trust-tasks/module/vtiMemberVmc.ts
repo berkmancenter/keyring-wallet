@@ -90,7 +90,8 @@ const issuerOf = (credential: Record<string, unknown>): string | undefined => {
  * The unsigned acknowledgement of `grant`, by `personaDid`. Refuses what
  * dtg-credentials refuses (`read_membership_grant`, `check_within_grant`): a
  * grant that is not a community's membership grant, already an acknowledgement,
- * about someone else, not `public`, or already past its end.
+ * about someone else, declaring a scope narrower than `directed`, or already past
+ * its end.
  */
 export function buildMemberVmc(
   grant: Record<string, unknown>,
@@ -106,7 +107,10 @@ export function buildMemberVmc(
   if (subject.id !== personaDid) throw new MemberVmcNotPossible('notTheGrantSubject')
   const community = issuerOf(grant)
   if (!community) throw new MemberVmcNotPossible('notAMembershipGrant')
-  if (grant.issuerScope !== 'public') throw new MemberVmcNotPossible('grantScope')
+  // `directed` at minimum, the narrowest scope a community can declare for its
+  // own identifier (dtg-credentials 0.16 read_membership_grant; `public` only
+  // through 0.15). Exact spellings: `Public` or an absent scope is no declaration.
+  if (grant.issuerScope !== 'directed' && grant.issuerScope !== 'public') throw new MemberVmcNotPossible('grantScope')
 
   const now = (options.now ?? new Date()).getTime()
   const grantUntil = typeof grant.validUntil === 'string' ? Date.parse(grant.validUntil) : NaN

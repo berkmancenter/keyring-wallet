@@ -23,7 +23,7 @@ import { DidKey, TypedArrayEncoder } from '@credo-ts/core'
 // eslint-disable-next-line import/order
 import { ed25519 } from '@noble/curves/ed25519.js'
 // eslint-disable-next-line import/order
-import { communityRoleCard, confersRole, LEGACY_DTG_SHAPE_UNTIL } from '@bifold/trust-tasks'
+import { communityRoleCard, confersRole, LEGACY_DTG_SHAPE_UNTIL, signDocumentProof } from '@bifold/trust-tasks'
 // eslint-disable-next-line import/order
 import minted from './fixtures/dtg-v1-minted-eligibility.json'
 // eslint-disable-next-line import/order
@@ -79,6 +79,26 @@ function mintedVetter() {
       domain: applicant,
     })
   return { did, present }
+}
+
+/**
+ * The minted community (seed 0xC0 × 32), able to re-issue the grant: an
+ * altered grant it signs verifies, so a refusal of one is for what it says,
+ * not for a broken proof.
+ */
+async function reissuedByCommunity(change: Json): Promise<Json> {
+  const secret = new Uint8Array(32).fill(0xc0)
+  const did = `did:key:z${TypedArrayEncoder.toBase58(new Uint8Array([0xed, 0x01, ...ed25519.getPublicKey(secret)]))}`
+  expect(did).toBe(community)
+  const verificationMethodId = DidKey.fromDid(did).didDocument.verificationMethod?.[0]?.id as string
+  const agent = {
+    ...resolver,
+    dependencyManager: {
+      resolve: () => ({ sign: async ({ data }: { data: Uint8Array }) => ({ signature: ed25519.sign(data, secret) }) }),
+    },
+  }
+  const { proof: _old, ...unsigned } = { ...vac, ...change }
+  return signDocumentProof(agent as never, unsigned, did, { kmsKeyId: 'minted-community', verificationMethodId })
 }
 
 describe('a role grant, read in either shape', () => {
@@ -190,9 +210,32 @@ describe('an applicant judging a vetter who presents a VAC grant', () => {
     expect(result).toMatchObject({ ok: true })
   })
 
-  // vta-sdk 0.47 verify_role_credential (eligibility.rs:303-336).
+  // vta-sdk 0.87 verify_role_credential (eligibility.rs:320-327): a community
+  // declares `directed` or `public` for its own identifier (`public` only
+  // through 0.84; dtg-credentials 0.16 lets a VTC issue either).
+  it('accepts a VAC grant the community issued declaring directed', async () => {
+    expect(vac.issuerScope).toBe('public')
+    const v = mintedVetter()
+    const directed = await reissuedByCommunity({ issuerScope: 'directed' })
+    await expect(
+      verifyEligibilityPresentation(resolver as never, await v.present(directed), expectations())
+    ).resolves.toMatchObject({ ok: true, credentialId: vac.id })
+  })
+
+  // The control: the same re-issue, signed as soundly, narrower or misspelt.
+  it.each(['pairwise', 'Public'])('still refuses a community-signed VAC grant declaring %s', async (issuerScope) => {
+    const v = mintedVetter()
+    const result = await verifyEligibilityPresentation(
+      resolver as never,
+      await v.present(await reissuedByCommunity({ issuerScope })),
+      expectations()
+    )
+    expect(result).toMatchObject({ ok: false, reason: 'grantMalformed' })
+  })
+
+  // vta-sdk verify_role_credential (eligibility.rs:309-340 at 0.87).
   it.each([
-    ['declaring a scope other than public', { issuerScope: 'directed' }, 'grantMalformed'],
+    ['declaring a scope narrower than directed', { issuerScope: 'pairwise' }, 'grantMalformed'],
     ['without issuerScope', { issuerScope: undefined }, 'grantMalformed'],
     [
       'under the old context',
