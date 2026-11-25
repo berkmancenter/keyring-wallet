@@ -3021,36 +3021,54 @@ export class VtaClient {
       ['signing', persona.kmsKeyIds?.signing, persona.vtaKeyIds.signing],
       ['keyAgreement', persona.kmsKeyIds?.keyAgreement, persona.vtaKeyIds.keyAgreement],
     ] as const
-    let fetched = false
-    for (const [kind, kmsKeyId, vtaKeyId] of pairs) {
-      if (!kmsKeyId || !isInMemoryKeyId(kmsKeyId)) continue
-      // Asked without fetching: getPublicKey would fetch a missing copy itself
-      // (EphemeralKeyManagementService), and this is the fetch.
-      if (await this.holdsKeyNow(kmsKeyId)) continue
-      const joined = keysInFlight.get(kmsKeyId)
-      if (joined) {
-        // A sign-in waits for this copy: the fetch it joins goes first now, if the sweep queued it behind others.
-        const place = source === 'on use' ? inFlightPriority.get(joined) : undefined
-        if (place) {
-          place.first = true
-          place.raise?.()
-        }
-        const since = Date.now()
-        await joined.finally(() =>
-          this.keyLog(
-            `${kind} copy (${source ?? 'other'}): joined the ${inFlightSource.get(joined) ?? 'other'} fetch, ${Date.now() - since} ms`
-          )
-        )
-        // Someone else's fetch: the copy is this agent's only if it is held now. A fetch started before a lock lands
-        // in the agent that locked, and a caller after the unlock (a new agent, the same id) would otherwise take it as
-        // held. Not held: this caller fetches it itself.
-        if (!(await this.holdsKeyNow(kmsKeyId))) await this.fetchKeyCopy(kind, kmsKeyId, vtaKeyId, source)
-      } else {
-        await this.fetchKeyCopy(kind, kmsKeyId, vtaKeyId, source)
+    // The two copies go together, not the signing one and then the key-agreement one: a sign-in needs the signing key
+    // for its TSP session and the key-agreement key for the mediator's authenticate, and fetched one after the other
+    // the second always landed in a second export round behind every other identity's first (a tester's launch,
+    // IN-724 on 281.2: four signing exports, then four key-agreement ones, the socket waiting on the last). The agent
+    // channel's read lane bounds how many exports are on the wire at once (keyCopySweep), so two at a time from one
+    // identity takes nothing from that. Both are waited for before this answers: a failed fetch fails the ask, and
+    // can leave the other copy held, which the next ask then finds and skips (one fetch instead of two).
+    const outcomes = await Promise.allSettled(
+      pairs.map(([kind, kmsKeyId, vtaKeyId]) => this.holdOneKey(kind, kmsKeyId, vtaKeyId, source))
+    )
+    const failed = outcomes.find((o): o is PromiseRejectedResult => o.status === 'rejected')
+    if (failed) throw failed.reason
+    return outcomes.some((o) => o.status === 'fulfilled' && o.value)
+  }
+
+  /** One of a persona's copies: held already (false), joined another's fetch or fetched here (true). */
+  private async holdOneKey(
+    kind: 'signing' | 'keyAgreement',
+    kmsKeyId: string | undefined,
+    vtaKeyId: string,
+    source?: KeyFetchSource
+  ): Promise<boolean> {
+    if (!kmsKeyId || !isInMemoryKeyId(kmsKeyId)) return false
+    // Asked without fetching: getPublicKey would fetch a missing copy itself
+    // (EphemeralKeyManagementService), and this is the fetch.
+    if (await this.holdsKeyNow(kmsKeyId)) return false
+    const joined = keysInFlight.get(kmsKeyId)
+    if (joined) {
+      // A sign-in waits for this copy: the fetch it joins goes first now, if the sweep queued it behind others.
+      const place = source === 'on use' ? inFlightPriority.get(joined) : undefined
+      if (place) {
+        place.first = true
+        place.raise?.()
       }
-      fetched = true
+      const since = Date.now()
+      await joined.finally(() =>
+        this.keyLog(
+          `${kind} copy (${source ?? 'other'}): joined the ${inFlightSource.get(joined) ?? 'other'} fetch, ${Date.now() - since} ms`
+        )
+      )
+      // Someone else's fetch: the copy is this agent's only if it is held now. A fetch started before a lock lands
+      // in the agent that locked, and a caller after the unlock (a new agent, the same id) would otherwise take it as
+      // held. Not held: this caller fetches it itself.
+      if (!(await this.holdsKeyNow(kmsKeyId))) await this.fetchKeyCopy(kind, kmsKeyId, vtaKeyId, source)
+    } else {
+      await this.fetchKeyCopy(kind, kmsKeyId, vtaKeyId, source)
     }
-    return fetched
+    return true
   }
 
   /** One line of the key-copy timing: by kind and source only, never a key id or an identity. */
