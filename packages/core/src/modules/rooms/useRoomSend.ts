@@ -9,6 +9,11 @@
  * key, the same on each retry, so a post that did reach the room before an answer was lost is not written twice
  * (words, a file, or both).
  *
+ * That id also fixes the record's key before anything is sent (`RoomsService.postKeyFor`), so the room's list is
+ * the last word: a post it shows leaves this list, sending, failed or sent, whatever its own answer said. A write
+ * can land and its answer still be lost or late; the post then read "Not sent" under the same post delivered
+ * (IN-736), since only a post whose answer came back knew its key.
+ *
  * A post may carry one file (picked and size-checked by `pickRoomFile`), with or without words. While it uploads,
  * the post shows how far it has come, and Cancel stops it: nothing is written, and the post is gone.
  *
@@ -55,6 +60,11 @@ export interface PendingPost {
   state: 'sending' | 'failed' | 'sent'
   /** The record's key, once written: the post leaves this list when the room's list shows that key. */
   key?: string
+  /**
+   * The key the record takes, known before it is written (`RoomsService.postKeyFor`): the room's list showing it means
+   * the post is there, whatever its answer said. Absent where the service can't say (the sample).
+   */
+  recordKey?: string
   /** The file it carries, if any. */
   file?: RoomsAttachment
   /** How far the file's upload has come, while sending. */
@@ -82,14 +92,14 @@ export interface RoomSend {
   cancel: (localId: string) => void
   /** Sends a failed post again, as the same event. */
   retry: (localId: string) => void
-  /** Forgets sent posts the room's list now shows. */
+  /** Forgets the posts the room's list now shows, whatever their state. */
   settle: (shownKeys: Set<string>) => void
 }
 
 interface Outbox {
   posts: PendingPost[]
   listeners: Set<() => void>
-  /** The room screen's refresh, while it is open: a post written shows in its list. */
+  /** The room screen's refresh, while it is open: a post written shows in its list, and so may one whose answer failed. */
   onSent?: () => void
   /** Whether the room is on screen, where a post that fails is marked and needs no notice. */
   onScreen: boolean
@@ -122,6 +132,10 @@ const update = (box: Outbox, localId: string, values: Partial<PendingPost>) =>
   change(box, (all) => all.map((p) => (p.localId === localId ? { ...p, ...values } : p)))
 
 const isExpired = (e: unknown): boolean => e instanceof Error && e.name === 'RoomsPreviewExpired'
+
+/** The key the room's list shows the post under: the written one, else the one it was always going to take. */
+export const listedKeyOf = (post: Pick<PendingPost, 'key' | 'recordKey'>): string | undefined =>
+  post.key ?? post.recordKey
 
 async function deliver(service: RoomsService, roomId: string, post: PendingPost) {
   const box = outboxOf(service, roomId)
@@ -173,6 +187,9 @@ async function deliver(service: RoomsService, roomId: string, post: PendingPost)
     if (box.posts.some((p) => p.localId === post.localId)) {
       const refused = permanentRefusal(e)
       update(box, post.localId, { state: 'failed', progress: undefined, refused })
+      // Not refused, so it may have landed with only its answer lost (IN-736): the room is read once more now, and a
+      // post its list shows leaves here (settle) instead of waiting for the next poll as "Not sent".
+      if (!refused) box.onSent?.()
       if (!box.onScreen) {
         const failed: RoomPostFailed = {
           service,
@@ -256,6 +273,7 @@ export function useRoomSend(
       if ((!trimmed && !file) || !service) return false
       const localId = newEventId()
       const at = new Date()
+      const recordKey = service.postKeyFor?.(localId)
       const post: PendingPost = {
         localId,
         text: trimmed,
@@ -266,6 +284,7 @@ export function useRoomSend(
         body: trimmed,
         at,
         state: 'sending',
+        ...(recordKey ? { recordKey } : {}),
         ...(file ? { file } : {}),
         // A reply goes only as a record; a file goes only as a note, so the two never meet (the composer offers no "+"
         // while replying).
@@ -299,8 +318,14 @@ export function useRoomSend(
     (shownKeys: Set<string>) => {
       if (!service) return
       const box = outboxOf(service, roomId)
-      if (!box.posts.some((p) => p.key && shownKeys.has(p.key))) return
-      change(box, (all) => all.filter((p) => !(p.key && shownKeys.has(p.key))))
+      // Shown: the post is in the room, whatever state it was left in. A failed one too: its write landed and only
+      // the answer went missing, and "Not sent" under the post delivered would be wrong twice over (IN-736).
+      const shown = (p: PendingPost) => {
+        const key = listedKeyOf(p)
+        return !!key && shownKeys.has(key)
+      }
+      if (!box.posts.some(shown)) return
+      change(box, (all) => all.filter((p) => !shown(p)))
     },
     [service, roomId]
   )

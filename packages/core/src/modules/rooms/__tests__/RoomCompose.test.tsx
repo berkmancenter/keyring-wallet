@@ -221,6 +221,28 @@ describe('posting to a room', () => {
     await waitFor(() => expect(tree.getAllByText('Second try')).toHaveLength(1))
   })
 
+  // IN-736: the write landed and its answer was lost. The room's list shows the post, and it showed again under it,
+  // faded, "Not sent. Tap to try again". The room screen draws the listed post once, and no "Not sent".
+  test('a post whose write landed and whose answer was lost shows once, delivered, with no "Not sent" beside it', async () => {
+    const service = mockService as RoomsService
+    const real = service.confirmWrite.bind(service)
+    // The sample keys a post by the room's next version: say it ahead, as the real service says its own.
+    const versions = (await service.listNotes(PLANNING)).notes.map((n) => n.version)
+    const next = `n${Math.max(0, ...versions) + 1}`
+    Object.assign(service, { postKeyFor: jest.fn(() => next) })
+    jest.spyOn(service, 'confirmWrite').mockImplementationOnce(async (token) => {
+      const written = await real(token)
+      expect(written.key).toBe(next)
+      throw new Error('timed out waiting for the agent')
+    })
+    const tree = show(PLANNING)
+    await type(tree, 'Testing a message from Keyring')
+    await send(tree)
+    // No pull and no wait for the next poll: a failure that was not a refusal reads the room once more.
+    await waitFor(() => expect(tree.getAllByText('Testing a message from Keyring')).toHaveLength(1))
+    expect(tree.queryByTestId(id('RoomPostNotSent'))).toBeNull()
+  })
+
   test('a post refused on this phone for good says why, and offers no retry (control: the test above)', async () => {
     const service = mockService as RoomsService
     const prepareWrite = jest
