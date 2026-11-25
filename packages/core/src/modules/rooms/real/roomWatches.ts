@@ -25,6 +25,11 @@
  *   Anything else (the host's `liveNotPermitted`, an agent or host that arms it one-shot, a request with no answer)
  *   leaves the room watched one signal at a time, exactly as above, and live is asked again after a wait. A room is
  *   live only while a screen holds it: leaving the room arms the one-shot watch again, which ends the live one.
+ * - **A live watch can end with nothing said.** When a room's signal delay goes back to `randomised`, its host ends
+ *   every live watch of it "at once, silently" (upstream `docs/02-vta/data-rooms.md`, "Watching a room", vta-service
+ *   0.84.0): no refusal reaches the phone, and the watch still reads as live here, so the room's timed poll waits too.
+ *   The room is quiet until its next renewal, at most about a minute on, is refused (`liveNotPermitted`); it is then
+ *   armed one signal at a time from the version held, and a host signals at once a room already past that version.
  *
  * @module rooms/real/roomWatches
  */
@@ -469,10 +474,19 @@ export class RoomWatches {
 
   private async arm(member: string, host: string, rooms: [string, number][]): Promise<void> {
     const generation = this.generation
-    const mine = (roomId: string) => {
+    const sent = new Map(rooms)
+    const waiting = (roomId: string) => {
       const w = this.watches.get(roomId)
       return generation === this.generation && w?.state === 'arming' && w.member === member && w.host === host
+        ? w
+        : undefined
     }
+    // Asked again from a later version while this request was out (the rows armed it, then its screen read further):
+    // that request is queued behind this one, and its answer is the one that says how the room is held. This answer
+    // arming it would leave the older version held here and the later answer matching nothing (281.2, 23QE-AHW7:
+    // "watching 1 of 1" then "watching 0 of 1", and the same version asked a third time).
+    const askedAgain = (roomId: string) => (waiting(roomId)?.since ?? 0) > (sent.get(roomId) ?? 0)
+    const mine = (roomId: string) => waiting(roomId) !== undefined && !askedAgain(roomId)
     const oneShot = this.oneShotType()
     if (!oneShot) {
       for (const [roomId] of rooms) if (mine(roomId)) this.polled(roomId, 'is a task the agent does not serve')
@@ -530,7 +544,9 @@ export class RoomWatches {
     }
     const byRoom = new Map(answer.watches.map((w) => [w.roomId, w]))
     let armed = 0
+    let later = 0
     for (const [roomId, since] of rooms) {
+      if (askedAgain(roomId)) later++
       if (!mine(roomId)) continue
       const outcome = byRoom.get(roomId)
       const expiresAt = outcome?.expiresAt ? Date.parse(outcome.expiresAt) : NaN
@@ -545,7 +561,15 @@ export class RoomWatches {
             : 'not armed'
         )
     }
-    this.deps.warn(`rooms: watching ${armed} of ${rooms.length} rooms at ${this.deps.logRef(host)}`)
+    // Counted over the rooms this answer speaks for. One asked again since is said apart, never as a room not armed.
+    const at = this.deps.logRef(host)
+    this.deps.warn(
+      later === rooms.length
+        ? `rooms: a watch of ${later} rooms at ${at} was answered after each was asked again from a later version: that answer says`
+        : `rooms: watching ${armed} of ${rooms.length - later} rooms at ${at}${
+            later ? ` (${later} more asked again from a later version: that answer says)` : ''
+          }`
+    )
   }
 
   private polled(roomId: string, why: string): void {
