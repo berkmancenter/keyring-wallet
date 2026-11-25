@@ -35,6 +35,7 @@ import { parseArgs } from 'node:util';
 import { byTestId, dumpSource, ensureAppium, stopAppium, existsTestId, screenshot, scrollToTestId, sleep, tapTestId, tapTestIdByCoordinates } from '../lib/driver.js';
 import { applicant as applicantRole, textOf, unlockToHome, vetter as vetterRole } from '../lib/keyringRoles.js';
 import { join } from '../lib/pages/join.js';
+import { CONFIRM_APPEARS_WITHIN_MS, handleBiometricConfirmIfPresent } from '../lib/flows.js';
 import { createHvAdmin, soleMemberSince } from './hvAdmin.js';
 import { clearDeviceLog, deviceLog, keepAlive, openDevice } from './hvDevices.js';
 import { anonymityVerdict, appLevelLines, applicationVerdict, taskRound, withoutOwnRequestCard, withWrongSecret, refusalCodes } from './hvVerdict.js';
@@ -145,6 +146,9 @@ try {
       await dumpSource(app, 'hv-persona-step').catch(() => undefined);
       await tapTestIdByCoordinates(app, 'JoinAsContinue', 10000).catch((e) => console.log(`[e2e] JoinAsContinue by coordinates: ${e.message}`));
     }
+    // From bifold #937 on, a phone with no biometrics (every emulator) confirms the new identity with the Keyring PIN
+    // ("Make your identity"); the other vetting drivers answer it the same way (wallet #857).
+    await handleBiometricConfirmIfPresent(app, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
   }
   const shown = await existsTestId(app, 'VettingPrivate', 90000);
   await screenshot(app, 'hv-vetting').catch(() => undefined);
@@ -169,6 +173,7 @@ try {
   console.log(`[e2e] VettingStartButton reads "${label}" — tapping`);
   if (!/start my application/i.test(label)) throw new Error(`VettingStartButton never read "Start my application" (last: "${label}")`);
   await tapTestId(app, 'VettingStartButton', 10000);
+  await handleBiometricConfirmIfPresent(app, { appearWithin: CONFIRM_APPEARS_WITHIN_MS });
   let verdict = applicationVerdict('');
   for (let i = 0; i < 12; i++) {
     await sleep(5000);
