@@ -29,7 +29,7 @@
  *
  * Asserts NEGATIVELY and specifically:
  *   - the exchanged contact renders via the default `ContactCard`
- *     (`bifold/packages/core/src/modules/vrc/components/ContactCard.tsx`) —
+ *     (`packages/core/src/modules/vrc/components/ContactCard.tsx`) —
  *     no dedicated container testID exists on that component (only its
  *     `ContactAvatarImage`, which `TradingCard` also reuses for its own
  *     portrait — see that file's own comment), so "default card" is proven

@@ -69,7 +69,7 @@ xcuserdata/
 app/vendor/bundle/**
 
 # child packages
-# bifold/ is part of this repository (history on the history/bifold ref); its own .gitignore covers its tree.
+# The framework is this repository's packages/* (history on the history/bifold ref, under bifold/ there); packages/.gitignore covers its tree.
 aries-oca-bundles/
 credo-ts/
 app/vendor/

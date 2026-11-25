@@ -51,7 +51,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'))
 
 // Mirror bifold's jestSetup: keep RefreshOrchestrator from spinning timers/logs
-jest.mock('../bifold/packages/core/src/modules/openid/refresh/refreshOrchestrator', () => ({
+jest.mock('../packages/core/src/modules/openid/refresh/refreshOrchestrator', () => ({
   RefreshOrchestrator: jest.fn().mockImplementation(() => ({
     configure: jest.fn(),
     start: jest.fn(),

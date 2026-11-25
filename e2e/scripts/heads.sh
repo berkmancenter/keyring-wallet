@@ -14,27 +14,29 @@
 #   e2e/scripts/heads.sh            # print, and fail if bifold ≠ the pinned commit
 #   ALLOW_UNPINNED=1 …              # print the gap and warn instead of failing
 #
-# Since the fold (docs/plans/single-codebase-plan.md), bifold/ is a directory of
-# this repository, not a submodule: there is no pin and no second head, the
-# wallet commit alone scopes a result, and this prints that and exits 0. The
-# pin logic below is kept for the release lines that still carry the gitlink
+# Since the fold (docs/plans/single-codebase-plan.md), the framework is part of
+# this repository, not a submodule, and since Phase 2 of that plan it lives at
+# packages/: there is no pin and no second head, the wallet commit alone scopes
+# a result, and this prints that and exits 0. "bifold" in its line is the id of
+# the packages/ tree (the manifest's and ota-deploy.mjs's name for it). The pin
+# logic below is kept for the release lines that still carry the gitlink
 # (release/255 and older), whose builds this script also guards.
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 wallet=$(git -C "$ROOT" rev-parse HEAD)
-# The index entry for bifold: mode 160000 is the submodule's gitlink (its commit in column 2); anything else is the
-# folded tree. `ls-tree HEAD bifold` would give the tree's id after the fold, and a tree id never equals a commit id.
+# The index entry for bifold: mode 160000 is the submodule's gitlink (its commit in column 2). Anything else, and the
+# framework is this repository's: at packages/ since the move.
 entry=$(git -C "$ROOT" ls-files -s -- bifold | awk 'NR == 1')
 if [ "${entry:0:6}" != "160000" ]; then
-  # --verify --quiet: a plain rev-parse echoes an unresolvable "HEAD:bifold" back on stdout, which would land in the
-  # SUMMARY as a tree id and pass a checkout with no bifold at all (review of the fold).
-  tree=$(git -C "$ROOT" rev-parse --verify --quiet "HEAD:bifold") || {
-    echo "heads: HEAD has no bifold at all: not a wallet checkout, or an incomplete one" >&2
+  # --verify --quiet: a plain rev-parse echoes an unresolvable "HEAD:packages" back on stdout, which would land in the
+  # SUMMARY as a tree id and pass a checkout with no framework at all (review of the fold).
+  tree=$(git -C "$ROOT" rev-parse --verify --quiet "HEAD:packages") || {
+    echo "heads: HEAD has neither a bifold gitlink nor a packages/ tree: not a wallet checkout, or an incomplete one (a checkout from between the fold and the move carries the framework at bifold/; its own heads.sh reads that)" >&2
     exit 1
   }
   dirty=""
   [ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ] && dirty=" (tree dirty)"
-  echo "heads: wallet ${wallet:0:8} · bifold tree ${tree:0:8} (one codebase, no pin)${dirty}"
+  echo "heads: wallet ${wallet:0:8} · bifold tree ${tree:0:8} (the packages/ tree: one codebase, no pin)${dirty}"
   echo "heads: SUMMARY wallet ${wallet:0:8} · bifold tree ${tree:0:8} (one codebase: the wallet commit scopes the result)${dirty}"
   exit 0
 fi

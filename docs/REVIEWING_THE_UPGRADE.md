@@ -66,7 +66,7 @@ Then the **bifold VRC contract suite** — this is *the* behavioral contract for
 VRC module and the most important test signal in the whole PR:
 
 ```sh
-cd bifold/packages/core && yarn test
+cd packages/core && yarn test
 ```
 
 > Note: `yarn typecheck` depends on the bifold packages building cleanly (the

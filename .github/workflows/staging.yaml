@@ -162,6 +162,11 @@ jobs:
         run: |
           yarn install --immutable
 
+      # As quality.yml's Testing job: the app's jest maps every @bifold/* package to source, and the build is made
+      # anyway so an import no mapper covers resolves as it does at runtime.
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
+
       - name: Run tests
         working-directory: app
         run: |
@@ -188,9 +193,9 @@ jobs:
           # Full history and tags, so the notes step can find the previous staging tag.
           fetch-depth: 0
 
-      - name: Show the bifold tree
+      - name: Show the framework tree
         run: |
-          echo "bifold tree at this build: $(git rev-parse --short=8 HEAD:bifold)"
+          echo "packages/ tree at this build: $(git rev-parse --verify --quiet --short=8 HEAD:packages || echo none)"
 
       - name: Free up disk space
         run: |
@@ -270,28 +275,20 @@ jobs:
           java-version: 17
           cache: "gradle"
 
-      - name: Build bifold packages
-        working-directory: bifold
-        run: |
-          echo "Building bifold packages..."
-          yarn install --immutable
-          yarn build
-          echo "✅ Bifold packages built successfully"
-
-      - name: Verify react-native-attestation build
+      - name: Verify react-native-attestation
         run: |
           echo "🔍 Verifying react-native-attestation package..."
 
-          # Check TypeScript build output exists
-          if [ -f "bifold/packages/react-native-attestation/build/commonjs/index.js" ]; then
-            echo "✅ TypeScript build: OK (build/commonjs/index.js exists)"
+          # The package bundles from source since Phase 2 of the fold (no build step): its entry must exist
+          if [ -f "packages/react-native-attestation/src/index.ts" ]; then
+            echo "✅ Source entry: OK (src/index.ts exists)"
           else
-            echo "❌ TypeScript build FAILED: build/commonjs/index.js not found"
+            echo "❌ Source entry MISSING: packages/react-native-attestation/src/index.ts not found"
             exit 1
           fi
 
           # Check native Android files exist
-          if [ -f "bifold/packages/react-native-attestation/android/src/main/java/com/attestation/AttestationModule.kt" ]; then
+          if [ -f "packages/react-native-attestation/android/src/main/java/com/attestation/AttestationModule.kt" ]; then
             echo "✅ Android native: OK (AttestationModule.kt exists)"
           else
             echo "❌ Android native MISSING: AttestationModule.kt not found"
@@ -299,7 +296,7 @@ jobs:
           fi
 
           # Check native iOS files exist
-          if [ -f "bifold/packages/react-native-attestation/ios/Attestation.mm" ]; then
+          if [ -f "packages/react-native-attestation/ios/Attestation.mm" ]; then
             echo "✅ iOS native: OK (Attestation.mm exists)"
           else
             echo "❌ iOS native MISSING: Attestation.mm not found"
@@ -307,7 +304,7 @@ jobs:
           fi
 
           # Check podspec exists (needed for iOS CocoaPods)
-          if [ -f "bifold/packages/react-native-attestation/react-native-attestation.podspec" ]; then
+          if [ -f "packages/react-native-attestation/react-native-attestation.podspec" ]; then
             echo "✅ CocoaPods spec: OK (podspec exists)"
           else
             echo "❌ CocoaPods spec MISSING: podspec not found"
@@ -317,18 +314,14 @@ jobs:
           echo ""
           echo "🎉 react-native-attestation verification complete!"
 
-      - name: Clean up after bifold build
+      - name: Clean up before the install
         run: |
-          echo "Disk space after bifold build:"
+          echo "Disk space before the install:"
           df -h
 
           # Clean up yarn cache (free up space early)
           yarn cache clean 2>/dev/null || true
           rm -rf ~/.yarn/cache 2>/dev/null || true
-
-          # Clean up node_modules caches in bifold
-          find bifold -type d -name ".cache" -exec rm -rf {} + 2>/dev/null || true
-          find bifold/node_modules -type d -name ".cache" -exec rm -rf {} + 2>/dev/null || true
 
           # Clean up any large temporary files
           find /tmp -type f -size +10M -delete 2>/dev/null || true
@@ -346,9 +339,12 @@ jobs:
         run: |
           yarn install --immutable
 
-      - name: Verify bifold linking
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
+
+      - name: Verify workspace linking
         run: |
-          node scripts/verify-bifold-linking.js
+          node scripts/verify-workspace-linking.js
 
       # Every store build records the native fingerprint it is made for, with OTA
       # on or off, so a later over-the-air publish can refuse a bundle that no
@@ -497,10 +493,7 @@ jobs:
           find . -type d -name ".next" -exec rm -rf {} + 2>/dev/null || true
           find . -type d -name ".turbo" -exec rm -rf {} + 2>/dev/null || true
 
-          # Clean up bifold source maps only (keep build/ and lib/ directories - Metro needs them)
-          # Some packages use build/ (remote-logs, oca, verifier) and some use lib/ (core)
-          find bifold/packages -type f -name "*.map" -delete 2>/dev/null || true
-          find bifold/packages -type f -name "*.d.ts.map" -delete 2>/dev/null || true
+          # The framework's packages (packages/*) bundle from source: no build output to trim here.
 
           # Never delete files inside node_modules by name: a folder called
           # "test" can be runtime code (@openvtc/trust-tasks exports
@@ -544,9 +537,7 @@ jobs:
           rm -rf app/android/.gradle 2>/dev/null || true
           rm -rf app/android/app/.cxx 2>/dev/null || true
 
-          # NOTE: We keep bifold lib/ and build/ directories here - Metro needs them for bundling!
-          # Some packages use build/ (remote-logs, oca, verifier) and some use lib/ (core)
-          # We delete them AFTER Metro bundling completes (see Android release build step)
+          # NOTE: packages/* bundle from source (no lib/ or build/ to keep or delete around Metro).
 
           # Clean up package manager caches (more aggressive)
           sudo apt-get clean
@@ -651,10 +642,7 @@ jobs:
           rm -rf $HOME/.metro 2>/dev/null || true
           rm -rf $HOME/.cache/metro-* 2>/dev/null || true
 
-          # Aggressively clean up bifold build artifacts AFTER Metro bundling (frees ~2-4GB)
-          # Metro bundling is complete, so we can now remove bifold lib/ directories
-          rm -rf bifold/packages/*/lib 2>/dev/null || true
-          rm -rf bifold/packages/*/build 2>/dev/null || true
+          # Metro bundling is complete; the framework's packages bundle from source, so there is no lib/ to remove.
 
           # Clean up runner diagnostic logs again (they grow during bundling)
           # NOTE: Only clean old diagnostic logs, not current workflow temp files
@@ -807,9 +795,9 @@ jobs:
           # The release-notes step reads the range since the previous staging tag.
           fetch-depth: 0
 
-      - name: Show the bifold tree
+      - name: Show the framework tree
         run: |
-          echo "bifold tree at this build: $(git rev-parse --short=8 HEAD:bifold)"
+          echo "packages/ tree at this build: $(git rev-parse --verify --quiet --short=8 HEAD:packages || echo none)"
 
       - uses: actions/setup-python@v5
         with:
@@ -843,28 +831,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-
 
-      - name: Build bifold packages
-        working-directory: bifold
-        run: |
-          echo "Building bifold packages..."
-          yarn install --immutable
-          yarn build
-          echo "✅ Bifold packages built successfully"
-
-      - name: Verify react-native-attestation build
+      - name: Verify react-native-attestation
         run: |
           echo "🔍 Verifying react-native-attestation package..."
 
-          # Check TypeScript build output exists
-          if [ -f "bifold/packages/react-native-attestation/build/commonjs/index.js" ]; then
-            echo "✅ TypeScript build: OK (build/commonjs/index.js exists)"
+          # The package bundles from source since Phase 2 of the fold (no build step): its entry must exist
+          if [ -f "packages/react-native-attestation/src/index.ts" ]; then
+            echo "✅ Source entry: OK (src/index.ts exists)"
           else
-            echo "❌ TypeScript build FAILED: build/commonjs/index.js not found"
+            echo "❌ Source entry MISSING: packages/react-native-attestation/src/index.ts not found"
             exit 1
           fi
 
           # Check native Android files exist
-          if [ -f "bifold/packages/react-native-attestation/android/src/main/java/com/attestation/AttestationModule.kt" ]; then
+          if [ -f "packages/react-native-attestation/android/src/main/java/com/attestation/AttestationModule.kt" ]; then
             echo "✅ Android native: OK (AttestationModule.kt exists)"
           else
             echo "❌ Android native MISSING: AttestationModule.kt not found"
@@ -872,7 +852,7 @@ jobs:
           fi
 
           # Check native iOS files exist
-          if [ -f "bifold/packages/react-native-attestation/ios/Attestation.mm" ]; then
+          if [ -f "packages/react-native-attestation/ios/Attestation.mm" ]; then
             echo "✅ iOS native: OK (Attestation.mm exists)"
           else
             echo "❌ iOS native MISSING: Attestation.mm not found"
@@ -880,7 +860,7 @@ jobs:
           fi
 
           # Check podspec exists (needed for iOS CocoaPods)
-          if [ -f "bifold/packages/react-native-attestation/react-native-attestation.podspec" ]; then
+          if [ -f "packages/react-native-attestation/react-native-attestation.podspec" ]; then
             echo "✅ CocoaPods spec: OK (podspec exists)"
           else
             echo "❌ CocoaPods spec MISSING: podspec not found"
@@ -895,9 +875,12 @@ jobs:
         run: |
           yarn install --immutable
 
-      - name: Verify bifold linking
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
+
+      - name: Verify workspace linking
         run: |
-          node scripts/verify-bifold-linking.js
+          node scripts/verify-workspace-linking.js
 
       - name: Create .xcode.env.local file
         working-directory: app/ios
@@ -1141,9 +1124,9 @@ jobs:
           # Test changes to this step with: bash --noprofile --norc -e -o pipefail
           # What a tester wants in "What to Test" is what CHANGED, not the subject
           # line of whichever merge happened to be last. Most user-facing work lands
-          # in the bifold submodule, so summarise both: the wallet's own commits
-          # since the previous staging tag, and the submodule commits the pointer
-          # moved across. Fall back to the old behaviour if either range is unknown.
+          # in the framework (packages/*, part of this repository since the fold), so
+          # the wallet's own range carries it; the second range below applies only while
+          # bifold was a submodule at both ends. Fall back to the old behaviour if either range is unknown.
           # This build's own tag is created after the build, so the previous
           # release is the newest staging tag reachable from HEAD's parent.
           PREV_TAG=$(git describe --tags --abbrev=0 --match 'staging-v*' HEAD^ 2>/dev/null || true)
