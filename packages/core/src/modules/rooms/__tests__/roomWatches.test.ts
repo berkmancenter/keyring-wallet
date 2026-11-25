@@ -102,7 +102,7 @@ describe('arming', () => {
     [
       'the agent does not serve the task',
       { served: [ROOMS_TASK.keysRead] },
-      'the agent does not serve rooms/keys/watch/0.1',
+      'the agent does not serve rooms/keys/watch',
     ],
     ['what it serves is not known yet', { served: null }, 'what the agent serves is not known yet'],
     ['the release switch is off', { on: () => false }, 'live delivery is off'],
@@ -148,7 +148,7 @@ describe('arming', () => {
       unwatchedLines(warn).map((line) => line.replace(/^rooms: no room is watched \((.*)\): they are polled$/, '$1'))
     ).toEqual([
       'what the agent serves is not known yet',
-      'the agent does not serve rooms/keys/watch/0.1',
+      'the agent does not serve rooms/keys/watch',
       'live delivery is off',
       'live delivery is off',
     ])

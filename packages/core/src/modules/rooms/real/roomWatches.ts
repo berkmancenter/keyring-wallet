@@ -50,6 +50,16 @@ export const LIVE_RETRY_MS = 10 * 60_000
 /** After a live request got no answer, how long before the next. */
 export const LIVE_NO_ANSWER_MS = 60_000
 
+/**
+ * The watch task's versions, newest first. A one-shot watch, and a cancel, go at the newest the agent serves, and step
+ * down to the one before when the agent refuses a version as not served (`arm`): the payload is the same at either
+ * (0.2 is 0.1 plus `live`), so an agent that serves one of them alone is still watched. A live watch is asked at 0.2
+ * only, the one version that has it (`liveMay`).
+ *
+ * @versionLadder rooms/keys/watch
+ */
+const WATCH_TYPES: readonly string[] = [ROOMS_TASK.keysWatch02, ROOMS_TASK.keysWatch01]
+
 export interface RoomWatchDeps {
   /** The task types the agent serves; undefined while not known. */
   served(): readonly string[] | undefined
@@ -92,6 +102,8 @@ export class RoomWatches {
   private readonly noLiveUntil = new Map<string, number>()
   /** Why no live watch goes out this session (the agent held or refused the task itself); undefined while they may. */
   private liveStopped?: string
+  /** Versions of the task this agent refused as not served, whatever its list says: not asked again this session. */
+  private readonly notServed = new Set<string>()
   /** The last reason said for not arming before a request (switch off, task not served or not known yet). */
   private unwatchedSaid?: string
   /** Why no watch goes out this session (the agent refused the task itself); undefined while they may. */
@@ -118,14 +130,12 @@ export class RoomWatches {
     // want passes all three checks (on, what the agent serves known, the task in it): a reason back after that is said again.
     if (this.stopped) return
     const served = this.deps.served()
-    // version-pinned: a one-shot watch is the 0.1 task, served wherever 0.2 is; 0.2 is asked only for a live watch (armLive)
-    const oneShotServed = served?.includes(ROOMS_TASK.keysWatch01) === true
     const unwatched = !this.deps.on()
       ? 'live delivery is off'
       : served === undefined
         ? 'what the agent serves is not known yet'
-        : !oneShotServed
-          ? 'the agent does not serve rooms/keys/watch/0.1'
+        : !this.oneShotType(served)
+          ? 'the agent does not serve rooms/keys/watch'
           : undefined
     if (unwatched) {
       if (this.unwatchedSaid !== unwatched) {
@@ -206,10 +216,12 @@ export class RoomWatches {
     for (const rooms of this.wanted.values()) rooms.delete(roomId)
     // One cancel ends the member's watch of the room at this agent, live or not: it holds one for a room at a time.
     if (w.state !== 'armed' && w.state !== 'live') return
+    const oneShot = this.oneShotType()
+    if (!oneShot) return
     this.chain = this.chain.then(() =>
       this.deps
         .agentTask(
-          ROOMS_TASK.keysWatch01, // version-pinned: one-shot is the 0.1 task, served wherever 0.2 is
+          oneShot,
           { member: w.member, host: w.host, rooms: [{ roomId }], cancel: true },
           { timeoutMs: WATCH_TIMEOUT_MS, waitForConsent: false }
         )
@@ -253,6 +265,7 @@ export class RoomWatches {
       !this.liveStopped &&
       this.deps.liveOn?.() === true &&
       served.includes(ROOMS_TASK.keysWatch02) &&
+      !this.notServed.has(ROOMS_TASK.keysWatch02) &&
       !((this.noLiveUntil.get(roomId) ?? 0) > this.deps.now())
     )
   }
@@ -274,7 +287,28 @@ export class RoomWatches {
     this.kick()
   }
 
-  /** The screen let go of `roomId`: no live request of it stays waiting. What is held is ended by the watch armed next. */
+  /**
+   * The version a one-shot watch, or a cancel, goes at: the newest the agent serves and has not refused as not served
+   * (its list can be older than the agent). None when no version is left.
+   */
+  private oneShotType(served: readonly string[] | undefined = this.deps.served()): string | undefined {
+    return WATCH_TYPES.find((type) => served?.includes(type) && !this.notServed.has(type))
+  }
+
+  /** Whether the task was held for consent in the last day, at any version: one rule holds them all. */
+  private async heldRecently(holds: ConsentHolds): Promise<boolean> {
+    const now = this.deps.now()
+    const each = await Promise.all(WATCH_TYPES.map((type) => holds.heldRecently(type, now).catch(() => true)))
+    return each.some(Boolean)
+  }
+
+  /**
+   * The screen let go of `roomId`: no live request of it stays waiting. What is held is ended by the watch armed next,
+   * and the room is never left unwatched between the two. Upstream, on the record its agent keeps while it switches
+   * (`WatchRecord.retiring`, vta-service 0.87.0 `operations/room_key_watch.rs`): "The watch a switch between one-shot
+   * and live is replacing (Recipient item 5): kept, under a key of its own, only until the host has armed the new watch
+   * at its new address, then cancelled at the host and forgotten — or put back, when the host refused the new one."
+   */
   private letGo(roomId: string): void {
     this.liveHeld.delete(roomId)
     this.askingLive.delete(roomId)
@@ -293,7 +327,7 @@ export class RoomWatches {
 
   /**
    * The rooms wanted live, a host at a time. The family's step-down is here and in `armLive`: 0.2 is asked first, and
-   * a room it does not make live is armed at 0.1 by `want`.
+   * a room it does not make live is armed one-shot by `want`, at the newest version the agent serves.
    *
    * @versionLadder rooms/keys/watch
    */
@@ -303,11 +337,7 @@ export class RoomWatches {
       if (rooms.size === 0) continue
       const [member, host] = k.split('\n')
       const all = [...rooms.entries()]
-      if (
-        !this.liveStopped &&
-        holds &&
-        (await holds.heldRecently(ROOMS_TASK.keysWatch02, this.deps.now()).catch(() => true))
-      ) {
+      if (!this.liveStopped && holds && (await this.heldRecently(holds))) {
         this.liveStopped = 'held for consent in the last day'
         this.deps.warn(`rooms: no room is watched live (${this.liveStopped}): each signals once per watch`)
       }
@@ -355,7 +385,9 @@ export class RoomWatches {
         this.liveStopped = why
       } else if (code === 'unsupportedType' || code === 'unsupportedVersion') {
         // An agent from before the live watch serves the task at 0.1 only and answers `unsupportedVersion` here: it
-        // will not learn 0.2 while this session lasts, so it is not asked every ten minutes for nothing.
+        // will not learn 0.2 while this session lasts, so it is not asked every ten minutes for nothing, and the
+        // one-shot watch armed below goes at the version before.
+        this.notServed.add(ROOMS_TASK.keysWatch02)
         this.liveStopped = why
       }
       this.deps.warn(
@@ -409,8 +441,7 @@ export class RoomWatches {
   private async flushOneShot(groups: [string, Map<string, number>][]): Promise<void> {
     if (groups.length === 0) return
     const holds = this.deps.consentHolds
-    // version-pinned: a one-shot watch is the 0.1 task, served wherever 0.2 is; 0.2 is asked only for a live watch (armLive)
-    if (holds && (await holds.heldRecently(ROOMS_TASK.keysWatch01, this.deps.now()).catch(() => true))) {
+    if (holds && (await this.heldRecently(holds))) {
       for (const [, rooms] of groups)
         for (const roomId of rooms.keys()) this.polled(roomId, 'held for consent in the last day')
       return
@@ -434,11 +465,16 @@ export class RoomWatches {
       const w = this.watches.get(roomId)
       return generation === this.generation && w?.state === 'arming' && w.member === member && w.host === host
     }
+    const oneShot = this.oneShotType()
+    if (!oneShot) {
+      for (const [roomId] of rooms) if (mine(roomId)) this.polled(roomId, 'is a task the agent does not serve')
+      return
+    }
     let answer: ReturnType<typeof parseWatch>
     try {
       answer = parseWatch(
         await this.deps.agentTask(
-          ROOMS_TASK.keysWatch01, // version-pinned: one-shot is the 0.1 task, served wherever 0.2 is
+          oneShot,
           {
             member,
             host,
@@ -450,12 +486,20 @@ export class RoomWatches {
       )
     } catch (e) {
       const code = refusalCode(e)
+      if (code === 'unsupportedVersion' || code === 'unsupportedType') {
+        // The step down: the agent does not serve the version its list named. Asked once more at the one before, and
+        // that version is left alone for the session. With none before it, the refusal is handled as any other below.
+        this.notServed.add(oneShot)
+        if (generation === this.generation && this.oneShotType()) {
+          this.deps.warn(`rooms: the agent does not serve the watch at the version it lists: asked at the one before`)
+          return this.arm(member, host, rooms)
+        }
+      }
       // By kind only, as every rooms line says a refusal (roomsLogWords): a code off the list reads as `other`.
       let why = code ? failureCategory(e) : 'no answer'
       if (consentPendingOf(e)) {
         // The agent has asked its approvers already. Kept, so no session asks again today (consentHolds.ts).
-        // version-pinned: a one-shot watch is the 0.1 task, served wherever 0.2 is; 0.2 is asked only for a live watch (armLive)
-        await this.deps.consentHolds?.noteHeld(ROOMS_TASK.keysWatch01, this.deps.now()).catch(() => undefined)
+        await this.deps.consentHolds?.noteHeld(oneShot, this.deps.now()).catch(() => undefined)
         why = 'held for consent'
         this.stopped = why
       } else if (code === 'unsupportedType') this.stopped = why

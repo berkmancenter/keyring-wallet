@@ -1,7 +1,7 @@
 /**
  * The live watch (`rooms/keys/watch/0.2`): the room a screen holds is watched live where its host allows it, renewed
  * before its two-minute lease ends, and never spent by a signal; every other outcome leaves the room watched one
- * signal at a time at 0.1, exactly as roomWatches.test.ts proves it, and live is asked again after a wait.
+ * signal at a time, at the newest version of the task its agent serves, and live is asked again after a wait.
  */
 import { storedConsentHolds } from '../real/consentHolds'
 import {
@@ -115,7 +115,7 @@ function setUp({
     ...(liveOn ? { liveOn } : {}),
   })
   const lines = () => warn.mock.calls.map(([line]) => line as string)
-  /** What went to the agent, in order: `0.2 live`, `0.1`, `0.1 cancel`. */
+  /** What went to the agent, in order: `0.2 live`, `0.2` (one-shot), `0.1`, `0.2 cancel`. */
   const asked = () =>
     sent.map(
       ({ type, payload }) =>
@@ -157,36 +157,48 @@ describe('a room held on screen', () => {
     expect(s.lines()).toContain('rooms: one is watched live')
   })
 
-  test('a room nobody holds is armed at 0.1 with the week lease and no live member, as before (control)', async () => {
-    const s = setUp()
-    s.watches.want(ROOM, MEMBER, HOST, 4)
-    await s.settled()
-    expect(s.sent).toEqual([
-      {
-        type: ROOMS_TASK.keysWatch01,
-        payload: {
-          member: MEMBER,
-          host: HOST,
-          rooms: [{ roomId: ROOM, sinceVersion: 4 }],
-          leaseSeconds: WATCH_LEASE_SECONDS,
+  test.each([
+    ['both versions', [ROOMS_TASK.keysWatch01, ROOMS_TASK.keysWatch02], ROOMS_TASK.keysWatch02],
+    // An agent that has dropped 0.1 is still watched: the one-shot watch is not tied to the older version.
+    ['0.2 alone', [ROOMS_TASK.keysWatch02], ROOMS_TASK.keysWatch02],
+    ['0.1 alone', [ROOMS_TASK.keysWatch01], ROOMS_TASK.keysWatch01],
+  ])(
+    'a room nobody holds, at an agent serving %s: one-shot, the week lease, no live member',
+    async (_, served, type) => {
+      const s = setUp({ served })
+      s.watches.want(ROOM, MEMBER, HOST, 4)
+      await s.settled()
+      expect(s.watches.watched(ROOM)).toBe(true)
+      expect(s.sent).toEqual([
+        {
+          type,
+          payload: {
+            member: MEMBER,
+            host: HOST,
+            rooms: [{ roomId: ROOM, sinceVersion: 4 }],
+            leaseSeconds: WATCH_LEASE_SECONDS,
+          },
         },
-      },
-    ])
-  })
+      ])
+    }
+  )
 
   test.each([
-    ['the release switch is off', { liveOn: () => false }],
-    ['no switch is given', { liveOn: null }],
-    ['the agent does not serve 0.2', { served: [ROOMS_TASK.keysWatch01] }],
-  ])('%s: the held room is armed one-shot at 0.1, and nothing goes at 0.2', async (_, over) => {
-    const s = setUp(over)
-    s.watches.want(ROOM, MEMBER, HOST, 4, { live: true })
-    await s.settled()
-    s.watches.renew(ROOM)
-    await s.settled()
-    expect(s.asked()).toEqual(['0.1'])
-    expect(s.watches.watched(ROOM)).toBe(true)
-  })
+    ['the release switch is off', { liveOn: () => false }, '0.2'],
+    ['no switch is given', { liveOn: null }, '0.2'],
+    ['the agent does not serve 0.2', { served: [ROOMS_TASK.keysWatch01] }, '0.1'],
+  ])(
+    '%s: the held room is armed one-shot, at the newest version the agent serves, and nothing is asked live',
+    async (_, over, oneShot) => {
+      const s = setUp(over)
+      s.watches.want(ROOM, MEMBER, HOST, 4, { live: true })
+      await s.settled()
+      s.watches.renew(ROOM)
+      await s.settled()
+      expect(s.asked()).toEqual([oneShot])
+      expect(s.watches.watched(ROOM)).toBe(true)
+    }
+  )
 
   test('a signal does not spend a live watch: each change is told, and nothing is armed between them', async () => {
     const s = setUp()
@@ -280,7 +292,7 @@ describe('renewing', () => {
     s.clock.now = T0 + WEEK
     s.watches.renew(ROOM)
     await s.settled()
-    expect(s.asked()).toEqual(['0.1'])
+    expect(s.asked()).toEqual(['0.2'])
   })
 
   test('a renewal the host refuses: the live watch is gone, and the room is armed one-shot at once', async () => {
@@ -292,7 +304,7 @@ describe('renewing', () => {
     s.clock.now = T0 + 70_000
     s.watches.renew(ROOM)
     await s.settled()
-    expect(s.asked()).toEqual(['0.2 live', '0.2 live', '0.1'])
+    expect(s.asked()).toEqual(['0.2 live', '0.2 live', '0.2'])
     expect(s.sent[2].payload.leaseSeconds).toBe(WATCH_LEASE_SECONDS)
     // One-shot now: the first signal spends it.
     expect(s.watches.signal(signal())).toBe(ROOM)
@@ -301,11 +313,11 @@ describe('renewing', () => {
 })
 
 describe('a host with no live watch to give', () => {
-  test('liveNotPermitted: said once with its reason, armed one-shot at 0.1, and not asked live again for ten minutes', async () => {
+  test('liveNotPermitted: said once with its reason, armed one-shot, and not asked live again for ten minutes', async () => {
     const s = setUp({ answer: delayedHost })
     s.watches.want(ROOM, MEMBER, HOST, 4, { live: true })
     await s.settled()
-    expect(s.asked()).toEqual(['0.2 live', '0.1'])
+    expect(s.asked()).toEqual(['0.2 live', '0.2'])
     expect(s.watches.watched(ROOM)).toBe(true)
     expect(s.lines().filter((l) => l.includes('not watched live'))).toEqual([
       "rooms: one is not watched live (the room's signal delay is not none): it signals once per watch",
@@ -315,7 +327,7 @@ describe('a host with no live watch to give', () => {
     s.watches.renew(ROOM)
     s.watches.want(ROOM, MEMBER, HOST, 4, { live: true })
     await s.settled()
-    expect(s.asked()).toEqual(['0.2 live', '0.1'])
+    expect(s.asked()).toEqual(['0.2 live', '0.2'])
   })
 
   test('after the wait, the tick asks live again; a host that now allows it makes the room live', async () => {
@@ -326,7 +338,7 @@ describe('a host with no live watch to give', () => {
     s.clock.now = T0 + LIVE_RETRY_MS
     s.watches.renew(ROOM)
     await s.settled()
-    expect(s.asked()).toEqual(['0.2 live', '0.1', '0.2 live'])
+    expect(s.asked()).toEqual(['0.2 live', '0.2', '0.2 live'])
     expect(s.watches.signal(signal())).toBe(ROOM)
     expect(s.watches.signal(signal())).toBe(ROOM)
   })
@@ -338,16 +350,16 @@ describe('a host with no live watch to give', () => {
     s.watches.want(ROOM, MEMBER, HOST, 4, { live: true })
     await s.settled()
     // Asked live once, refused; nothing armed again, and the watch armed before still answers its signal.
-    expect(s.asked()).toEqual(['0.1', '0.2 live'])
+    expect(s.asked()).toEqual(['0.2', '0.2 live'])
     expect(s.watches.watched(ROOM)).toBe(true)
     expect(s.watches.signal(signal())).toBe(ROOM)
   })
 
-  test('armed without live (an agent or host that arms 0.2 one-shot): armed again at 0.1 with the week lease, not left on two minutes', async () => {
+  test('armed without live (an agent or host that arms 0.2 one-shot): armed again one-shot with the week lease, not left on two minutes', async () => {
     const s = setUp({ answer: oneShotOnly })
     s.watches.want(ROOM, MEMBER, HOST, 4, { live: true })
     await s.settled()
-    expect(s.asked()).toEqual(['0.2 live', '0.1'])
+    expect(s.asked()).toEqual(['0.2 live', '0.2'])
     expect(s.sent[1].payload.leaseSeconds).toBe(WATCH_LEASE_SECONDS)
     s.clock.now = T0 + LIVE_LEASE_SECONDS * 1000 + 1
     expect(s.watches.watched(ROOM)).toBe(true)
@@ -357,22 +369,22 @@ describe('a host with no live watch to give', () => {
   test('no answer: the room is armed one-shot, and live is asked again after a minute, not before', async () => {
     const s = setUp({
       answer: (sent, now) => {
-        if (sent.type === ROOMS_TASK.keysWatch02) throw new Error('timed out')
+        if (sent.payload.live) throw new Error('timed out')
         return liveHost(sent, now)
       },
     })
     s.watches.want(ROOM, MEMBER, HOST, 4, { live: true })
     await s.settled()
-    expect(s.asked()).toEqual(['0.2 live', '0.1'])
+    expect(s.asked()).toEqual(['0.2 live', '0.2'])
     s.clock.now = T0 + LIVE_NO_ANSWER_MS - 1
     s.watches.renew(ROOM)
     await s.settled()
-    expect(s.asked()).toEqual(['0.2 live', '0.1'])
+    expect(s.asked()).toEqual(['0.2 live', '0.2'])
     s.replies.answer = liveHost
     s.clock.now = T0 + LIVE_NO_ANSWER_MS
     s.watches.renew(ROOM)
     await s.settled()
-    expect(s.asked()).toEqual(['0.2 live', '0.1', '0.2 live'])
+    expect(s.asked()).toEqual(['0.2 live', '0.2', '0.2 live'])
   })
 
   test('the agent refuses the task itself: no live watch is asked again this session, and one-shot watches go on', async () => {
@@ -390,6 +402,26 @@ describe('a host with no live watch to give', () => {
     await s.settled()
     expect(s.asked()).toEqual(['0.2 live', '0.1', '0.1'])
   })
+
+  test.each(['unsupportedVersion', 'unsupportedType'])(
+    'a room nobody holds, at an agent whose list names 0.2 but which answers %s: armed at 0.1, and 0.2 is left alone',
+    async (code) => {
+      // The step down: a list older or newer than the agent must not leave its rooms unwatched.
+      const s = setUp({
+        answer: (sent, now) => {
+          if (sent.type === ROOMS_TASK.keysWatch02) throw new VtiRefusal(code, 'not served')
+          return liveHost(sent, now)
+        },
+      })
+      s.watches.want(ROOM, MEMBER, HOST, 4)
+      await s.settled()
+      expect(s.watches.watched(ROOM)).toBe(true)
+      s.watches.want('did:webvh:room:two', MEMBER, HOST, 1)
+      s.watches.want('did:webvh:room:two', MEMBER, HOST, 1, { live: true })
+      await s.settled()
+      expect(s.asked()).toEqual(['0.2', '0.1', '0.1'])
+    }
+  )
 
   test('an agent that serves the watch at 0.1 only: the same, no live watch is asked again this session', async () => {
     // What an agent from before the live watch answers: it knows the task, not this version of it.
@@ -409,25 +441,36 @@ describe('a host with no live watch to give', () => {
     expect(s.asked()).toEqual(['0.2 live', '0.1', '0.1'])
   })
 
-  test('a hold of 0.2 noted in the last day: nothing goes at 0.2, and the room is armed one-shot', async () => {
+  test.each([
+    ['0.2', ROOMS_TASK.keysWatch02],
+    ['0.1', ROOMS_TASK.keysWatch01],
+  ])('a hold of %s noted in the last day: nothing goes at either version, and the room is polled', async (_, type) => {
+    // One rule holds the task at every version, so asking at the other one would only send the approvers a second request.
     const holds = storedConsentHolds(() => 'did:agent:mine', disk())
-    await holds.noteHeld(ROOMS_TASK.keysWatch02, T0 - 1000)
+    await holds.noteHeld(type, T0 - 1000)
     const s = setUp({ holds })
     s.watches.want(ROOM, MEMBER, HOST, 4, { live: true })
     await s.settled()
-    expect(s.asked()).toEqual(['0.1'])
-    expect(s.watches.watched(ROOM)).toBe(true)
+    expect(s.asked()).toEqual([])
+    expect(s.watches.watched(ROOM)).toBe(false)
+  })
+
+  test('no hold noted: the same room is asked for (control)', async () => {
+    const s = setUp({ holds: storedConsentHolds(() => 'did:agent:mine', disk()) })
+    s.watches.want(ROOM, MEMBER, HOST, 4, { live: true })
+    await s.settled()
+    expect(s.asked()).toEqual(['0.2 live'])
   })
 })
 
 describe('letting go', () => {
-  test('the screen lets go: the one-shot watch is armed at 0.1 from the newest version, which ends the live one', async () => {
+  test('the screen lets go: the one-shot watch is armed from the newest version held, which ends the live one', async () => {
     const s = setUp()
     s.watches.want(ROOM, MEMBER, HOST, 4, { live: true })
     await s.settled()
     s.watches.want(ROOM, MEMBER, HOST, 6, { live: false })
     await s.settled()
-    expect(s.asked()).toEqual(['0.2 live', '0.1'])
+    expect(s.asked()).toEqual(['0.2 live', '0.2'])
     expect(s.sent[1].payload.rooms).toEqual([{ roomId: ROOM, sinceVersion: 6 }])
     // One-shot again, and no longer renewed.
     expect(s.watches.signal(signal())).toBe(ROOM)
@@ -435,7 +478,7 @@ describe('letting go', () => {
     s.clock.now = T0 + 70_000
     s.watches.renew(ROOM)
     await s.settled()
-    expect(s.asked()).toEqual(['0.2 live', '0.1'])
+    expect(s.asked()).toEqual(['0.2 live', '0.2'])
   })
 
   test('letting go of a room that was never live sends nothing when its one-shot watch is armed from that version', async () => {
@@ -444,14 +487,14 @@ describe('letting go', () => {
     await s.settled()
     s.watches.want(ROOM, MEMBER, HOST, 4, { live: false })
     await s.settled()
-    expect(s.asked()).toEqual(['0.2 live', '0.1'])
+    expect(s.asked()).toEqual(['0.2 live', '0.2'])
   })
 
   test('let go while the live request is out: its live answer is not kept, and the room is armed one-shot', async () => {
     let release: (() => void) | undefined
     const s = setUp({
       answer: async (sent, now) => {
-        if (sent.type === ROOMS_TASK.keysWatch02) await new Promise<void>((r) => (release = r))
+        if (sent.payload.live) await new Promise<void>((r) => (release = r))
         return liveHost(sent, now)
       },
     })
@@ -464,7 +507,7 @@ describe('letting go', () => {
     release?.()
     await s.settled()
     // The host armed it live meanwhile, on a two-minute lease nobody will renew: a one-shot watch replaces it.
-    expect(s.asked()).toEqual(['0.1', '0.2 live', '0.1'])
+    expect(s.asked()).toEqual(['0.2', '0.2 live', '0.2'])
     s.clock.now = T0 + LIVE_LEASE_SECONDS * 1000 + 1
     expect(s.watches.watched(ROOM)).toBe(true)
     expect(s.watches.signal(signal())).toBe(ROOM)
@@ -477,12 +520,21 @@ describe('letting go', () => {
     await s.settled()
     s.watches.cancel(ROOM)
     await s.settled()
-    expect(s.asked()).toEqual(['0.2 live', '0.1 cancel'])
+    expect(s.asked()).toEqual(['0.2 live', '0.2 cancel'])
     expect(s.watches.signal(signal())).toBeUndefined()
     s.clock.now = T0 + 70_000
     s.watches.renew(ROOM)
     await s.settled()
-    expect(s.asked()).toEqual(['0.2 live', '0.1 cancel'])
+    expect(s.asked()).toEqual(['0.2 live', '0.2 cancel'])
+  })
+
+  test('a cancel goes at the newest version the agent serves', async () => {
+    const s = setUp({ served: [ROOMS_TASK.keysWatch01] })
+    s.watches.want(ROOM, MEMBER, HOST, 4)
+    await s.settled()
+    s.watches.cancel(ROOM)
+    await s.settled()
+    expect(s.asked()).toEqual(['0.1', '0.1 cancel'])
   })
 
   test('the wallet locked: every live watch is forgotten, and a signal for one is not acted on', async () => {
