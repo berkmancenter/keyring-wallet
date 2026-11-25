@@ -968,7 +968,11 @@ export class VtaAgentController {
     if (this.state.status !== 'connected') this.set({ status: 'connecting', error: undefined })
     const done = (async () => {
       try {
+        // Stamped like the client's own connect steps: the hello is the last gate before `online`, which every
+        // key-copy fetch waits for (a tester's launch, IN-724 on 281.2: 0.65 s between the session live and online).
+        const began = Date.now()
         await client.connect()
+        releaseWarn(`vtaAgent: connect +${Date.now() - began} ms: session live; saying hello (whoami)`)
         // Say hello to the VTA so it caches a reply route for this DID. Without a
         // round-trip the VTA has never seen this approver and drops a consent
         // request to it as "no mediator route" (VTI-24). whoami is the cheapest
@@ -980,6 +984,9 @@ export class VtaAgentController {
         await client.whoAmI().catch((error: unknown) => {
           if (refusedAsNotOnAcl(error)) throw error
         })
+        releaseWarn(
+          `vtaAgent: connect +${Date.now() - began} ms: hello answered; online (key copies may be fetched now)`
+        )
         this.set({ status: 'connected', managerDid: client.managerDid, sessionOpenedAt: this.now() })
         // With a name already shown for the agent, asking it again waits behind the session's first work, with the
         // ask of what it serves (agentLastKnownSwitch.ts). With none, or with the switch off: at once, as before.
