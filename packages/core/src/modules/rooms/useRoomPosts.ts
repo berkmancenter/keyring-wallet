@@ -537,7 +537,7 @@ export function useRoomPosts(
     return () => {
       current = false
     }
-  }, [service, roomId, enabled, generation, notePoll])
+  }, [service, roomId, enabled, generation, notePoll, afterListings])
 
   const listed = !!listing
   // In view and listed: the room's watch is armed from the newest version held (each poll arms it again, above).
@@ -662,7 +662,7 @@ export function useRoomPosts(
       signalTick.current = undefined
       owedSignal.current = false
     }
-  }, [service, roomId, enabled, live, listed, notePoll])
+  }, [service, roomId, enabled, live, listed, notePoll, afterListings])
 
   // Until the room is known, a copy drawn before it is drawn as the identity it was of, so the member's own posts are on
   // their side from the start and nothing moves when the room arrives.
@@ -789,7 +789,7 @@ export function useRoomPosts(
     return () => {
       current = false
     }
-  }, [service, roomId, listing, shown, drawnAs])
+  }, [service, roomId, listing, shown, drawnAs, afterListings])
 
   // The opening's line, said only when the screen says it drew the posts (`painted`, from its list's layout), never
   // when they are set: 279.4 said "9 posts shown in 135 ms" while the room screen still showed its spinner (YJPT-6WC8).
