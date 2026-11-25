@@ -211,12 +211,18 @@ describe('what a room lets its member write', () => {
     expect((await s.service.recordFeaturesIn(ROOM)).listed).toEqual([])
   })
 
-  it('reads the profile once per room epoch, and again when the epoch moves', async () => {
+  // Since IN-776 a write learns the room's epoch from a key list read in the last few minutes (HELD_FRESH_MS) rather
+  // than asking each time, so a move is seen at the next key list asked for any reason: here, the rooms listed again.
+  it('reads the profile once per room epoch, and again when the epoch moves and a key list says so', async () => {
     const s = setup({ listed: ['kind'] })
     await s.service.recordFeaturesIn(ROOM)
     await s.service.recordFeaturesIn(ROOM)
     expect(s.tasks(ROOMS_TASK.keysProfileRead)).toHaveLength(1)
     s.state.epoch = 4
+    // Not yet: the key list in hand still says epoch 3.
+    await s.service.recordFeaturesIn(ROOM)
+    expect(s.tasks(ROOMS_TASK.keysProfileRead)).toHaveLength(1)
+    await s.service.listMyRooms()
     await s.service.recordFeaturesIn(ROOM)
     expect(s.tasks(ROOMS_TASK.keysProfileRead)).toHaveLength(2)
   })
@@ -269,6 +275,8 @@ describe('a room whose replies and reactions were on', () => {
         await s.service.recordFeaturesIn(ROOM)
         s.state.epoch = 4
         answer = next
+        // The phone learns the move at its next key list (HELD_FRESH_MS).
+        await s.service.listMyRooms()
         return s.service.recordFeaturesIn(ROOM)
       },
     }
