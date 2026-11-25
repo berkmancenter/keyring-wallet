@@ -14,9 +14,11 @@ import { onRoomsListed } from './useRoomRows'
  * of truth: this is a small, disposable copy of what the member was shown while they had access, never an archive and
  * never evidence of anything.
  *
- * What is kept, per identity and open, attributed or private room: at most {@link MSG_CACHE_POSTS} posts,
- * {@link MSG_CACHE_BYTES} bytes and {@link MSG_CACHE_DAYS} days, across at most {@link MSG_CACHE_ROOMS} rooms (Alberto,
- * 11-18). Each post as the chat draws it: key, version, kind, author, when, its words, what it replies to, reaction
+ * What is kept, per identity and open, attributed or private room: its newest {@link MSG_CACHE_POSTS} posts drawn,
+ * whatever their age, within {@link MSG_CACHE_BYTES} bytes, across at most {@link MSG_CACHE_ROOMS} rooms (Alberto,
+ * 11-18); and a copy its room's screen has not refreshed for {@link MSG_CACHE_DAYS} days is emptied (Alberto, 11-25:
+ * "Keep newest 50, age the copy"). Until 282 the days were each post's age, so a room quiet for a week opened on next
+ * to nothing (IN-724: one post of Test Room's ten). Each post as the chat draws it: key, version, kind, author, when, its words, what it replies to, reaction
  * counts, its check's verdict. Never a file's bytes, a post the agent could not open, or one whose signature was
  * refused. Rooms whose tier is unknown (custody-only) are never kept (Room.tsx names the tiers kept). An attributed or
  * private room's words, and a private room's author (which its host never sees), are kept as the agent opened them: a
@@ -57,6 +59,7 @@ export function isMessageCacheOn(): boolean {
 export const MSG_CACHE_POSTS = 50
 export const MSG_CACHE_BYTES = 64 * 1024
 export const MSG_CACHE_ROOMS = 32
+/** How long a copy lasts without its room's screen refreshing it (`keptAt`), whatever its posts' own age. */
 export const MSG_CACHE_DAYS = 7
 const DAY_MS = 24 * 3600 * 1000
 /** A post's words past this are cut, and the refresh draws the whole post. */
@@ -167,6 +170,9 @@ export async function noteBiometricUnlock(on: boolean): Promise<void> {
 
 const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 0
 
+/** Whether a copy kept at `keptAt` has gone {@link MSG_CACHE_DAYS} without its room's screen refreshing it. */
+const notRefreshed = (keptAt: number, now: number) => now - keptAt > MSG_CACHE_DAYS * DAY_MS
+
 function postOf(raw: unknown): CachedPost | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const p = raw as Record<string, unknown>
@@ -198,10 +204,9 @@ function postOf(raw: unknown): CachedPost | undefined {
   }
 }
 
-/** The posts to keep: none past {@link MSG_CACHE_DAYS}, newest first, within the post and byte caps. */
-export function trimPosts(posts: readonly CachedPost[], now: number): CachedPost[] {
+/** The posts to keep: newest first, whatever their age, within the post and byte caps. */
+export function trimPosts(posts: readonly CachedPost[]): CachedPost[] {
   const fresh = posts
-    .filter((p) => now - Date.parse(p.writtenAt) <= MSG_CACHE_DAYS * DAY_MS)
     .map((p) =>
       p.body.length > MSG_CACHE_BODY_MAX ? { ...p, body: p.body.slice(0, MSG_CACHE_BODY_MAX), cut: true as const } : p
     )
@@ -330,14 +335,20 @@ async function apply(agent: CacheWallet, entry: JournalEntry): Promise<number> {
  * Empties the kept copies `scope` covers, writing the intent to the journal first: one cut short is finished at the
  * next start ({@link sweepMessageCache}), and nothing the journal names is ever shown. Says how many, never which.
  */
-export async function emptyMessageCache(agent: CacheWallet, scope: EmptyScope, reason: string): Promise<number> {
+export async function emptyMessageCache(
+  agent: CacheWallet,
+  scope: EmptyScope,
+  reason: string,
+  /** Whether to say the counts after, by `reason`; a caller that says its own line passes false. */
+  say = true
+): Promise<number> {
   const n = await inTurn(async () => {
     const entry = entryOf(scope, reason)
     const { record, entries } = await journalOf(agent)
     if (!entries.some((e) => sameEntry(e, entry))) await writeJournal(agent, record, [...entries, entry])
     return apply(agent, entry)
   })
-  await sayCounts(agent, reason)
+  if (say) await sayCounts(agent, reason)
   return n
 }
 
@@ -367,7 +378,7 @@ export function keepRoomPosts(
     if (!(await messageCacheAllowed())) return false
     const { entries } = await journalOf(agent)
     if (journaled([...entries, ...emptiedThisRun], room)) return false
-    const kept = trimPosts(posts, now)
+    const kept = trimPosts(posts)
     const id = recordIdOf(room.personaDid, room.roomId)
     const content = {
       v: 1,
@@ -408,8 +419,8 @@ export function keepRoomPosts(
 
 /**
  * The identity's copy of a room, when the cache is allowed and the copy may be shown: this build's shape, the same
- * identity, not past the room's end, not named by the journal, and only the posts within {@link MSG_CACHE_DAYS}.
- * A copy past the room's end is emptied, not shown.
+ * identity, not past the room's end, not named by the journal, and refreshed within {@link MSG_CACHE_DAYS}. A copy
+ * past the room's end, or not refreshed for that long, is emptied, not shown.
  */
 export async function readRoomPosts(
   agent: CacheWallet,
@@ -418,9 +429,11 @@ export async function readRoomPosts(
   now = Date.now()
 ): Promise<{ room: CachedRoom; posts: CachedPost[] } | undefined> {
   const read = await readInTurn(agent, personaDid, roomId, now).catch(() => undefined)
-  if (read === 'ended') {
+  if (read === 'ended' || read === 'stale') {
     // Emptied journal first, as every emptying is; the reader hears nothing either way (b0's note, #1130).
-    await emptyMessageCache(agent, { room: roomId }, 'room ended').catch(() => undefined)
+    await emptyMessageCache(agent, { room: roomId }, read === 'ended' ? 'room ended' : 'not refreshed').catch(
+      () => undefined
+    )
     return undefined
   }
   return read
@@ -467,7 +480,7 @@ function readInTurn(
   personaDid: string,
   roomId: string,
   now: number
-): Promise<{ room: CachedRoom; posts: CachedPost[] } | 'ended' | undefined> {
+): Promise<{ room: CachedRoom; posts: CachedPost[] } | 'ended' | 'stale' | undefined> {
   return inTurn(async () => {
     if (!(await messageCacheAllowed())) return undefined
     const record = await agent.genericRecords.findById(recordIdOf(personaDid, roomId))
@@ -476,10 +489,8 @@ function readInTurn(
     const { entries } = await journalOf(agent)
     if (journaled(entries, content)) return undefined
     if (content.validUntil && Date.parse(content.validUntil) <= now) return 'ended' as const
-    const posts = content.posts
-      .map(postOf)
-      .filter((p): p is CachedPost => !!p)
-      .filter((p) => now - Date.parse(p.writtenAt) <= MSG_CACHE_DAYS * DAY_MS)
+    if (notRefreshed(content.keptAt, now)) return 'stale' as const
+    const posts = content.posts.map(postOf).filter((p): p is CachedPost => !!p)
     if (posts.length === 0) return undefined
     const { keptAt: _keptAt, posts: _raw, ...room } = content
     return { room, posts }
@@ -489,8 +500,8 @@ function readInTurn(
 /**
  * At each start: finishes every emptying the journal still holds; with the cache not allowed (the kill, or no
  * biometric unlock), empties every copy; else empties each copy whose membership no longer stands (`current`: each
- * community and identity the member is in now, not removed), whose room has ended, or whose posts are all past
- * {@link MSG_CACHE_DAYS}. That catches what happened with the app closed: a removal, an identity let go.
+ * community and identity the member is in now, not removed), whose room has ended, or that its room's screen has not
+ * refreshed for {@link MSG_CACHE_DAYS}. That catches what happened with the app closed: a removal, an identity let go.
  */
 type Memberships = ReadonlyArray<{ communityDid: string; personaDid: string }>
 
@@ -529,10 +540,7 @@ export function sweepMessageCache(
       }
       if (standing && !standing.has(`${c.communityDid}\n${c.personaDid}`)) return true
       if (c.validUntil && Date.parse(c.validUntil) <= now) return true
-      return !c.posts.some((p) => {
-        const post = postOf(p)
-        return !!post && now - Date.parse(post.writtenAt) <= MSG_CACHE_DAYS * DAY_MS
-      })
+      return notRefreshed(c.keptAt, now) || !c.posts.some((p) => !!postOf(p))
     })
     return n + (await emptyRecords(agent, ended))
   })
@@ -556,7 +564,14 @@ export interface ListedRoom {
   validUntil?: string
 }
 
-/** Empties the copy of each listed room the listing says is gone: listed as removed or lapsed, or past its end. */
+/**
+ * Empties the copy of each listed room the listing says is gone: listed as removed or lapsed, or past its end.
+ *
+ * A gone room nothing is kept of is the common case: a listing names every room the member ever left, at every read
+ * (two minutes apart), and 281.2 journalled, emptied nothing and said its unchanged counts for two of them each time
+ * (IN-724). Such a room is only marked emptied for this run, so no keep already on its way puts posts back; nothing
+ * is written and nothing said. One with a copy is emptied as before, journal first, and its line says how many.
+ */
 export async function emptyGoneRooms(agent: CacheWallet, rooms: readonly ListedRoom[], now = Date.now()) {
   let n = 0
   for (const room of rooms) {
@@ -564,7 +579,18 @@ export async function emptyGoneRooms(agent: CacheWallet, rooms: readonly ListedR
       room.standing === 'removed' ||
       room.standing === 'lapsed' ||
       (room.validUntil !== undefined && Date.parse(room.validUntil) <= now)
-    if (gone) n += await emptyMessageCache(agent, { room: room.roomId }, 'access gone')
+    if (!gone) continue
+    const entry = entryOf({ room: room.roomId }, 'access gone')
+    const kept = await inTurn(async () => {
+      const covered = await coveredBy(agent, entry)
+      if (covered.some((record) => record.content?.emptied !== true)) return true
+      if (!emptiedThisRun.some((e) => sameEntry(e, entry))) emptiedThisRun.push(entry)
+      return false
+    })
+    if (!kept) continue
+    const emptied = await emptyMessageCache(agent, { room: room.roomId }, 'access gone', false)
+    n += emptied
+    await sayCounts(agent, `access gone, ${emptied} emptied`)
   }
   return n
 }

@@ -762,7 +762,10 @@ export function useRoomPosts(
 
   // The posts the room's own listing drew, kept in the wallet once they settle (rooms/messageCache): never those drawn
   // from a kept listing or the kept copy itself, and only the posts the screen counts (the chat's, for the chat).
+  // Every listing the screen reads (its opening, a poll, a refresh, "load older") keeps what it drew.
+  const keepPending = useRef<(() => void) | undefined>(undefined)
   useEffect(() => {
+    keepPending.current = undefined
     const cache = cacheNow.current
     const me = actingAsNow.current
     const wallet = service?.runsOn
@@ -773,15 +776,27 @@ export function useRoomPosts(
       .filter((post) => !counted || counted(post))
       .map(keptOf)
       .filter((post): post is CachedPost => !!post)
-    const timer = setTimeout(() => {
+    const keepNow = () => {
+      if (keepPending.current === keepNow) keepPending.current = undefined
       void keepRoomPosts(
         wallet,
         { personaDid: me.did, roomId, communityDid: cache.communityDid, validUntil: cache.validUntil },
         kept
       ).catch(() => undefined)
-    }, MESSAGE_KEEP_DELAY_MS)
+    }
+    keepPending.current = keepNow
+    const timer = setTimeout(keepNow, MESSAGE_KEEP_DELAY_MS)
     return () => clearTimeout(timer)
   }, [posts, listing, service, roomId])
+  // Leaving the room (the screen closed, or another room under it) keeps what was drawn at once: waiting for the posts
+  // to settle dropped the keep of a room left within MESSAGE_KEEP_DELAY_MS of its last draw, so a quick look kept
+  // nothing (IN-724). Whatever the keep checks (the switch, biometric unlock, an emptying this run) it still checks.
+  useEffect(
+    () => () => {
+      keepPending.current?.()
+    },
+    [service, roomId]
+  )
 
   const loadOlder = useCallback(() => {
     setLoadingOlder(true)

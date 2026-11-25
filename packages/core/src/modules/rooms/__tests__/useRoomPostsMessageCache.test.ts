@@ -128,6 +128,43 @@ describe('keeping what the room drew', () => {
     expect(keptWords(r.wallet)).toContain('the words of b')
   })
 
+  // 281.2 (IN-724): leaving before the posts settled dropped the keep, so a quick look kept nothing.
+  it('leaving the room before the posts settle keeps what was drawn at once', async () => {
+    const r = roomWith([note('a', 1), note('b', 2)])
+    const { unmount } = await open(r.service)
+    expect(keptWords(r.wallet)).not.toContain('the words of')
+    unmount()
+    await flush()
+    expect(keptWords(r.wallet)).toContain('the words of a')
+    expect(keptWords(r.wallet)).toContain('the words of b')
+    // Once: the settle that would have come writes nothing more.
+    const writes = r.wallet.genericRecords.save.mock.calls.length + r.wallet.genericRecords.update.mock.calls.length
+    await settle()
+    expect(r.wallet.genericRecords.save.mock.calls.length + r.wallet.genericRecords.update.mock.calls.length).toBe(
+      writes
+    )
+  })
+
+  it('control: leaving before the first listing answers keeps nothing (nothing confirmed was drawn)', async () => {
+    const r = roomWith([note('a', 1)])
+    r.hold()
+    const { unmount } = await open(r.service)
+    unmount()
+    await flush()
+    await settle()
+    expect(r.wallet.genericRecords.save).not.toHaveBeenCalled()
+  })
+
+  it('control: leaving after the room was refused keeps nothing', async () => {
+    const r = roomWith([note('a', 1)])
+    r.hold()
+    const { unmount } = await open(r.service)
+    await r.fail(new RoomsRefused('listNotes', 'notAMember', false, 'not a member'))
+    unmount()
+    await flush()
+    expect(keptWords(r.wallet)).not.toContain('the words of')
+  })
+
   it('control: a screen not given messageCache (a sealed room, or not the chat) keeps and reads nothing', async () => {
     const r = roomWith([note('a', 1)])
     await open(r.service, {})
