@@ -10,8 +10,9 @@ name: Test builds
 #
 # With `push: on` a build also names the push gateway, and its artifact name
 # ends in -push-on, so it cannot be taken for the testers' configuration.
-# What each build carries, like the staging build: MEDIATOR_URL and nothing else
-# baked in (no VTI_* value: testers link their own agent and community), except
+# What each build carries, like the staging build: MEDIATOR_URL and the wallet
+# mailbox's address (MAILBOX_MEDIATOR_DID), and nothing else baked in (no VTI_*
+# value: testers link their own agent and community), except
 # E2E_CLOCKS=short: the grant windows wait 60 s and the auto-lock defaults to
 # 1 minute, so the release checks wait a minute instead of ten (gate efficiency
 # item 3). Only this workflow sets it; quality.yml fails if another does, and
@@ -234,6 +235,9 @@ jobs:
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          # The wallet mailbox's address, the store build's own secret: with it the mailbox opens (on by default since
+          # 281.2), so the gate's pairs mint v2 invitations as testers' phones do. Empty when the secret is unset.
+          MAILBOX_MEDIATOR_DID: ${{ secrets.MAILBOX_MEDIATOR_DID }}
           FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
           PUSH: ${{ inputs.push }}
           CLOCKS: ${{ inputs.clocks || 'short' }}
@@ -242,7 +246,7 @@ jobs:
           PUSH_GATEWAY_URL: ${{ vars.PUSH_GATEWAY_URL || 'https://keyring-push.asml.berkmancenter.org' }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" > .env
-          echo "MAILBOX_MEDIATOR_DID=" >> .env
+          echo "MAILBOX_MEDIATOR_DID=${MAILBOX_MEDIATOR_DID}" >> .env
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
           # The test build's short clocks (see the top of this file), unless this
@@ -372,6 +376,9 @@ jobs:
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          # The wallet mailbox's address, the store build's own secret: with it the mailbox opens (on by default since
+          # 281.2), so the gate's pairs mint v2 invitations as testers' phones do. Empty when the secret is unset.
+          MAILBOX_MEDIATOR_DID: ${{ secrets.MAILBOX_MEDIATOR_DID }}
           FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
           PUSH: ${{ inputs.push }}
           CLOCKS: ${{ inputs.clocks || 'short' }}
@@ -382,7 +389,7 @@ jobs:
           PUSH_FCM_PROJECT_ID: ${{ vars.PUSH_FCM_PROJECT_ID || 'hls-asml-identity-ba68' }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" > .env
-          echo "MAILBOX_MEDIATOR_DID=" >> .env
+          echo "MAILBOX_MEDIATOR_DID=${MAILBOX_MEDIATOR_DID}" >> .env
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
           # The test build's short clocks (see the top of this file), unless this
