@@ -95,7 +95,6 @@ describe("a room's Messages row", () => {
     const saidExact = exact.getByTestId(id('RoomMessageRow')).props.accessibilityLabel as string
     expect(saidExact).toContain('MessagesList.Unread')
     expect(saidExact).not.toContain('UnreadMore')
-    for (const words of [en, fr, ptBr]) expect(words.MessagesList.UnreadMore).toContain('{{count}}')
   })
 
   test('the member\'s own post reads "You: …"; no posts read yet, and no unread count (control)', () => {
@@ -222,5 +221,19 @@ describe('the words', () => {
     ]
     for (const words of said) expect(words).not.toMatch(/\{\{|Rooms\./)
     expect(said[6]).toContain('Keyring Lab')
+  })
+
+  // "N+" said aloud agrees in number, at 1 too: a window of others' posts mostly retracted or the member's own can
+  // leave one unread below which more may lie. English and Portuguese say "1 or more … messages", as they would
+  // anyway; French says "1 message non lu ou plus". Rendered by i18next itself, never the key the harness returns.
+  test.each([
+    ['en', en, '1 or more unread messages', '60 or more unread messages'],
+    ['fr', fr, '1 message non lu ou plus', '60 messages non lus ou plus'],
+    ['pt-BR', ptBr, '1 ou mais mensagens não lidas', '60 ou mais mensagens não lidas'],
+  ])('%s: "N or more unread" agrees in number at 1 and at 60', async (lng, resources, one, sixty) => {
+    const i = i18n.createInstance()
+    await i.init({ lng, resources: { [lng]: { translation: resources } }, interpolation: { escapeValue: false } })
+    expect(i.t('MessagesList.UnreadMore', { count: 1 })).toBe(one)
+    expect(i.t('MessagesList.UnreadMore', { count: 60 })).toBe(sixty)
   })
 })
