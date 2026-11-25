@@ -86,6 +86,7 @@ import { keepHold, LATE_STEP_MS, lateStepStore, minutesOf, queueWaitMs } from '.
 import { TrustTasksModule } from './module/TrustTasksModule'
 import { trustTaskRegistry } from './registry'
 import type { InboundContext as RegistryInboundContext } from './registry'
+import type { TrustTaskDocumentRecord } from './services/TrustTaskDocumentRecord'
 import { TrustTaskDocumentRepository } from './services/TrustTaskDocumentRepository'
 import { TrustTasksService, respondWith, rejectWith, extendedCode } from './services/TrustTasksService'
 
@@ -514,6 +515,36 @@ async function openRelationshipExchange(agent: Agent, connectionId: string): Pro
  */
 const proposeSentAt = new Map<string, number>()
 
+/**
+ * A VRC delivery that failed, said on screen: the flow ends as an error (the overlay reads `ended`, so it says
+ * "didn't complete" at once, not after the stall timeout) and the error dialog opens with a retry, which runs the
+ * delivery again; with the issue document retained undelivered, that retry sends the same document (signing nothing
+ * twice). Before this, the v2 (mailbox) path ended the flow silently where the legacy leg showed a dialog, and a
+ * failed first send over the mailbox left the tester with nothing to do but guess (2026-11-21).
+ *
+ * Order matters: `clearFlow` deletes any error, so the error is set after it.
+ */
+export function sayDeliveryFailed(agent: Agent, connectionId: string, exchangeId: string, error: Error): void {
+  vrcFlowStore.clearFlow(connectionId, 'error')
+  void (async () => {
+    let contactName: string | undefined
+    try {
+      contactName = (await agent.modules.didcomm.connections.getById(connectionId)).theirLabel ?? undefined
+    } catch {
+      // the name is a courtesy; the dialog reads without it
+    }
+    vrcFlowStore.setError(connectionId, {
+      type: 'send-failed',
+      message: error.message,
+      contactName,
+      onRetry: async () => {
+        await deliverVrcViaTrustTaskForExchange(agent, connectionId, exchangeId)
+        vrcFlowStore.clearError(connectionId)
+      },
+    })
+  })()
+}
+
 /** Deliver our VRC on an accepted exchange, and the R-Card with it (not on an upgrade: the profile went already). */
 export function deliverAfterAcceptance(agent: Agent, connectionId: string, exchangeId: string, upgrade: boolean): void {
   // FIRE AND FORGET — the caller runs inside credo's inbound message processing, and the delivery may await the
@@ -521,9 +552,10 @@ export function deliverAfterAcceptance(agent: Agent, connectionId: string, excha
   // against its own transport (the challenge sits queued behind this very handler until timeout).
   void deliverVrcViaTrustTaskForExchange(agent, connectionId, exchangeId).catch((e: Error) => {
     agent.config.logger.error(`${LOG_PREFIX} VRC delivery after acceptance failed: ${e.message}`)
-    // Said on screen at once (the overlay reads `ended`), not left "preparing" until the stall timeout: a send the
-    // mailbox refused is a failure this phone knows about now. Only while the status is still this delivery's.
-    if (vrcFlowStore.getStatus(connectionId) === 'preparing-offer') vrcFlowStore.clearFlow(connectionId, 'error')
+    // Said on screen at once, with a retry (sayDeliveryFailed): a send the mailbox refused is a failure this phone
+    // knows about now. Only while the status is still this delivery's.
+    if (vrcFlowStore.getStatus(connectionId) === 'preparing-offer')
+      sayDeliveryFailed(agent, connectionId, exchangeId, e)
   })
   if (!upgrade) {
     void issueRCardForAcceptedExchange(agent, connectionId).catch((e: Error) =>
@@ -558,6 +590,18 @@ export function priorForExchange(
   exchangeId: string
 ): boolean {
   return priors.some((r) => r.document.issuer === issuer && threadOf(r) === exchangeId)
+}
+
+/**
+ * The retained issue document of `issuer` on `exchangeId`, when there is one: the issue guard reads it, since a
+ * prior whose send failed (`undelivered`) is the document to send again, not proof the exchange was served.
+ */
+export function priorIssueFor<T extends { document: Record<string, unknown> }>(
+  priors: T[],
+  issuer: string,
+  exchangeId: string
+): T | undefined {
+  return priors.find((r) => r.document.issuer === issuer && threadOf(r) === exchangeId)
 }
 
 /** The propose-thread documents (proposes, responses) retained on a connection. */
@@ -1282,8 +1326,8 @@ async function acceptRelationshipProposal(
     },
     (e: Error) => {
       logger.error(`${LOG_PREFIX} VRC delivery after acceptance failed: ${e.message}`)
-      // It used to stay "preparing" until the overlay's hard timeout.
-      vrcFlowStore.clearFlow(connectionId, 'error')
+      // It used to stay "preparing" until the overlay's hard timeout; now said at once, with a retry.
+      sayDeliveryFailed(agent, connectionId, exchangeId, e)
     }
   )
   // The R-Card (still on the legacy leg) rides this acceptance as its trigger
@@ -1364,7 +1408,14 @@ async function deliverVrcViaTrustTaskForExchangeInner(
     connectionId,
     role: 'request',
   })
-  if (priorForExchange(priorIssues as never, connection.did, exchangeId)) return 'already-issued'
+  const prior = priorIssueFor(priorIssues, connection.did, exchangeId)
+  if (prior && !prior.undelivered) return 'already-issued'
+  if (prior) {
+    // Signed and retained on an earlier trigger, never sent (the mailbox refused it, the connection was down): this
+    // trigger sends that document, signing nothing twice. Read as "already issued" before, the retry showed the
+    // "Sent N min ago" card for a card that never left (the second false success of the mailbox tester builds).
+    return resendRetainedIssue(agent, documentRepository, prior, connectionId, exchangeId)
+  }
 
   const repository = agent.dependencyManager.container.resolve(RelationshipDidRepository)
   const record = await repository.findByConnectionDid(agent.context, connection.theirDid)
@@ -1492,12 +1543,48 @@ async function deliverVrcViaTrustTaskForExchangeInner(
   }
   const signed = await signDocumentProof(agent, document, record.myRelationshipDid)
 
-  await service.retain(agent.context, signed, 'request', connectionId)
-  await sendTrustTaskDocument(agent, connectionId, signed)
+  // Retained before it is sent, so a duplicate trigger that lands after the send can never sign a second one; a
+  // send that fails marks the retained document undelivered, and the next trigger sends it (resendRetainedIssue).
+  const retained = await service.retain(agent.context, signed, 'request', connectionId)
+  try {
+    await sendTrustTaskDocument(agent, connectionId, signed)
+  } catch (e) {
+    retained.undelivered = true
+    await documentRepository
+      .update(agent.context, retained)
+      .catch((err: Error) => logger.warn(`${LOG_PREFIX} could not mark the issue undelivered: ${err.message}`))
+    throw e
+  }
   // Diagnostic only (e2e checker): the VRC this party just issued, as sent.
   logIssuedVrcJson('ISSUER', exchangeId, '-', signedVc)
   vrcFlowStore.setStatus(connectionId, 'offer-sent', false)
   logger.info(`${LOG_PREFIX} issue sent (exchange ${exchangeId}) on connection ${connectionId}`)
+  return 'delivered'
+}
+
+/**
+ * Send an issue document this phone signed and retained on an earlier trigger whose send failed: the same document,
+ * so no second signature, biometric prompt or witness session. Cleared of its mark once it leaves; left marked, and
+ * the error rethrown, when the send fails again.
+ */
+async function resendRetainedIssue(
+  agent: Agent,
+  documentRepository: TrustTaskDocumentRepository,
+  prior: TrustTaskDocumentRecord,
+  connectionId: string,
+  exchangeId: string
+): Promise<'delivered'> {
+  const logger = agent.config.logger
+  vrcFlowStore.setDialect(connectionId, 'trust-tasks')
+  vrcFlowStore.setStatus(connectionId, 'preparing-offer', vrcFlowStore.isWitnessedFlow(connectionId))
+  await sendTrustTaskDocument(agent, connectionId, prior.document)
+  prior.undelivered = undefined
+  await documentRepository
+    .update(agent.context, prior)
+    .catch((err: Error) => logger.warn(`${LOG_PREFIX} could not clear the issue's undelivered mark: ${err.message}`))
+  logIssuedVrcJson('ISSUER', exchangeId, '-', (prior.document.payload as { vrc?: unknown } | undefined)?.vrc)
+  vrcFlowStore.setStatus(connectionId, 'offer-sent', false)
+  logger.info(`${LOG_PREFIX} issue sent on the retry (exchange ${exchangeId}) on connection ${connectionId}`)
   return 'delivered'
 }
 

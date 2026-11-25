@@ -37,6 +37,11 @@ describe('the delivery after the acceptance failing', () => {
     expect(logger.error.mock.calls.map((c) => String(c[0]))).toEqual([
       expect.stringMatching(/VRC delivery after acceptance failed: .*no mailbox is open/),
     ])
+    // and the error dialog opens, with a retry that runs the delivery again (the v2 path showed no dialog before)
+    const error = vrcFlowStore.getError('c-1')
+    expect(error?.type).toBe('send-failed')
+    expect(error?.message).toMatch(/no mailbox is open/)
+    expect(typeof error?.onRetry).toBe('function')
   })
 
   test('CONTROL: when the status is no longer this delivery’s (already issued, offer sent), nothing is ended', async () => {

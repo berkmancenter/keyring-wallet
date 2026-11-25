@@ -1509,6 +1509,7 @@ async function announceRelationshipDid(
   // can issue us a VC 2.0 credential; old peers simply ignore the suffix.
   const message = `This is my relationship DID: vrc:relationshipDid:${relationshipDid} vrc:rceVersion:${RCE_PROTOCOL_VERSION}`
   let sent = false
+  let lastSendError: string | undefined
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -1516,6 +1517,7 @@ async function announceRelationshipDid(
       sent = true
       break
     } catch (sendError) {
+      lastSendError = (sendError as Error).message
       logger.warn(`Relationship DID send attempt ${attempt}/${maxRetries} failed: ${(sendError as Error).message}`)
       if (attempt < maxRetries) {
         await new Promise<void>((resolve) => setTimeout(resolve, 2000 * attempt))
@@ -1529,9 +1531,20 @@ async function announceRelationshipDid(
     logger.error(`✗ RelationshipDid stored locally but failed to send after ${maxRetries} attempts`)
     // Nothing left this phone, so the flow ends here, as an error the overlay says at once. Left "connecting", the
     // chat would show "Sent N min ago… this continues when they open it" for a message that was never sent, and the
-    // exchange would wait forever (a mailbox send refused, 2026-11-21).
-    if (vrcFlowStore.getStatus(connectionRecord.id) === 'connecting')
+    // exchange would wait forever (a mailbox send refused, 2026-11-21). The error dialog opens too, with a retry
+    // that announces again: the v2 (mailbox) path showed no dialog where the legacy leg did.
+    if (vrcFlowStore.getStatus(connectionRecord.id) === 'connecting') {
       vrcFlowStore.clearFlow(connectionRecord.id, 'error')
+      vrcFlowStore.setError(connectionRecord.id, {
+        type: 'send-failed',
+        message: lastSendError,
+        contactName: connectionRecord.theirLabel ?? undefined,
+        onRetry: async () => {
+          await announceRelationshipDid(agent, connectionRecord, logger)
+          if (vrcFlowStore.getStatus(connectionRecord.id) === 'connecting') vrcFlowStore.clearError(connectionRecord.id)
+        },
+      })
+    }
   }
 
   logger.debug(`RelationshipDid stored for counterparty: ${counterpartyConnectionDid}`)

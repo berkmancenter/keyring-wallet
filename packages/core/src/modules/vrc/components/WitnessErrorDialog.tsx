@@ -28,6 +28,7 @@ export type WitnessErrorType =
   | 'biometric-failed'
   | 'stale-witness'
   | 'network-error'
+  | 'send-failed'
   | 'event-not-started'
   | 'event-ended'
 
@@ -44,16 +45,17 @@ export interface WitnessErrorDialogProps {
 }
 
 const iconMap: Record<WitnessErrorType, { name: string; tint: 'warning' | 'error' | 'muted' }> = {
-  'witness-timeout':           { name: 'schedule',        tint: 'warning' },
-  'vp-submission-failed':      { name: 'cloud-off',       tint: 'error' },
-  'session-timeout':           { name: 'hourglass-empty', tint: 'warning' },
-  'counterparty-not-connected':{ name: 'person-off',      tint: 'warning' },
-  'biometric-cancelled':       { name: 'fingerprint',     tint: 'muted' },
-  'biometric-failed':          { name: 'fingerprint',     tint: 'error' },
-  'stale-witness':             { name: 'link-off',        tint: 'warning' },
-  'network-error':             { name: 'wifi-off',        tint: 'error' },
-  'event-not-started':         { name: 'event',           tint: 'warning' },
-  'event-ended':               { name: 'event-busy',      tint: 'muted' },
+  'witness-timeout': { name: 'schedule', tint: 'warning' },
+  'vp-submission-failed': { name: 'cloud-off', tint: 'error' },
+  'session-timeout': { name: 'hourglass-empty', tint: 'warning' },
+  'counterparty-not-connected': { name: 'person-off', tint: 'warning' },
+  'biometric-cancelled': { name: 'fingerprint', tint: 'muted' },
+  'biometric-failed': { name: 'fingerprint', tint: 'error' },
+  'stale-witness': { name: 'link-off', tint: 'warning' },
+  'network-error': { name: 'wifi-off', tint: 'error' },
+  'send-failed': { name: 'cloud-off', tint: 'error' },
+  'event-not-started': { name: 'event', tint: 'warning' },
+  'event-ended': { name: 'event-busy', tint: 'muted' },
 }
 
 const getErrorContent = (
@@ -73,7 +75,8 @@ const getErrorContent = (
       return {
         title: 'Witness Not Responding',
         message: `The witness${witnessName ? ` "${witnessName}"` : ''} did not respond in time.`,
-        infoMessage: 'The witness server may be offline or experiencing high load. You can retry or proceed without witness protection.',
+        infoMessage:
+          'The witness server may be offline or experiencing high load. You can retry or proceed without witness protection.',
         showProceedWithout: true,
         showRetry: true,
       }
@@ -97,7 +100,8 @@ const getErrorContent = (
       return {
         title: 'Contact Not on Witness',
         message: `${contactName || 'Your contact'} does not appear to be connected to${witnessName ? ` "${witnessName}"` : ' the same witness'}.`,
-        infoMessage: 'Both parties must be connected to the same witness for a witnessed exchange. You can retry, or proceed without witness verification.',
+        infoMessage:
+          'Both parties must be connected to the same witness for a witnessed exchange. You can retry, or proceed without witness verification.',
         showProceedWithout: true,
         showRetry: true,
       }
@@ -105,7 +109,8 @@ const getErrorContent = (
       return {
         title: 'Verification Cancelled',
         message: 'Biometric verification was cancelled.',
-        infoMessage: 'The credential was not sent because biometric confirmation is required for hardware-backed signing.',
+        infoMessage:
+          'The credential was not sent because biometric confirmation is required for hardware-backed signing.',
         showProceedWithout: false,
         showRetry: true,
       }
@@ -140,6 +145,16 @@ const getErrorContent = (
         infoMessage: `The event window for witnessed exchanges has closed. You can still exchange credentials without witness verification.`,
         showProceedWithout: true,
         showRetry: false,
+      }
+    case 'send-failed':
+      // This phone's own document never left (the mailbox refused it, the connection was down): nothing to proceed
+      // without, and the retry sends the document already signed, so no second Face ID or witness session.
+      return {
+        title: 'Could not send',
+        message: `Keyring could not deliver your relationship card${contactName ? ` to ${contactName}` : ''}.`,
+        infoMessage: errorMessage || 'Check the connection and try again. Nothing was sent.',
+        showProceedWithout: false,
+        showRetry: true,
       }
     case 'network-error':
     default:

@@ -126,6 +126,11 @@ describe('the first contact’s announcement', () => {
     expect(sendMessage).toHaveBeenCalledTimes(3)
     expect(vrcFlowStore.flowEndedWith('conn-1')).toBe('error')
     expect(vrcFlowStore.getStatus('conn-1')).toBe('idle')
+    // and the error dialog opens with a retry, where the v2 (mailbox) path used to end the flow silently
+    const error = vrcFlowStore.getError('conn-1')
+    expect(error?.type).toBe('send-failed')
+    expect(error?.message).toMatch(/no mailbox is open/)
+    expect(typeof error?.onRetry).toBe('function')
   })
 
   it('CONTROL: sent, the flow stays connecting, waiting on the other phone', async () => {

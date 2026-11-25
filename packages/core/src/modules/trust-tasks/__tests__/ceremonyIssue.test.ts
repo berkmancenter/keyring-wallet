@@ -89,8 +89,11 @@ function makeFakeAgent(options: {
   theirDid: string
   relationshipRecord?: { myRelationshipDid?: string; counterpartyRelationshipDid?: string } | null
   credentialProofValid?: boolean
+  /** The first N sends of an ISSUE document fail the way a refused mailbox send does; later ones go through. */
+  issueSendsFailing?: number
 }) {
   const connectionId = 'conn-1'
+  let issueSendsToFail = options.issueSendsFailing ?? 0
   const stored: unknown[] = []
   const sentMessages: TrustTaskMessage[] = []
   const storedCredentials: unknown[] = []
@@ -138,6 +141,10 @@ function makeFakeAgent(options: {
   singletons.set(RelationshipDidRepository, relationshipRepo)
   singletons.set(DidCommMessageSender, {
     sendMessage: async (outbound: { message: TrustTaskMessage }) => {
+      if (issueSendsToFail > 0 && (outbound.message.document as { type?: string }).type === issue.TYPE_URI) {
+        issueSendsToFail -= 1
+        throw new Error('[TrustTasks:WalletMailbox] no mailbox is open to send through')
+      }
       sentMessages.push(outbound.message)
     },
   })
@@ -283,6 +290,41 @@ describe('the proposer side (auto-delivery on acceptance)', () => {
     ])
     const issues = fake.sentMessages.filter((m) => (m.document as { type?: string }).type === issue.TYPE_URI)
     expect(issues).toHaveLength(1)
+  })
+
+  test('a send the mailbox refused is sent again on the next trigger, from the retained document, signed once', async () => {
+    // The issue document is retained BEFORE it is sent (so a duplicate trigger after the send never signs a second
+    // one). Read as "already issued", a retained document whose send failed made every retry a no-op and the chat
+    // say "Sent N min ago" for a card that never left (mailbox tester builds, 2026-11-21). Now the failed send marks
+    // the record undelivered, and the next trigger sends that document: no second signature or witness session.
+    const fake = makeFakeAgent({ myDid: 'did:peer:4aaa', theirDid: 'did:peer:4zzz', issueSendsFailing: 1 })
+    const exchangeId = 'eeee1111-0000-4000-8000-00000000000e'
+    vrcFlowStore.setStatus(fake.connectionId, 'preparing-offer', false)
+
+    await expect(deliverVrcViaTrustTaskForExchange(fake.agent, fake.connectionId, exchangeId)).rejects.toThrow(
+      /no mailbox is open/
+    )
+    expect(fake.sentMessages.filter((m) => (m.document as { type?: string }).type === issue.TYPE_URI)).toHaveLength(0)
+    expect(fake.w3c.signCredential).toHaveBeenCalledTimes(1)
+
+    // the next trigger: the same document leaves, nothing is signed again
+    await expect(deliverVrcViaTrustTaskForExchange(fake.agent, fake.connectionId, exchangeId)).resolves.toBe(
+      'delivered'
+    )
+    const issues = fake.sentMessages.filter((m) => (m.document as { type?: string }).type === issue.TYPE_URI)
+    expect(issues).toHaveLength(1)
+    const doc = issues[0].document as { threadId: string; proof: unknown; payload: { vrc: unknown } }
+    expect(doc.threadId).toBe(exchangeId)
+    expect(doc.proof).toEqual(STUB_PROOF)
+    expect(doc.payload.vrc).toEqual(SIGNED_VRC)
+    expect(fake.w3c.signCredential).toHaveBeenCalledTimes(1)
+    expect(vrcFlowStore.getStatus(fake.connectionId)).toBe('offer-sent')
+
+    // CONTROL: sent, the exchange is served; a third trigger is the no-op it always was
+    await expect(deliverVrcViaTrustTaskForExchange(fake.agent, fake.connectionId, exchangeId)).resolves.toBe(
+      'already-issued'
+    )
+    expect(fake.sentMessages.filter((m) => (m.document as { type?: string }).type === issue.TYPE_URI)).toHaveLength(1)
   })
 })
 

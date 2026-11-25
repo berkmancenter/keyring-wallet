@@ -33,6 +33,7 @@ export interface TrustTaskDocumentRecordProps {
   document: Record<string, unknown>
   role: TrustTaskDocumentRole
   connectionId?: string
+  undelivered?: boolean
 }
 
 export class TrustTaskDocumentRecord extends BaseRecord {
@@ -43,6 +44,13 @@ export class TrustTaskDocumentRecord extends BaseRecord {
   public document!: Record<string, unknown>
   public role!: TrustTaskDocumentRole
   public connectionId?: string
+  /**
+   * An outbound document this phone signed and retained whose send then failed (the mailbox refused it, the
+   * connection was down): kept as signed, so the next trigger sends this very document again instead of signing
+   * another or, as before, taking the retained copy as proof it was sent and answering "already issued". Cleared
+   * once it leaves. Absent (never set) on every document that was sent first time or that arrived.
+   */
+  public undelivered?: boolean
 
   public constructor(props: TrustTaskDocumentRecordProps) {
     super()
@@ -52,6 +60,7 @@ export class TrustTaskDocumentRecord extends BaseRecord {
       this.document = props.document
       this.role = props.role
       this.connectionId = props.connectionId
+      if (props.undelivered) this.undelivered = true
     }
   }
 
