@@ -98,7 +98,7 @@ describe('keeping and reading', () => {
 
   // IN-725: a bundle from before the fix drew a whole signed record as a post's words, and kept it. Read back, the copy
   // would put that JSON on screen again, and the room would never read the record afresh: its version has not moved.
-  it("a whole record kept as a post's words is left out of the copy read back; words stay (control)", async () => {
+  it("a whole signed record kept as a post's words is left out of the copy read back; a person's words stay, JSON or not", async () => {
     const w = wallet()
     const record = JSON.stringify({
       author: ME,
@@ -110,12 +110,20 @@ describe('keeping and reading', () => {
     })
     const kept = [
       post('record', 60_000, { body: record }),
-      post('cut record', 120_000, { body: record.slice(0, 40), cut: true }),
+      post('cut record', 120_000, { body: record.slice(0, record.indexOf('"roomId"') + 12), cut: true }),
       post('words', 180_000, { body: 'See you at 6' }),
-      post('cut words', 240_000, { body: 'A long story', cut: true }),
+      // Control (review of #1020): what a person typed, which only looks like structure.
+      post('typed json', 240_000, { body: '{"a":1}' }),
+      post('typed braces', 300_000, { body: '{}' }),
+      post('cut words', 360_000, { body: '{ a long story that starts with a brace', cut: true }),
     ]
     await keepRoomPosts(w, room(), kept, NOW)
-    expect((await readRoomPosts(w, ME, ROOM, NOW))?.posts.map((p) => p.key)).toEqual(['words', 'cut words'])
+    expect((await readRoomPosts(w, ME, ROOM, NOW))?.posts.map((p) => p.key)).toEqual([
+      'words',
+      'typed json',
+      'typed braces',
+      'cut words',
+    ])
   })
 
   it('control: another identity on the phone never reads it', async () => {

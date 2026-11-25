@@ -25,7 +25,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useAgentSession } from './agentSession'
-import { newestFirst, postOf, type RoomPost, withRepliesToReactions } from './roomPosts'
+import { isRecordJson, newestFirst, postOf, type RoomPost, withRepliesToReactions } from './roomPosts'
 import { inertFlags, toInertText } from './inertText'
 import { dropKeptListing, keepListing, keptListing } from './keptListings'
 import {
@@ -251,7 +251,9 @@ function seedOf(posts: readonly CachedPost[], read: Map<string, Note>): Listing 
  */
 function keptOf(post: RoomPost): CachedPost | undefined {
   const writtenAt = post.writtenAt ?? post.at?.toISOString()
-  // Nor one this client can't show: it has no words, and kept, it would come back as an empty bubble.
+  // Nor one this client can't show: it has no words, and kept, it would come back as an empty bubble. Nor words that
+  // are a whole signed record (someone pasted one): the copy leaves those out when it is read (messageCache), and what
+  // is written must be what is read back.
   if (
     !writtenAt ||
     post.retracted ||
@@ -259,7 +261,8 @@ function keptOf(post: RoomPost): CachedPost | undefined {
     post.refused ||
     post.delivery ||
     post.notShown ||
-    post.files.length > 0
+    post.files.length > 0 ||
+    isRecordJson(String(post.text))
   )
     return undefined
   return {

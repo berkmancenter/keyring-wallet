@@ -72,27 +72,42 @@ const dateOf = (iso?: string): Date | undefined => {
 }
 
 /**
- * Whether `text` is a whole JSON object other than this client's own chat event: a record's structure, never words a
- * person wrote. Nothing draws such text. A record's body is read out of it (`real/wire.ts` `parseRecord`), and a copy
- * kept before that was so is read again (`messageCache.ts`).
+ * Whether `text` is a whole sealed record as its author signed it, rather than words a person wrote: a JSON object
+ * carrying a record's own envelope, which is a `proof` object, or a `roomId` with a `version` (`SealedRecordBody`).
+ *
+ * For a post's WORDS, where there is nothing else to go by: the copy a phone keeps of a room (`messageCache.ts`) holds
+ * each post as its words alone. A bundle from before IN-725's fix drew such a record whole and kept it so. Told by the
+ * envelope and by nothing wider on purpose: a person may well type `{}` or `{"a":1}` as a message, and words taken for
+ * a record would be dropped from the copy each time it is read, and missing from the room when the phone is offline.
  *
  * IN-725: a note written in a community's web room with a title and no text reached Keyring as a signed
  * `SealedRecordBody` with no `body` member, which that schema allows, and the whole of it was drawn as a chat bubble.
  */
 export function isRecordJson(text: string): boolean {
   if (!text.trimStart().startsWith('{')) return false
+  let value: unknown
   try {
-    const value: unknown = JSON.parse(text)
-    return (
-      !!value &&
-      typeof value === 'object' &&
-      !Array.isArray(value) &&
-      (value as { profile?: unknown }).profile !== CHAT_PROFILE
-    )
+    value = JSON.parse(text)
   } catch {
     return false
   }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  const signed = !!record.proof && typeof record.proof === 'object' && !Array.isArray(record.proof)
+  return signed || (typeof record.roomId === 'string' && typeof record.version === 'number')
 }
+
+/**
+ * The same for words cut short (`messageCache.ts` cuts long ones), which no longer parse: told by their start and by
+ * naming one of a record's own members, never by their structure.
+ *
+ * It leans on an order that is upstream's, not ours: a signed body is written with its members sorted, so `proof` and
+ * `roomId` come early. A body with a large member that sorts before them (a file's manifest, say) can be cut before
+ * either name, and is then missed. When this misses, an old record's JSON stays in the copy a while longer; it never
+ * takes a person's words out. That is the direction it is allowed to fail in.
+ */
+export const isCutRecordJson = (text: string): boolean =>
+  text.trimStart().startsWith('{') && /"(?:proof|roomId)"\s*:/.test(text)
 
 /** A chat message's text, if `body` is a keyring.chat/1 message event; otherwise undefined. */
 export function chatMessageText(body: string, now: number = Date.now()): string | undefined {

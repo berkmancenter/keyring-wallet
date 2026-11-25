@@ -6,7 +6,7 @@
 import { CHAT_PROFILE } from '../../chat/chatEvent'
 import { toInertText } from '../inertText'
 import { parseRead } from '../real/wire'
-import { chatMessageBody, isRecordJson, isNote, placeOf, postOf } from '../roomPosts'
+import { chatMessageBody, isCutRecordJson, isNote, isRecordJson, placeOf, postOf } from '../roomPosts'
 import type { Note } from '../types'
 
 const ROOM = 'did:webvh:QmRoom:dids.example:final-device'
@@ -106,18 +106,46 @@ describe('what is still shown as written', () => {
   })
 })
 
+// For a post's words, in the copy a phone keeps: a whole signed record is told by its own envelope and nothing wider.
 describe('isRecordJson', () => {
   it.each([
-    [JSON.stringify(sealed({ title: 'Message 1' })), true],
-    [`  ${JSON.stringify({ a: 1 })}`, true],
-    ['{}', true],
-    [JSON.stringify({ profile: CHAT_PROFILE, type: 'message' }), false],
-    ['See you at 6', false],
-    ['[1,2,3]', false],
-    ['123', false],
-    ['{not json', false],
-    ['', false],
-  ])('%s → %s', (text, is) => expect(isRecordJson(text)).toBe(is))
+    ['the reported record: proof, roomId, title, version', JSON.stringify(sealed({ title: 'Message 1' })), true],
+    ['one with only what a body must have', JSON.stringify(sealed()), true],
+    ['a roomId and a version, no proof', JSON.stringify({ roomId: ROOM, version: 3 }), true],
+    ['a proof alone', JSON.stringify({ proof: { type: 'DataIntegrityProof' } }), true],
+    ['leading white space', `  ${JSON.stringify(sealed())}`, true],
+  ])('%s: a record', (_, text, is) => expect(isRecordJson(text)).toBe(is))
+
+  // Words a person may type as a message: taken for a record, they would be dropped from the copy at every read, and
+  // be missing from the room when the phone is offline (review of #1020).
+  it.each([
+    ['an empty object', '{}'],
+    ['an object', '{"a":1}'],
+    ['an object with a title', '{"title":"Minutes"}'],
+    ['a roomId and no version', JSON.stringify({ roomId: ROOM })],
+    ['a version and no roomId', '{"version":3}'],
+    ['a proof that is not an object', '{"proof":"of concept"}'],
+    ["this client's chat event", JSON.stringify({ profile: CHAT_PROFILE, type: 'message' })],
+    ['plain words', 'See you at 6'],
+    ['a list', '[1,2,3]'],
+    ['a number', '123'],
+    ['something that only starts like JSON', '{not json'],
+    ['nothing', ''],
+  ])('%s: words (control)', (_, text) => expect(isRecordJson(text)).toBe(false))
+})
+
+describe('isCutRecordJson, for words cut short that no longer parse', () => {
+  const whole = JSON.stringify(sealed({ description: 'x'.repeat(200) }))
+  it('the start of a signed record, told by a member it names', () => {
+    expect(isCutRecordJson(whole.slice(0, whole.indexOf('"roomId"') + 12))).toBe(true)
+    expect(isCutRecordJson(whole.slice(0, whole.indexOf('"proof"') + 10))).toBe(true)
+  })
+
+  it.each([
+    ['a long story that starts with a brace', `{ ${'so it began '.repeat(20)}`],
+    ['JSON a person typed, cut', '{"shopping":["eggs","flour","su'],
+    ['words that name roomId without a brace first', 'the "roomId": field is the room'],
+  ])('%s: words (control)', (_, text) => expect(isCutRecordJson(text)).toBe(false))
 })
 
 describe('as a post', () => {
