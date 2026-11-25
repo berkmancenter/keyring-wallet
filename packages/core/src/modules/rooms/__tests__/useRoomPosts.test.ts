@@ -442,11 +442,11 @@ describe('a room watched at its host', () => {
     const { result } = await open(w.service)
     const real = service.listNotes.getMockImplementation()!
     let release: () => void = () => undefined
-    // The next listing is asked before the change and held until after its signal.
-    service.listNotes.mockImplementationOnce(
-      (roomId: string, options: { sinceVersion?: number }) =>
-        new Promise((resolve) => (release = () => void real(roomId, options).then(resolve)))
-    )
+    // The next listing is asked before the change, answered as the room was then, and held until after its signal.
+    service.listNotes.mockImplementationOnce(async (roomId: string, options: { sinceVersion?: number }) => {
+      const answer = await real(roomId, options)
+      return new Promise((resolve) => (release = () => resolve(answer)))
+    })
     await act(async () => result.current.pollNow())
     expect(polls(service)).toHaveLength(1)
     write(note('b', 2))
