@@ -8,6 +8,8 @@ import { ROOMS_TASK } from '../real/wire'
 import { RECORD_UNOPENED_REASONS, RoomsRefused, RoomsUnavailable } from '../types'
 import { failureCategory, logRef } from '../roomsLogWords'
 import { postOf, reactionValueOf } from '../roomPosts'
+import { ROOMS_READ_MARKER } from '../readMarkerSwitch'
+import { READ_MARKER_SETTLE_MS } from '../real/readMarkers'
 
 const SPEC = 'https://trusttasks.org/spec/'
 const COMMUNITY: RoomsCommunity = { did: 'did:webvh:community:a', name: 'Garden club', personaDid: 'did:key:persona-a' }
@@ -1069,5 +1071,133 @@ describe('a record the agent cannot open', () => {
     expect(b.warn).toHaveBeenCalledWith(
       `rooms: ${logRef(ROOM)} records not opened on this page: beyondChain 3, other 1`
     )
+  })
+})
+
+// Where the person has read a room to, kept by their agent (real/readMarkers.ts): the key list at 0.3 brings each
+// room's marker, the room screen's posts are told to the agent as the room's member, and a marker moved on another
+// device is heard.
+describe("read markers kept by the person's agent", () => {
+  const SET = ROOMS_TASK.keysReadMarkerSet01
+  const listed03 = {
+    rooms: [
+      { roomId: ROOM, epoch: 3, earliestReadableEpoch: 1, member: 'did:key:persona-a', readMarker: { version: 7 } },
+      { roomId: CUSTODY_ROOM, epoch: 1, earliestReadableEpoch: 1, member: 'did:key:persona-a' },
+    ],
+  }
+  const serving03 = (answer03: () => unknown = () => listed03) => {
+    const made = backend({
+      agentServedTypes: async () => [ROOMS_TASK.keysList03, ROOMS_TASK.keysList02, ROOMS_TASK.keysList01, SET],
+    })
+    const before = made.agentTask.getMockImplementation()!
+    made.agentTask.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
+      if (type === ROOMS_TASK.keysList03) return answer03()
+      if (type === SET)
+        return { roomId: payload.roomId, member: payload.member, readMarker: payload.readMarker, moved: true }
+      return before(type, payload)
+    })
+    return made
+  }
+  const listTypes = (agentTask: jest.Mock) =>
+    agentTask.mock.calls.map(([type]) => type as string).filter((type) => type.includes('/rooms/keys/list/'))
+  afterEach(() => {
+    ROOMS_READ_MARKER.on = true
+    ROOMS_READ_MARKER.remoteOff = false
+    jest.useRealTimers()
+  })
+
+  it('the key list is asked at 0.3 where the agent serves it, and each room has the marker it brought', async () => {
+    const { b, agentTask } = serving03()
+    const service = new AgentRoomsService(b)
+    const rooms = await service.listMyRooms()
+    expect(agentTask).toHaveBeenCalledWith(ROOMS_TASK.keysList03, { includePersonal: true })
+    expect(listTypes(agentTask)).toEqual([ROOMS_TASK.keysList03])
+    expect(rooms.map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+    expect(service.roomReadMarker(ROOM)).toEqual({ version: 7 })
+    // A room held only in custody is no member's room on this phone: it has no marker here.
+    expect(service.roomReadMarker(CUSTODY_ROOM)).toBeUndefined()
+  })
+
+  it.each([
+    ['the release switch off', () => void (ROOMS_READ_MARKER.on = false)],
+    ['the release kill', () => void (ROOMS_READ_MARKER.remoteOff = true)],
+  ])('%s: the key list is asked at 0.2, exactly as before, and no marker is held (control)', async (_, turnOff) => {
+    turnOff()
+    const { b, agentTask } = serving03()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    expect(listTypes(agentTask)).toEqual([ROOMS_TASK.keysList02])
+    expect(service.roomReadMarker(ROOM)).toBeUndefined()
+  })
+
+  it('an agent that does not serve 0.3 is asked at 0.2 (control: every agent before vta-service 0.84)', async () => {
+    const { b, agentTask } = backend()
+    await new AgentRoomsService(b).listMyRooms()
+    expect(listTypes(agentTask)).toEqual([ROOMS_TASK.keysList02])
+  })
+
+  it.each(['unsupportedVersion', 'unsupportedType'])(
+    'an agent that lists 0.3 and refuses it (%s) is asked at 0.2, then and for the session: the rooms are still listed',
+    async (code) => {
+      const { b, agentTask } = serving03(() => {
+        throw refused(code)
+      })
+      const service = new AgentRoomsService(b)
+      expect((await service.listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+      expect(listTypes(agentTask)).toEqual([ROOMS_TASK.keysList03, ROOMS_TASK.keysList02])
+      await service.listMyRooms()
+      expect(listTypes(agentTask)).toEqual([ROOMS_TASK.keysList03, ROOMS_TASK.keysList02, ROOMS_TASK.keysList02])
+    }
+  )
+
+  it('what the room screen shows is told to the agent as the member the room is held as, once the reading settles', async () => {
+    const { b, agentTask } = serving03()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    jest.useFakeTimers()
+    service.markRoomRead(ROOM, { version: 9, createdAt: '2026-11-25T05:59:00Z' })
+    // The agent holds 7 already: a post at or before it is not sent.
+    service.markRoomRead(ROOM, { version: 7 })
+    // Not a member's room on this phone: nothing to tell.
+    service.markRoomRead(CUSTODY_ROOM, { version: 2 })
+    expect(agentTask.mock.calls.filter(([type]) => type === SET)).toEqual([])
+    await jest.advanceTimersByTimeAsync(READ_MARKER_SETTLE_MS)
+    expect(agentTask.mock.calls.filter(([type]) => type === SET)).toEqual([
+      [
+        SET,
+        { roomId: ROOM, member: 'did:key:persona-a', readMarker: { version: 9, createdAt: '2026-11-25T05:59:00Z' } },
+        expect.objectContaining({ waitForConsent: false }),
+      ],
+    ])
+    expect(service.roomReadMarker(ROOM)).toEqual({ version: 9, createdAt: '2026-11-25T05:59:00Z' })
+  })
+
+  it("a marker moved on another device is heard for the room's own member, and stops being heard", async () => {
+    let push: (payload: Record<string, unknown>) => void = () => undefined
+    const stopped = jest.fn()
+    const { b } = serving03()
+    b.onRoomReadMarkerMoved = (listener) => {
+      push = listener
+      return stopped
+    }
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    const heard = jest.fn()
+    const stop = service.onRoomReadMarker(heard)
+    push({ roomId: ROOM, member: 'did:key:persona-a', readMarker: { version: 2 } })
+    // Another identity's marker, and a room this phone does not hold: nothing.
+    push({ roomId: ROOM, member: 'did:key:someone-else', readMarker: { version: 5 } })
+    push({ roomId: 'did:webvh:room:unknown', member: 'did:key:persona-a', readMarker: { version: 5 } })
+    expect(heard.mock.calls).toEqual([[ROOM, { version: 2 }, 'moved']])
+    stop()
+    expect(stopped).toHaveBeenCalledTimes(1)
+  })
+
+  it('a lock forgets every marker', async () => {
+    const { b } = serving03()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    service.dropOpenedRecords()
+    expect(service.roomReadMarker(ROOM)).toBeUndefined()
   })
 })

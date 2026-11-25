@@ -16,6 +16,7 @@ import {
   reactionValueOf,
   reactionValueOfBody,
   withRepliesToReactions,
+  readMarkerOf,
 } from '../roomPosts'
 import type { Note, NoteSummary } from '../types'
 
@@ -353,5 +354,22 @@ describe('a record that answers a reaction', () => {
   test('a page with no reaction comes back as it was (control)', () => {
     const page = [postOf(note('Words', { key: 'm1' }))]
     expect(withRepliesToReactions(page)).toBe(page)
+  })
+})
+
+describe('where the posts on screen take the member to (the read marker)', () => {
+  it('the highest version among them, and the host time of the newest, as the host wrote it', () => {
+    expect(
+      readMarkerOf([
+        { version: 4, createdAt: '2026-11-25T05:58:00Z' },
+        // An edit: a higher version, an older post.
+        { version: 9, createdAt: '2026-11-25T05:50:00Z' },
+        { version: 7, createdAt: '2026-11-25T05:59:00.000Z' },
+      ])
+    ).toEqual({ version: 9, createdAt: '2026-11-25T05:59:00.000Z' })
+  })
+
+  it('no host time where no post carries one, or none that reads as a time', () => {
+    expect(readMarkerOf([{ version: 4 }, { version: 2, createdAt: 'yesterday' }])).toEqual({ version: 4 })
   })
 })

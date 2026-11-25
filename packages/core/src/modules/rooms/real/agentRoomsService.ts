@@ -61,6 +61,7 @@ import type {
   RoomCapabilities,
   RoomFile,
   RoomOffer,
+  RoomReadMarker,
   RoomsCapabilities,
   RoomsOperation,
   RoomsService,
@@ -84,6 +85,8 @@ import {
 import type { ConsentHolds } from './consentHolds'
 import { RoomWatches } from './roomWatches'
 import { isRoomLiveWatchOn } from '../liveWatchSwitch'
+import { isRoomReadMarkerOn } from '../readMarkerSwitch'
+import { RoomReadMarkers } from './readMarkers'
 import { OPEN_FILE_BYTES, openRoomFile, type OpenFileCopy } from './files/open'
 import { checkSender, type ResolveSender } from './files/sender'
 import { TextSenderCount } from './files/textSenderCount'
@@ -228,6 +231,12 @@ export interface RoomsBackend {
    * no signal arrives, and every room is polled.
    */
   onRoomSignal?(listener: (payload: Record<string, unknown>) => void): () => void
+  /**
+   * Hear the agent's notice that a read marker moved on another of the person's devices
+   * (`rooms/keys/read-marker/moved/0.1`), as pushed. Returns the way to stop hearing. Absent: a marker changed elsewhere
+   * is learned at the next key list.
+   */
+  onRoomReadMarkerMoved?(listener: (payload: Record<string, unknown>) => void): () => void
   /**
    * Lets rooms be watched and their signals read (live delivery). The real backend reads it from the release's switch
    * (`liveDeliverySwitch.ts`) each time it is asked. Anything but `true`, absent included, is off: every room polls.
@@ -489,6 +498,14 @@ export class AgentRoomsService implements RoomsService {
   private readonly watches: RoomWatches
   private readonly changedListeners = new Set<(roomId: string) => void>()
   private stopSignals?: () => void
+  /** Where the person has read each room to, kept by their agent for all their devices (readMarkers.ts). */
+  private readonly readMarkers: RoomReadMarkers
+  private readonly readMarkerListeners = new Set<
+    (roomId: string, marker: RoomReadMarker, how: 'further' | 'moved') => void
+  >()
+  private stopReadMarkers?: () => void
+  /** The agent refused the key list at 0.3, whatever its list says: asked at the one before for this session. */
+  private keysList03Refused = false
   /** Each offer as last read, and when: an accept goes ahead on one read moments ago (acceptFromPreviewSwitch). */
   private offers = new Map<string, { community: RoomsCommunity; offer: OfferRecord; readAt: number }>()
   private previews = new Map<string, { offerId: string; at: number }>()
@@ -557,6 +574,15 @@ export class AgentRoomsService implements RoomsService {
       logRef,
       on: () => this.backend.liveDelivery === true,
       liveOn: isRoomLiveWatchOn,
+    })
+    this.readMarkers = new RoomReadMarkers({
+      served: () => this.served?.types,
+      agentTask: (type, payload, opts) => this.agentTask(type, payload, opts),
+      consentHolds: backend.consentHolds,
+      now: () => this.now(),
+      warn: (line) => this.backend.warn(line),
+      on: isRoomReadMarkerOn,
+      holds: (roomId, member) => this.heldBy.get(roomId)?.has(member) === true,
     })
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
     // Before any room can open: a killed app's copy of a file does not wait for the next file to be opened. Once per
@@ -848,15 +874,36 @@ export class AgentRoomsService implements RoomsService {
     return read
   }
 
-  /** @versionLadder rooms/keys/list */
+  /**
+   * 0.3 where the release keeps read markers at the agent and the agent serves it: the same list, with each room's
+   * marker beside its label. An agent that refuses 0.3 as not served, whatever its list says, is asked at 0.2 from then
+   * on: the key list is what every room hangs on, and a marker is not worth losing it.
+   *
+   * @versionLadder rooms/keys/list
+   */
   private async readHeldRooms(): Promise<HeldRoom[]> {
     const served = this.served?.types ?? []
-    const held = served.includes(ROOMS_TASK.keysList02)
+    const askedAt = this.now()
+    let held: HeldRoom[] | undefined
+    if (isRoomReadMarkerOn() && !this.keysList03Refused && served.includes(ROOMS_TASK.keysList03)) {
+      try {
+        held = parseKeysList(await this.agentTask(ROOMS_TASK.keysList03, { includePersonal: true }))
+      } catch (e) {
+        const code = refusalCode(e)
+        if (code !== 'unsupportedVersion' && code !== 'unsupportedType') throw e
+        this.keysList03Refused = true
+        this.backend.warn(
+          'rooms: the agent does not serve the key list at the version it lists: asked at the one before'
+        )
+      }
+    }
+    held ??= served.includes(ROOMS_TASK.keysList02)
       ? parseKeysList(await this.agentTask(ROOMS_TASK.keysList02, { includePersonal: true }))
       : parseKeysList(await this.agentTask(ROOMS_TASK.keysList01, {}))
     const by = new Map<string, Set<string>>()
     for (const h of held) if (h.member) by.set(h.roomId, (by.get(h.roomId) ?? new Set()).add(h.member))
     this.heldBy = by
+    this.readMarkers.listed(held, askedAt)
     return held
   }
 
@@ -1496,6 +1543,48 @@ export class AgentRoomsService implements RoomsService {
     return this.watches.watched(roomId)
   }
 
+  /** The member this phone holds `roomId` as, where it is a member of it. */
+  private memberOf(roomId: string): string | undefined {
+    const room = this.rooms.get(roomId)
+    return room?.community && room.standing === 'member' ? room.community.personaDid : undefined
+  }
+
+  public markRoomRead(roomId: string, marker: RoomReadMarker): void {
+    const member = this.memberOf(roomId)
+    if (member) this.readMarkers.read(roomId, member, marker)
+  }
+
+  public roomReadMarker(roomId: string): RoomReadMarker | undefined {
+    const member = this.memberOf(roomId)
+    return member ? this.readMarkers.held(roomId, member) : undefined
+  }
+
+  public onRoomReadMarker(
+    listener: (roomId: string, marker: RoomReadMarker, how: 'further' | 'moved') => void
+  ): () => void {
+    this.readMarkerListeners.add(listener)
+    if (!this.stopReadMarkers) {
+      // A marker is told for the identity the room is held as on this phone: a room held as two is counted as that one.
+      const stopHeard = this.readMarkers.onHeard((roomId, member, marker, how) => {
+        if (this.memberOf(roomId) !== member) return
+        for (const heard of [...this.readMarkerListeners]) heard(roomId, marker, how)
+      })
+      // The agent's notice that a marker moved on another device, heard while someone listens.
+      const stopMoved = this.backend.onRoomReadMarkerMoved?.((payload) => this.readMarkers.moved(payload))
+      this.stopReadMarkers = () => {
+        stopHeard()
+        stopMoved?.()
+      }
+    }
+    return () => {
+      this.readMarkerListeners.delete(listener)
+      if (this.readMarkerListeners.size === 0) {
+        this.stopReadMarkers?.()
+        this.stopReadMarkers = undefined
+      }
+    }
+  }
+
   public onRoomChanged(listener: (roomId: string) => void): () => void {
     this.changedListeners.add(listener)
     // Signals are heard while someone listens: each one is a room to read, and with no screen there is none.
@@ -1517,6 +1606,7 @@ export class AgentRoomsService implements RoomsService {
 
   public dropOpenedRecords(): void {
     this.watches.forget()
+    this.readMarkers.forget()
     this.opened.clear()
     this.listed.clear()
     // A read asked before the lock is not joined after it, nor kept when it answers.

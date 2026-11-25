@@ -11,6 +11,7 @@ import {
   type HostCheck,
   type RecordPrune,
   type RecordUnopenedReason,
+  type RoomReadMarker,
   type RoomTier,
   type RoomVerb,
 } from '../types'
@@ -23,6 +24,11 @@ const SPEC = 'https://trusttasks.org/spec/'
 export const ROOMS_TASK = {
   keysList01: `${SPEC}rooms/keys/list/0.1`,
   keysList02: `${SPEC}rooms/keys/list/0.2`,
+  // 0.3: `includePersonal` also brings each room's read marker, where the member has one (VTA 0.84; readMarkers.ts).
+  keysList03: `${SPEC}rooms/keys/list/0.3`,
+  // Where the member has read a room to, kept by their agent for every one of their devices (trust-tasks-tf #1086,
+  // VTA 0.84). Forward only; the answer is the marker in force.
+  keysReadMarkerSet01: `${SPEC}rooms/keys/read-marker/set/0.1`,
   // 0.5 adds `order` (newestFirst), `maxPages` and a cursor (VTI #2668, VTA 0.81); 0.6 adds `beforeVersion`, to page
   // back from the lowest version held (VTI #2727, VTA 0.83), each over the host's records/list 0.7/0.8. Asked only
   // under rooms/newestFirstSwitch.
@@ -103,7 +109,46 @@ const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
 const TIERS: readonly RoomTier[] = ['open', 'attributed', 'private']
 const VERBS: readonly RoomVerb[] = ['read', 'write', 'curate', 'admin']
 
-/** One room the key holder can open (`rooms/keys/list`, 0.1 or 0.2). Custody only: no name, tier or host. */
+/**
+ * Where a member has seen one room's conversation up to, as their key holder keeps it (`rooms/keys/read-marker/set/0.1`
+ * `ReadMarker`): the room version, and the host's `createdAt` of the newest message seen, for a reader that keeps no
+ * copy of the room. `version` 0 is none of it.
+ */
+export type ReadMarker = RoomReadMarker
+
+const readMarkerOf = (raw: unknown): ReadMarker | undefined => {
+  const m = obj(raw)
+  const version = m?.version
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 0) return undefined
+  const createdAt = str(m?.createdAt)
+  return { version, ...(createdAt && Number.isFinite(Date.parse(createdAt)) ? { createdAt } : {}) }
+}
+
+/**
+ * The answer to a set (`rooms/keys/read-marker/set/0.1#response`): the marker now in force, and whether this request
+ * moved it. Undefined when the answer carries no marker.
+ */
+export function parseReadMarkerSet(payload: unknown): { readMarker: ReadMarker; moved: boolean } | undefined {
+  const p = obj(payload)
+  const readMarker = readMarkerOf(p?.readMarker)
+  return readMarker ? { readMarker, moved: p?.moved === true } : undefined
+}
+
+/**
+ * The agent's notice that a member's marker for a room moved on another of their devices
+ * (`rooms/keys/read-marker/moved/0.1`), or undefined when the payload is not one.
+ */
+export function parseReadMarkerMoved(
+  payload: unknown
+): { roomId: string; member: string; readMarker: ReadMarker } | undefined {
+  const p = obj(payload)
+  const roomId = str(p?.roomId)
+  const member = str(p?.member)
+  const readMarker = readMarkerOf(p?.readMarker)
+  return roomId && member && readMarker ? { roomId, member, readMarker } : undefined
+}
+
+/** One room the key holder can open (`rooms/keys/list`, 0.1 to 0.3). Custody only: no name, tier or host. */
 export interface HeldRoom {
   roomId: string
   epoch: number
@@ -112,6 +157,8 @@ export interface HeldRoom {
   member?: string
   /** 0.2: the member's own label for the room, asked for with `includePersonal`. */
   personalLabel?: string
+  /** 0.3: where the member has read the room to, asked for with `includePersonal`; absent where they have none. */
+  readMarker?: ReadMarker
 }
 
 export function parseKeysList(payload: unknown): HeldRoom[] {
@@ -122,8 +169,16 @@ export function parseKeysList(payload: unknown): HeldRoom[] {
     const earliest = int(r?.earliestReadableEpoch)
     if (!r || !roomId || epoch === undefined || earliest === undefined) return []
     const personal = obj(r.personal)
+    const readMarker = readMarkerOf(r.readMarker)
     return [
-      { roomId, epoch, earliestReadableEpoch: earliest, member: str(r.member), personalLabel: str(personal?.label) },
+      {
+        roomId,
+        epoch,
+        earliestReadableEpoch: earliest,
+        member: str(r.member),
+        personalLabel: str(personal?.label),
+        ...(readMarker ? { readMarker } : {}),
+      },
     ]
   })
 }

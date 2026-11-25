@@ -3843,10 +3843,35 @@ export class VtaAgentController {
     return () => this.roomSignals.delete(listener)
   }
 
+  /** Who hears a read marker's move (`rooms/keys/read-marker/moved/0.1`): the rooms service, while one runs. */
+  private readonly roomReadMarkerMoves = new Set<(payload: Record<string, unknown>) => void>()
+
+  /**
+   * Hear each `rooms/keys/read-marker/moved/0.1` the linked agent pushes, with its payload as sent. The rooms service
+   * acts only on one that names a room the agent holds as that member, and at most by changing what this phone counts
+   * as unread. Returns the way to stop hearing them.
+   */
+  onRoomReadMarkerMoved(listener: (payload: Record<string, unknown>) => void): () => void {
+    this.roomReadMarkerMoves.add(listener)
+    return () => this.roomReadMarkerMoves.delete(listener)
+  }
+
   private inbound(plaintext: DidCommV2PlaintextMessage) {
     // The answer to a decision sent to another person's agent is that wait's, never a request.
     if (takeForeignReply(plaintext)) return
     const body = plaintext.body as { type?: unknown; payload?: unknown } | undefined
+    if (body?.type === VTA_TASK.roomsKeysReadMarkerMoved) {
+      const payload = body.payload
+      if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return
+      for (const listener of [...this.roomReadMarkerMoves]) {
+        try {
+          listener(payload as Record<string, unknown>)
+        } catch {
+          // One listener's failure is its own; the notice still reaches the rest.
+        }
+      }
+      return
+    }
     if (body?.type === VTA_TASK.roomsKeysChanged) {
       const payload = body.payload
       if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return

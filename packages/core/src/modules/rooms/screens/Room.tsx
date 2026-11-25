@@ -73,7 +73,7 @@ import { roomsStatusText } from '../components/roomsStatusText'
 import { SampleDataBanner } from '../components/SampleDataBanner'
 import { type InertText, toInertText } from '../inertText'
 import { permanentRefusal, postRefusalWhy } from '../postRefusal'
-import { isChatPost, isNoteMarker, reactionValueOfBody, type RoomPost } from '../roomPosts'
+import { isChatPost, isNoteMarker, reactionValueOfBody, readMarkerOf, type RoomPost } from '../roomPosts'
 import { byArrival, drawnInChat, quotedWords, type RoomReactionTally } from '../roomThread'
 import { openInMyAgent } from '../roomLinks'
 import type { Identity, RecordFeatures, RoomFile } from '../types'
@@ -300,7 +300,9 @@ const Room: React.FC = () => {
   }, [feed.posts, settle])
   // What the member has on screen is seen: Messages counts only the posts after it (rooms in Messages, R1).
   useEffect(() => {
-    if (inView && feed.posts?.length) markRoomSeen(service, roomId, Math.max(...feed.posts.map((p) => p.version)))
+    if (!inView || !feed.posts?.length) return
+    const seen = readMarkerOf(feed.posts)
+    markRoomSeen(service, roomId, seen.version, seen.createdAt)
   }, [inView, feed.posts, service, roomId])
   // A sent post leaves the outbox in the effect above, so one frame after the list first carries it. Drawn for that
   // frame it showed twice, and the chat jumped up a bubble and back (279.3): it is left out here as soon as it is listed.

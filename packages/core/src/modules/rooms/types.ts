@@ -94,6 +94,15 @@ export type RoomTier = 'open' | 'attributed' | 'private'
 export type RoomVerb = 'read' | 'write' | 'curate' | 'admin'
 
 /**
+ * Where a member has seen one room's conversation up to: the room version, and the host's `createdAt` of the newest
+ * message seen (else its `updatedAt`), as the host returned it. `version` 0 is none of it.
+ */
+export interface RoomReadMarker {
+  version: number
+  createdAt?: string
+}
+
+/**
  * An identity as a person sees it: never a name. `identityWords` are the community's words for the
  * DID when the community supplied them; without them a screen shows a short form of the DID.
  */
@@ -582,6 +591,20 @@ export interface RoomsService {
    * asks for one again after a wait where the host had none to give. Sends nothing otherwise.
    */
   renewRoomWatch?(roomId: string): void
+  /**
+   * The person has seen `roomId` up to `marker` on this phone (its screen showed that post). Where their agent keeps
+   * read markers it is told, so their other devices count the same posts as read (`real/readMarkers.ts`). Returns at
+   * once; nothing is said if it can't. None for the sample.
+   */
+  markRoomRead?(roomId: string, marker: RoomReadMarker): void
+  /** Where the person's agent says they have read `roomId` to, as last heard from it; undefined when it said nothing. */
+  roomReadMarker?(roomId: string): RoomReadMarker | undefined
+  /**
+   * Hear where the person has read a room to, as their agent holds it. `further`: it may only move what this phone
+   * holds forward. `moved`: it is the marker in force, behind or not (the room was marked unread on another device).
+   * Returns the way to stop hearing.
+   */
+  onRoomReadMarker?(listener: (roomId: string, marker: RoomReadMarker, how: 'further' | 'moved') => void): () => void
   /** True while `roomId` has a watch armed: its timed poll can wait, and a change comes through `onRoomChanged`. */
   roomWatched?(roomId: string): boolean
   /** Hear each room a watch said changed: read it once. Returns the way to stop hearing. */
