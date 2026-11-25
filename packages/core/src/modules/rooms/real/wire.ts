@@ -37,6 +37,12 @@ export const ROOMS_TASK = {
   // as `rooms/keys/changed/0.1` (VTI #2457/#2461/#2463, trust-tasks-tf #1036/#1040; VTA 0.77, VTC 0.24). Declared
   // `Mutating`, as read 0.2 is: a hold of it is kept for a day (consentHolds.ts).
   keysWatch01: `${SPEC}rooms/keys/watch/0.1`,
+  // 0.1, and `live: true`: the agent arms `rooms/watch/0.2` live at the host and passes on every signal, not just the
+  // first, while the client renews it (the host leases one for at most 120 s). Only where the room's signal delay is
+  // `none`: elsewhere the host's refusal comes back as `hostRefused` with `hostCode` `rooms/watch:liveNotPermitted`, and
+  // the agent arms nothing in its place (VTI #2671, trust-tasks-tf #1087; VTA 0.83, VTC 0.30). Sent for a live watch
+  // only: a one-shot watch still goes at 0.1.
+  keysWatch02: `${SPEC}rooms/keys/watch/0.2`,
   keysRead: `${SPEC}rooms/keys/read/0.1`,
   membershipsList: `${SPEC}vtc/rooms/memberships/list/0.1`,
   // 0.4 renames a renewal's `renews` to `renewsAt` (VTC 0.16 serves only 0.4; 0.15 serves 0.2 and 0.4); 0.3 adds the
@@ -801,9 +807,14 @@ export interface RoomWatchOutcome {
   refused?: string
   /** The host's own code, when `refused` is `hostRefused`. */
   hostCode?: string
+  /** `rooms/keys/watch/0.2`: true only when the host armed the watch live. Absent on a one-shot watch, at either version. */
+  live?: true
 }
 
-/** A `rooms/keys/watch/0.1` answer: one outcome per room asked, in order. Throws on anything else. */
+/** The host's code for a live watch asked on a room whose signal delay is not `none` (`rooms/watch/0.2`). */
+export const LIVE_NOT_PERMITTED = 'rooms/watch:liveNotPermitted'
+
+/** A `rooms/keys/watch/0.1` or `0.2` answer: one outcome per room asked, in order. Throws on anything else. */
 export function parseWatch(answer: unknown): { member: string; host: string; watches: RoomWatchOutcome[] } {
   const a = obj(answer)
   const member = str(a?.member)
@@ -823,6 +834,8 @@ export function parseWatch(answer: unknown): { member: string; host: string; wat
         ...(str(o.expiresAt) ? { expiresAt: str(o.expiresAt) } : {}),
         ...(str(o.refused) ? { refused: str(o.refused) } : {}),
         ...(str(o.hostCode) ? { hostCode: str(o.hostCode) } : {}),
+        // Only the literal `true` of an armed watch counts: anything else is a one-shot watch.
+        ...(o.armed && o.live === true ? { live: true as const } : {}),
       }
     }),
   }

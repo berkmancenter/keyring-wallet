@@ -103,6 +103,9 @@ const LOGGED_REFUSAL_CODES = new Set([
   // rooms/keys/watch/0.1 (VTA 0.79): a watch past the agent's bound, and a member the caller may not act as.
   'limitReached',
   'listInvalid',
+  // rooms/watch/0.2 (VTA 0.81): a live watch asked of a room whose signal delay is not `none`. It comes back as a watch
+  // outcome's `hostCode` (`rooms/watch:liveNotPermitted`).
+  'liveNotPermitted',
   'locationMismatch',
   'memberLimitsUnavailable',
   'memberNotPrincipal',

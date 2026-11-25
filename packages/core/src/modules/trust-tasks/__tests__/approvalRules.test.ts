@@ -307,6 +307,7 @@ describe('the phone never sends an offered task', () => {
    */
   const INDIRECT: Record<string, string> = {
     'this.browseType()': 'the newest ROOMS_TASK.keysBrowse* the agent serves',
+    oneShot: 'the newest ROOMS_TASK.keysWatch* the agent serves (roomWatches.ts oneShotType)',
     get: 'ROOMS_TASK.vaultGet02 or vaultGet01',
     type: "agentStep's own type, each named at its caller",
     act: 'the newest ROOMS_TASK.keysAct* the agent serves (actType)',

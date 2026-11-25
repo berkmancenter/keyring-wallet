@@ -368,7 +368,7 @@ describe('a room in view', () => {
 const watchable = <S extends RoomsService>(service: S, { arms = true }: { arms?: boolean } = {}) => {
   let armed = false
   const listeners = new Set<(roomId: string) => void>()
-  const watchRoom = jest.fn((_roomId: string, _since: number) => {
+  const watchRoom = jest.fn((_roomId: string, _since: number, _options?: { live?: boolean }) => {
     if (arms) armed = true
   })
   return {
@@ -398,7 +398,8 @@ describe('a room watched at its host', () => {
     const { service } = roomWith([note('a', 1), note('b', 2)])
     const w = watchable(service)
     await open(w.service)
-    expect(w.watchRoom).toHaveBeenCalledWith(ROOM, 2)
+    // On screen, so asked live: where the host has no live watch to give, the same call arms it one-shot (roomWatches).
+    expect(w.watchRoom).toHaveBeenCalledWith(ROOM, 2, { live: true })
   })
 
   test('watched: no timed poll every ten seconds; one at two minutes, for a signal lost', async () => {
@@ -420,7 +421,56 @@ describe('a room watched at its host', () => {
     expect(polls(service)).toHaveLength(1)
     expect(polls(service)[0][1]).toEqual({ sinceVersion: 1 })
     expect(result.current.posts?.map((p) => p.key)).toEqual(['b', 'a'])
-    expect(w.watchRoom).toHaveBeenLastCalledWith(ROOM, 2)
+    // The read's own arming, which is what arms a one-shot watch again; the screen's follows it, still held live.
+    expect(w.watchRoom).toHaveBeenCalledWith(ROOM, 2)
+    expect(w.watchRoom).toHaveBeenLastCalledWith(ROOM, 2, { live: true })
+  })
+
+  // The live watch (rooms/keys/watch/0.2): the screen says when it holds the room and when it lets go, and keeps the
+  // watch from lapsing. What a host gives for it, and the fall back to one signal at a time, is roomWatches' to decide.
+  test('going out of view lets go of the room, once, from the newest version held; a new post never does', async () => {
+    const { service, write } = roomWith([note('a', 1)])
+    const w = watchable(service)
+    const hook = await open(w.service)
+    const letGo = () =>
+      w.watchRoom.mock.calls.filter(([, , o]) => (o as { live?: boolean } | undefined)?.live === false)
+    write(note('b', 2))
+    await w.signal()
+    // Control: the post moved the newest version, and the room is still held.
+    expect(hook.result.current.posts?.map((p) => p.key)).toEqual(['b', 'a'])
+    expect(letGo()).toHaveLength(0)
+    hook.rerender({ inView: false })
+    await flush()
+    expect(letGo()).toEqual([[ROOM, 2, { live: false }]])
+  })
+
+  test('closing the room lets go of it too', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service)
+    const hook = await open(w.service)
+    hook.unmount()
+    expect(w.watchRoom).toHaveBeenLastCalledWith(ROOM, 1, { live: false })
+  })
+
+  test('a room never in view is never let go of (control)', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service)
+    const hook = await open(w.service, false)
+    hook.unmount()
+    expect(w.watchRoom).not.toHaveBeenCalled()
+  })
+
+  test('every tick asks for the live watch to be renewed, a tick that polls nothing included', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service)
+    const renewRoomWatch = jest.fn((_roomId: string) => undefined)
+    await open(Object.assign(w.service, { renewRoomWatch }))
+    expect(renewRoomWatch).not.toHaveBeenCalled()
+    await tick()
+    await tick()
+    // Watched, so neither tick polled; both still asked for the renewal.
+    expect(polls(service)).toHaveLength(0)
+    expect(renewRoomWatch.mock.calls).toEqual([[ROOM], [ROOM]])
   })
 
   test('a signal for another room reads nothing here (control)', async () => {
