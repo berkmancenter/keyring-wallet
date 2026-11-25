@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-import { AgentRoomsService, type RoomsBackend, type RoomsCommunity } from '../real/agentRoomsService'
+import { AgentRoomsService, postKey, type RoomsBackend, type RoomsCommunity } from '../real/agentRoomsService'
 import { RecordMembersNotPermitted, RecordSendingOff, type RecordWrite } from '../real/recordWrites'
 import { ROOMS_TASK } from '../real/wire'
 import { RECORDS_ON_KEPT_KEY, resetRecordsOnKept } from '../recordsWereOn'
@@ -373,6 +373,17 @@ describe('sending is off', () => {
 
 describe('a message', () => {
   const PLAIN = { roomId: ROOM, key: 'opaque-1', version: 1, author: ME, body: 'hello' }
+
+  // IN-736: the outbox clears a post the room lists by the key said ahead (useRoomSend), and an attributed room's message
+  // goes by this path, not the note's. Its key must be the one said ahead too.
+  it('with an idempotency key, takes the key the service says ahead, before anything is sent', async () => {
+    const s = setup()
+    const ahead = s.service.postKeyFor('post-7')
+    expect(s.sendCompleted).not.toHaveBeenCalled()
+    expect(ahead).toBe(postKey('post-7'))
+    expect((await send(s, { type: 'message', body: 'hello', idempotencyKey: 'post-7' })).key).toBe(ahead)
+    expect(s.sealedBody().body).toMatchObject({ key: ahead })
+  })
 
   it('with nothing listed is exactly today’s sealed post', async () => {
     const s = setup()
