@@ -96,6 +96,28 @@ describe('keeping and reading', () => {
     expect(record.tags).toMatchObject({ community: hashOf(LAB), persona: hashOf(ME), room: hashOf(ROOM) })
   })
 
+  // IN-725: a bundle from before the fix drew a whole signed record as a post's words, and kept it. Read back, the copy
+  // would put that JSON on screen again, and the room would never read the record afresh: its version has not moved.
+  it("a whole record kept as a post's words is left out of the copy read back; words stay (control)", async () => {
+    const w = wallet()
+    const record = JSON.stringify({
+      author: ME,
+      key: 'n',
+      proof: { type: 'DataIntegrityProof' },
+      roomId: ROOM,
+      title: 'Message 1',
+      version: 30,
+    })
+    const kept = [
+      post('record', 60_000, { body: record }),
+      post('cut record', 120_000, { body: record.slice(0, 40), cut: true }),
+      post('words', 180_000, { body: 'See you at 6' }),
+      post('cut words', 240_000, { body: 'A long story', cut: true }),
+    ]
+    await keepRoomPosts(w, room(), kept, NOW)
+    expect((await readRoomPosts(w, ME, ROOM, NOW))?.posts.map((p) => p.key)).toEqual(['words', 'cut words'])
+  })
+
   it('control: another identity on the phone never reads it', async () => {
     const w = wallet()
     await keepRoomPosts(w, room(), [post('a')], NOW)

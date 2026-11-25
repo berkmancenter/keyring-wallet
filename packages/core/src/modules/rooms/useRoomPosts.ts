@@ -251,7 +251,16 @@ function seedOf(posts: readonly CachedPost[], read: Map<string, Note>): Listing 
  */
 function keptOf(post: RoomPost): CachedPost | undefined {
   const writtenAt = post.writtenAt ?? post.at?.toISOString()
-  if (!writtenAt || post.retracted || post.unread || post.refused || post.delivery || post.files.length > 0)
+  // Nor one this client can't show: it has no words, and kept, it would come back as an empty bubble.
+  if (
+    !writtenAt ||
+    post.retracted ||
+    post.unread ||
+    post.refused ||
+    post.delivery ||
+    post.notShown ||
+    post.files.length > 0
+  )
     return undefined
   return {
     key: post.key,

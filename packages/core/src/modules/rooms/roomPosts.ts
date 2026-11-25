@@ -59,6 +59,8 @@ export interface RoomPost {
   answersReaction?: true
   /** A reaction whose body, as written, a reader must not show (`reactionValueOfBody`). */
   reactionRefused?: true
+  /** The record was read and holds nothing this client can show: one line says so, never the record itself. */
+  notShown?: true
 }
 
 const sameIdentity = (a?: Identity, b?: Identity): boolean => !!a && !!b && JSON.stringify(a) === JSON.stringify(b)
@@ -67,6 +69,29 @@ const dateOf = (iso?: string): Date | undefined => {
   if (!iso) return undefined
   const at = new Date(iso)
   return Number.isNaN(at.getTime()) ? undefined : at
+}
+
+/**
+ * Whether `text` is a whole JSON object other than this client's own chat event: a record's structure, never words a
+ * person wrote. Nothing draws such text. A record's body is read out of it (`real/wire.ts` `parseRecord`), and a copy
+ * kept before that was so is read again (`messageCache.ts`).
+ *
+ * IN-725: a note written in a community's web room with a title and no text reached Keyring as a signed
+ * `SealedRecordBody` with no `body` member, which that schema allows, and the whole of it was drawn as a chat bubble.
+ */
+export function isRecordJson(text: string): boolean {
+  if (!text.trimStart().startsWith('{')) return false
+  try {
+    const value: unknown = JSON.parse(text)
+    return (
+      !!value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      (value as { profile?: unknown }).profile !== CHAT_PROFILE
+    )
+  } catch {
+    return false
+  }
 }
 
 /** A chat message's text, if `body` is a keyring.chat/1 message event; otherwise undefined. */
@@ -119,6 +144,7 @@ export function postOf(note: Note | NoteSummary, actingAs?: Identity, now: numbe
     ...(read && note.writtenAt ? { writtenAt: note.writtenAt } : {}),
     ...(read && note.editedAt ? { editedAt: note.editedAt } : {}),
     ...(read && note.reactionRefused ? { reactionRefused: true as const } : {}),
+    ...(read && !retracted && note.notShown ? { notShown: true as const } : {}),
     ...(note.createdAt ? { createdAt: note.createdAt } : {}),
     ...(note.createdBy ? { createdBy: note.createdBy } : {}),
   }

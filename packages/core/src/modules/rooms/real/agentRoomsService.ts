@@ -1412,6 +1412,7 @@ export class AgentRoomsService implements RoomsService {
       ...(opened.kind === 'reaction' && reactionValueOfBody(opened.body) === undefined
         ? { reactionRefused: true as const }
         : {}),
+      ...(opened.notShown ? { notShown: true as const } : {}),
     }
   }
 
