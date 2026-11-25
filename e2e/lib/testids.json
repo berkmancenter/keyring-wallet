@@ -1394,6 +1394,7 @@
     "RoomPostCannotOpen": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostLate": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostNotSent": ["src/modules/rooms/components/RoomPostBubble.tsx"],
+    "RoomPostNotShown": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostReactions": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostRemoved": ["src/modules/rooms/components/RoomPostBubble.tsx"],
     "RoomPostRetry": ["src/modules/rooms/components/RoomPostBubble.tsx"],
