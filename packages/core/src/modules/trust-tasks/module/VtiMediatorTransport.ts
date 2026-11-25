@@ -820,7 +820,13 @@ export class VtiMediatorSession {
     // verdict on the token: drop it, mint a new one, try once more. A
     // freshly-minted token that is refused is a real failure and is reported.
     const hadCachedToken = this.accessToken !== undefined
+    // Stamped at the end, one line: where a start's time went (the challenge and its key, the socket, live delivery),
+    // since a sign-in that took 5.8 s on a tester's launch (IN-724, 281.2) was one figure with nothing inside it.
+    const began = Date.now()
+    const stamps: string[] = []
+    const stamp = (what: string) => stamps.push(`${what} +${Date.now() - began} ms`)
     await this.ensureAccessToken()
+    stamp(hadCachedToken ? 'token (cached)' : 'token')
     try {
       await this.openSocket()
     } catch (error) {
@@ -835,6 +841,7 @@ export class VtiMediatorSession {
       // is what failed.
       await this.openSocket()
     }
+    stamp('socket open')
     try {
       await this.startLiveDelivery()
     } catch (error) {
@@ -847,8 +854,14 @@ export class VtiMediatorSession {
       await this.startLiveDelivery()
     }
     this.scheduleRenewal()
-    // Whether this phone is collecting its inbox, and where: a report could not say (D7FG-2Y9J).
-    releaseWarn(`${LOG_PREFIX} collecting for ${didPrefix(this.identity.did)} on ${this.where}: live delivery on`)
+    stamp('live delivery')
+    // Whether this phone is collecting its inbox, and where: a report could not say (D7FG-2Y9J). And where the start's
+    // time went, step by step from its beginning.
+    releaseWarn(
+      `${LOG_PREFIX} collecting for ${didPrefix(this.identity.did)} on ${this.where}: live delivery on (started in ${
+        Date.now() - began
+      } ms: ${stamps.join(', ')})`
+    )
   }
 
   /**

@@ -1419,8 +1419,15 @@ export class VtaClient {
 
   private async connectOnce(): Promise<void> {
     if (this.session?.isOpen) return
+    // Each step stamped from the connect's start, in the release log, as vtiAgent stamps a sign-in: the time from the
+    // agent being ready to this session being live was one untagged stretch in a tester's launch (2.9 s of 8.3 s to
+    // the first room rows, IN-724 on 281.2), and nothing said which of these steps it went to.
+    const began = Date.now()
+    const step = (what: string) => releaseWarn(`${LOG_PREFIX} connect +${Date.now() - began} ms: ${what}`)
     this.mediator ??= await resolveVtaMediator(this.agent, this.vtaDid)
+    step('mediator resolved')
     const did = await this.ensureManagerIdentity()
+    step('manager identity ready')
     // A swap this phone never saw the end of — the answer was lost, or the app
     // was killed while waiting for it — is settled before anything signs as
     // either key; settling leaves the session open as the key the VTA knows.
@@ -1430,13 +1437,14 @@ export class VtaClient {
         `${LOG_PREFIX} a key swap is pending on connect (${record.pendingNext.did}); asking the VTA which key it knows`
       )
       await this.resolvePendingSwap(record)
+      step('pending key swap settled; session open')
       return
     }
-    await this.openAs(did)
+    await this.openAs(did, step)
   }
 
-  /** Open the session as `did`. */
-  private async openAs(did: string): Promise<void> {
+  /** Open the session as `did`; `step` stamps each stage from the connect's start (connectOnce). */
+  private async openAs(did: string, step: (what: string) => void = () => undefined): Promise<void> {
     this.mediator ??= await resolveVtaMediator(this.agent, this.vtaDid)
     this.identity = await vtiClientIdentityFromDid(this.agent, did)
     // Best effort: a wallet whose manager key cannot back TSP ports simply
@@ -1447,6 +1455,7 @@ export class VtaClient {
     this.tsp = did.startsWith('did:key:')
       ? undefined
       : await tspSessionForManager(this.agent, did).catch(() => undefined)
+    step(this.tsp ? 'TSP session for the manager key built' : 'DIDComm only (no TSP session for this key)')
     this.greeted = false
     // Not the breaker: a fresh socket is no evidence replies arrive, and the breaker is the agent's, not this
     // session's (D7FG-2Y9J: resetting it here, at every reconnect, was half of why the hold never held).
@@ -1465,6 +1474,7 @@ export class VtaClient {
         }): the old one is stopped`
       )
       await replaced.stop().catch(() => undefined)
+      step('the replaced session stopped')
     }
     const session = new VtiMediatorSession(this.agent, this.identity, this.mediator, {
       onError: (error) => this.options.onError?.(error),
@@ -1487,7 +1497,9 @@ export class VtaClient {
           }
         : {}),
     })
+    step('signing in to the mediator (challenge, then the socket; the manager key is fetched first when not held)')
     await session.start()
+    step('socket open, live delivery on')
     this.session = session
     // Live delivery flushes whatever the mediator has queued for this DID —
     // and this DID is persisted, so that backlog can include stale replies from
@@ -1516,6 +1528,7 @@ export class VtaClient {
           ? `${LOG_PREFIX} connect: the mediator handed over its queue in ${Date.now() - began} ms; going on`
           : `${LOG_PREFIX} connect: the mediator did not answer the queue request within ${ceilingMs} ms; going on`
       )
+    step('drained; the session is live')
   }
 
   /** Ask the session to prove its socket answers (back in the foreground); one that does not is reopened. */
