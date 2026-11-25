@@ -434,6 +434,44 @@ describe('a room watched at its host', () => {
     expect(result.current.posts?.map((p) => p.key)).toEqual(['c', 'b', 'a'])
   })
 
+  // Probe C (review of #1024): a signal that comes while a listing is out did not list, and that listing could have been
+  // asked before the change. A live watch's host signals each change once, so the post waited for the two-minute poll.
+  test('watched live: a signal while a listing is out is read once that listing answers', async () => {
+    const { service, write } = roomWith([note('a', 1)])
+    const w = watchable(service, { live: true })
+    const { result } = await open(w.service)
+    const real = service.listNotes.getMockImplementation()!
+    let release: () => void = () => undefined
+    // The next listing is asked before the change and held until after its signal.
+    service.listNotes.mockImplementationOnce(
+      (roomId: string, options: { sinceVersion?: number }) =>
+        new Promise((resolve) => (release = () => void real(roomId, options).then(resolve)))
+    )
+    await act(async () => result.current.pollNow())
+    expect(polls(service)).toHaveLength(1)
+    write(note('b', 2))
+    await w.signal()
+    // Not a second listing while one is out.
+    expect(polls(service)).toHaveLength(1)
+    await act(async () => release())
+    await flush()
+    await act(async () => void jest.advanceTimersByTime(0))
+    await flush()
+    expect(polls(service)).toHaveLength(2)
+    expect(result.current.posts?.map((p) => p.key)).toEqual(['b', 'a'])
+  })
+
+  test('a listing out with no signal while it was out asks nothing more when it answers (control)', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service, { live: true })
+    const { result } = await open(w.service)
+    await act(async () => result.current.pollNow())
+    await flush()
+    await act(async () => void jest.advanceTimersByTime(0))
+    await flush()
+    expect(polls(service)).toHaveLength(1)
+  })
+
   test('watched: "Try again" reads at once too, as a signal does', async () => {
     const { service } = roomWith([note('a', 1)])
     const w = watchable(service, { live: true })

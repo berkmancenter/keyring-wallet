@@ -1013,8 +1013,10 @@ describe('every community kept from for now', () => {
   })
 })
 
-// A read the agent refuses with `unknownEpoch` says why in `details.reason` (vta-service room_group.rs open_refused),
-// after the agent has tried to repair its keys (VTI #2231). The reason reaches the screen; nothing else changes.
+// A record the agent could not open says why in `details.reason`, after the agent has tried to repair its keys
+// (VTI #2231). A read's own refusal is `cannotOpen` (the rows just below). `unknownEpoch` is rooms/keys/open's and
+// file-key's code for the same reasons (vta-service room_group.rs open_refused); the rows after them feed it to the same
+// helper, which reads both. The reason reaches the screen; nothing else changes.
 describe('a record the agent cannot open', () => {
   const unknownEpoch = (reason: string) =>
     Object.assign(refused('rooms/keys/open:unknownEpoch'), { details: { reason, earliestEpoch: 3 } })
@@ -1050,14 +1052,17 @@ describe('a record the agent cannot open', () => {
     ['removed', false],
     ['beyondChain', false],
     ['notDelivered', true],
-  ] as const)('is refused with the reason the agent gave: %s (retryable %s)', async (reason, retryable) => {
-    const refusal = unknownEpoch(reason)
-    const { service } = failingRead(refusal)
-    const error = await service.readNote(ROOM, 'n1').catch((e: unknown) => e)
-    expect(error).toBeInstanceOf(RoomsRefused)
-    expect(error).toMatchObject({ operation: 'readNote', code: reason, retryable, refusal })
-    expect(failureCategory(error)).toBe(`refused (${reason})`)
-  })
+  ] as const)(
+    "open's and file-key's code, unknownEpoch, read by the same helper: %s (retryable %s)",
+    async (reason, retryable) => {
+      const refusal = unknownEpoch(reason)
+      const { service } = failingRead(refusal)
+      const error = await service.readNote(ROOM, 'n1').catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(RoomsRefused)
+      expect(error).toMatchObject({ operation: 'readNote', code: reason, retryable, refusal })
+      expect(failureCategory(error)).toBe(`refused (${reason})`)
+    }
+  )
 
   it.each([
     ['another refusal', refused('notFound')],
