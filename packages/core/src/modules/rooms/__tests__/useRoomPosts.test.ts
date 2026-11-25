@@ -20,7 +20,6 @@ import {
   POSTS_PAGE,
   ROOM_POLL_MS,
   ROOM_WATCHED_POLL_MS,
-  ROOM_LIVE_WATCHED_POLL_MS,
   type RoomPosts,
   useRoomPosts,
 } from '../useRoomPosts'
@@ -371,7 +370,6 @@ const watchable = <S extends RoomsService>(
   { arms = true, live = false }: { arms?: boolean; live?: boolean } = {}
 ) => {
   let armed = false
-  let liveNow = live
   const listeners = new Set<(roomId: string) => void>()
   const watchRoom = jest.fn((_roomId: string, _since: number, _options?: { live?: boolean }) => {
     if (arms) armed = true
@@ -380,7 +378,6 @@ const watchable = <S extends RoomsService>(
     service: Object.assign(service, {
       watchRoom,
       roomWatched: (roomId: string) => roomId === ROOM && armed,
-      roomWatchedLive: (roomId: string) => roomId === ROOM && armed && liveNow,
       onRoomChanged: (listener: (roomId: string) => void) => {
         listeners.add(listener)
         return () => void listeners.delete(listener)
@@ -388,11 +385,9 @@ const watchable = <S extends RoomsService>(
     }),
     watchRoom,
     listeners,
-    /** The host ends the live watch, or it lapses: the room stays watched one signal at a time. */
-    endLive: () => void (liveNow = false),
-    /** The agent passes the host's signal on: the watch is spent. */
+    /** The agent passes the host's signal on: a one-shot watch is spent; a live one is not, as RoomWatches.signal. */
     signal: async (roomId = ROOM) => {
-      if (roomId === ROOM) armed = false
+      if (roomId === ROOM && !live) armed = false
       await act(async () => {
         for (const l of [...listeners]) l(roomId)
       })
@@ -410,7 +405,7 @@ describe('a room watched at its host', () => {
     expect(w.watchRoom).toHaveBeenCalledWith(ROOM, 2, { live: true })
   })
 
-  test('watched one signal at a time: no timed poll every ten seconds; one at two minutes, for a signal lost', async () => {
+  test('watched: no timed poll every ten seconds; one at two minutes, for a signal lost', async () => {
     const { service } = roomWith([note('a', 1)])
     const w = watchable(service)
     await open(w.service)
@@ -420,26 +415,40 @@ describe('a room watched at its host', () => {
     expect(polls(service)).toHaveLength(1)
   })
 
-  // IN-756: the room on screen was watched live, one live signal arrived and the next never did, and the new post
-  // waited for the two-minute poll; the member left and came back to see it.
-  test('watched live: the timed poll comes at thirty seconds, not two minutes, and again thirty after', async () => {
-    const { service } = roomWith([note('a', 1)])
+  // IN-756 (282, First Room, signal delay none): the room was watched live, its signal arrived, and the open room did
+  // not read: a live watch is not spent by a signal, so the room still read as watched and the two-minute wait held
+  // the signal's tick like a timed one. The member left and came back to see the post.
+  test('watched live: a signal reads the room at once and the new post shows, and so does the next one', async () => {
+    const { service, write } = roomWith([note('a', 1)])
     const w = watchable(service, { live: true })
-    await open(w.service)
-    expect(ROOM_LIVE_WATCHED_POLL_MS).toBe(30_000)
-    for (let i = 0; i < ROOM_LIVE_WATCHED_POLL_MS / ROOM_POLL_MS - 1; i++) await tick()
-    expect(polls(service)).toHaveLength(0)
+    const { result } = await open(w.service)
     await tick()
+    write(note('b', 2))
+    await w.signal()
+    expect(w.service.roomWatched(ROOM)).toBe(true)
     expect(polls(service)).toHaveLength(1)
-    for (let i = 0; i < ROOM_LIVE_WATCHED_POLL_MS / ROOM_POLL_MS; i++) await tick()
+    expect(result.current.posts?.map((p) => p.key)).toEqual(['b', 'a'])
+    write(note('c', 3))
+    await w.signal()
     expect(polls(service)).toHaveLength(2)
+    expect(result.current.posts?.map((p) => p.key)).toEqual(['c', 'b', 'a'])
   })
 
-  test('a live watch that ends (out of view, or lapsed) waits the two minutes again (control)', async () => {
+  test('watched: "Try again" reads at once too, as a signal does', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service, { live: true })
+    const { result } = await open(w.service)
+    await tick()
+    expect(polls(service)).toHaveLength(0)
+    await act(async () => result.current.pollNow())
+    await flush()
+    expect(polls(service)).toHaveLength(1)
+  })
+
+  test('watched live: the timed poll still waits the two minutes (control: only a signal goes through)', async () => {
     const { service } = roomWith([note('a', 1)])
     const w = watchable(service, { live: true })
     await open(w.service)
-    w.endLive()
     for (let i = 0; i < ROOM_WATCHED_POLL_MS / ROOM_POLL_MS - 1; i++) await tick()
     expect(polls(service)).toHaveLength(0)
     await tick()

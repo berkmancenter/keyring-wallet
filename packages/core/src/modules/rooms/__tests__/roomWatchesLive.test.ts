@@ -154,22 +154,7 @@ describe('a room held on screen', () => {
       },
     ])
     expect(s.watches.watched(ROOM)).toBe(true)
-    expect(s.watches.watchedLive(ROOM)).toBe(true)
     expect(s.lines()).toContain('rooms: one is watched live')
-  })
-
-  // The open room's poll waits 30 s rather than 120 s for a live watch (useRoomPosts, IN-756): only while it is live.
-  test('watched live only while live: not for a one-shot watch, nor once the live lease has lapsed', async () => {
-    const s = setUp()
-    s.watches.want(ROOM, MEMBER, HOST, 4, { live: true })
-    await s.settled()
-    expect(s.watches.watchedLive(ROOM)).toBe(true)
-    s.clock.now += LIVE_LEASE_SECONDS * 1000 + 1
-    expect(s.watches.watchedLive(ROOM)).toBe(false)
-    const once = setUp()
-    once.watches.want(ROOM, MEMBER, HOST, 4)
-    await once.settled()
-    expect([once.watches.watched(ROOM), once.watches.watchedLive(ROOM)]).toEqual([true, false])
   })
 
   test.each([
@@ -212,7 +197,6 @@ describe('a room held on screen', () => {
       await s.settled()
       expect(s.asked()).toEqual([oneShot])
       expect(s.watches.watched(ROOM)).toBe(true)
-      expect(s.watches.watchedLive(ROOM)).toBe(false)
     }
   )
 
