@@ -214,12 +214,13 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Extension:** an event or notification an administrator session can subscribe to when an entry's subject changes.
 - **Severity:** P0 works around (reconcile on app start sets `keyChanged`); P1 none.
 
-### AC-23 Which task types an entry's `stepUp` gates is undocumented
+### AC-23 How an owner's wallet approves an agent's act (reframed 2026-11-25)
 
-- **Hit:** an ACL entry has `stepUp` (`approver`, `require`) and `personal-ai-agents.md` Step 5 describes passkey step-up as "the guardrail", but not whether it gates memory writes and room tasks for an `application` entry, or what `require` accepts.
-- **Evidence:** `vta-sdk/src/client/acl.rs` (`stepUp`); `docs/02-vta/personal-ai-agents.md` Step 5; unmeasured (plan §2.3 item 12, step 0.1(n)).
-- **Extension:** document the gated task types and the `require` values.
-- **Severity:** P1 works around (the plugin's hook is the primary control; step-up is used only if measured to gate); P2 none.
+- **Hit (as first written):** an ACL entry has `stepUp` (`approver`, `require`) and `personal-ai-agents.md` Step 5 describes passkey step-up as "the guardrail", but not whether it gates memory writes and room tasks for an `application` entry, or what `require` accepts.
+- **Re-read at the pin `f7b78e29d` on 2026-11-25:** the entry's `stepUp` fields are stored by the ACL operations and gate nothing at runtime; step-up is only ever self-approval (`initiate_self_step_up`, `trust_tasks/policy_gate.rs:250`; the disclosure step-up, `trust_tasks/persona.rs:3110`); `maybe_push_step_up` returns early when the recipient is the caller (`trust_tasks/step_up.rs:1127`); and `step_up.rs:1276-1282` says delegated step-up was removed and "Someone-else-approves is the consent flow's job (`requireConsent` + an approver set)". So the question is now the consent flow's.
+- **Evidence:** the files above; `vta-service/src/operations/acl.rs:28-31,1112-1116`; `trust_tasks/policy_gate.rs:1-16` (policy rules, enforced only when `config.policy.enforcement` is on). Read, not run. Unmeasured: plan §2.3 item 12, step 0.1(n).
+- **Extension:** a documented way for an owner (not only the operator) to put an `application` entry's memory and room writes under `requireConsent` with the owner's wallet in the approver set, with the consent request pushed to that wallet in a documented format. Documenting that the entry's `stepUp` fields are inert (or removing them) would avoid the misreading this plan made on 2026-11-25.
+- **Severity:** P1 works around (the plugin's hook is the primary control; the consent flow is used only once measured, plan D43); P2 none.
 
 ## Not for upstream: local items to resolve elsewhere
 
@@ -284,7 +285,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 
 ### AC-34 No typed credential value type for agent memory
 
-- **Hit:** a memory value is UTF-8 text of at most 64 KiB (`operations/app_state.rs:94,558-575`); no blob type was found in `vta/memory/*` (the maintainers' "blob" type is a question for Alberto). A credential given to an agent's memory is a JSON text envelope (plan §3.15, D36).
+- **Hit:** a memory value is UTF-8 text of at most 64 KiB (`operations/app_state.rs:94,558-575`); no blob type was found in `vta/memory/*`. **Re-checked at the pin `f7b78e29d` on 2026-11-25:** still absent (`MAX_VALUE_BYTES = 65_536`, text only), as Alberto confirmed for the maintainers' "blob" type, so the ask stands as written. A credential given to an agent's memory is a JSON text envelope (plan §3.15, D36).
 - **Evidence:** `vta-service/src/operations/memory.rs:79-100`; the credential vault is separate (`vta-vault/src/model.rs:1-40`, `present.rs:1-40`, `trust_tasks/cred_vault.rs:492-540`), at `4e5861d95`, 2026-11-24.
 - **Extension:** a typed credential value for `vta/memory/*` beside text: typed verification, status awareness, a larger cap or a reference.
 - **Severity:** P1 works around (the text envelope); not a dependency. Registered as VTI-Q47.

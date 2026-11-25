@@ -3,8 +3,8 @@
 Exported from the UI/UX lane's canvas, artifact version `1795643806-7f0f (the UI/UX lane's canvas version 39, 2026-11-25)`, by `scripts/plans/export-canvas.py`.
 One PNG per artboard, in the canvas's order, rendered with headless Chrome at the board's size at twice the
 pixel density from the published artboard files and their shared stylesheet; `sheet.png` is all of them, three
-to a row. These are the visual target for the screens (the plan's section 8.6); the kit SVGs in `../mockups/`
-remain the checked source for the copy. Re-export when a new canvas version is approved.
+to a row. These are the design the screens are built to (D41, the plan's section 8.6); the kit SVGs in `../mockups/`
+are the checked source for the copy, and only that. Re-export when a new canvas version is approved.
 
 | # | File | Board | Size |
 |---|---|---|---|
