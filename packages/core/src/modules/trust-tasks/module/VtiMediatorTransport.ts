@@ -240,7 +240,8 @@ export async function resolveDidDocumentRetrying(
         }`
       )
       // No pause after the last attempt: there is nothing it would wait for, and it held every caller's error back
-      // by 3.2 s (the fourth pause) on a resolve that was never going to answer.
+      // by 3.2 s (the fourth pause) on a resolve that was never going to answer. The warning above is printed either
+      // way; what goes is the dead time after it.
       if (i + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 800 * (i + 1)))
     }
   }
