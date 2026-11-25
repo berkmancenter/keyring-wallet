@@ -14,8 +14,17 @@
  *   settle, and one out is answered before the next goes, so a conversation on screen costs a trip every few seconds,
  *   not one per message.
  * - **A change made elsewhere is taken as it is.** The list brings each room's marker; the agent's `moved` notice
- *   brings one as it changes, to a device watching the room. A marker behind the one held is the person marking the
- *   room unread on another device, and is taken too.
+ *   brings one as it changes. A marker behind the agent's last is the person marking the room unread on another
+ *   device, and is taken too. One further on than the agent's last is another device reading on, and only ever moves
+ *   this phone forward, even where it is behind what this phone's screen shows.
+ * - **A room marked unread elsewhere stays unread here until its screen is entered again.** A screen left open on the
+ *   room would otherwise say "seen" again at its next listing and undo the person's own choice within seconds;
+ *   upstream warns of exactly that ("not a forward set issued before a rewind sent since"). So after such a marker no
+ *   set goes for the room, a waiting one is dropped, and the rows do not count its screen as seen
+ *   ({@link RoomReadMarkers.markedUnread}), until {@link RoomReadMarkers.entered}.
+ * - **The notice reaches only a device watching the room.** The agent sends `moved` to the member's other clients
+ *   that hold a `rooms/keys/watch` on the room as that member. A room this phone only polls (its watch refused, or an
+ *   agent that serves none) gets no notice, and learns of a change at the next key list.
  * - **A hold is kept for a day**, as a watch's is (consentHolds.ts): the task goes with `waitForConsent: false`, and an
  *   agent whose rules hold it is not asked again for a day. A refusal of the task itself stops it for this session.
  * - **Nothing is said per set.** Upstream writes no audit row and no log line for one, because when a person read a
@@ -81,8 +90,9 @@ export interface ReadMarkerDeps {
 
 /**
  * A marker heard from the agent, to adopt:
- * - `further`: it may only move what this phone holds forward (a list's marker, a set's answer);
- * - `moved`: it is the one in force, behind or not (the agent's notice, or a list's marker behind the agent's last).
+ * - `further`: it may only move what this phone holds forward (a set's answer, or a marker further on than the
+ *   agent's last: another device read on);
+ * - `moved`: the agent's marker went back, which only "mark as unread" does. It is taken as it is.
  */
 export type ReadMarkerHeard = (roomId: string, member: string, marker: ReadMarker, how: 'further' | 'moved') => void
 
@@ -97,6 +107,8 @@ export class RoomReadMarkers {
   private readonly busy = new Set<string>()
   /** When the agent last answered a set, by room and member: a list asked before that says nothing newer. */
   private readonly answeredAt = new Map<string, number>()
+  /** Rooms marked unread on another device, until their screen is entered again here: no set goes for them. */
+  private readonly heldUnread = new Set<string>()
   /** Rooms the agent refused a set for: not asked again this session. */
   private readonly refused = new Set<string>()
   private readonly listeners = new Set<ReadMarkerHeard>()
@@ -121,10 +133,27 @@ export class RoomReadMarkers {
   }
 
   /**
-   * The person has seen `roomId` to `marker` on this phone. Told to the agent unless it already holds one as far on.
-   * Returns at once.
+   * True from when `roomId` was marked unread on another of the person's devices until its screen is entered again
+   * here: what a screen left open on it shows is not to be counted as seen, here or at the agent.
+   */
+  markedUnread(roomId: string, member: string): boolean {
+    return this.heldUnread.has(keyOf(roomId, member))
+  }
+
+  /**
+   * The person navigated to the room's screen (useRoomEntered): what it shows is seen from here on. Never called for
+   * the app coming back to the foreground with the room still open.
+   */
+  entered(roomId: string): void {
+    for (const k of [...this.heldUnread]) if (k.startsWith(`${roomId}\n`)) this.heldUnread.delete(k)
+  }
+
+  /**
+   * The person has seen `roomId` to `marker` on this phone. Told to the agent unless it already holds one as far on,
+   * or the room was marked unread elsewhere and its screen has not been entered again. Returns at once.
    */
   read(roomId: string, member: string, marker: ReadMarker): void {
+    if (this.heldUnread.has(keyOf(roomId, member))) return
     const why = this.notKept()
     if (why) {
       if (this.notKeptSaid !== why) {
@@ -162,25 +191,37 @@ export class RoomReadMarkers {
       const before = this.inForce.get(k)
       if (before && before.version === room.readMarker.version && before.createdAt === room.readMarker.createdAt)
         continue
-      this.inForce.set(k, room.readMarker)
-      this.tell(room.roomId, room.member, room.readMarker, furtherOn(room.readMarker, before) ? 'further' : 'moved')
+      this.take(k, room.roomId, room.member, room.readMarker)
     }
   }
 
   /**
+   * A marker the agent holds that this phone did not set. Behind the agent's last: the room was marked unread on
+   * another device, and is held unread here until its screen is entered again. Otherwise another device read on.
+   */
+  private take(k: string, roomId: string, member: string, marker: ReadMarker): void {
+    const before = this.inForce.get(k)
+    const wentBack = before !== undefined && furtherOn(before, marker)
+    this.inForce.set(k, marker)
+    const waiting = this.wanted.get(k)
+    if (wentBack) {
+      this.heldUnread.add(k)
+      // Whatever waits was seen before the room was marked unread: it is not to undo that.
+      this.wanted.delete(k)
+    } else if (waiting && !furtherOn(waiting.marker, marker)) this.wanted.delete(k)
+    this.tell(roomId, member, marker, wentBack ? 'moved' : 'further')
+  }
+
+  /**
    * A `rooms/keys/read-marker/moved/0.1` the agent pushed: the member's marker for a room moved on another device.
-   * Acted on only for a room the agent holds as that member; taken as the marker in force, behind or not.
+   * Acted on only for a room the agent holds as that member; taken as the marker in force, behind or not. A set
+   * still waiting that is no further on has nothing left to say, and is dropped.
    */
   moved(payload: unknown): void {
     if (!this.deps.on()) return
     const notice = parseReadMarkerMoved(payload)
     if (!notice || !this.deps.holds(notice.roomId, notice.member)) return
-    const k = keyOf(notice.roomId, notice.member)
-    this.inForce.set(k, notice.readMarker)
-    // A set still waiting that is no further on has nothing left to say.
-    const waiting = this.wanted.get(k)
-    if (waiting && !furtherOn(waiting.marker, notice.readMarker)) this.wanted.delete(k)
-    this.tell(notice.roomId, notice.member, notice.readMarker, 'moved')
+    this.take(keyOf(notice.roomId, notice.member), notice.roomId, notice.member, notice.readMarker)
   }
 
   /** Forget every marker and every set waiting (the wallet locked, the person logged out). Nothing is asked of the agent. */
@@ -190,6 +231,7 @@ export class RoomReadMarkers {
     this.wanted.clear()
     this.busy.clear()
     this.refused.clear()
+    this.heldUnread.clear()
     this.generation++
   }
 

@@ -597,11 +597,23 @@ export interface RoomsService {
    * once; nothing is said if it can't. None for the sample.
    */
   markRoomRead?(roomId: string, marker: RoomReadMarker): void
+  /**
+   * True from when the person marked `roomId` unread on another device until its screen is entered again here
+   * ({@link RoomsService.roomEntered}): a screen left open on the room does not count what it shows as seen, so their
+   * choice is not undone.
+   */
+  roomMarkedUnread?(roomId: string): boolean
+  /**
+   * The person navigated to `roomId`'s screen (useRoomEntered): from here on what it shows is seen. Not the app coming
+   * back to the foreground with the room still open: that is the moment a room marked unread elsewhere must stay so.
+   */
+  roomEntered?(roomId: string): void
   /** Where the person's agent says they have read `roomId` to, as last heard from it; undefined when it said nothing. */
   roomReadMarker?(roomId: string): RoomReadMarker | undefined
   /**
    * Hear where the person has read a room to, as their agent holds it. `further`: it may only move what this phone
-   * holds forward. `moved`: it is the marker in force, behind or not (the room was marked unread on another device).
+   * holds forward. `moved`: the agent's marker went back (the room was marked unread on another device), and is taken
+   * as it is.
    * Returns the way to stop hearing.
    */
   onRoomReadMarker?(listener: (roomId: string, marker: RoomReadMarker, how: 'further' | 'moved') => void): () => void

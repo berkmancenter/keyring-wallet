@@ -1210,6 +1210,37 @@ describe("read markers kept by the person's agent", () => {
     expect(stopped).toHaveBeenCalledTimes(1)
   })
 
+  it('a room marked unread elsewhere is held unread through the app leaving and returning, until it is entered', async () => {
+    let push: (payload: Record<string, unknown>) => void = () => undefined
+    const { b, agentTask } = serving03()
+    b.onRoomReadMarkerMoved = (listener) => {
+      push = listener
+      return () => undefined
+    }
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    service.onRoomReadMarker(() => undefined)
+    // The room is open on this phone; the agent held 7, and the person marks it unread at 2 on their laptop.
+    service.roomInView(ROOM, true)
+    push({ roomId: ROOM, member: 'did:key:persona-a', readMarker: { version: 2 } })
+    expect(service.roomMarkedUnread(ROOM)).toBe(true)
+    // The app goes to the background and comes back with the room still on screen: out of view, then in view. The
+    // phone was only picked up, so the hold stays (control: hung on this transition, it ended here).
+    service.roomInView(ROOM, false)
+    service.roomInView(ROOM, true)
+    expect(service.roomMarkedUnread(ROOM)).toBe(true)
+    jest.useFakeTimers()
+    service.markRoomRead(ROOM, { version: 9 })
+    await jest.advanceTimersByTimeAsync(READ_MARKER_SETTLE_MS)
+    expect(agentTask.mock.calls.filter(([type]) => type === SET)).toEqual([])
+    // The person navigates away and back to the room: it is theirs to read again.
+    service.roomEntered(ROOM)
+    expect(service.roomMarkedUnread(ROOM)).toBe(false)
+    service.markRoomRead(ROOM, { version: 9 })
+    await jest.advanceTimersByTimeAsync(READ_MARKER_SETTLE_MS)
+    expect(agentTask.mock.calls.filter(([type]) => type === SET)).toHaveLength(1)
+  })
+
   it('a lock forgets every marker', async () => {
     const { b } = serving03()
     const service = new AgentRoomsService(b)

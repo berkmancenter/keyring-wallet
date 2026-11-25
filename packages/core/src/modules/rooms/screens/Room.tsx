@@ -80,6 +80,7 @@ import type { Identity, RecordFeatures, RoomFile } from '../types'
 import { useMyName } from '../useMyName'
 import { usePetnames } from '../usePetname'
 import { useInViewAndActive } from '../useInViewAndActive'
+import { useRoomEntered } from '../useRoomEntered'
 import { type RoomListing, useRoom } from '../useRoom'
 import { POSTS_PAGE, ROOM_POLL_MS, useRoomPosts } from '../useRoomPosts'
 import { markRoomSeen, useRoomRows } from '../useRoomRows'
@@ -298,6 +299,9 @@ const Room: React.FC = () => {
   useEffect(() => {
     if (feed.posts) settle(new Set(feed.posts.map((p) => p.key)))
   }, [feed.posts, settle])
+  // Before the effect below, so that entering the room counts what it shows: a room marked unread on another device
+  // stays unread here until the person navigates to it again (useRoomEntered), whatever a screen left open shows.
+  useRoomEntered(service, roomId)
   // What the member has on screen is seen: Messages counts only the posts after it (rooms in Messages, R1).
   useEffect(() => {
     if (!inView || !feed.posts?.length) return

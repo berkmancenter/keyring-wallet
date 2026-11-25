@@ -1564,6 +1564,15 @@ export class AgentRoomsService implements RoomsService {
     if (member) this.readMarkers.read(roomId, member, marker)
   }
 
+  public roomEntered(roomId: string): void {
+    this.readMarkers.entered(roomId)
+  }
+
+  public roomMarkedUnread(roomId: string): boolean {
+    const member = this.memberOf(roomId)
+    return member !== undefined && this.readMarkers.markedUnread(roomId, member)
+  }
+
   public roomReadMarker(roomId: string): RoomReadMarker | undefined {
     const member = this.memberOf(roomId)
     return member ? this.readMarkers.held(roomId, member) : undefined

@@ -363,10 +363,10 @@ describe("the agent's key list", () => {
 })
 
 describe("the agent's notice that a marker moved on another device", () => {
-  test('further on: held, and the rows are told', () => {
+  test('further on than the agent held, or the first heard: held, and the rows are told it may move them forward', () => {
     const s = setUp()
     s.markers.moved({ roomId: 'room:1', member: MEMBER, readMarker: { version: 9 } })
-    expect(s.heard.mock.calls).toEqual([['room:1', MEMBER, { version: 9 }, 'moved']])
+    expect(s.heard.mock.calls).toEqual([['room:1', MEMBER, { version: 9 }, 'further']])
     expect(s.markers.held('room:1', MEMBER)).toEqual({ version: 9 })
   })
 
@@ -405,6 +405,90 @@ describe("the agent's notice that a marker moved on another device", () => {
     s.markers.moved({ roomId: 'room:2', member: MEMBER, readMarker: { version: 5 } })
     await s.settle()
     expect(s.sent().map((p) => [p.roomId, p.readMarker.version])).toEqual([['room:2', 7]])
+  })
+})
+
+// Review finding on #1007: the person marks a room unread on their laptop while the phone has it open. The open screen
+// said "seen" again at its next listing, and the forward set undid the mark within seconds, here and at the agent.
+describe('a room marked unread on another device', () => {
+  const setThenRewound = async () => {
+    const s = setUp()
+    s.markers.read('room:1', MEMBER, { version: 415 })
+    await s.settle()
+    s.markers.moved({ roomId: 'room:1', member: MEMBER, readMarker: { version: 408 } })
+    return s
+  }
+
+  test('what the screen left open shows is not sent again, however often it says so, until the room is entered again', async () => {
+    const s = await setThenRewound()
+    expect(s.heard.mock.calls).toEqual([['room:1', MEMBER, { version: 408 }, 'moved']])
+    expect(s.markers.markedUnread('room:1', MEMBER)).toBe(true)
+    // The open screen's next listings: the same posts, and a new one.
+    s.markers.read('room:1', MEMBER, { version: 415 })
+    s.markers.read('room:1', MEMBER, { version: 416 })
+    await s.settle()
+    expect(s.sent().map((p) => p.readMarker.version)).toEqual([415])
+    expect(s.markers.held('room:1', MEMBER)).toEqual({ version: 408 })
+    // The person navigates to the room again: what it shows is seen.
+    s.markers.entered('room:1')
+    expect(s.markers.markedUnread('room:1', MEMBER)).toBe(false)
+    s.markers.read('room:1', MEMBER, { version: 416 })
+    await s.settle()
+    expect(s.sent().map((p) => p.readMarker.version)).toEqual([415, 416])
+  })
+
+  test('a set still waiting when the mark arrives is dropped, though it is further on: it was seen before the mark', async () => {
+    const s = setUp()
+    s.markers.listed([
+      { roomId: 'room:1', epoch: 1, earliestReadableEpoch: 1, member: MEMBER, readMarker: { version: 412 } },
+    ])
+    s.markers.read('room:1', MEMBER, { version: 415 })
+    s.markers.moved({ roomId: 'room:1', member: MEMBER, readMarker: { version: 408 } })
+    await s.settle()
+    expect(s.agentTask).not.toHaveBeenCalled()
+    expect(s.markers.markedUnread('room:1', MEMBER)).toBe(true)
+  })
+
+  test('learned from the key list instead (no notice reaches a room that is only polled): held unread the same', async () => {
+    const s = setUp()
+    s.markers.read('room:1', MEMBER, { version: 415 })
+    await s.settle()
+    s.pass(1000)
+    s.markers.listed([
+      { roomId: 'room:1', epoch: 1, earliestReadableEpoch: 1, member: MEMBER, readMarker: { version: 408 } },
+    ])
+    expect(s.markers.markedUnread('room:1', MEMBER)).toBe(true)
+    s.markers.read('room:1', MEMBER, { version: 415 })
+    await s.settle()
+    expect(s.agentTask).toHaveBeenCalledTimes(1)
+  })
+
+  test('another device reading on from further back is no mark (control): told as further, nothing held, the waiting set goes', async () => {
+    const s = setUp()
+    // The agent held 400. The browser reads to 408 while this phone, showing 415, waits out its settle time.
+    s.markers.listed([
+      { roomId: 'room:1', epoch: 1, earliestReadableEpoch: 1, member: MEMBER, readMarker: { version: 400 } },
+    ])
+    s.markers.read('room:1', MEMBER, { version: 415 })
+    s.markers.moved({ roomId: 'room:1', member: MEMBER, readMarker: { version: 408 } })
+    expect(s.heard.mock.calls[1]).toEqual(['room:1', MEMBER, { version: 408 }, 'further'])
+    expect(s.markers.markedUnread('room:1', MEMBER)).toBe(false)
+    await s.settle()
+    expect(s.sent().map((p) => p.readMarker.version)).toEqual([415])
+  })
+
+  test('entering another room, or the same room as another identity only, ends nothing here (control)', async () => {
+    const s = await setThenRewound()
+    s.markers.entered('room:2')
+    s.markers.entered('room:')
+    expect(s.markers.markedUnread('room:1', MEMBER)).toBe(true)
+    expect(s.markers.markedUnread('room:1', OTHER)).toBe(false)
+  })
+
+  test('a lock forgets the hold with everything else', async () => {
+    const s = await setThenRewound()
+    s.markers.forget()
+    expect(s.markers.markedUnread('room:1', MEMBER)).toBe(false)
   })
 })
 

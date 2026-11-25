@@ -1392,6 +1392,29 @@ describe("read markers kept by the person's agent", () => {
     expect(list.result.current.rows.rows[0].unread).toBe(0)
   })
 
+  test('marked unread elsewhere with the room still open here: its screen does not clear the count, or tell the agent, until the room is entered again', async () => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1), note('n2', 2), note('n3', 3)] })
+    const { tell, markRoomRead } = withMarkers(s)
+    let held = false
+    Object.assign(s, { roomMarkedUnread: () => held })
+    const { list } = mount(s)
+    await flush()
+    held = true
+    tell('planning', 1, 'moved')
+    await flush()
+    expect(list.result.current.rows.rows[0].unread).toBe(2)
+    // The open screen's next listing says what it shows again.
+    act(() => markRoomSeen(s, 'planning', 3))
+    expect(list.result.current.rows.rows[0].unread).toBe(2)
+    expect(markRoomRead).not.toHaveBeenCalled()
+    expect(await keptSeen()).toEqual([1])
+    // Entered again (control: the same call now counts).
+    held = false
+    act(() => markRoomSeen(s, 'planning', 3))
+    expect(list.result.current.rows.rows[0].unread).toBe(0)
+    expect(markRoomRead).toHaveBeenCalledWith('planning', { version: 3 })
+  })
+
   test('marked unread on another device: seen only up to there, and the room is read afresh to count what came after', async () => {
     const s = serviceWith([room('planning')], { planning: [note('n1', 1), note('n2', 2), note('n3', 3)] })
     const { tell } = withMarkers(s)

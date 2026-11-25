@@ -774,6 +774,8 @@ export function markRoomSeen(
   createdAt?: string
 ): void {
   if (!service || service !== feed.service) return
+  // Marked unread on another device, and not looked at again here: a screen left open on the room says nothing.
+  if (service.roomMarkedUnread?.(roomId)) return
   // The person's agent is told too, so their other devices count the same posts as read. Before the check below: a
   // room already seen this far here may not be at the agent yet, and the service sends nothing the agent already holds.
   service.markRoomRead?.(roomId, { version, ...(createdAt ? { createdAt } : {}) })
