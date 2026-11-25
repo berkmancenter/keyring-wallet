@@ -16,7 +16,8 @@ export const identityText = (identity: Identity): string =>
 /**
  * Another member as a person reads them: the member's own name for them when they gave one ("River (named by you)",
  * always marked as theirs), else the name the member wrote on their own directory card ("River (member)",
- * marked as theirs, since a self-chosen name can claim anything), else the community's words when given, else
+ * marked as a member of the community, which is what the directory can vouch for; the name itself is still
+ * self-chosen), else the community's words when given, else
  * "Member …saddle", the DID's last letters so two members without a name can be told apart. The DID itself is kept
  * for the member's sheet.
  */
