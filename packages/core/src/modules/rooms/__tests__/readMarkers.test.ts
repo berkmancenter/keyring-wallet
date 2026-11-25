@@ -17,7 +17,7 @@ type Payload = { roomId: string; member: string; readMarker: ReadMarker; rewind?
 type Answer = (payload: Payload) => unknown
 
 /** The agent keeps what it is sent. */
-const kept: Answer = (p) => ({ roomId: p.roomId, member: p.member, readMarker: p.readMarker, moved: true })
+const kept = (p: Payload) => ({ roomId: p.roomId, member: p.member, readMarker: p.readMarker, moved: true })
 
 const disk = () => {
   const rows = new Map<string, string>()
