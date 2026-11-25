@@ -2356,10 +2356,6 @@ export class AgentRoomsService implements RoomsService {
   }
 
   /**
-   * Writes a message, a reply or a reaction to an attributed room, by the writer's rule (`recordWrites.ts`). Off until
-   * `RoomsBackend.recordSending` says so: the real backend reads the release's switch (`recordSendingSwitch`) on every send.
-   */
-  /**
    * A record write, and on any failure what it may have taken on trust is forgotten, as for a sealed write: a refusal
    * decided here from the room's record members (`requirePermitted`, a reply's or an edit's members) can come from a
    * key list held across an epoch move, so the next write asks one afresh (review of #1029).
@@ -2374,6 +2370,10 @@ export class AgentRoomsService implements RoomsService {
     }
   }
 
+  /**
+   * Writes a message, a reply or a reaction to an attributed room, by the writer's rule (`recordWrites.ts`). Off until
+   * `RoomsBackend.recordSending` says so: the real backend reads the release's switch (`recordSendingSwitch`) on every send.
+   */
   private async sendRecordOnce(roomId: string, write: RecordWrite): Promise<{ key: string; version: number }> {
     if (!this.backend.recordSending) throw new RecordSendingOff()
     // A message's words are held to a post's own rules: an empty one would read as withdrawn, a long one as no post did.
@@ -2439,17 +2439,6 @@ export class AgentRoomsService implements RoomsService {
   }
 
   /**
-   * Writes a note to an attributed room, as `pnm rooms put` does (VTA 0.67). The phone builds the record's body
-   * naming the member as its author, without a proof; the agent signs it as the member and seals it
-   * (`rooms/keys/seal/0.2`, `signAsPrincipal`), and the sealed form is put as the member like any write.
-   *
-   * The seal binds the version, and the host assigns versions from a room-wide counter, so the version is predicted
-   * as the room's newest plus one. When another write took it, the note is stored but sealed for another version and
-   * does not open: it is sealed again for the next version and written over exactly what landed, a few times.
-   * `ownKey`: the key is this post's own, so a record already there at the first try is this post, sent again
-   * after its answer was lost.
-   */
-  /**
    * A sealed write, and on any failure the two things it may have taken on trust are forgotten: the key list's epoch
    * (HELD_FRESH_MS) and the room's head (HEAD_FRESH_MS). The next write asks both afresh, so a stale one costs one
    * failed write, never every write until it ages out (review of #1029).
@@ -2466,6 +2455,17 @@ export class AgentRoomsService implements RoomsService {
     }
   }
 
+  /**
+   * Writes a note to an attributed room, as `pnm rooms put` does (VTA 0.67). The phone builds the record's body
+   * naming the member as its author, without a proof; the agent signs it as the member and seals it
+   * (`rooms/keys/seal/0.2`, `signAsPrincipal`), and the sealed form is put as the member like any write.
+   *
+   * The seal binds the version, and the host assigns versions from a room-wide counter, so the version is predicted
+   * as the room's newest plus one. When another write took it, the note is stored but sealed for another version and
+   * does not open: it is sealed again for the next version and written over exactly what landed, a few times.
+   * `ownKey`: the key is this post's own, so a record already there at the first try is this post, sent again
+   * after its answer was lost.
+   */
   private async writeSealedOnce(
     room: KnownRoom,
     community: RoomsCommunity,
