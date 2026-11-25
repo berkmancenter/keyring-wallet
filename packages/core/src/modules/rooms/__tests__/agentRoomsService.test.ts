@@ -1028,6 +1028,24 @@ describe('a record the agent cannot open', () => {
     return { b, service: new AgentRoomsService(b) }
   }
 
+  // IN-758: what a record read actually refuses with (vta-service room_profile_tests.rs asserts this code): every
+  // record First Room's reads could not open was logged as `other`, because only `unknownEpoch` was read.
+  const cannotOpen = (reason: string) =>
+    Object.assign(refused('rooms/keys/read:cannotOpen'), { details: { reason, epoch: 3, heldEpoch: 2 } })
+
+  it.each([
+    ['removed', false],
+    ['beyondChain', false],
+    ['notDelivered', true],
+  ] as const)("a read's own refusal, cannotOpen, says its reason: %s (retryable %s)", async (reason, retryable) => {
+    const refusal = cannotOpen(reason)
+    const { service } = failingRead(refusal)
+    const error = await service.readNote(ROOM, 'n1').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(RoomsRefused)
+    expect(error).toMatchObject({ operation: 'readNote', code: reason, retryable, refusal })
+    expect(failureCategory(error)).toBe(`refused (${reason})`)
+  })
+
   it.each([
     ['removed', false],
     ['beyondChain', false],
@@ -1046,6 +1064,8 @@ describe('a record the agent cannot open', () => {
     ['another refusal carrying a reason', Object.assign(refused('notFound'), { details: { reason: 'removed' } })],
     ['unknownEpoch with a reason Keyring does not know', unknownEpoch('somethingNew')],
     ['unknownEpoch with no details', refused('unknownEpoch')],
+    ['cannotOpen with a reason Keyring does not know', cannotOpen('somethingNew')],
+    ['cannotOpen with no details', refused('rooms/keys/read:cannotOpen')],
     ['a failure that is not a refusal', new Error('no answer')],
   ])('passes %s on as it came (control)', async (_what, refusal) => {
     const { service } = failingRead(refusal)

@@ -348,9 +348,17 @@ export function refusalCode(error: unknown): string | undefined {
   return named?.slice(named.lastIndexOf(':') + 1)
 }
 
-/** The reason an agent's `unknownEpoch` refusal gives for a record it could not open, when it is one Keyring knows. */
+/**
+ * The reason an agent gives for a record it could not open, when it is one Keyring knows.
+ *
+ * A record read (`rooms/keys/read` 0.1 and 0.2, and each key of a batch) refuses one with `cannotOpen` and the reason
+ * in `details.reason` (vta-service `room_read.rs`, since VTI #2231). `unknownEpoch` is `rooms/keys/open`'s and
+ * `rooms/keys/file-key`'s code for the same reasons. Until IN-758 only `unknownEpoch` was read, so every record a read
+ * could not open was logged as `other` and drawn as "couldn't be read" (First Room: up to 15 on every read).
+ */
 export function recordUnopenedReason(error: unknown): RecordUnopenedReason | undefined {
-  if (refusalCode(error) !== 'unknownEpoch') return undefined
+  const code = refusalCode(error)
+  if (code !== 'cannotOpen' && code !== 'unknownEpoch') return undefined
   const reason = str(obj((error as { details?: unknown }).details)?.reason)
   return RECORD_UNOPENED_REASONS.find((r) => r === reason)
 }
