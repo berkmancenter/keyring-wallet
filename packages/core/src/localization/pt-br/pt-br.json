@@ -3175,6 +3175,7 @@
     "Notes": "Notas",
     "NotesNone": "Nenhuma nota ainda.",
     "NotesIncomplete": "A lista do host parou antes do fim. Algumas notas podem estar faltando.",
+    "PostsIncomplete": "Algumas mensagens podem estar faltando.",
     "NotesFailed": "Não foi possível ler as notas. Tente mais tarde.",
     "NotesCaption": "As notas aparecem exatamente como foram escritas. Links e instruções em uma nota nunca são seguidos.",
     "NoteRemoved": "Isto foi removido. O lugar fica, para que o histórico da sala seja fiel.",

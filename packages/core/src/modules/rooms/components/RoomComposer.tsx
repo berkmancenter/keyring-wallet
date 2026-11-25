@@ -77,6 +77,11 @@ export interface RoomComposerProps {
   draft?: string
   /** Told of every change to the field's text, including the empty field a send leaves. */
   onTextChange?: (text: string) => void
+  /**
+   * The room is not read yet (the screen is drawn from what the phone has): the member may type, and Send waits. It is
+   * held, as while a send is out, never hidden: the composer keeps its place when the room arrives.
+   */
+  waiting?: boolean
 }
 
 export const RoomComposer: React.FC<RoomComposerProps> = ({
@@ -91,6 +96,7 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
   attachRequest = 0,
   draft,
   onTextChange,
+  waiting = false,
 }) => {
   const { t, i18n } = useTranslation()
   const { ColorPalette } = useTheme()
@@ -139,7 +145,7 @@ export const RoomComposer: React.FC<RoomComposerProps> = ({
     }
   }, [])
   const [refused, setRefused] = useState<'tooLarge' | 'tooLargeHere' | 'unreadable'>()
-  const canSend = (text.trim().length > 0 || !!file) && !sending
+  const canSend = (text.trim().length > 0 || !!file) && !sending && !waiting
   const attachHere = canAttach && !context
   const styles = StyleSheet.create({
     bar: {
