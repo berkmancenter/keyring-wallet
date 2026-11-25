@@ -15,9 +15,21 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../utils/testable'
 import VtiVetting from '../screens/VtiVetting'
 import { vtaAgent } from '../module/vtaAgent'
+import { vtiAgent } from '../module/vtiAgent'
 import * as grantState from '../module/vtiGrantState'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+
+// The screen signs the seated vetter in (vtiAgent.connect) as every other Vetting suite's render does; left real
+// against this fixture's offline resolver, each sign-in retried the persona's DID for seconds after its test and
+// jest printed every retry as "Cannot log after tests are done" into whichever suite ran next (62 of the 65 on
+// main's CI of 2026-11-25, core part 1/4; the other 3, in part 2/4, are VtiInvitedScreen.test.tsx's, a fixture with
+// no resolver at all; never when this file ran last, since the process exited first). These tests are about what a
+// fresh render reads from the store, so the sign-in is answered as the sibling suites answer it.
+beforeEach(() => {
+  jest.spyOn(vtiAgent, 'connect').mockResolvedValue(undefined as never)
+  jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({ wire: '0.3', criteria: [] } as never)
+})
 
 const mockUseAgent = useAgent as jest.Mock
 const communityDid = 'did:webvh:example:community'

@@ -24,7 +24,11 @@ jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('../../../../__mocks__/@react-navigation/native'),
   useIsFocused: () => true,
 }))
-jest.mock('../useRoomRows', () => ({ onRoomsListed: jest.fn() }))
+jest.mock('../useRoomRows', () => ({
+  onRoomsListed: jest.fn(),
+  dropRowPreviews: jest.fn(),
+  readRowPreviewsWith: jest.fn(),
+}))
 
 const ROOM = 'did:webvh:r:open'
 const LAB = 'did:webvh:lab'
@@ -126,6 +130,59 @@ describe('keeping what the room drew', () => {
     await settle()
     expect(keptWords(r.wallet)).toContain('the words of a')
     expect(keptWords(r.wallet)).toContain('the words of b')
+  })
+
+  // IN-725: what is kept must be what the copy gives back. A post this client can't show has no words to keep, and
+  // words that are a whole signed record are left out when the copy is read (messageCache), so neither is written.
+  it("keeps a person's words, JSON or not; not a post that can't be shown, nor words that are a whole signed record", async () => {
+    const pasted = JSON.stringify({ author: 'did:peer:them', key: 'p', proof: { type: 'x' }, roomId: ROOM, version: 4 })
+    const r = roomWith([
+      note('words', 1),
+      { ...note('typed json', 2), body: toInertText('{"a":1}') },
+      { ...note('not shown', 3), body: toInertText(''), notShown: true },
+      { ...note('pasted record', 4), body: toInertText(pasted) },
+    ])
+    await open(r.service)
+    await settle()
+    const kept = r.wallet.copies().flatMap((copy) => (copy.posts ?? []) as { key: string }[])
+    expect(kept.map((p) => p.key).sort()).toEqual(['typed json', 'words'])
+  })
+
+  // 281.2 (IN-724): leaving before the posts settled dropped the keep, so a quick look kept nothing.
+  it('leaving the room before the posts settle keeps what was drawn at once', async () => {
+    const r = roomWith([note('a', 1), note('b', 2)])
+    const { unmount } = await open(r.service)
+    expect(keptWords(r.wallet)).not.toContain('the words of')
+    unmount()
+    await flush()
+    expect(keptWords(r.wallet)).toContain('the words of a')
+    expect(keptWords(r.wallet)).toContain('the words of b')
+    // Once: the settle that would have come writes nothing more.
+    const writes = r.wallet.genericRecords.save.mock.calls.length + r.wallet.genericRecords.update.mock.calls.length
+    await settle()
+    expect(r.wallet.genericRecords.save.mock.calls.length + r.wallet.genericRecords.update.mock.calls.length).toBe(
+      writes
+    )
+  })
+
+  it('control: leaving before the first listing answers keeps nothing (nothing confirmed was drawn)', async () => {
+    const r = roomWith([note('a', 1)])
+    r.hold()
+    const { unmount } = await open(r.service)
+    unmount()
+    await flush()
+    await settle()
+    expect(r.wallet.genericRecords.save).not.toHaveBeenCalled()
+  })
+
+  it('control: leaving after the room was refused keeps nothing', async () => {
+    const r = roomWith([note('a', 1)])
+    r.hold()
+    const { unmount } = await open(r.service)
+    await r.fail(new RoomsRefused('listNotes', 'notAMember', false, 'not a member'))
+    unmount()
+    await flush()
+    expect(keptWords(r.wallet)).not.toContain('the words of')
   })
 
   it('control: a screen not given messageCache (a sealed room, or not the chat) keeps and reads nothing', async () => {

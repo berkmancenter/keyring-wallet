@@ -215,6 +215,93 @@ describe('arming', () => {
     ])
   })
 
+  // 281.2, report 23QE-AHW7: the rows armed a room, the room's screen read it and asked again from a later version
+  // while that request was out, and the log said "watching 1 of 1" then "watching 0 of 1". The first answer had armed
+  // the room from the older version, so the second, the one the agent now holds, matched nothing here.
+  describe('a later version wanted while a request is out', () => {
+    const held = () => {
+      const releases: ((fail?: boolean) => void)[] = []
+      const s = setUp({
+        answer: (p) =>
+          new Promise((resolve, reject) =>
+            releases.push((fail) => (fail ? reject(new Error('timed out')) : resolve(armedAll(p))))
+          ),
+      })
+      const settle = async () => {
+        for (let i = 0; i < 10; i++) await Promise.resolve()
+      }
+      const watching = () => s.warn.mock.calls.map(([line]) => line as string).filter((line) => line.includes('watch'))
+      return { ...s, releases, settle, watching }
+    }
+
+    test('the later request arms the room, and the version held here is the one the agent holds', async () => {
+      const s = held()
+      s.watches.want('room:1', MEMBER, HOST, 4)
+      await s.settle()
+      s.watches.want('room:1', MEMBER, HOST, 6)
+      s.releases[0]()
+      await s.settle()
+      // The first answer is for a version no longer wanted: the room is not armed by it.
+      expect(s.watches.watched('room:1')).toBe(false)
+      s.releases[1]()
+      await s.watches.idle()
+      expect(s.watches.watched('room:1')).toBe(true)
+      expect(s.sent().map((p) => p.rooms)).toEqual([
+        [{ roomId: 'room:1', sinceVersion: 4 }],
+        [{ roomId: 'room:1', sinceVersion: 6 }],
+      ])
+      // Held from 6, as the agent holds it: wanting 6 again sends nothing. Held from 4, it went a third time.
+      s.watches.want('room:1', MEMBER, HOST, 6)
+      await s.watches.idle()
+      expect(s.agentTask).toHaveBeenCalledTimes(2)
+      expect(s.watching()).toEqual([
+        'rooms: a watch of 1 rooms at host:a was answered after each was asked again from a later version: that answer says',
+        'rooms: watching 1 of 1 rooms at host:a',
+      ])
+    })
+
+    test('a room of the same request that was not asked again is armed by the first answer, and counted alone', async () => {
+      const s = held()
+      s.watches.want('room:1', MEMBER, HOST, 4)
+      s.watches.want('room:2', MEMBER, HOST, 2)
+      await s.settle()
+      s.watches.want('room:1', MEMBER, HOST, 6)
+      s.releases[0]()
+      await s.settle()
+      expect(s.watches.watched('room:2')).toBe(true)
+      expect(s.watches.watched('room:1')).toBe(false)
+      s.releases[1]()
+      await s.watches.idle()
+      expect(s.watches.watched('room:1')).toBe(true)
+      expect(s.watching()).toEqual([
+        'rooms: watching 1 of 1 rooms at host:a (1 more asked again from a later version: that answer says)',
+        'rooms: watching 1 of 1 rooms at host:a',
+      ])
+    })
+
+    test('the first request gets no answer: the later one still arms the room', async () => {
+      const s = held()
+      s.watches.want('room:1', MEMBER, HOST, 4)
+      await s.settle()
+      s.watches.want('room:1', MEMBER, HOST, 6)
+      s.releases[0](true)
+      await s.settle()
+      s.releases[1]()
+      await s.watches.idle()
+      expect(s.watches.watched('room:1')).toBe(true)
+    })
+
+    test('no later version wanted: one answer, one line, as before (control)', async () => {
+      const s = held()
+      s.watches.want('room:1', MEMBER, HOST, 4)
+      await s.settle()
+      s.releases[0]()
+      await s.watches.idle()
+      expect(s.watches.watched('room:1')).toBe(true)
+      expect(s.watching()).toEqual(['rooms: watching 1 of 1 rooms at host:a'])
+    })
+  })
+
   test('a watch that lapsed is not watched, and is armed again from the same version', async () => {
     let now = T0
     const s = setUp({ now: () => now })

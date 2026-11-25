@@ -27,7 +27,11 @@ jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('../../../../__mocks__/@react-navigation/native'),
   useIsFocused: () => true,
 }))
-jest.mock('../useRoomRows', () => ({ onRoomsListed: jest.fn() }))
+jest.mock('../useRoomRows', () => ({
+  onRoomsListed: jest.fn(),
+  dropRowPreviews: jest.fn(),
+  readRowPreviewsWith: jest.fn(),
+}))
 
 const ROOM = 'did:webvh:r:attributed'
 const LAB = 'did:webvh:lab'

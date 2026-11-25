@@ -459,7 +459,13 @@ export async function keepFromListener(
     const answer = vtiAgent.answerFromListener(persona.did, received)
     if (answer) {
       releaseWarn(
-        `[VTI] listener for ${who}: ${kind} ${answer === 'answered' ? 'given to the ask waiting for it' : 'answers no ask: dropped'}`
+        `[VTI] listener for ${who}: ${kind} ${
+          answer === 'answered'
+            ? 'given to the ask waiting for it'
+            : answer === 'repeat'
+              ? 'is a second copy of an answer already given: dropped'
+              : 'answers no ask: dropped'
+        }`
       )
       return
     }

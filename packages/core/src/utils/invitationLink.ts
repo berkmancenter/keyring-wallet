@@ -4,7 +4,7 @@
  * Shared: the link alone, ready to tap, with nothing written around it, and
  * as a link rather than text where the platform has one.
  *
- * Arrived: a link whose inline invitation (`oob`, `c_i`, `d_m`) cannot be read
+ * Arrived: a link whose inline invitation (`_oob`, `oob`, `c_i`, `d_m`) cannot be read
  * was cut or altered on its way. On build 265 a receiver was handed one cut to
  * 200 characters, and was told "Unable to handle deeplink" (1039) with nothing
  * to do about it. It is caught before connecting and said for what it is. Why
@@ -31,15 +31,18 @@ export function invitationShareContent(invitationUrl: string, title: string, os:
   return os === 'ios' ? { title, url: invitationUrl } : { title, message: invitationUrl }
 }
 
-const INLINE_INVITATION = /[?&](oob|c_i|d_m)=([^&#\s]*)/
+// `_oob` is the out-of-band/2.0 parameter: a phone whose mailbox is open shares
+// its invitation under it (base64url JSON, like `oob`). Missing here, a tapped
+// one was dropped without a word, while the same link pasted or scanned worked.
+const INLINE_INVITATION = /[?&](_oob|oob|c_i|d_m)=([^&#\s]*)/
 
 /**
  * Whether a deep link carries an invitation for the connect path: an inline one
- * (`oob`, `c_i`, `d_m`), a link to fetch one from (`url`), or one of our short
+ * (`_oob`, `oob`, `c_i`, `d_m`), a link to fetch one from (`url`), or one of our short
  * links, which Credo fetches. Anything else is not handed to it.
  */
 export function deepLinkCarriesInvitation(link: string): boolean {
-  return /[?&](oob|c_i|d_m|url)=/.test(link) || isShortInvitationLink(link)
+  return /[?&](_oob|oob|c_i|d_m|url)=/.test(link) || isShortInvitationLink(link)
 }
 
 /** Whether `link` carries an inline invitation that cannot be read. */
@@ -49,7 +52,7 @@ export function invitationLinkIncomplete(link: string): boolean {
   const [, param, raw] = found
   try {
     const value = decodeURIComponent(raw)
-    const json = param === 'oob' ? JsonEncoder.fromBase64Url(value) : JsonEncoder.fromBase64(value)
+    const json = param === 'oob' || param === '_oob' ? JsonEncoder.fromBase64Url(value) : JsonEncoder.fromBase64(value)
     return json === null || typeof json !== 'object'
   } catch {
     return true

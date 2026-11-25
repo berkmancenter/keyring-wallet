@@ -3,7 +3,8 @@
  * shows the member's rooms at once instead of an empty list for the 20-55 s its first listing took on testers' phones
  * (11-17). Each row is shown as reading until that listing replaces them all; a room it does not list is gone with it.
  *
- * What is kept is what a row names: the room, its community and when it was last active. Never a post's words
+ * What is kept is what a row names: the room, its community, its tier, until when the member's access runs and when
+ * it was last active. Never a post's words
  * (`lastPost` is left out), as Alberto agreed (11-17: room names, not message text), and no unread count: a row from
  * the last run shows none, and neither does the tab's badge, until the first listing reads it (his word, 11-18). It lives
  * in the wallet, so it is as private as the wallet, goes with it, and is read only while it is open.
@@ -52,6 +53,9 @@ export interface RowAtStart {
   /** ISO 8601. */
   lastActivityAt?: string
   notJoined?: boolean
+  /** The room's tier and the end of the member's access (ISO 8601), for the room's header before the room is read. */
+  tier?: string
+  validUntil?: string
 }
 
 interface GenericRecordLike {
@@ -88,6 +92,10 @@ function rowOf(raw: unknown): RowAtStart | undefined {
   if (!optionalText(r.nameFrom) || !optionalText(r.communityName) || !optionalText(r.lastActivityAt)) return undefined
   if (r.notJoined !== undefined && typeof r.notJoined !== 'boolean') return undefined
   if (typeof r.lastActivityAt === 'string' && Number.isNaN(Date.parse(r.lastActivityAt))) return undefined
+  // Kept since 282: a row from an earlier run has neither, and one that is not as written is left off the row alone.
+  const tier = typeof r.tier === 'string' && r.tier.length > 0 ? r.tier : undefined
+  const validUntil =
+    typeof r.validUntil === 'string' && !Number.isNaN(Date.parse(r.validUntil)) ? r.validUntil : undefined
   return {
     key: r.key,
     roomId: r.roomId,
@@ -97,6 +105,8 @@ function rowOf(raw: unknown): RowAtStart | undefined {
     ...(r.communityName !== undefined ? { communityName: r.communityName as string } : {}),
     ...(r.lastActivityAt !== undefined ? { lastActivityAt: r.lastActivityAt as string } : {}),
     ...(r.notJoined !== undefined ? { notJoined: r.notJoined as boolean } : {}),
+    ...(tier !== undefined ? { tier } : {}),
+    ...(validUntil !== undefined ? { validUntil } : {}),
   }
 }
 

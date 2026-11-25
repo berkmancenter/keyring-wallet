@@ -12,6 +12,7 @@ import {
 } from '../real/agentRoomsService'
 import { CONSENT_HOLD_BACKOFF_MS, type ConsentHolds, storedConsentHolds } from '../real/consentHolds'
 import { parseReadBatch, ROOMS_TASK } from '../real/wire'
+import { RoomsRefused } from '../types'
 import { VtiRefusal } from '../../trust-tasks/module/vtiAgent'
 
 const COMMUNITY: RoomsCommunity = { did: 'did:webvh:community:a', name: 'Garden club', personaDid: 'did:key:persona-a' }
@@ -290,9 +291,13 @@ describe('each key answered on its own', () => {
     expect(a.status).toBe('fulfilled')
     expect(c.status).toBe('fulfilled')
     expect(b).toMatchObject({ status: 'rejected' })
-    const refusal = (b as PromiseRejectedResult).reason
-    expect(refusal).toBeInstanceOf(VtiRefusal)
-    expect(refusal).toMatchObject({
+    // Passed on by its reason, as a read alone is (IN-758: until then this was read as an unknown refusal, `other`),
+    // with the agent's own refusal kept on it.
+    const refused = (b as PromiseRejectedResult).reason
+    expect(refused).toBeInstanceOf(RoomsRefused)
+    expect(refused).toMatchObject({ operation: 'readNote', code: 'notDelivered', retryable: true })
+    expect(refused.refusal).toBeInstanceOf(VtiRefusal)
+    expect(refused.refusal).toMatchObject({
       code: 'rooms/keys/read:cannotOpen',
       details: { epoch: 4, reason: 'notDelivered' },
     })

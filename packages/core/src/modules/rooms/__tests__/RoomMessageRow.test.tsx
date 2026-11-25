@@ -126,6 +126,20 @@ describe("a room's Messages row", () => {
     expect(reading.queryByText('Rooms.RowNoPosts')).toBeNull()
   })
 
+  // Alberto (11-24, 281.2): every row of a cold start spun, though the phone already had them. A row from the last run
+  // reads quietly; the spinner is for a room shown for the first time (the row above).
+  test('a row the phone already had from its last run shows no spinner, and still says reading to a screen reader', () => {
+    const quiet = show(
+      <RoomMessageRow
+        row={row({ unread: 0, lastPost: undefined, reading: true, fromLastTime: true })}
+        onOpen={jest.fn()}
+      />
+    )
+    expect(quiet.UNSAFE_queryByType(ActivityIndicator)).toBeNull()
+    expect(quiet.queryByText('Rooms.RowNoPosts')).toBeNull()
+    expect(quiet.getByTestId(id('RoomMessageRow')).props.accessibilityLabel).toContain('Rooms.RowLabel')
+  })
+
   // 34VR-Y58H (277.8, 11-03): a room he was not in spun for good. It says so, with no spinner.
   test('a room not joined yet says so, with no spinner (control above: reading has one)', () => {
     const notJoined = show(

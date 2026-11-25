@@ -429,6 +429,29 @@ describe('an answer that comes after the session moved on', () => {
     expect(vtiAgent.answerFromListener(A, didcommReply(sent, MEMBERSHIPS, { items: [] }) as never)).toBe('orphan')
   })
 
+  // 281.2, report 23QE-AHW7: the shared session took a rooms listing's answer as it was moving on to another identity,
+  // its acknowledgement never went, and the mediator delivered the same message to the first identity's listener two
+  // seconds later. The log said "answers no ask: dropped", which read as an answer lost.
+  it('a second copy of an answer the session already gave its ask is a repeat, not an orphan', async () => {
+    const { session, sent, answer } = await asked(MEMBERSHIPS)
+    const reply = didcommReply(sent, MEMBERSHIPS, { items: ['a'] })
+    session.onMessage(reply)
+    expect(await answer).toMatchObject({ body: { payload: { items: ['a'] } } })
+    await connectTo(SECOND, 'didcomm', B)
+    expect(vtiAgent.answerFromListener(A, reply as never)).toBe('repeat')
+    // Control: another message on the same thread is not that copy.
+    expect(vtiAgent.answerFromListener(A, { ...reply, id: 'urn:uuid:another-message' } as never)).toBe('orphan')
+  })
+
+  it("a second copy of a write's answer is still not a listener's to drop (control)", async () => {
+    const { session, sent, answer } = await asked(SUBMIT)
+    const reply = didcommReply(sent, SUBMIT, { id: 'r1' })
+    session.onMessage(reply)
+    expect(await answer).toMatchObject({ body: { payload: { id: 'r1' } } })
+    await connectTo(SECOND, 'didcomm', B)
+    expect(vtiAgent.answerFromListener(A, reply as never)).toBeUndefined()
+  })
+
   it("a late answer kept for later is the identity's that asked: another doesn't take it", async () => {
     const kept = await asked(MEMBERSHIPS, 50)
     await connectTo(SECOND, 'didcomm', B)

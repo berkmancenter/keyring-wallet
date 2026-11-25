@@ -703,6 +703,7 @@ describe('what a listener keeps', () => {
   it.each([
     ['answered', 'given to the ask waiting for it'],
     ['orphan', 'answers no ask: dropped'],
+    ['repeat', 'is a second copy of an answer already given: dropped'],
   ])(
     'an answer vtiAgent calls %s is taken: acknowledged, said once, and nobody is told one waits',
     async (verdict, said) => {

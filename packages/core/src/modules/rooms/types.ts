@@ -259,6 +259,11 @@ export interface Note extends NoteSummary {
   editedAt?: string
   /** A reaction whose body, as written and before it was made inert, a reader must not show. */
   reactionRefused?: true
+  /**
+   * The record was opened and holds nothing this client can show: JSON that is no record it knows, or a record with
+   * no title, words, file or kind. Its `body` is empty; a screen says one line in its place, never the record.
+   */
+  notShown?: true
 }
 
 /** A file to post, as the phone picked it: a local copy the service reads and uploads through the member's agent. */
@@ -578,6 +583,8 @@ export interface RoomsService {
    * Counted per room. None for the sample.
    */
   roomInView?(roomId: string, inView: boolean): void
+  /** Whether a room is open on a screen and in view now (roomInView): Messages reads its row first. */
+  isRoomInView?(roomId: string): boolean
   /**
    * Ask to hear when `roomId` moves past `sinceVersion` (the newest version read), instead of polling it: where the
    * agent and the room's host can watch, the room is armed at its host. Returns at once; nothing is said if it can't.
@@ -617,6 +624,12 @@ export interface RoomsService {
    * Returns the way to stop hearing.
    */
   onRoomReadMarker?(listener: (roomId: string, marker: RoomReadMarker, how: 'further' | 'moved') => void): () => void
+  /**
+   * The key a post's record takes, from its idempotency key, known before it is sent: the room's list showing it means
+   * the post is there, whatever its write's answer said (useRoomSend). Absent: posts are matched by the key a write
+   * answers with, and only then.
+   */
+  postKeyFor?(idempotencyKey: string): string
   /** True while `roomId` has a watch armed: its timed poll can wait, and a change comes through `onRoomChanged`. */
   roomWatched?(roomId: string): boolean
   /** Hear each room a watch said changed: read it once. Returns the way to stop hearing. */

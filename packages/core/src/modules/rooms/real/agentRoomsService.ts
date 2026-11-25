@@ -950,6 +950,10 @@ export class AgentRoomsService implements RoomsService {
     else this.inView.delete(roomId)
   }
 
+  public isRoomInView(roomId: string): boolean {
+    return this.inView.has(roomId)
+  }
+
   private namingMember(type: string, payload: Record<string, unknown>): Record<string, unknown> {
     if (!CUSTODY_TASK.test(type) || typeof payload.roomId !== 'string') return payload
     const roomId = payload.roomId
@@ -1465,6 +1469,7 @@ export class AgentRoomsService implements RoomsService {
       ...(opened.kind === 'reaction' && reactionValueOfBody(opened.body) === undefined
         ? { reactionRefused: true as const }
         : {}),
+      ...(opened.notShown ? { notShown: true as const } : {}),
     }
   }
 
@@ -1543,6 +1548,10 @@ export class AgentRoomsService implements RoomsService {
     const room = this.rooms.get(roomId)
     if (!room?.community || !room.host || room.standing !== 'member') return
     this.watches.want(roomId, room.community.personaDid, room.host, sinceVersion, options)
+  }
+
+  public postKeyFor(idempotencyKey: string): string {
+    return postKey(idempotencyKey)
   }
 
   public renewRoomWatch(roomId: string): void {

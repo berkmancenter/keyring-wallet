@@ -25,7 +25,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { useAgentSession } from './agentSession'
-import { newestFirst, postOf, type RoomPost, withRepliesToReactions } from './roomPosts'
+import { isRecordJson, newestFirst, postOf, type RoomPost, withRepliesToReactions } from './roomPosts'
 import { inertFlags, toInertText } from './inertText'
 import { dropKeptListing, keepListing, keptListing } from './keptListings'
 import {
@@ -251,7 +251,19 @@ function seedOf(posts: readonly CachedPost[], read: Map<string, Note>): Listing 
  */
 function keptOf(post: RoomPost): CachedPost | undefined {
   const writtenAt = post.writtenAt ?? post.at?.toISOString()
-  if (!writtenAt || post.retracted || post.unread || post.refused || post.delivery || post.files.length > 0)
+  // Nor one this client can't show: it has no words, and kept, it would come back as an empty bubble. Nor words that
+  // are a whole signed record (someone pasted one): the copy leaves those out when it is read (messageCache), and what
+  // is written must be what is read back.
+  if (
+    !writtenAt ||
+    post.retracted ||
+    post.unread ||
+    post.refused ||
+    post.delivery ||
+    post.notShown ||
+    post.files.length > 0 ||
+    isRecordJson(String(post.text))
+  )
     return undefined
   return {
     key: post.key,
@@ -268,7 +280,12 @@ function keptOf(post: RoomPost): CachedPost | undefined {
  * A listing, counted in `inFlight` until it settles, even when the call throws before it returns a promise: left
  * counted, every later poll would be skipped for the life of the screen.
  */
-function counted(inFlight: { current: number }, list: () => Promise<NoteList>): Promise<NoteList> {
+function counted(
+  inFlight: { current: number },
+  list: () => Promise<NoteList>,
+  /** Called once no listing is out any more, after what the last one answered has been taken in. */
+  idle?: () => void
+): Promise<NoteList> {
   let asked: Promise<NoteList>
   try {
     asked = list()
@@ -278,6 +295,8 @@ function counted(inFlight: { current: number }, list: () => Promise<NoteList>): 
   inFlight.current++
   return asked.finally(() => {
     inFlight.current--
+    // Later than the caller's own handlers, which are chained on what this returns: the listing is merged first.
+    if (inFlight.current === 0 && idle) setTimeout(idle, 0)
   })
 }
 
@@ -369,6 +388,18 @@ export function useRoomPosts(
   }, [])
   // The poll of the room while it is polled, for `pollNow`.
   const tickNow = useRef<(() => void) | undefined>(undefined)
+  /**
+   * A signal came while a listing was out, so its tick did not list (probe C, review of #1024). That listing may have
+   * been asked before the change, and a live watch's host signals each change once: it is read once more when no
+   * listing is out (`afterListings`).
+   */
+  const owedSignal = useRef(false)
+  const signalTick = useRef<(() => void) | undefined>(undefined)
+  const afterListings = useCallback(() => {
+    if (!owedSignal.current) return
+    owedSignal.current = false
+    signalTick.current?.()
+  }, [])
   /** When the last listing of the room was asked: a watched room's poll waits ROOM_WATCHED_POLL_MS from it. */
   const askedAt = useRef(0)
   /** The member's own successful writes the posts do not carry yet (awaitWrites): a watched room polls at its old pace. */
@@ -475,7 +506,7 @@ export function useRoomPosts(
         () => undefined
       )
     olderAsked.current = undefined
-    counted(listingsInFlight, () => listHead(service, roomId)).then(
+    counted(listingsInFlight, () => listHead(service, roomId), afterListings).then(
       (list) => {
         skips.current = 0
         if (!current) return
@@ -506,7 +537,7 @@ export function useRoomPosts(
     return () => {
       current = false
     }
-  }, [service, roomId, enabled, generation, notePoll])
+  }, [service, roomId, enabled, generation, notePoll, afterListings])
 
   const listed = !!listing
   // In view and listed: the room's watch is armed from the newest version held (each poll arms it again, above).
@@ -530,18 +561,26 @@ export function useRoomPosts(
   useEffect(() => {
     if (!service || !enabled || !live || !listed) return
     let current = true
-    const tick = () => {
+    // `signalled`: the room's watch said it changed, so this tick reads whatever the watched-room wait says.
+    const tick = (signalled = false) => {
       // Before anything that skips a tick: a live watch not renewed lapses at its host within two minutes.
       service.renewRoomWatch?.(roomId)
       if (skips.current > 0) {
         skips.current--
         return
       }
-      if (listingsInFlight.current > 0) return
-      // Watched: a change is told and read at once (below), and this tick is only the fallback for a signal lost.
-      // A signal spends the watch before it ticks, so the tick it starts is never held here. Nor is one while the
+      if (listingsInFlight.current > 0) {
+        // A listing out answers what was there when it was asked. A signal is owed a read after it (afterListings).
+        if (signalled) owedSignal.current = true
+        return
+      }
+      // Watched: a change is told and read at once (below), and a timed tick is only the fallback for a signal lost.
+      // The tick a signal starts is never held here: a one-shot watch is spent by its signal, but a live one is not, so
+      // it still reads as watched, and until IN-756 its signal was held like a timed tick and the open room showed the
+      // change only at the two-minute poll (a member left and came back to see a new post). Nor is one held while the
       // member's own write is still to land (awaitWrites): its overlay ends at 30 s, and a lost signal is never re-sent.
       if (
+        !signalled &&
         awaiting.current.length === 0 &&
         service.roomWatched?.(roomId) &&
         Date.now() - askedAt.current < ROOM_WATCHED_POLL_MS
@@ -549,8 +588,10 @@ export function useRoomPosts(
         return
       askedAt.current = Date.now()
       const sentOn = openedAt.current
-      counted(listingsInFlight, () =>
-        service.listNotes(roomId, { sinceVersion: newestVersion(listingNow.current?.notes ?? []) })
+      counted(
+        listingsInFlight,
+        () => service.listNotes(roomId, { sinceVersion: newestVersion(listingNow.current?.notes ?? []) }),
+        afterListings
       ).then(
         (newer) => {
           if (current) notePoll(false)
@@ -561,7 +602,7 @@ export function useRoomPosts(
             // session it was sent on, so only a session opened since asks again at once.
             const fullOn = openedAt.current
             const size = Math.min(1000, Math.max(ROOM_HEAD_WINDOW, now.notes.length))
-            counted(listingsInFlight, () => listHead(service, roomId, size)).then(
+            counted(listingsInFlight, () => listHead(service, roomId, size), afterListings).then(
               (full) => {
                 if (!current) return
                 const replaced = listingOf(full)
@@ -597,15 +638,20 @@ export function useRoomPosts(
     // (`pollNow`) is the member's way out at once, and a listing that succeeds clears them.
     if (resumed.current && skips.current === 0) tick()
     resumed.current = false
-    const timer = setInterval(tick, ROOM_POLL_MS)
+    const timer = setInterval(() => tick(), ROOM_POLL_MS)
+    // Read now, as a signal is: the member's own "Try again" (pollNow), and the agent coming back after a failed poll
+    // (the effect below that watches the session).
     tickNow.current = () => {
       skips.current = 0
-      tick()
+      tick(true)
     }
-    // The room's watch said it changed: read it now, once. A listing already out reads it, and arms the watch again
-    // from what it found, so a change it missed is signalled again at once.
+    signalTick.current = () => tick(true)
+    // The room's watch said it changed: read it now, once. With a listing already out, the read is owed and goes
+    // when no listing is out (afterListings): that listing may have been asked before the change. Only a one-shot watch
+    // is armed again by what a listing finds, so that a change it missed is signalled again; a live watch's host
+    // signals each change once, and a signal not read is not sent twice.
     const stopHearing = service.onRoomChanged?.((changed) => {
-      if (changed === roomId) tick()
+      if (changed === roomId) tick(true)
     })
     return () => {
       current = false
@@ -613,8 +659,10 @@ export function useRoomPosts(
       clearInterval(timer)
       resumed.current = true
       tickNow.current = undefined
+      signalTick.current = undefined
+      owedSignal.current = false
     }
-  }, [service, roomId, enabled, live, listed, notePoll])
+  }, [service, roomId, enabled, live, listed, notePoll, afterListings])
 
   // Until the room is known, a copy drawn before it is drawn as the identity it was of, so the member's own posts are on
   // their side from the start and nothing moves when the room arrives.
@@ -650,7 +698,11 @@ export function useRoomPosts(
       const asked = { below, settled: false }
       olderAsked.current = asked
       const askedFor = reads.current
-      counted(listingsInFlight, () => service.listNotes(roomId, { head: ROOM_HEAD_WINDOW, beforeVersion: below })).then(
+      counted(
+        listingsInFlight,
+        () => service.listNotes(roomId, { head: ROOM_HEAD_WINDOW, beforeVersion: below }),
+        afterListings
+      ).then(
         (older) => {
           asked.settled = true
           const held = listingNow.current
@@ -737,7 +789,7 @@ export function useRoomPosts(
     return () => {
       current = false
     }
-  }, [service, roomId, listing, shown, drawnAs])
+  }, [service, roomId, listing, shown, drawnAs, afterListings])
 
   // The opening's line, said only when the screen says it drew the posts (`painted`, from its list's layout), never
   // when they are set: 279.4 said "9 posts shown in 135 ms" while the room screen still showed its spinner (YJPT-6WC8).
@@ -762,7 +814,10 @@ export function useRoomPosts(
 
   // The posts the room's own listing drew, kept in the wallet once they settle (rooms/messageCache): never those drawn
   // from a kept listing or the kept copy itself, and only the posts the screen counts (the chat's, for the chat).
+  // Every listing the screen reads (its opening, a poll, a refresh, "load older") keeps what it drew.
+  const keepPending = useRef<(() => void) | undefined>(undefined)
   useEffect(() => {
+    keepPending.current = undefined
     const cache = cacheNow.current
     const me = actingAsNow.current
     const wallet = service?.runsOn
@@ -773,15 +828,27 @@ export function useRoomPosts(
       .filter((post) => !counted || counted(post))
       .map(keptOf)
       .filter((post): post is CachedPost => !!post)
-    const timer = setTimeout(() => {
+    const keepNow = () => {
+      if (keepPending.current === keepNow) keepPending.current = undefined
       void keepRoomPosts(
         wallet,
         { personaDid: me.did, roomId, communityDid: cache.communityDid, validUntil: cache.validUntil },
         kept
       ).catch(() => undefined)
-    }, MESSAGE_KEEP_DELAY_MS)
+    }
+    keepPending.current = keepNow
+    const timer = setTimeout(keepNow, MESSAGE_KEEP_DELAY_MS)
     return () => clearTimeout(timer)
   }, [posts, listing, service, roomId])
+  // Leaving the room (the screen closed, or another room under it) keeps what was drawn at once: waiting for the posts
+  // to settle dropped the keep of a room left within MESSAGE_KEEP_DELAY_MS of its last draw, so a quick look kept
+  // nothing (IN-724). Whatever the keep checks (the switch, biometric unlock, an emptying this run) it still checks.
+  useEffect(
+    () => () => {
+      keepPending.current?.()
+    },
+    [service, roomId]
+  )
 
   const loadOlder = useCallback(() => {
     setLoadingOlder(true)

@@ -252,12 +252,14 @@ describe('parseFileManifest', () => {
       expect(parseFileManifest(manifest(over))).toBeUndefined()
   })
 
-  it('a body whose file is not a manifest is shown whole, as any unknown JSON', () => {
+  // Until IN-725 such a body was shown whole, as any unknown JSON was. No JSON object is drawn as text now.
+  it('a body whose file is not a manifest carries no file, and is not shown as text: as any unknown JSON', () => {
     const raw = JSON.stringify({ file: { name: 'x' } })
     const opened = parseRead({ key: 'k', version: 1, plaintext: b64url(raw) }, (s) =>
       Buffer.from(s, 'base64url').toString('utf8')
     )
-    expect(opened?.body).toBe(raw)
+    expect(opened?.body).toBe('')
+    expect(opened?.notShown).toBe(true)
     expect(opened?.file).toBeUndefined()
   })
 })
@@ -305,9 +307,11 @@ describe('parseRead, what a record says it is (trust-tasks-tf #1027)', () => {
     const opened = sealed({ kind: 'message', writtenAt: members.writtenAt })
     expect(opened?.body).toBe('')
     expect(opened?.kind).toBe('message')
-    // With nothing to say what it is, a JSON body with no `body` is shown whole, as it always was (control).
-    const raw = { some: 'json' }
-    expect(sealed(raw)?.body).toBe(JSON.stringify(raw))
+    expect(opened?.notShown).toBeUndefined()
+    // With nothing to say what it is, a JSON body with no `body` is not a record this client knows (control). It was
+    // shown whole until IN-725; now it has no words and is marked as one that can't be shown.
+    const unknown = sealed({ some: 'json' })
+    expect([unknown?.body, unknown?.notShown]).toEqual(['', true])
   })
 
   it("today's records read as they did, with no new member", () => {

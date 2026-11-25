@@ -31,7 +31,11 @@ import {
 } from '../messageCache'
 import { cacheWallet } from './fixtures/cacheWallet'
 
-jest.mock('../useRoomRows', () => ({ onRoomsListed: jest.fn() }))
+jest.mock('../useRoomRows', () => ({
+  onRoomsListed: jest.fn(),
+  dropRowPreviews: jest.fn(),
+  readRowPreviewsWith: jest.fn(),
+}))
 
 const NOW = Date.parse('2026-11-18T12:00:00Z')
 const DAY = 24 * 3600 * 1000
@@ -92,20 +96,74 @@ describe('keeping and reading', () => {
     expect(record.tags).toMatchObject({ community: hashOf(LAB), persona: hashOf(ME), room: hashOf(ROOM) })
   })
 
+  // IN-725: a bundle from before the fix drew a whole signed record as a post's words, and kept it. Read back, the copy
+  // would put that JSON on screen again, and the room would never read the record afresh: its version has not moved.
+  it("a whole signed record kept as a post's words is left out of the copy read back; a person's words stay, JSON or not", async () => {
+    const w = wallet()
+    const record = JSON.stringify({
+      author: ME,
+      key: 'n',
+      proof: { type: 'DataIntegrityProof' },
+      roomId: ROOM,
+      title: 'Message 1',
+      version: 30,
+    })
+    const kept = [
+      post('record', 60_000, { body: record }),
+      post('cut record', 120_000, { body: record.slice(0, record.indexOf('"proof"') + 12), cut: true }),
+      post('words', 180_000, { body: 'See you at 6' }),
+      // Control (review of #1020): what a person typed, which only looks like structure.
+      post('typed json', 240_000, { body: '{"a":1}' }),
+      post('typed braces', 300_000, { body: '{}' }),
+      post('cut words', 360_000, { body: '{ a long story that starts with a brace', cut: true }),
+      // Whole, an object naming a room and no version is a person's words; cut, it is still.
+      post('cut pasted object', 420_000, { body: `{"roomId":"${ROOM}","settings":{"k`, cut: true }),
+    ]
+    await keepRoomPosts(w, room(), kept, NOW)
+    expect((await readRoomPosts(w, ME, ROOM, NOW))?.posts.map((p) => p.key)).toEqual([
+      'words',
+      'typed json',
+      'typed braces',
+      'cut words',
+      'cut pasted object',
+    ])
+  })
+
   it('control: another identity on the phone never reads it', async () => {
     const w = wallet()
     await keepRoomPosts(w, room(), [post('a')], NOW)
     expect(await readRoomPosts(w, OTHER_ME, ROOM, NOW)).toBeUndefined()
   })
 
-  it(`keeps at most ${MSG_CACHE_POSTS} posts, newest first, none past ${MSG_CACHE_DAYS} days`, async () => {
+  it(`keeps at most ${MSG_CACHE_POSTS} posts, the newest`, async () => {
     const w = wallet()
+    // 80 posts a minute apart, all within the day: what is dropped is dropped by count, the oldest first, never by age.
     const many = Array.from({ length: 80 }, (_, i) => post(`p${i}`, (i + 1) * 60_000))
-    await keepRoomPosts(w, room(), [...many, post('old', (MSG_CACHE_DAYS + 1) * DAY)], NOW)
+    await keepRoomPosts(w, room(), many, NOW)
     const read = await readRoomPosts(w, ME, ROOM, NOW)
-    expect(read?.posts).toHaveLength(MSG_CACHE_POSTS)
-    expect(read?.posts[0].key).toBe('p0')
-    expect(read?.posts.map((p) => p.key)).not.toContain('old')
+    expect(read?.posts.map((p) => p.key)).toEqual(many.slice(0, MSG_CACHE_POSTS).map((p) => p.key))
+  })
+
+  // IN-724 (281.2): Test Room's posts were from 4, 5, 16 and 17 Nov and 24 Nov 11:18, kept that evening; with a post's
+  // own age capped at 7 days the copy held one. Alberto, 11-25: "Keep newest 50, age the copy".
+  it(`keeps a quiet room's posts whatever their age, the copy lasting ${MSG_CACHE_DAYS} days from its last keep`, async () => {
+    const w = wallet()
+    const quiet = [post('today', 12 * 3600_000), post('a week', 7 * DAY + 7 * 3600_000), post('three weeks', 20 * DAY)]
+    await keepRoomPosts(w, room(), quiet, NOW)
+    expect((await readRoomPosts(w, ME, ROOM, NOW))?.posts.map((p) => p.key)).toEqual(['today', 'a week', 'three weeks'])
+    expect(await readRoomPosts(w, ME, ROOM, NOW + MSG_CACHE_DAYS * DAY)).toBeDefined()
+  })
+
+  it(`a copy not refreshed for ${MSG_CACHE_DAYS} days is emptied, not shown; each keep refreshes it`, async () => {
+    const w = wallet()
+    await keepRoomPosts(w, room(), [post('a')], NOW)
+    await keepRoomPosts(w, room({ roomId: ROOM2 }), [post('b')], NOW)
+    // ROOM2 opened again six days on: its copy lasts from then.
+    await keepRoomPosts(w, room({ roomId: ROOM2 }), [post('b'), post('c', -6 * DAY)], NOW + 6 * DAY)
+    const later = NOW + MSG_CACHE_DAYS * DAY + 1
+    expect(await readRoomPosts(w, ME, ROOM, later)).toBeUndefined()
+    expect(w.copies().filter((c) => c.emptied === true)).toHaveLength(1)
+    expect((await readRoomPosts(w, ME, ROOM2, later))?.posts.map((p) => p.key)).toEqual(['c', 'b'])
   })
 
   it(`keeps a room within ${MSG_CACHE_BYTES} bytes, and cuts a post past its own limit`, async () => {
@@ -290,6 +348,39 @@ describe('emptying', () => {
     expect(await shown(w)).toEqual(['garden'])
   })
 
+  // 281.2 (IN-724): every listing named two rooms long left, and each journalled, emptied nothing and said its unchanged
+  // counts, every two minutes.
+  it('a gone room nothing is kept of: nothing written, nothing said, and nothing kept of it after', async () => {
+    const w = wallet()
+    const said = jest.fn()
+    // Bound first: its start sweep runs on the clock, and these copies are kept at NOW.
+    await bindMessageCache(w, async () => [{ communityDid: LAB, personaDid: ME }], said)
+    await keepRoomPosts(w, room({ roomId: ROOM2 }), [post('b')], NOW)
+    said.mockClear()
+    w.genericRecords.save.mockClear()
+    w.genericRecords.update.mockClear()
+    expect(await emptyGoneRooms(w, [{ roomId: ROOM, standing: 'removed' }], NOW)).toBe(0)
+    expect(w.genericRecords.save).not.toHaveBeenCalled()
+    expect(w.genericRecords.update).not.toHaveBeenCalled()
+    expect(said).not.toHaveBeenCalled()
+    // A keep on its way when the listing said it was gone does not put posts back.
+    expect(await keepRoomPosts(w, room(), [post('a')], NOW)).toBe(false)
+    expect(await readRoomPosts(w, ME, ROOM2, NOW)).toBeDefined()
+  })
+
+  it('a gone room with a copy is emptied, journal first, and its line says how many', async () => {
+    const w = wallet()
+    const said = jest.fn()
+    await bindMessageCache(w, async () => [{ communityDid: LAB, personaDid: ME }], said)
+    await keepRoomPosts(w, room(), [post('a')], NOW)
+    await keepRoomPosts(w, room({ personaDid: OTHER_ME }), [post('e')], NOW)
+    said.mockClear()
+    expect(await emptyGoneRooms(w, [{ roomId: ROOM, standing: 'lapsed' }], NOW)).toBe(2)
+    expect(await readRoomPosts(w, ME, ROOM, NOW)).toBeUndefined()
+    expect(w.journal()).toHaveLength(0)
+    expect(said.mock.calls).toEqual([['[Rooms:cache] records 2, kept 0, bytes 0, journal 0 (access gone, 2 emptied)']])
+  })
+
   it('an emptying cut short is finished at the next start, and nothing it names is shown meanwhile', async () => {
     const w = wallet()
     await kept(w)
@@ -335,12 +426,19 @@ describe('at each start', () => {
     expect(await readRoomPosts(w, ME, ROOM2, NOW)).toBeDefined()
   })
 
-  it('empties a copy whose room has ended, or whose posts are all past the days kept', async () => {
+  it('empties a copy whose room has ended, or that was not refreshed for the days kept', async () => {
     const w = wallet()
     await keepRoomPosts(w, room({ validUntil: new Date(NOW + DAY).toISOString() }), [post('a')], NOW)
     await keepRoomPosts(w, room({ roomId: ROOM2 }), [post('b')], NOW)
     const later = NOW + (MSG_CACHE_DAYS + 1) * DAY
     expect(await sweepMessageCache(w, [{ communityDid: LAB, personaDid: ME }], later)).toBe(2)
+  })
+
+  it('a copy refreshed today whose posts are all weeks old is kept', async () => {
+    const w = wallet()
+    await keepRoomPosts(w, room(), [post('a', 20 * DAY), post('b', 30 * DAY)], NOW)
+    expect(await sweepMessageCache(w, [{ communityDid: LAB, personaDid: ME }], NOW)).toBe(0)
+    expect(await readRoomPosts(w, ME, ROOM, NOW)).toBeDefined()
   })
 
   it('control: a copy whose membership stands, in its room and its days, is kept', async () => {

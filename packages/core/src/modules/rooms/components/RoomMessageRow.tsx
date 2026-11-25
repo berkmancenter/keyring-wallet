@@ -65,6 +65,9 @@ const RoomMessageRow: React.FC<RoomMessageRowProps> = ({ row, onOpen }) => {
   // Not read yet (the agent not ready on a cold launch): the app's spinner, as the rooms card shows (#775), never "No
   // posts yet" for a room that may have some. The words stay in the row's label, for a screen reader.
   const reading = !post && !!row.reading && !row.notJoined
+  // A row this phone already had from its last run reads quietly: its name and time stand, its preview line is empty
+  // until the room is read, and nothing spins (Alberto, 11-24). The spinner is for a room shown for the first time.
+  const quiet = reading && !!row.fromLastTime
   const what = !post
     ? (t(row.notJoined ? 'Rooms.NotJoinedYet' : row.reading ? 'Rooms.Reading' : 'Rooms.RowNoPosts') as string)
     : post.kind === 'note'
@@ -219,12 +222,15 @@ const RoomMessageRow: React.FC<RoomMessageRowProps> = ({ row, onOpen }) => {
                     <ThemedText style={styles.preview} numberOfLines={1} importantForAccessibility="no">
                       {' '}
                     </ThemedText>
-                    <ActivityIndicator
-                      size="small"
-                      color={ColorPalette.brand.primary}
-                      style={styles.spinner}
-                      accessibilityLabel={line}
-                    />
+                    {quiet ? null : (
+                      <ActivityIndicator
+                        size="small"
+                        color={ColorPalette.brand.primary}
+                        style={styles.spinner}
+                        accessibilityLabel={line}
+                        testID={testIdWithKey('RoomMessageRowReading')}
+                      />
+                    )}
                   </View>
                 ) : (
                   <ThemedText style={styles.preview} numberOfLines={1} ellipsizeMode="tail">

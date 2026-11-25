@@ -114,6 +114,9 @@ export function detectHostIp() {
   );
 }
 
+// The witness leg's DIDComm version (WITNESS_LEG, v1 by default): lib/witnessLeg.js, re-exported for the runners.
+export { witnessLegFrom, witnessLegFromEnv } from "./witnessLeg.js";
+
 /**
  * Start the witness server behind an HTTPS tunnel (cloudflared). Returns
  * { invitationUrl, publicUrl, name, stop, waitForParticipants }.

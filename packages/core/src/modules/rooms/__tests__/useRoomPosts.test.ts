@@ -365,7 +365,10 @@ describe('a room in view', () => {
 // version held never mentions them: a `lastPrune.version` above what this phone has synced means rebuild from a full
 // listing and drop what it no longer holds (browse 0.3 spec, "a caller that keeps its own copy of the room").
 /** A service that can watch: armed by watchRoom, spent by a signal, as the agent's watches are. */
-const watchable = <S extends RoomsService>(service: S, { arms = true }: { arms?: boolean } = {}) => {
+const watchable = <S extends RoomsService>(
+  service: S,
+  { arms = true, live = false }: { arms?: boolean; live?: boolean } = {}
+) => {
   let armed = false
   const listeners = new Set<(roomId: string) => void>()
   const watchRoom = jest.fn((_roomId: string, _since: number, _options?: { live?: boolean }) => {
@@ -382,9 +385,9 @@ const watchable = <S extends RoomsService>(service: S, { arms = true }: { arms?:
     }),
     watchRoom,
     listeners,
-    /** The agent passes the host's signal on: the watch is spent. */
+    /** The agent passes the host's signal on: a one-shot watch is spent; a live one is not, as RoomWatches.signal. */
     signal: async (roomId = ROOM) => {
-      if (roomId === ROOM) armed = false
+      if (roomId === ROOM && !live) armed = false
       await act(async () => {
         for (const l of [...listeners]) l(roomId)
       })
@@ -405,6 +408,84 @@ describe('a room watched at its host', () => {
   test('watched: no timed poll every ten seconds; one at two minutes, for a signal lost', async () => {
     const { service } = roomWith([note('a', 1)])
     const w = watchable(service)
+    await open(w.service)
+    for (let i = 0; i < ROOM_WATCHED_POLL_MS / ROOM_POLL_MS - 1; i++) await tick()
+    expect(polls(service)).toHaveLength(0)
+    await tick()
+    expect(polls(service)).toHaveLength(1)
+  })
+
+  // IN-756 (282, First Room, signal delay none): the room was watched live, its signal arrived, and the open room did
+  // not read: a live watch is not spent by a signal, so the room still read as watched and the two-minute wait held
+  // the signal's tick like a timed one. The member left and came back to see the post.
+  test('watched live: a signal reads the room at once and the new post shows, and so does the next one', async () => {
+    const { service, write } = roomWith([note('a', 1)])
+    const w = watchable(service, { live: true })
+    const { result } = await open(w.service)
+    await tick()
+    write(note('b', 2))
+    await w.signal()
+    expect(w.service.roomWatched(ROOM)).toBe(true)
+    expect(polls(service)).toHaveLength(1)
+    expect(result.current.posts?.map((p) => p.key)).toEqual(['b', 'a'])
+    write(note('c', 3))
+    await w.signal()
+    expect(polls(service)).toHaveLength(2)
+    expect(result.current.posts?.map((p) => p.key)).toEqual(['c', 'b', 'a'])
+  })
+
+  // Probe C (review of #1024): a signal that comes while a listing is out did not list, and that listing could have been
+  // asked before the change. A live watch's host signals each change once, so the post waited for the two-minute poll.
+  test('watched live: a signal while a listing is out is read once that listing answers', async () => {
+    const { service, write } = roomWith([note('a', 1)])
+    const w = watchable(service, { live: true })
+    const { result } = await open(w.service)
+    const real = service.listNotes.getMockImplementation()!
+    let release: () => void = () => undefined
+    // The next listing is asked before the change, answered as the room was then, and held until after its signal.
+    service.listNotes.mockImplementationOnce(async (roomId: string, options: { sinceVersion?: number }) => {
+      const answer = await real(roomId, options)
+      return new Promise((resolve) => (release = () => resolve(answer)))
+    })
+    await act(async () => result.current.pollNow())
+    expect(polls(service)).toHaveLength(1)
+    write(note('b', 2))
+    await w.signal()
+    // Not a second listing while one is out.
+    expect(polls(service)).toHaveLength(1)
+    await act(async () => release())
+    await flush()
+    await act(async () => void jest.advanceTimersByTime(0))
+    await flush()
+    expect(polls(service)).toHaveLength(2)
+    expect(result.current.posts?.map((p) => p.key)).toEqual(['b', 'a'])
+  })
+
+  test('a listing out with no signal while it was out asks nothing more when it answers (control)', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service, { live: true })
+    const { result } = await open(w.service)
+    await act(async () => result.current.pollNow())
+    await flush()
+    await act(async () => void jest.advanceTimersByTime(0))
+    await flush()
+    expect(polls(service)).toHaveLength(1)
+  })
+
+  test('watched: "Try again" reads at once too, as a signal does', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service, { live: true })
+    const { result } = await open(w.service)
+    await tick()
+    expect(polls(service)).toHaveLength(0)
+    await act(async () => result.current.pollNow())
+    await flush()
+    expect(polls(service)).toHaveLength(1)
+  })
+
+  test('watched live: the timed poll still waits the two minutes (control: only a signal goes through)', async () => {
+    const { service } = roomWith([note('a', 1)])
+    const w = watchable(service, { live: true })
     await open(w.service)
     for (let i = 0; i < ROOM_WATCHED_POLL_MS / ROOM_POLL_MS - 1; i++) await tick()
     expect(polls(service)).toHaveLength(0)

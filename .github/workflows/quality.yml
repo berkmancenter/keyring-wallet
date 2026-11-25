@@ -116,7 +116,10 @@ jobs:
           # see e2e/scripts/sync-testids.sh): a renamed id fails here, not at the gate. And e2e/lib/testids.json must be
           # packages/core/testids.json in this tree, both ways: a change to the manifest carries its resync
           # (e2e/scripts/sync-testids.sh), and a check that cannot read it fails here (CI is set).
-          node e2e/scripts/check-testids.mjs || fail=1
+          # Said as an error of its own, as the branches around it are: left to its exit code, this one failed the job
+          # with no annotation, under a log that read "14/14 ok" (#1020, three heads red before anyone saw why).
+          node e2e/scripts/check-testids.mjs \
+            || { echo "::error file=e2e/lib/testids.json::check-testids failed (its lines above say which): a driver names a testID the app does not have, or e2e/lib/testids.json is out of step with packages/core/testids.json. For the second, run e2e/scripts/sync-testids.sh and commit the result"; fail=1; }
           # The harness's and the scripts' own tests (node built-ins and bash only, no install), found rather than named
           # (scripts/ci/find-tests.mjs): every *.test.mjs and *.test.sh under e2e/ and scripts/, so a new one runs here
           # without anyone adding it. Named lists left 21 of them running nowhere, check-testids.test.mjs among them,

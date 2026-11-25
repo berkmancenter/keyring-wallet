@@ -68,6 +68,7 @@ import { isNote, newestFirst, placeOf, postOf } from './roomPosts'
 import type { Identity, NoteSummary, RoomsService, RoomSummary } from './types'
 import { isRoomWatchWheneverOpenOn } from './watchWheneverOpenSwitch'
 import { isRoomsPartialListingOn } from './partialListingSwitch'
+import { isRoomsRowsTogetherOn, ROWS_READ_TOGETHER } from './rowsTogetherSwitch'
 import { isRoomsNewestFirstOn, ROOM_HEAD_WINDOW } from './newestFirstSwitch'
 
 /** While Messages is in view: about the offers poll's idle pace, never faster. */
@@ -124,6 +125,14 @@ export interface RoomRow {
   reading?: boolean
   /** A sealed room not joined yet (`RoomSummary.joined`): never read, and the row says so rather than reading. */
   notJoined?: boolean
+  /**
+   * The row is the last run's (rowsAtStart), not yet replaced by this run's listing: it is `reading`, quietly. Messages
+   * shows no spinner on a row it already had (Alberto, 11-24: "in real apps that do messaging we dont see this lag").
+   */
+  fromLastTime?: boolean
+  /** The room's tier and the end of the member's access: what the room's header says before the room is read (Room). */
+  tier?: RoomSummary['tier']
+  validUntil?: string
 }
 
 interface Track {
@@ -227,13 +236,32 @@ const readSeen = () =>
     hiddenUntil = await versionsAt(ROOMS_HIDDEN_KEY)
   })())
 
-// Written whole each time, never removed key by key: a room's entry goes by writing the rest.
-const keep = async (key: string, versions: Record<string, number> | undefined) => {
-  try {
-    await AsyncStorage.setItem(key, JSON.stringify(versions ?? {}))
-  } catch {
-    // Kept in memory for this run; a relaunch starts from what was last kept.
-  }
+// Written whole each time, never removed key by key: a room's entry goes by writing the rest. One write of a key at a
+// time, so the newest lands last whatever the storage's own order: a write asked while one is out waits for it, and
+// only the newest of those asked meanwhile is written (rooms read together ask at once).
+const writing = new Map<string, Promise<void>>()
+const toWrite = new Map<string, string>()
+const write = (key: string, value: string): Promise<void> => {
+  const done = (async () => {
+    try {
+      await AsyncStorage.setItem(key, value)
+    } catch {
+      // Kept in memory for this run; a relaunch starts from what was last kept.
+    }
+    const next = toWrite.get(key)
+    toWrite.delete(key)
+    if (next === undefined) writing.delete(key)
+    else await write(key, next)
+  })()
+  writing.set(key, done)
+  return done
+}
+const keep = (key: string, versions: Record<string, number> | undefined): Promise<void> => {
+  const value = JSON.stringify(versions ?? {})
+  const out = writing.get(key)
+  if (!out) return write(key, value)
+  toWrite.set(key, value)
+  return out
 }
 const keepSeen = () => keep(ROOMS_SEEN_KEY, seenVersions)
 const keepHidden = () => keep(ROOMS_HIDDEN_KEY, hiddenUntil)
@@ -309,7 +337,8 @@ async function readRoom(service: RoomsService, room: RoomSummary, track: Track |
       // Its listing entry says who and when; the words wait for a newer post.
     }
     const post = postOf(read, actingAs)
-    if (placeOf(post) === 'nowhere') {
+    // Nor is one this client can't show: the row quotes words, and it has none.
+    if (placeOf(post) === 'nowhere' || post.notShown) {
       if (candidate.key === next.lastKey) {
         next.last = undefined
         next.lastKey = undefined
@@ -336,7 +365,28 @@ const rowOf = (room: RoomSummary & { communityDid: string }, track: Track | unde
   ...(moreUnread(track) ? { unreadMore: true } : {}),
   lastPost: track?.last,
   ...(room.joined === false ? { notJoined: true } : track ? {} : { reading: true }),
+  tier: room.tier,
+  ...(room.validUntil !== undefined ? { validUntil: room.validUntil } : {}),
 })
+
+const TIERS: readonly NonNullable<RoomRow['tier']>[] = ['open', 'attributed', 'private', 'unknown']
+
+/**
+ * A listed room's row. Until its posts are read, a room the last run's rows already showed keeps that row's time and
+ * stays quiet (`fromLastTime`): the listing answering put a spinner on a row the member was already looking at, and
+ * took its time away, until the room was read.
+ */
+const listedRow = (
+  room: RoomSummary & { communityDid: string },
+  track: Track | undefined,
+  before: readonly RoomRow[] | undefined
+): RoomRow => {
+  const row = rowOf(room, track)
+  if (!row.reading) return row
+  const last = before?.find((shown) => shown.roomId === room.roomId && shown.fromLastTime)
+  if (!last) return row
+  return { ...row, fromLastTime: true, ...(last.lastActivityAt ? { lastActivityAt: last.lastActivityAt } : {}) }
+}
 
 const NAMES_FROM: readonly RoomRow['nameFrom'][] = ['community', 'personal', 'roomId']
 
@@ -350,6 +400,8 @@ const keptRowOf = (row: RoomRow): RowAtStart => ({
   ...(row.communityName !== undefined ? { communityName: row.communityName } : {}),
   ...(row.lastActivityAt ? { lastActivityAt: row.lastActivityAt.toISOString() } : {}),
   ...(row.notJoined ? { notJoined: true } : {}),
+  ...(row.tier !== undefined ? { tier: row.tier } : {}),
+  ...(row.validUntil !== undefined ? { validUntil: row.validUntil } : {}),
 })
 
 /** A row kept by the last run, shown as reading until the first listing replaces it. Its words read as inert again. */
@@ -364,6 +416,10 @@ const rowFromKept = (kept: RowAtStart): RoomRow => ({
   // None until the first listing reads the room: a count kept from the last run is not this run's (Alberto, 11-18).
   unread: 0,
   ...(kept.notJoined ? { notJoined: true } : { reading: true }),
+  fromLastTime: true,
+  // A tier this build does not name is no tier: the header shows no badge, as for a room whose tier is unknown.
+  ...(TIERS.some((tier) => tier === kept.tier) ? { tier: kept.tier as RoomRow['tier'] } : {}),
+  ...(kept.validUntil !== undefined ? { validUntil: kept.validUntil } : {}),
 })
 
 /**
@@ -423,6 +479,9 @@ const sameRow = (a: RoomRow, b: RoomRow): boolean =>
   a.communityName === b.communityName &&
   a.nameFrom === b.nameFrom &&
   !!a.reading === !!b.reading &&
+  !!a.fromLastTime === !!b.fromLastTime &&
+  a.tier === b.tier &&
+  a.validUntil === b.validUntil &&
   !!a.notJoined === !!b.notJoined &&
   a.unread === b.unread &&
   !!a.unreadMore === !!b.unreadMore &&
@@ -440,16 +499,170 @@ const sameRow = (a: RoomRow, b: RoomRow): boolean =>
 function showRows(service: RoomsService): void {
   const byRoom = tracks.get(service)
   let back = false
-  feed.rows = (feed.all ?? []).filter((row) => {
-    const hash = hashOf(row.roomId)
-    const until = hiddenUntil?.[hash]
-    if (until === undefined) return true
-    if ((byRoom?.get(row.roomId)?.newest ?? 0) <= until) return false
-    hiddenUntil = without(hiddenUntil, hash)
-    back = true
-    return true
-  })
+  feed.rows = (feed.all ?? [])
+    .filter((row) => {
+      const hash = hashOf(row.roomId)
+      const until = hiddenUntil?.[hash]
+      if (until === undefined) return true
+      if ((byRoom?.get(row.roomId)?.newest ?? 0) <= until) return false
+      hiddenUntil = without(hiddenUntil, hash)
+      back = true
+      return true
+    })
+    .map(withPreview)
   if (back) void keepHidden()
+  lookForPreviews(service)
+}
+
+/** A row's newest post as the wallet's kept copy of its room holds it (rooms/messageCache), and when it was written. */
+export interface RowPreview {
+  post: RoomRowPost
+  at: Date
+}
+/**
+ * Reads a kept copy's newest post for a room, given by rooms/messageCache when it is bound (no import cycle): what
+ * `service`'s agent holds of the member's communities is read once, then each room as its row comes due.
+ */
+export type RowPreviewReader = (
+  service: RoomsService
+) => Promise<((roomId: string) => Promise<RowPreview | undefined>) | undefined>
+let previewReader: RowPreviewReader | undefined
+let previews: ReadonlyMap<string, RowPreview> = new Map()
+/** The rooms whose copies this run (and service) looked at: each once, when its row first reads. */
+let previewsAsked = new Set<string>()
+/** Rooms whose copies were emptied this run: a read of one already out draws nothing (the review of #1011). */
+let previewsDropped = new Set<string>()
+/** How many times each room's copy failed to be read this run, and how many tries a room gets. */
+let previewTries = new Map<string, number>()
+const PREVIEW_TRIES = 2
+/** Moves on when every preview comes down and when the service changes: a read already out draws nothing after it. */
+let previewGen = 0
+/** One room's copy read at a time, so the room screen's own read of its copy waits behind one of these at most. */
+let previewChain: Promise<void> = Promise.resolve()
+
+/**
+ * A row not read yet this run shows its room's newest post from the wallet's kept copy, at once, instead of an empty
+ * line until the room is read (Alberto, 11-25: "Yes, show it at once"). It reads message words at launch, which the
+ * rows themselves never keep (rowsAtStart keeps names and times only, 11-17): only what the copy holds, under every
+ * check the copy's own read makes (its switch, biometric unlock, the journal, the room's end, the copy's age, one
+ * identity). The room's read replaces it, and an emptying of a room's copy takes its preview down
+ * ({@link dropRowPreviews}).
+ */
+function withPreview(row: RoomRow): RoomRow {
+  if (row.lastPost || !row.reading || row.notJoined) return row
+  const preview = previews.get(row.roomId)
+  if (!preview) return row
+  const at =
+    row.lastActivityAt && row.lastActivityAt.getTime() >= preview.at.getTime() ? row.lastActivityAt : preview.at
+  return { ...row, lastPost: preview.post, lastActivityAt: at }
+}
+
+/** Gives the reader of the kept copies' newest posts (rooms/messageCache `bindMessageCache`); read at once if due. */
+export function readRowPreviewsWith(reader: RowPreviewReader | undefined): void {
+  previewReader = reader
+  if (reader && feed.service) lookForPreviews(feed.service)
+}
+
+const stillReading = (roomId: string): boolean =>
+  (feed.rows ?? []).some((row) => row.roomId === roomId && row.reading && !row.notJoined)
+
+/**
+ * Looks at the copies of the rows reading now and not looked at yet, the most recently active first (Messages' own
+ * order, so the rows on screen fill first), and draws each row as soon as its own copy is read (the review of #1011): no row
+ * waits for another's. A row read meanwhile is passed by.
+ */
+function lookForPreviews(service: RoomsService): void {
+  const reader = previewReader
+  if (!reader || feed.service !== service) return
+  const due = (feed.rows ?? [])
+    .filter((row) => row.reading && !row.lastPost && !row.notJoined && !previewsAsked.has(row.roomId))
+    .sort((a, b) => (b.lastActivityAt?.getTime() ?? 0) - (a.lastActivityAt?.getTime() ?? 0))
+    .map((row) => row.roomId)
+  if (due.length === 0) return
+  for (const roomId of due) previewsAsked.add(roomId)
+  const gen = previewGen
+  const current = () => gen === previewGen && feed.service === service
+  previewChain = previewChain.then(async () => {
+    let found = 0
+    let drawn = 0
+    let failed = 0
+    let failure = ''
+    let first: number | undefined
+    // A read that fails gives its room back, to be looked at again at the rows' next drawing, twice at most this run;
+    // the rooms after it are still read (the review of #1011).
+    const failedOn = (roomId: string, e: unknown) => {
+      failed++
+      failure ||= failureCategory(e)
+      const tries = (previewTries.get(roomId) ?? 0) + 1
+      previewTries.set(roomId, tries)
+      if (tries < PREVIEW_TRIES) previewsAsked.delete(roomId)
+    }
+    let read: ((roomId: string) => Promise<RowPreview | undefined>) | undefined
+    try {
+      read = await reader(service)
+    } catch (e) {
+      for (const roomId of due) failedOn(roomId, e)
+    }
+    for (const roomId of due) {
+      if (!read || !current()) break
+      if (!stillReading(roomId)) continue
+      let preview: RowPreview | undefined
+      try {
+        preview = await read(roomId)
+      } catch (e) {
+        failedOn(roomId, e)
+        continue
+      }
+      if (!preview || !current() || previewsDropped.has(roomId)) continue
+      found++
+      previews = new Map(previews).set(roomId, preview)
+      if (!stillReading(roomId)) continue
+      showRows(service)
+      publish()
+      drawn++
+      first ??= Date.now() - RUN_STARTED_AT
+    }
+    if (failed > 0) log?.(`[Rooms:rows] ${failed} saved copies' newest posts were not read: ${failure}`)
+    if (found > 0)
+      log?.(
+        `[Rooms:rows] ${found} of ${due.length} rooms' newest posts read from the saved copies, ${drawn} rows drawn, the first ${first ?? '-'} ms and the last ${Date.now() - RUN_STARTED_AT} ms after launch`
+      )
+  })
+}
+
+/**
+ * A kept copy is being emptied (rooms/messageCache): those rooms' previews come down at once, and a read of one already
+ * out draws nothing. Without the rooms (a copy that does not say its room), every preview comes down, and nothing more
+ * is drawn from the copies this run.
+ */
+export function dropRowPreviews(roomIds?: Iterable<string>): void {
+  let next: Map<string, RowPreview>
+  if (roomIds === undefined) {
+    previewGen++
+    next = new Map()
+  } else {
+    next = new Map(previews)
+    for (const roomId of roomIds) {
+      previewsDropped.add(roomId)
+      next.delete(roomId)
+    }
+  }
+  // Only after the rooms are marked: a room whose read is still out has no preview yet, and the mark is what stops it.
+  if (next.size === previews.size) return
+  previews = next
+  const service = feed.service
+  if (!service) return
+  showRows(service)
+  publish()
+}
+
+/** Every preview, its rooms looked at and its reads out, gone: at a change of service and for tests. */
+function resetPreviews(): void {
+  previews = new Map()
+  previewsAsked = new Set()
+  previewsDropped = new Set()
+  previewTries = new Map()
+  previewGen++
 }
 
 const shown = (room: RoomSummary): room is RoomSummary & { communityDid: string } =>
@@ -458,13 +671,56 @@ const shown = (room: RoomSummary): room is RoomSummary & { communityDid: string 
 type Listed = (service: RoomsService, rooms: RoomSummary[]) => void
 const listedListeners = new Set<Listed>()
 
+/**
+ * The order rooms are read in: the room open on screen first (its reads go ahead of the agent's queue too:
+ * RoomsService.roomInView), then the most recently active as last read or last kept, so the rows at the top of Messages
+ * stop reading first; the rest as listed.
+ */
+function readOrder<R extends { roomId: string }>(
+  service: RoomsService,
+  rooms: readonly R[],
+  known: Map<string, Track>
+) {
+  const shownAt = new Map((feed.all ?? []).map((row) => [row.roomId, row.lastActivityAt?.getTime() ?? 0]))
+  const at = (roomId: string) => known.get(roomId)?.at?.getTime() ?? shownAt.get(roomId) ?? 0
+  const inView = (roomId: string) => (service.isRoomInView?.(roomId) === true ? 1 : 0)
+  return rooms
+    .map((room, i) => ({ room, i }))
+    .sort((a, b) => inView(b.room.roomId) - inView(a.room.roomId) || at(b.room.roomId) - at(a.room.roomId) || a.i - b.i)
+    .map(({ room }) => room)
+}
+
+/**
+ * Reads `rooms` with `read`: up to {@link ROWS_READ_TOGETHER} at once in {@link readOrder}'s order while
+ * rooms/rowsTogetherSwitch is on, and one after another as listed, as before, when it is off.
+ */
+function readRooms<R extends { roomId: string }>(
+  service: RoomsService,
+  rooms: readonly R[],
+  known: Map<string, Track>,
+  read: (room: R) => Promise<void>
+): Promise<void> {
+  return isRoomsRowsTogetherOn()
+    ? readTogether(readOrder(service, rooms, known), ROWS_READ_TOGETHER, read)
+    : readTogether(rooms, 1, read)
+}
+
+/** Runs `read` over `items`, at most `together` at once, in their order; settles when every one has. */
+async function readTogether<T>(items: readonly T[], together: number, read: (item: T) => Promise<void>): Promise<void> {
+  let next = 0
+  const lane = async () => {
+    while (next < items.length) await read(items[next++])
+  }
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(together, items.length)) }, lane))
+}
+
 /** Told of each listing of the member's rooms the poll reads, all of it, the rooms Messages leaves out included. */
 export function onRoomsListed(listener: Listed): () => void {
   listedListeners.add(listener)
   return () => void listedListeners.delete(listener)
 }
 
-/** Reads every room once, one after another. A room that can't be read keeps what was read of it before. */
+/** Reads every room once (rooms/rowsTogetherSwitch: how many at once). A room that can't be read keeps what was read of it before. */
 async function readAll(service: RoomsService): Promise<void> {
   feed.asking = true
   feed.lastAsk = Date.now()
@@ -472,6 +728,7 @@ async function readAll(service: RoomsService): Promise<void> {
   try {
     await readSeen()
     showRowsAtStart(service)
+    lookForPreviews(service)
     let byRoom = tracks.get(service)
     if (!byRoom) tracks.set(service, (byRoom = new Map()))
     const known = byRoom
@@ -482,12 +739,14 @@ async function readAll(service: RoomsService): Promise<void> {
     let listingEnded = false
     let partial: { rooms: (RoomSummary & { communityDid: string })[]; answered: Set<string> } | undefined
     let readingPartial: Promise<void> = Promise.resolve()
+    // Draws this listing's rows once it has ended (set below): what a partial read that ends after it calls.
+    let showListed: () => void = () => undefined
     const showPartial = () => {
       if (!partial || listingEnded || feed.service !== service) return
       const { rooms: answeredRooms, answered } = partial
       const ids = new Set(answeredRooms.map((room) => room.roomId))
       const waiting = (feed.all ?? []).filter((row) => !answered.has(row.communityDid) && !ids.has(row.roomId))
-      const next = [...answeredRooms.map((room) => rowOf(room, known.get(room.roomId))), ...waiting]
+      const next = [...answeredRooms.map((room) => listedRow(room, known.get(room.roomId), feed.all)), ...waiting]
       const before = feed.all
       if (before && next.length === before.length && next.every((row, i) => sameRow(row, before[i]))) return
       feed.all = next
@@ -508,10 +767,10 @@ async function readAll(service: RoomsService): Promise<void> {
       const answeredRooms = rooms.filter(shown)
       partial = { rooms: answeredRooms, answered: new Set(answered) }
       showPartial()
-      readingPartial = readingPartial.then(async () => {
-        for (const room of answeredRooms) {
+      readingPartial = readingPartial.then(() =>
+        readRooms(service, answeredRooms, known, async (room) => {
           if (listingEnded || feed.service !== service) return
-          if (room.joined === false || readThisAsk.has(room.roomId)) continue
+          if (room.joined === false || readThisAsk.has(room.roomId)) return
           readThisAsk.add(room.roomId)
           try {
             known.set(room.roomId, await readRoom(service, room, known.get(room.roomId)))
@@ -520,24 +779,15 @@ async function readAll(service: RoomsService): Promise<void> {
             readThisAsk.delete(room.roomId)
             log?.(`[Rooms:rows] ${logRef(room.roomId)} of ${logRef(room.communityDid)} not read: ${failureCategory(e)}`)
           }
-          showPartial()
-        }
-      })
+          // Drawn as it ends, the listing ended or not: a read that ended after it waited for the others in flight.
+          if (listingEnded) showListed()
+          else showPartial()
+        })
+      )
     }
     const listed = await service.listMyRooms(isRoomsPartialListingOn() ? { onPartial } : {})
     listingEnded = true
-    // A room being read for a partial answer finishes before the rooms are read again: never two reads of one room.
-    await readingPartial
-    if (feed.service === service)
-      for (const listener of listedListeners) {
-        try {
-          listener(service, listed)
-        } catch {
-          // A listener's failure is its own; the rows read on.
-        }
-      }
     const rooms = listed.filter(shown)
-    if (feed.service === service) feed.listed = new Map(rooms.map((room) => [room.roomId, room]))
     // A community this listing skipped for now (a step kept its session as another identity: `heldBack`) keeps the
     // rows already read of it, as they were, until a listing reads it again. Without them its rooms and its chip went
     // from Messages at every such listing, so two communities seldom showed together (1 listing in 12, 277.11). By the
@@ -550,7 +800,7 @@ async function readAll(service: RoomsService): Promise<void> {
     const show = () => {
       const kept = (feed.all ?? []).filter((row) => skipped.has(row.communityDid) && !listedIds.has(row.roomId))
       feed.keptRooms = new Set(kept.map((row) => row.roomId))
-      const next = [...rooms.map((room) => rowOf(room, known.get(room.roomId))), ...kept]
+      const next = [...rooms.map((room) => listedRow(room, known.get(room.roomId), feed.all)), ...kept]
       const before = feed.all
       feed.failed = false
       if (before && next.length === before.length && next.every((row, i) => sameRow(row, before[i]))) return
@@ -567,13 +817,28 @@ async function readAll(service: RoomsService): Promise<void> {
         )
       }
     }
+    // A room read for a partial answer that ends from here on is drawn with this listing's rows.
+    showListed = () => {
+      if (feed.service === service) show()
+    }
+    // A room being read for a partial answer finishes before the rooms are read again: never two reads of one room.
+    await readingPartial
+    if (feed.service === service)
+      for (const listener of listedListeners) {
+        try {
+          listener(service, listed)
+        } catch {
+          // A listener's failure is its own; the rows read on.
+        }
+      }
+    if (feed.service === service) feed.listed = new Map(rooms.map((room) => [room.roomId, room]))
     if (feed.service !== service) return
     show()
-    for (const room of rooms) {
+    await readRooms(service, rooms, byRoom, async (room) => {
       if (feed.service !== service) return
       // Not joined: there are no keys to read it with, and asking again every poll only fails again. Read already for
       // a partial answer of this listing: once is enough.
-      if (room.joined === false || readThisAsk.has(room.roomId)) continue
+      if (room.joined === false || readThisAsk.has(room.roomId)) return
       try {
         byRoom.set(room.roomId, await readRoom(service, room, byRoom.get(room.roomId)))
       } catch (e) {
@@ -583,8 +848,9 @@ async function readAll(service: RoomsService): Promise<void> {
       }
       if (feed.service !== service) return
       show()
-    }
-    if (feed.service === service) watchActive(service)
+    })
+    if (feed.service !== service) return
+    watchActive(service)
     // A kept row is not this listing's: it neither asks a retry nor counts as not read, as it did not when it went.
     const reading = (feed.all ?? []).filter((row) => row.reading && !feed.keptRooms.has(row.roomId)).length
     const keptLine = feed.keptRooms.size > 0 ? `, ${feed.keptRooms.size} kept as read before` : ''
@@ -901,6 +1167,9 @@ export function resetRoomRows(): void {
   log = undefined
   firstRowsSaid = false
   rowsAtStartLooked = false
+  resetPreviews()
+  previewReader = undefined
+  previewChain = Promise.resolve()
   if (keepTimer) clearTimeout(keepTimer)
   keepTimer = undefined
   tracks = new WeakMap()
@@ -933,6 +1202,8 @@ export function useRoomRowsPoll(
     const next = service && linked ? service : undefined
     if (feed.service === next) return
     feed.service = next
+    // Another agent's rooms: none of the last one's previews, and its own looked for at its first read.
+    resetPreviews()
     stopRetrying()
     feed.all = undefined
     feed.rows = undefined

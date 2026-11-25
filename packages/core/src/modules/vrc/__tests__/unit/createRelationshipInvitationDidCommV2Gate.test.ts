@@ -57,20 +57,24 @@ function mailboxOpen(open = true) {
 }
 
 describe('createRelationshipInvitation: v2 accepted by default, minted only through the wallet mailbox', () => {
+  // These rows test the mint path itself, so the release kill (on from 282) is lifted here; its own rows are below.
+  beforeEach(() => {
+    DIDCOMM_V2_MINT_REMOTE_OFF.off = false
+  })
+
   afterEach(() => {
     jest.restoreAllMocks()
     setDidCommV2Enabled(DIDCOMM_V2_ON_BY_DEFAULT)
     setV2MediationEnabled(false)
-    DIDCOMM_V2_MINT_REMOTE_OFF.off = false
+    DIDCOMM_V2_MINT_REMOTE_OFF.off = true // the shipped value, from 282
   })
 
-  test('as shipped: DIDComm v2 on', () => {
+  // Whether v2 is minted as shipped is the kill's own row, below: from 282 it is not.
+  test('as shipped: the DIDComm v2 setting is on', () => {
     jest.isolateModules(() => {
       const ceremony = require('../../../trust-tasks/ceremony') as typeof import('../../../trust-tasks/ceremony')
       expect(ceremony.DIDCOMM_V2_ON_BY_DEFAULT).toBe(true)
-      expect(ceremony.isDidCommV2Enabled()).toBe(true)
     })
-    expect(isDidCommV2Enabled()).toBe(true)
   })
 
   test('DEFAULT: v2 on, no mailbox open → a v1 invitation, through the default mediator, and the log says why', async () => {
@@ -162,18 +166,20 @@ describe('createRelationshipInvitation: v2 accepted by default, minted only thro
 
 describe('DIDCOMM_V2_MINT_REMOTE_OFF beats what DIDComm v2 ships as', () => {
   afterEach(() => {
-    DIDCOMM_V2_MINT_REMOTE_OFF.off = false
+    DIDCOMM_V2_MINT_REMOTE_OFF.off = true // the shipped value, from 282
     setDidCommV2Enabled(DIDCOMM_V2_ON_BY_DEFAULT)
   })
 
-  test('with nothing having set it, the kill is the only way it goes off (control: kill lifted, it is on again)', () => {
+  test('as shipped from 282 the kill is on, so nothing mints v2; lifted, v2 is on again (control)', () => {
     jest.isolateModules(() => {
       const fresh = require('../../../trust-tasks/ceremony') as typeof import('../../../trust-tasks/ceremony')
-      expect(fresh.isDidCommV2Enabled()).toBe(true)
-      fresh.DIDCOMM_V2_MINT_REMOTE_OFF.off = true
+      // On until chat speaks over v2: a contact made through a v2 invitation had no reactions, timer or photos.
+      expect(fresh.DIDCOMM_V2_MINT_REMOTE_OFF.off).toBe(true)
       expect(fresh.isDidCommV2Enabled()).toBe(false)
       fresh.DIDCOMM_V2_MINT_REMOTE_OFF.off = false
       expect(fresh.isDidCommV2Enabled()).toBe(true)
+      fresh.DIDCOMM_V2_MINT_REMOTE_OFF.off = true
+      expect(fresh.isDidCommV2Enabled()).toBe(false)
     })
   })
 
