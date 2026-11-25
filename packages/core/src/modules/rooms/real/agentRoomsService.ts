@@ -2359,7 +2359,22 @@ export class AgentRoomsService implements RoomsService {
    * Writes a message, a reply or a reaction to an attributed room, by the writer's rule (`recordWrites.ts`). Off until
    * `RoomsBackend.recordSending` says so: the real backend reads the release's switch (`recordSendingSwitch`) on every send.
    */
+  /**
+   * A record write, and on any failure what it may have taken on trust is forgotten, as for a sealed write: a refusal
+   * decided here from the room's record members (`requirePermitted`, a reply's or an edit's members) can come from a
+   * key list held across an epoch move, so the next write asks one afresh (review of #1029).
+   */
   public async sendRecord(roomId: string, write: RecordWrite): Promise<{ key: string; version: number }> {
+    try {
+      return await this.sendRecordOnce(roomId, write)
+    } catch (e) {
+      this.heldLast = undefined
+      this.heads.delete(roomId)
+      throw e
+    }
+  }
+
+  private async sendRecordOnce(roomId: string, write: RecordWrite): Promise<{ key: string; version: number }> {
     if (!this.backend.recordSending) throw new RecordSendingOff()
     // A message's words are held to a post's own rules: an empty one would read as withdrawn, a long one as no post did.
     if (write.type === 'message' || write.type === 'edit') {

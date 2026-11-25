@@ -238,6 +238,25 @@ describe('a write that fails forgets what it took on trust', () => {
     expect(written.version).toBe(5)
   })
 
+  // The other door: a reply is refused on the phone, before anything is sealed, when the epoch's profile does not list
+  // inReplyTo. With a key list held across an epoch move that was every reply for five minutes.
+  test('a reply refused on the phone for its members forgets the key list too: the next write asks a fresh one', async () => {
+    const s = setup({ head: 4 })
+    await s.openWatched()
+    await expect(
+      s.service.sendRecord(ROOM, {
+        type: 'message',
+        body: 'yes',
+        inReplyTo: { key: 'older', version: 4 },
+        idempotencyKey: 'r1',
+      })
+    ).rejects.toBeDefined()
+    expect(s.sendCompleted).not.toHaveBeenCalled()
+    const lists = s.count(ROOMS_TASK.keysList02)
+    await s.send('then a message')
+    expect(s.count(ROOMS_TASK.keysList02)).toBe(lists + 1)
+  })
+
   test('a write that goes through keeps both: the next one asks neither (control)', async () => {
     const s = setup({ head: 4 })
     await s.openWatched()
