@@ -446,6 +446,44 @@ const shown = (room: RoomSummary): room is RoomSummary & { communityDid: string 
 type Listed = (service: RoomsService, rooms: RoomSummary[]) => void
 const listedListeners = new Set<Listed>()
 
+/**
+ * How many rooms a read of every room reads at once. One at a time, 281.2 took 26 s to read four rooms (IN-724), every
+ * row reading until its turn came, while the agent's read lane (VtaClient, VTA_READ_LANE_SIZE) runs three reads beside
+ * each other. Each room's own read stays in order (its listing, then its newest post), and its row is drawn the moment
+ * it ends. Where the lane is one, the agent's queue still runs them one at a time.
+ *
+ * ROLLBACK: set to 1 (an OTA can ship that alone); rooms are then read one after another, in the order below.
+ */
+export const ROWS_READ_TOGETHER = 3
+
+/**
+ * The order rooms are read in: the room open on screen first (its reads go ahead of the agent's queue too:
+ * RoomsService.roomInView), then the most recently active as last read or last kept, so the rows at the top of Messages
+ * stop reading first; the rest as listed.
+ */
+function readOrder<R extends { roomId: string }>(
+  service: RoomsService,
+  rooms: readonly R[],
+  known: Map<string, Track>
+) {
+  const shownAt = new Map((feed.all ?? []).map((row) => [row.roomId, row.lastActivityAt?.getTime() ?? 0]))
+  const at = (roomId: string) => known.get(roomId)?.at?.getTime() ?? shownAt.get(roomId) ?? 0
+  const inView = (roomId: string) => (service.isRoomInView?.(roomId) === true ? 1 : 0)
+  return rooms
+    .map((room, i) => ({ room, i }))
+    .sort((a, b) => inView(b.room.roomId) - inView(a.room.roomId) || at(b.room.roomId) - at(a.room.roomId) || a.i - b.i)
+    .map(({ room }) => room)
+}
+
+/** Runs `read` over `items`, at most `together` at once, in their order; settles when every one has. */
+async function readTogether<T>(items: readonly T[], together: number, read: (item: T) => Promise<void>): Promise<void> {
+  let next = 0
+  const lane = async () => {
+    while (next < items.length) await read(items[next++])
+  }
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(together, items.length)) }, lane))
+}
+
 /** Told of each listing of the member's rooms the poll reads, all of it, the rooms Messages leaves out included. */
 export function onRoomsListed(listener: Listed): () => void {
   listedListeners.add(listener)
@@ -470,6 +508,8 @@ async function readAll(service: RoomsService): Promise<void> {
     let listingEnded = false
     let partial: { rooms: (RoomSummary & { communityDid: string })[]; answered: Set<string> } | undefined
     let readingPartial: Promise<void> = Promise.resolve()
+    // Draws this listing's rows once it has ended (set below): what a partial read that ends after it calls.
+    let showListed: () => void = () => undefined
     const showPartial = () => {
       if (!partial || listingEnded || feed.service !== service) return
       const { rooms: answeredRooms, answered } = partial
@@ -496,10 +536,10 @@ async function readAll(service: RoomsService): Promise<void> {
       const answeredRooms = rooms.filter(shown)
       partial = { rooms: answeredRooms, answered: new Set(answered) }
       showPartial()
-      readingPartial = readingPartial.then(async () => {
-        for (const room of answeredRooms) {
+      readingPartial = readingPartial.then(() =>
+        readTogether(readOrder(service, answeredRooms, known), ROWS_READ_TOGETHER, async (room) => {
           if (listingEnded || feed.service !== service) return
-          if (room.joined === false || readThisAsk.has(room.roomId)) continue
+          if (room.joined === false || readThisAsk.has(room.roomId)) return
           readThisAsk.add(room.roomId)
           try {
             known.set(room.roomId, await readRoom(service, room, known.get(room.roomId)))
@@ -508,24 +548,15 @@ async function readAll(service: RoomsService): Promise<void> {
             readThisAsk.delete(room.roomId)
             log?.(`[Rooms:rows] ${logRef(room.roomId)} of ${logRef(room.communityDid)} not read: ${failureCategory(e)}`)
           }
-          showPartial()
-        }
-      })
+          // Drawn as it ends, the listing ended or not: a read that ended after it waited for the others in flight.
+          if (listingEnded) showListed()
+          else showPartial()
+        })
+      )
     }
     const listed = await service.listMyRooms(isRoomsPartialListingOn() ? { onPartial } : {})
     listingEnded = true
-    // A room being read for a partial answer finishes before the rooms are read again: never two reads of one room.
-    await readingPartial
-    if (feed.service === service)
-      for (const listener of listedListeners) {
-        try {
-          listener(service, listed)
-        } catch {
-          // A listener's failure is its own; the rows read on.
-        }
-      }
     const rooms = listed.filter(shown)
-    if (feed.service === service) feed.listed = new Map(rooms.map((room) => [room.roomId, room]))
     // A community this listing skipped for now (a step kept its session as another identity: `heldBack`) keeps the
     // rows already read of it, as they were, until a listing reads it again. Without them its rooms and its chip went
     // from Messages at every such listing, so two communities seldom showed together (1 listing in 12, 277.11). By the
@@ -555,13 +586,28 @@ async function readAll(service: RoomsService): Promise<void> {
         )
       }
     }
+    // A room read for a partial answer that ends from here on is drawn with this listing's rows.
+    showListed = () => {
+      if (feed.service === service) show()
+    }
+    // A room being read for a partial answer finishes before the rooms are read again: never two reads of one room.
+    await readingPartial
+    if (feed.service === service)
+      for (const listener of listedListeners) {
+        try {
+          listener(service, listed)
+        } catch {
+          // A listener's failure is its own; the rows read on.
+        }
+      }
+    if (feed.service === service) feed.listed = new Map(rooms.map((room) => [room.roomId, room]))
     if (feed.service !== service) return
     show()
-    for (const room of rooms) {
+    await readTogether(readOrder(service, rooms, byRoom), ROWS_READ_TOGETHER, async (room) => {
       if (feed.service !== service) return
       // Not joined: there are no keys to read it with, and asking again every poll only fails again. Read already for
       // a partial answer of this listing: once is enough.
-      if (room.joined === false || readThisAsk.has(room.roomId)) continue
+      if (room.joined === false || readThisAsk.has(room.roomId)) return
       try {
         byRoom.set(room.roomId, await readRoom(service, room, byRoom.get(room.roomId)))
       } catch (e) {
@@ -571,8 +617,9 @@ async function readAll(service: RoomsService): Promise<void> {
       }
       if (feed.service !== service) return
       show()
-    }
-    if (feed.service === service) watchActive(service)
+    })
+    if (feed.service !== service) return
+    watchActive(service)
     // A kept row is not this listing's: it neither asks a retry nor counts as not read, as it did not when it went.
     const reading = (feed.all ?? []).filter((row) => row.reading && !feed.keptRooms.has(row.roomId)).length
     const keptLine = feed.keptRooms.size > 0 ? `, ${feed.keptRooms.size} kept as read before` : ''
