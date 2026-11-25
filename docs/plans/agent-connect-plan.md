@@ -1,6 +1,6 @@
 # Agent connect — a person's own AI agent in Keyring
 
-**Status:** Draft, revision 4. Nothing built. Tiers P0 to P2, each a working product on its own (§7.0). Two decisions are open (§11 Q1 and Q5); the decisions already made, with who and when, are in the register in the Overview.
+**Status:** Draft, revision 4. Nothing built. Tiers P0 to P2, each a working product on its own (§7.0). One decision is open (§11 Q5); the decisions already made, with who and when, are in the register in the Overview.
 **Roadmap epic:** none yet.
 **Scope:** A person connects their own AI agent (an agent host reaching their VTA through MCP and a small plugin of ours; the first host is a Claude Code terminal session, and the contract is host- and model-neutral, §3.18) to Keyring by scanning a code, typing a number from their terminal, chats with it one to one, adds it to data rooms, and revokes it, with no change to the VTI stack. Anything that would need a VTI change is listed in §10, not built around.
 **Companions:** [`agent-connect-plan/`](./agent-connect-plan/) — review index in this plan's §12; running ledger of asks for VTI, OpenVTC and the working groups: [`agent-connect-plan/vti-asks.md`](./agent-connect-plan/vti-asks.md) (this plan's §10)
@@ -223,7 +223,7 @@ Emulators and simulators cannot prove the biometric gate; the hardware-key appro
 
 | Question | Recommendation | Who decides | By when, or what it blocks |
 |---|---|---|---|
-| Where the plugin repository `keyring-agent-plugin` is hosted: the OpenVTC organisation or the owner's own | The owner's own organisation now, a transfer to OpenVTC later if they want it (§11) | Owner | Blocks steps 10 and 10b (7.6, 7.15; the repository is created there) |
+| Where the plugin repository is hosted | **Decided 2026-11-24 (D39):** a new repository `berkmancenter/vti-agent-connect`, Apache-2.0; move later (for example to OpenVTC) only if Alberto prefers | Owner (decided) | Blocks nothing |
 | Which mediator each side of an agent connect uses in production, and how a wake-up for an agent's message reaches a phone (§2.5, §11 Q5) | No recommendation yet: the repositories read do not show it | Owner | Blocks only the wake-up answer of steps 0.1 and 0.3; agent-chat notifications are off in P0 (§3.5), so no P0 step waits on it |
 
 **Decisions made**
@@ -236,6 +236,7 @@ Emulators and simulators cannot prove the biometric gate; the hardware-key appro
 | Keyring always connects to its VTA as an unrestricted administrator (the P0 assumption, §1.5); memories are created top-level after an `auth/whoami` guard, which ends the connect with a clear failure if it fails; the parent-context route is not built (D32). Step 0.1(p) is the live confirmation and the tripwire | Product owner | 2026-11-24 | A root context needs an unrestricted administrator (VTI-CTX-020), which the owner's phone is by design; no degraded mode (§1.5, §3.15) |
 | A memory's id is opaque and random, never derived from its name or the owner (D35, replaces D33) | Product owner | 2026-11-24 | A topic in an id would sit for good in ACL entries, audit rows, claims and logs (§3.15) |
 | An agent's memory set may be widened after connect behind a biometric approval that names every room; narrowing needs one confirmation (D34) | Product owner | 2026-11-24 | The set stays fixed against the agent and rooms without a new agent for each memory (§3.15) |
+| The plugin lives in a new repository `berkmancenter/vti-agent-connect`, Apache-2.0 (D39) and reuses `vta-mcp` (D40) | Product owner (the user) | 2026-11-24 | One place to release and review a host-neutral plugin; the guard and call surface are the VTA team's |
 | A credential reaches an agent's memory only through Keyring with the biometric approval (D36); joining a room by scan is a P2 placeholder (D37); the design is host- and model-neutral and evidenced (D38) | Product owner (the user) | 2026-11-24 | One repository to release and review; the VTA binds the memory, not the model (§3.15, §3.17, §3.18) |
 | P0, P1 and P2 are iterative minimum products, each shipping and working alone (§7.0); re-tiered on the user's instruction of 2026-11-24: the P0 gate covers P0 cases and screens only, the 4-hour tail run is P1, the Farm and mailbox passes are recorded validations done when their operators allow (the lab pass is the P0 exit), and earlier prose labels (rooms, mentions, "Answers other people", the community setting, "Also delete what it remembered", the daemon, presenting the VDC, "Also cut its room access now") follow §7.0 | Product owner, by the user's instruction | 2026-11-24 | If work stops after any tier, what exists works |
 
@@ -656,12 +657,12 @@ An `AgentConnection` record per agent (Credo generic record, as `VtiIdentityStor
 
 ### 3.12 The session plugin
 
-**Home.** Our own small TypeScript repository, packaged as a Claude Code plugin (named `keyring-agent-plugin`, D17; Apache-2.0, as the OpenVTC libraries are; which organisation hosts it is open, §11). It is a sibling of `vta-agent-memory`, not a fork or a contribution to it: that plugin is Rust and OpenVTC's, has no inbound-message path (its only hook is `SessionStart`) and no home for a pairing flow, and the pairing is a Keyring-defined draft flow (ledger AC-01, AC-18). It configures `vta-mcp` and can run beside `vta-agent-memory`; it does not extend either. It is built on the published `@openvtc/vti-didcomm-js`, `@openvtc/trust-tasks` and selected subpaths of `@openvtc/pnm-core` (`./did`, `./didcomm`, `./inbound`, `./onboarding`, `./device`; whether `pnm-core` runs under Node is unverified, §2.3 item 8), and `@modelcontextprotocol/sdk`; consumed from npm, not vendored. It needs Node 20 or later and runs under **Node with `ws`**, not Bun (§2.4). It also acts as the channel server (below).
+**Home.** Our own small TypeScript repository, packaged as a Claude Code plugin (a new repository, `berkmancenter/vti-agent-connect`, D17, D39; Apache-2.0, as the VTI and OpenVTC repositories are; decided, §11 Q1; install address pattern for Claude Code: `/plugin marketplace add berkmancenter/vti-agent-connect` then `/plugin install <plugin>@<marketplace>`, **unverified**: the plugin and marketplace layout was not checked against Claude Code's documentation or a working example). It is a sibling of `vta-agent-memory`, not a fork or a contribution to it: that plugin is Rust and OpenVTC's, has no inbound-message path (its only hook is `SessionStart`) and no home for a pairing flow, and the pairing is a Keyring-defined draft flow (ledger AC-01, AC-18). It configures `vta-mcp` and can run beside `vta-agent-memory`; it does not extend either. It is built on the published `@openvtc/vti-didcomm-js`, `@openvtc/trust-tasks` and selected subpaths of `@openvtc/pnm-core` (`./did`, `./didcomm`, `./inbound`, `./onboarding`, `./device`; whether `pnm-core` runs under Node is unverified, §2.3 item 8), and `@modelcontextprotocol/sdk`; consumed from npm, not vendored. It needs Node 20 or later and runs under **Node with `ws`**, not Bun (§2.4). It also acts as the channel server (below).
 
 **Layout and responsibilities.** The core is a library with thin front-ends, so the headless daemon (P2) is one more front-end and no rewrite:
 
 ```
-keyring-agent-plugin/
+vti-agent-connect/
   .claude-plugin/plugin.json, marketplace.json
   .mcp.json                      server "keyring-agent": bin/keyring-agent serve
   skills/keyring-agent/SKILL.md  the connect command; arms Monitor on `inbox --follow`; the fencing and answering rules
@@ -880,7 +881,7 @@ A link length of 251 bytes at QR level M is the specification's limit for a prod
 | D14 | "Answers other people" is a per-agent setting, off by default; off is a fixed, plugin-generated, rate-limited reply (§3.13). | The agent should not silently ignore a person who addresses it, and must not let a third party's text reach the model by default. A fixed reply is cheap and not injectable. | Silence (the person cannot tell why). A model-written refusal (injectable, spendable by others). Always on. The limits are one reply per author per room per 60 minutes and 20 an hour, and the lockout of D8 is 3 wrong in 60 minutes with a 15-minute lock: Keyring's own numbers with no VTI precedent beyond the PIN lock, so they are cheap to change. |
 | D15 | "Not stated" for a community's agents setting counts as no. | An agent in a room reads all of it (§3.6); the safe default for a missing answer is no. | Asking "Add anyway" on not stated. |
 | D16 | The fr and pt-br wording of the fixed reply is a release gate: a native reader of each approves it before the plugin is released (§3.13, step 10b, 7.15). | The text is the one thing the plugin says in the owner's name to strangers, and a machine-drafted translation can be wrong in tone or meaning. | Releasing on the drafts; reviewing after release. |
-| D17 | The plugin repository is named `keyring-agent-plugin`, Apache-2.0. Its host organisation is open (§11). | The name says what it is and for whom; the licence matches the OpenVTC libraries it builds on. | A name tied to Claude Code alone (the core is a library with other front-ends, D12). |
+| D17 | The plugin repository is named `vti-agent-connect` (a host-neutral name; this plan's first name for it was `keyring-agent-plugin`), Apache-2.0; it is a new repository under `berkmancenter` (D39). | The name says what it is and for whom, without a vendor or the wallet in it; the licence matches the VTI and OpenVTC repositories (`verifiable-trust-infrastructure/LICENSE`, `Cargo.toml:130`; `keyring-wallet/external/openvtc/LICENSE`, `vti-didcomm-js/LICENSE`, `package.json:118`). | A name tied to Claude Code alone (the core is a library with other front-ends, D12); a name tied to the wallet. |
 | D18 | The delivery cases (live, offline, no sender account) are a P0 release gate on a lab mediator **configured like the production wallet mailbox** (step 0.1(q)); the validation passes on the mailbox host itself and on the Farm are **recorded validations done when their operators allow, never a P0 exit condition** (P0 has no outside-party dependency; decided by the user's instruction of 2026-11-24); the **refusal** cases (closed ACL, queue cap, anoncrypt, wrong host, community setting) run only on a mediator we control: the lab, or a Farm Full Stack (§8.3). | Only the lab's starter mediator was measured, with an open ACL; the production mailbox is `explicit_deny` with a self-grant, read from config and not measured. A refusal path needs a mediator whose configuration we can set (`vti-lab-and-field`). If a case fails, the design changes only for that mediator: pairing and room parts do not depend on delivery. | Treating the lab's open result as the mailbox's or the Farm's. Running the closed and queue cases on a mediator we do not control. Any live action by us on the mailbox host before its operators approve. |
 | D19 | A persona-issued VDC is signed by the VTA if it has a task that signs a W3C credential as the persona; if not, the VDC is carried in a Trust Task envelope the VTA signs. Its validity is 7 days, re-issued while the ACL entry is active, with no status entry in P0 (§3.4). | Keyring never signs as the persona (§4); short validity with re-issue is the specification's stand-in for status ("declining to re-issue"). A revoked agent's VDC can stay valid for up to 7 days; P0 shows it to no one and P1 shows it only in the agent's profile record in rooms. Phase 0 step 0.1(f) measures which route exists. | A Keyring-held signing key; a long validity with no status (a revoked agent would hold a VDC nobody can revoke); validity equal to the ACL expiry. |
 | D20 | New surfaces are named "AI agents" and "Connect an agent". The VTA's own screens keep their names until step 5a moves them under Settings as "My VTA" (D26); from then the Settings row and the moved stack's header say "My VTA", and a screen in that stack no longer calls the VTA "your agent" where the AI agents are one tap away (the exact strings are listed when step 5a is written). | The agent is a different thing from the VTA; two things called "agent" one tab apart would be confused, so the VTA takes the name "My VTA" where it moves. | Renaming the VTA's screens before they move; keeping "your agent" for the VTA once "My Agent" is the AI agent. |
@@ -900,6 +901,8 @@ A link length of 251 bytes at QR level M is the specification's limit for a prod
 | D36 | **A credential reaches an agent's memory only through Keyring, with the owner's biometric approval naming the memory, the fields and the purpose; it is a copy in a JSON text envelope in the existing memory type, written by Keyring, never a pointer the agent can follow; the maintainers' typed credential value type is an upstream ask, not a dependency (P1, step 7.23).** | The agent holds no vault capability and the VTA's presentation is selective, consented and key-bound (`present.rs:1-40`); D31 stays intact because Keyring writes into a memory already on the entry. | A pointer the agent follows (it has no vault access); the agent writing the memory; waiting for the typed value (VTI-Q47). |
 | D37 | **Joining a room by scanning a code is a P2 placeholder (a draft `room-join` trigger flow, this plan's §3.17, step 7.26); the code carries only the owner's contact, a room reference, a single-use handle and an expiry of at most 300 seconds; an agent never scans.** | The VTA has no join request and recommends waiting (`data-rooms-joining.md:122-131`); the trigger-link rules fix the payload limits. | A VIC or a key package in the code (a bearer artifact and a size breach); a Keyring-only join in P0 or P1 (it needs rooms and a spec). |
 | D38 | **The design is host- and model-neutral: the plugin core implements a documented `HostContract`, imports no vendor library (a test fails on one), and is evidenced by a conformance suite on a second host (P1) and a host and model matrix (P2).** | The binding that keeps an agent to its memory is the VTA's (D31); only the plugin's front-end is host-specific (§3.18). | Claiming neutrality without a second host; making the core depend on one vendor. |
+| D39 | **The plugin lives in a new, separate repository `berkmancenter/vti-agent-connect`, under our own organisation (the same as keyring-wallet), Apache-2.0, with DCO sign-off and signed commits as those repositories require; a later transfer (for example to OpenVTC) only if Alberto prefers, which a GitHub transfer allows without losing history. Decided by the user on 2026-11-24; the repository is not created by this plan.** | One place for a host-neutral plugin, released and reviewed on its own cadence (the fr and pt-br gate, D16), with no agreement needed from anyone; Apache-2.0 is what the VTI repository (`LICENSE`, `Cargo.toml:130`), OpenVTC (`external/openvtc/LICENSE`, `Cargo.toml:16`) and `vti-didcomm-js` use; `keyring-wallet` requires a DCO sign-off (`CONTRIBUTING.md:17`) and the VTI repository has `.github/dco.yml`. No `NOTICE` file exists in those repositories (only in `affinidi-tdk-rs`), so one is added only if third-party Apache-2.0 code is bundled. | A subdirectory of keyring-wallet (withdrawn by the user); the OpenVTC organisation now (an agreement and a process we do not control); a wallet-named repository. |
+| D40 | **The plugin reuses `vta-mcp` for every operation on the VTA and adds only what `vta-mcp` does not have: the pairing, the channel and `inbox`, and the sender gate.** `vta-mcp` already exposes `vta_call` (any Trust Task by URI) and `vta_list_operations`, typed convenience tools, a per-operation guard (`--read-only`, allow and deny globs such as `vta/memory/*`, confirm levels) and a redacted call record (`vta-mcp/src/server.rs:1-30,1093`; `docs/02-vta/vta-mcp.md:29-33,90`; `vta-mcp/src/main.rs:152`), so memory, room `present`, `open` and `seal`, and `device/register` need no wrapper. **Same-tier fallback:** where `vta-mcp` cannot be configured for the agent's identity, the plugin calls the VTA through the TypeScript SDK directly. | Wrapping would duplicate a guard and a call surface the VTA team maintains; the binding that matters is the VTA's ACL entry (D31), not a tool list. | Wrapping or re-implementing `vta-mcp`; a plugin with its own VTA client as the default. |
 | D34 | **Decided (2026-11-24): an agent's memory set may be widened after connect only behind the phone's biometric approval that names every room the agent is in; narrowing needs one confirmation.** (§3.15 step 4.) | It keeps "the set is fixed" true against the agent, the plugin and rooms, while sparing the owner a new agent for each added memory. Cons: a widened set applies at once in every room the agent is in, which is what the naming and the biometric are for. | Never widening (every change a new pairing and VDC); widening with one confirmation only (easier to do by reflex). |
 | D35 | **A memory's id is opaque: `keyring-memory-<random>`, 10 lowercase base32 characters from the phone's secure random generator, never derived from the name, a slug or the owner's DID; the owner's label is the context's `name`.** Decided by the owner on 2026-11-24. The rules, the honest limits and the test spec are §3.15's. | A topic in an id would sit in ACL entries, audit rows, token claims and logs for good, and an id cannot be renamed; a hash of a name is recomputable from a dictionary. A random id keeps the topic out of all of those. A collision is a redraw. | The readable owner segment, the two-word handle, the owner hash and the readable slug (each rejected above; an owner hash, or segment, stays a deferred option only if a VTA ever has several owners); a slug of the name; an id derived from the owner's DID. |
 
@@ -1008,7 +1011,7 @@ Wireframes are in [`agent-connect-plan/mockups/`](./agent-connect-plan/mockups/)
 |---|---|---|
 | Keyring core | Keyring maintainers (Brendan Miller) | 7.2 to 7.5, 7.7 to 7.10, 7.13, 7.14, 7.16, 7.18, 7.20 to 7.23, 7.26 (the logic of each) |
 | UI/UX | UI/UX lane (the product owner's designer) | The screens of 7.7, 7.8, 7.11, 7.13, 7.14, 7.16; the canvas redraw (§6, "Canvas frames pending redraw") |
-| Plugin repository | Plugin maintainer, once §11 Q1 is decided | 7.6, 7.15, 7.19, 7.24, 7.25 |
+| Plugin repository (`berkmancenter/vti-agent-connect`, D39) | Plugin maintainer | 7.6, 7.15, 7.19, 7.24, 7.25 |
 | VTA and upstream recording | Keyring maintainers | 7.1 (findings), this plan's §10 and `vti-asks.md`; the lab's VTA; no filing required |
 | Test and lab | Test lane (the lab owner) | 7.1, 7.11, 7.12, 7.17, 7.24 (the conformance suite) |
 
@@ -1016,7 +1019,7 @@ Wireframes are in [`agent-connect-plan/mockups/`](./agent-connect-plan/mockups/)
 
 ```mermaid
 flowchart LR
-  Q1["Q1 plugin host (open)"]
+  Q1["Q1 plugin host: new repository (D39)"]
   p1["7.1 measure"]
   p2["7.2 link and pairing machine"]
   p3["7.3 VDC"]
@@ -1087,7 +1090,7 @@ flowchart LR
   linkStyle 0,1,2,3,4,5,14,15,19 stroke:#c00,stroke-width:4px
 ```
 
-**The stack, and what runs in parallel.** One step is one PR. Steps 7.2 to 7.4 (pure logic, each after the measurements of 7.1) can run in parallel; 7.7 needs them; 7.8 (the My Agent tab) follows 7.7, which builds the AI agents list it opens on, and 7.9 and 7.10 need 7.7; the plugin repository host (§11 Q1) blocks 7.6 and 7.15 and, through them, 7.12 (the P0 exit), 7.17, 7.19, 7.24 and 7.25, which need the plugin; the harness of 7.5 lets Keyring's side of P0 finish without it.
+**The stack, and what runs in parallel.** One step is one PR. Steps 7.2 to 7.4 (pure logic, each after the measurements of 7.1) can run in parallel; 7.7 needs them; 7.8 (the My Agent tab) follows 7.7, which builds the AI agents list it opens on, and 7.9 and 7.10 need 7.7; the plugin's repository is decided (a new `berkmancenter/vti-agent-connect`, D39), so no step waits on §11 Q1; creating it is the first task of 7.6, and a later move to another organisation is a transfer, not a dependency.
 
 | PR n of N | Step | Tier | Base | Can start after |
 |---|---|---|---|---|
@@ -1096,7 +1099,7 @@ flowchart LR
 | 3 of 26 | 7.3 | P0 | PR 1 | PR 1 |
 | 4 of 26 | 7.4 | P0 | PR 1 | PR 1 |
 | 5 of 26 | 7.5 | P0 | PR 2 | PR 2, PR 3, PR 4 |
-| 6 of 26 | 7.6 | P0 | keyring-agent-plugin (own repository) | PR 5 |
+| 6 of 26 | 7.6 | P0 | berkmancenter/vti-agent-connect (new repository) | PR 5 |
 | 7 of 26 | 7.7 | P0 | PR 5 | PR 3, PR 4, PR 5 |
 | 8 of 26 | 7.8 | P0 | PR 7 | PR 7 |
 | 9 of 26 | 7.9 | P0 | PR 7 | PR 7 |
@@ -1105,7 +1108,7 @@ flowchart LR
 | 12 of 26 | 7.12 | P0 | PR 11 | PR 6, PR 11 |
 | 13 of 26 | 7.13 | P1 | PR 12 | PR 12 |
 | 14 of 26 | 7.14 | P1 | PR 13 | PR 13 |
-| 15 of 26 | 7.15 | P1 | keyring-agent-plugin (own repository) | PR 2, PR 6, PR 13 |
+| 15 of 26 | 7.15 | P1 | berkmancenter/vti-agent-connect (new repository) | PR 2, PR 6, PR 13 |
 | 16 of 26 | 7.16 | P1 | PR 12 | PR 12 |
 | 17 of 26 | 7.17 | P1 | PR 14 | PR 14, PR 15, PR 16 |
 | 18 of 26 | 7.18 | P2 | PR 16 | PR 16 |
@@ -1114,8 +1117,8 @@ flowchart LR
 | 21 of 26 | 7.21 | P2 | PR 14 | PR 14 |
 | 22 of 26 | 7.22 | P2 | PR 17 | PR 17 |
 | 23 of 26 | 7.23 | P1 | PR 12 | PR 12 |
-| 24 of 26 | 7.24 | P1 | keyring-agent-plugin (own repository) | PR 6, PR 12 |
-| 25 of 26 | 7.25 | P2 | keyring-agent-plugin (own repository) | PR 19, PR 24 |
+| 24 of 26 | 7.24 | P1 | berkmancenter/vti-agent-connect (new repository) | PR 6, PR 12 |
+| 25 of 26 | 7.25 | P2 | berkmancenter/vti-agent-connect (new repository) | PR 19, PR 24 |
 | 26 of 26 | 7.26 | P2 | PR 17 | PR 13, PR 17 |
 
 **Upstream dependencies in P0 and P1, and the real fallback** (checked against this plan on 2026-11-24).
@@ -1184,11 +1187,11 @@ flowchart LR
 
 ### 7.6 Step 10: plugin, pairing and chat (P0)
 
-**Owner:** Plugin maintainer (plugin repository lane; needs §11 Q1)
+**Owner:** Plugin maintainer (plugin repository lane)
 
-**Fallback:** the plugin repository's host is open (§11 Q1); until decided, 7.5's harness lets Keyring's side finish; without the channel (VTI-Q35 does not apply here) the `inbox` and Monitor fallback delivers messages (step 0.3).
+**Fallback:** none needed for the host (the new repository, D39; the harness of 7.5 lets Keyring's side finish regardless); where `vta-mcp` cannot be configured for the agent's identity the plugin calls the VTA through the TypeScript SDK directly (D40); the `inbox` and Monitor fallback delivers messages where the channel is unavailable (step 0.3).
 
-**10. Plugin** (own repository, §3.12, D12). *Acceptance:* the repository has the layout of §3.12 with its unit tests in the same change; with the harness replaced by the real plugin, a pairing completes against Keyring's pairing code through the harness of 7.5 on the lab (against the finished Keyring app it is exercised in 7.12); `vta-mcp` runs as `K_a`; the plugin pins the owner's VTA and refuses a `claim` or an `approved` naming another (nothing is enrolled), asks "Pair with ...? [y/N]" before `hello` and any number and refuses to run without a TTY, accepts chat only from `chatDid`, checks the VDC's issuer against `ownerPersonaDid`, signs the acceptance of a re-issued grant only from `chatDid`; it refuses another pairing major with the terminal message and keeps its last `settings` on an unknown `settings` version; the channel and the `inbox` plus Monitor fallback both deliver a message to an idle session (step 0.3). The plugin's `P`, `K_t` and `K_a` each self-grant before their first send, and a refused self-grant prints its line and aborts (§3.2). **The host contract (D38, §3.18):** the core implements the documented `HostContract` and imports no vendor library, and a test greps the core's imports and fails on one; the Claude Code front-end is the first implementation.
+**10. Plugin** (`berkmancenter/vti-agent-connect`, §3.12, D12, D39). *Acceptance:* the repository has the layout of §3.12 with its unit tests in the same change; with the harness replaced by the real plugin, a pairing completes against Keyring's pairing code through the harness of 7.5 on the lab (against the finished Keyring app it is exercised in 7.12); `vta-mcp` runs as `K_a`; the plugin pins the owner's VTA and refuses a `claim` or an `approved` naming another (nothing is enrolled), asks "Pair with ...? [y/N]" before `hello` and any number and refuses to run without a TTY, accepts chat only from `chatDid`, checks the VDC's issuer against `ownerPersonaDid`, signs the acceptance of a re-issued grant only from `chatDid`; it refuses another pairing major with the terminal message and keeps its last `settings` on an unknown `settings` version; the channel and the `inbox` plus Monitor fallback both deliver a message to an idle session (step 0.3). The plugin's `P`, `K_t` and `K_a` each self-grant before their first send, and a refused self-grant prints its line and aborts (§3.2). **The repository (D39, D40):** `berkmancenter/vti-agent-connect` is created with a `LICENSE` (Apache-2.0, the text the VTI and OpenVTC repositories carry), a DCO sign-off requirement and signed commits as `keyring-wallet` and `verifiable-trust-infrastructure` require, a `NOTICE` only if third-party Apache-2.0 code is bundled, and the plugin layout (`.claude-plugin/plugin.json` and a marketplace file; unverified, §3.12); the plugin reuses `vta-mcp` for the VTA's operations and adds only the channel, the inbox, the pairing and the sender gate (D40). **The host contract (D38, §3.18):** the core implements the documented `HostContract` and imports no vendor library, and a test greps the core's imports and fails on one; the Claude Code front-end is the first implementation.
 
 ### 7.7 Step 5: store, list and connect screens, the agent as a contact (P0)
 
@@ -1258,11 +1261,11 @@ flowchart LR
 
 ### 7.15 Step 10b: plugin, rooms, mentions and "Answers other people" (P1)
 
-**Owner:** Plugin maintainer (plugin repository lane; needs §11 Q1)
+**Owner:** Plugin maintainer (plugin repository lane)
 
 **Fallback:** the plugin's hook is the primary control where the VTA's step-up gate is undocumented (VTI-Q35, §3.13).
 
-**10b. Plugin: rooms, mentions and "Answers other people"** (own repository, §3.12, §3.13). *Acceptance:* the plugin accepts room records only from `ownerPersonaDid` (moved here from step 10); it **writes the agent's `memberProfile` record with `delegation` at the first room offer and when the VDC is re-issued, only where the room's profile lists `delegation`** (a test with a profile that does and one that does not; the body is byte-identical to a plain name record where it does not; §3.16); it matches only its own whole handle; it drops a message not authored by the owner's persona (gated on the author, not the room), fences room content, and does not declare `claude/channel/permission`; with the setting on and the hook check passed, the hook denies every tool but `reply` while the marker is `other` and owner events wait for `Stop`; with "Answers other people" off a non-owner mention gets the fixed reply of §3.13 once per author per room per 60 minutes and no more than 20 per hour, the model sees nothing. **Release gate:** the fr and pt-br wording of §3.13 has been reviewed and approved by a native reader of each language, the reviewer's name and date are recorded in the plugin repository's release checklist, and the plugin's release step fails while either is missing (D16).
+**10b. Plugin: rooms, mentions and "Answers other people"** (`berkmancenter/vti-agent-connect`, §3.12, §3.13). *Acceptance:* the plugin accepts room records only from `ownerPersonaDid` (moved here from step 10); it **writes the agent's `memberProfile` record with `delegation` at the first room offer and when the VDC is re-issued, only where the room's profile lists `delegation`** (a test with a profile that does and one that does not; the body is byte-identical to a plain name record where it does not; §3.16); it matches only its own whole handle; it drops a message not authored by the owner's persona (gated on the author, not the room), fences room content, and does not declare `claude/channel/permission`; with the setting on and the hook check passed, the hook denies every tool but `reply` while the marker is `other` and owner events wait for `Stop`; with "Answers other people" off a non-owner mention gets the fixed reply of §3.13 once per author per room per 60 minutes and no more than 20 per hour, the model sees nothing. **Release gate:** the fr and pt-br wording of §3.13 has been reviewed and approved by a native reader of each language, the reviewer's name and date are recorded in the plugin repository's release checklist, and the plugin's release step fails while either is missing (D16).
 
 ### 7.16 Step 12: delete memory (P1)
 
@@ -1290,7 +1293,7 @@ flowchart LR
 
 ### 7.19 Step 15: headless daemon front-end (P2)
 
-**Owner:** Plugin maintainer (plugin repository lane; needs §11 Q1)
+**Owner:** Plugin maintainer (plugin repository lane)
 
 **Fallback:** none needed; no upstream change is required.
 
@@ -1345,7 +1348,7 @@ flowchart LR
 
 **21. Matrix.** Provider adapters on the headless daemon (7.19) and a matrix of at least three host or model combinations passing the 7.24 suite. *Acceptance:* the suite passes on each combination; the combinations and versions tested are recorded. **Exit: the model-agnostic claim is evidenced on three combinations. Test `agent-connect-p2-matrix`.**
 
-### 7.26 Step 22: join a room by scanning a code (P2, placeholder)
+### 7.26 Step 22: join a room by scanning a code, a placeholder (P2)
 
 **Owner:** Keyring core and the UI/UX lane
 
@@ -1450,11 +1453,13 @@ Asks are **recorded** here and in the running ledger [`agent-connect-plan/vti-as
 
 ## 11. Open questions
 
-Two decisions are open (Q1 and Q5); the live check of step 0.1(p) is a measurement, not a decision. Q2, Q3 and Q4 were decided by the owner on 2026-11-24 and are stated as design (D32, D35, D34). Everything else that was an open question here was decided with the owner on 2026-11-20 and is stated as design where it applies; the reasoning is in [`agent-connect-plan/2026-11-20-bam.md`](./agent-connect-plan/2026-11-20-bam.md) finding 20, and the later decisions in its finding 21.
+One decision is open (Q5); the live check of step 0.1(p) is a measurement, not a decision. Q2, Q3 and Q4 were decided by the owner on 2026-11-24 and are stated as design (D32, D35, D34). Everything else that was an open question here was decided with the owner on 2026-11-20 and is stated as design where it applies; the reasoning is in [`agent-connect-plan/2026-11-20-bam.md`](./agent-connect-plan/2026-11-20-bam.md) finding 20, and the later decisions in its finding 21.
 
 | # | Question | Owner | Recommendation |
 |---|---|---|---|
-| Q1 | Where is the `keyring-agent-plugin` repository hosted (§3.12, D17): the OpenVTC organisation, or the owner's own? Needed before step 10 creates it. | Owner | **Recommendation: the owner's own organisation now, and offer a transfer to OpenVTC once the `agent-connect` flow is proposed upstream.** Reason: the plugin's pairing is a Keyring draft flow with placeholder type URIs (§4), and D12 chose not to build inside OpenVTC's repositories; a repository can be transferred later with its links redirected, while moving the other way after OpenVTC adopts it is harder. |
+| Q1 | Where is the plugin hosted (§3.12, D12, D17)? | Owner | **Decided 2026-11-24 (D39):** a new, separate repository under our own organisation, `berkmancenter/vti-agent-connect` (the same organisation as keyring-wallet; a host-neutral name, D38), Apache-2.0 like the other VTI and OpenVTC repositories; a GitHub transfer later (for example to OpenVTC) keeps its history and is a move, not a dependency. The repository is not created by this plan. |
+Options considered for Q1 (the decision is D39: our own organisation, a new repository):
+
 | Option | Pros | Cons |
 |---|---|---|
 | Owner's own organisation | No agreement or review needed from anyone; the owner controls release timing, the licence and the fr and pt-br gate; fits a draft flow that upstream has not accepted; a later transfer is possible | Less discoverable beside `vta-agent-memory`; reads as unofficial to people who look for an OpenVTC plugin; one maintainer |
