@@ -26,13 +26,16 @@ export const VTA_READ_LANE_SIZE = 3
  * The tasks that may share the lane: reads only, by exact type and version. Every browse version the ladder may send
  * is here, newest first, so a newer one added to the ladder fails the version guard until it is added here too.
  *
- * What may share the lane, not what is sent: browse 0.2 is held here, and the ladder (`browseType`) sends 0.3 or 0.1.
+ * What may share the lane, not what is sent: browse 0.2 is held here, and the ladders (`browseType`, `windowType`)
+ * send 0.6 down to 0.1.
  *
  * @versionCoverage rooms/keys/browse rooms/keys/read
  */
 export const VTA_READ_LANE_TYPES: ReadonlySet<string> = new Set([
   'https://trusttasks.org/spec/rooms/keys/read/0.2',
   'https://trusttasks.org/spec/rooms/keys/read/0.1',
+  'https://trusttasks.org/spec/rooms/keys/browse/0.6',
+  'https://trusttasks.org/spec/rooms/keys/browse/0.5',
   'https://trusttasks.org/spec/rooms/keys/browse/0.4',
   'https://trusttasks.org/spec/rooms/keys/browse/0.3',
   'https://trusttasks.org/spec/rooms/keys/browse/0.2',

@@ -9,6 +9,7 @@
  */
 import { deriveRoomCapabilities, sampleCapabilities } from '../capabilities'
 import { inertFlags, toInertText } from '../inertText'
+import { windowOf } from '../listingWindow'
 import { chatMessageBody } from '../roomPosts'
 import type {
   AgentGrant,
@@ -257,14 +258,15 @@ export function createSampleRoomsService(options: { now?: () => number } = {}): 
     async roomCapabilities(roomId) {
       return deriveRoomCapabilities(sampleCapabilities(), room(roomId))
     },
-    async listNotes(roomId, { sinceVersion = 0 } = {}) {
-      return {
+    async listNotes(roomId, { sinceVersion = 0, head, beforeVersion } = {}) {
+      const list = {
         notes: room(roomId)
-          .notes.filter((n) => n.version > sinceVersion)
+          .notes.filter((n) => head !== undefined || n.version > sinceVersion)
           .map(({ body: _body, ...summary }) => summary),
         complete: true,
         check: { verdict: 'consistent' as const, detail: 'sample data' },
       }
+      return head !== undefined ? windowOf(list, head, beforeVersion) : list
     },
     async readNote(roomId, key): Promise<Note> {
       const note = room(roomId).notes.find((n) => n.key === key)

@@ -165,6 +165,8 @@ export const PHONE_SENDS: readonly string[] = [
   'rooms/keys/browse/0.1',
   'rooms/keys/browse/0.3',
   'rooms/keys/browse/0.4',
+  'rooms/keys/browse/0.5',
+  'rooms/keys/browse/0.6',
   'rooms/keys/read/0.1',
   'rooms/keys/read/0.2',
   'rooms/keys/watch/0.1',
