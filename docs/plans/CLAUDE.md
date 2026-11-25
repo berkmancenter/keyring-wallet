@@ -427,6 +427,14 @@ fact about an external spec, not about our history.
 - **Flag conditional designs.** If an approach depends on a decision that has not
   been made, say so at the approach, not only in an open-questions list. A plan
   that quietly assumes its own precondition reads as settled.
+- **Name the person, never the role.** A decision, review, rule or ask is
+  credited to the person who made it, by name ("Brendan", "Alberto", "Brendan
+  and Alberto"), never as "the user", "the product owner" or "the owner".
+  Several people and their agents write these plans, and to each agent "the
+  user" is whoever it is working for, so the same title names a different
+  person depending on who wrote the line, and a later reader cannot tell whose
+  decision it was. In a plan's own text "the owner" still means the product's
+  user (the person who owns an agent, a room or a VTA), never a plan's author.
 
 ## Writing a dated companion
 
