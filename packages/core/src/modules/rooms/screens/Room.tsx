@@ -84,7 +84,7 @@ import { type RoomListing, useRoom } from '../useRoom'
 import { POSTS_PAGE, ROOM_POLL_MS, useRoomPosts } from '../useRoomPosts'
 import { markRoomSeen, useRoomRows } from '../useRoomRows'
 import { useRoomDraft } from '../useRoomDraft'
-import { type PendingPost, useRoomSend } from '../useRoomSend'
+import { listedKeyOf, type PendingPost, useRoomSend } from '../useRoomSend'
 import { useRoomsService } from '../useRoomsService'
 import { useRoomThread } from '../useRoomThread'
 import { isPendingRecordKey, usePendingWrites, withPendingWrites } from '../pendingRecordWrites'
@@ -294,7 +294,7 @@ const Room: React.FC = () => {
     }
   }, [uploadOn, service, roomId])
   const { settle } = outbox
-  // A sent post leaves the outbox once the room's own list shows it.
+  // A post leaves the outbox once the room's own list shows it, whatever its own answer said (useRoomSend, IN-736).
   useEffect(() => {
     if (feed.posts) settle(new Set(feed.posts.map((p) => p.key)))
   }, [feed.posts, settle])
@@ -306,7 +306,12 @@ const Room: React.FC = () => {
   // frame it showed twice, and the chat jumped up a bubble and back (279.3): it is left out here as soon as it is listed.
   const pendingPosts = useMemo(() => {
     const listed = new Set(feed.posts?.map((p) => p.key))
-    return outbox.pending.filter((p) => !(p.key && listed.has(p.key))).map((p) => pendingAsPost(p, room?.actingAs))
+    return outbox.pending
+      .filter((p) => {
+        const key = listedKeyOf(p)
+        return !(key && listed.has(key))
+      })
+      .map((p) => pendingAsPost(p, room?.actingAs))
   }, [outbox.pending, feed.posts, room?.actingAs])
   // The list is drawn from the bottom up, so offset 0 is the newest post: a post just sent shows there.
   const list = useRef<FlatList<Item>>(null)

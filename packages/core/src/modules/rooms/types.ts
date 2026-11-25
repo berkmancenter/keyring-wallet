@@ -587,6 +587,12 @@ export interface RoomsService {
    * asks for one again after a wait where the host had none to give. Sends nothing otherwise.
    */
   renewRoomWatch?(roomId: string): void
+  /**
+   * The key a post's record takes, from its idempotency key, known before it is sent: the room's list showing it means
+   * the post is there, whatever its write's answer said (useRoomSend). Absent: posts are matched by the key a write
+   * answers with, and only then.
+   */
+  postKeyFor?(idempotencyKey: string): string
   /** True while `roomId` has a watch armed: its timed poll can wait, and a change comes through `onRoomChanged`. */
   roomWatched?(roomId: string): boolean
   /** Hear each room a watch said changed: read it once. Returns the way to stop hearing. */
