@@ -1514,7 +1514,8 @@
       "InProgress": "Exchange in progress...",
       "ExchangingCards": "Exchanging contact cards...",
       "TookTooLong": "The exchange took too long. You may need to reconnect and try again.",
-      "DidNotComplete": "The exchange didn't complete. You may need to try connecting again."
+      "DidNotComplete": "The exchange didn't complete. You may need to try connecting again.",
+      "DidNotReach": "Your scan never reached the other phone, so it is still waiting for one. Ask them for a new code and scan again."
     },
     "Connected": {
       "Text": "You connected with {{name}} and can now message securely",
@@ -3130,6 +3131,7 @@
   },
   "LateStep": {
     "KeepOpenShare": "Keyring has to stay open on both phones until this finishes: the other person's steps can't reach you while it's closed.",
+    "NoScanArrived": "Did they scan already and nothing happened? Their phone could not reach yours. Go back and open this screen again for a new code.",
     "KeepOpen": "Keyring has to stay open on both phones until this finishes. {{name}}'s steps can't reach you while it's closed.",
     "HeldTitleConnected": "{{name}} accepted your card {{minutes}} min ago",
     "HeldTitleAccepted": "{{name}} accepted {{minutes}} min ago",

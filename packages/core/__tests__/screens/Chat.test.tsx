@@ -323,26 +323,28 @@ describe('Chat screen when the exchange fails on this phone', () => {
       </BasicAppContext>
     )
 
-  test('a first contact whose send failed: "didn’t complete" at once, never "sent N min ago", and it can be dismissed', () => {
+  test('a first contact whose send failed: "never reached the other phone" at once, never "sent N min ago", and it can be dismissed', () => {
     const tree = rendered()
     act(() => {
       vrcFlowStore.setStatus('1', 'connecting', false)
     })
     expect(tree.getByText('Chat.Flow.Connecting')).toBeTruthy()
-    // The send failed on this phone (a mailbox send refused): the flow ends as an error.
+    // The send failed on this phone (a mailbox send refused): the flow ends as an error. From `connecting`, the words
+    // are the first contact's: the scan never reached the other phone, ask for a new code (not "try connecting again").
     act(() => {
       vrcFlowStore.clearFlow('1', 'error')
     })
-    expect(tree.getByText('Chat.Flow.DidNotComplete')).toBeTruthy()
+    expect(tree.getByText('Chat.Flow.DidNotReach')).toBeTruthy()
+    expect(tree.queryByText('Chat.Flow.DidNotComplete')).toBeNull()
     expect(tree.queryByText('LateStep.WaitingSince')).toBeNull()
     // Not after the stall timeout either: the waiting card never appears for a flow that has ended.
     act(() => {
       jest.advanceTimersByTime(FLOW_TIMEOUT_MS_NON_WITNESSED)
     })
     expect(tree.queryByText('LateStep.WaitingSince')).toBeNull()
-    expect(tree.getByText('Chat.Flow.DidNotComplete')).toBeTruthy()
+    expect(tree.getByText('Chat.Flow.DidNotReach')).toBeTruthy()
     fireEvent.press(tree.getByText('Global.Dismiss'))
-    expect(tree.queryByText('Chat.Flow.DidNotComplete')).toBeNull()
+    expect(tree.queryByText('Chat.Flow.DidNotReach')).toBeNull()
   })
 
   test('a delivery that failed after the acceptance: "didn’t complete" at once, not after the stall timeout', () => {

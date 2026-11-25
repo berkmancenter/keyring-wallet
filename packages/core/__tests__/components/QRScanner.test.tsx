@@ -258,6 +258,39 @@ describe('QRScanner Component', () => {
     expect(tree).toMatchSnapshot()
   })
 
+  test('the QR code view says to ask for a new code once a code has been up three minutes with nothing arriving', async () => {
+    // A scan whose first message never reached this phone (the other phone's send failed) looks exactly like no
+    // scan: the keep-open line gives way to the one way forward, a new code (2026-11-21).
+    useAgent().agent?.modules.didcomm.oob.createInvitation.mockReturnValue({
+      outOfBandInvitation: { toUrl: () => 'https://example.com/invitation' },
+    })
+    const tree = render(
+      <StoreProvider
+        initialState={{ ...defaultState, preferences: { ...defaultState.preferences, walletName: 'My Wallet' } }}
+      >
+        <BasicAppContext>
+          <QRScanner
+            showTabs={false}
+            defaultToConnect={true}
+            handleCodeScan={() => Promise.resolve()}
+            navigation={navigation as any}
+            route={{} as any}
+          />
+        </BasicAppContext>
+      </StoreProvider>
+    )
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(1000)
+    })
+    const line = tree.getByTestId(testIdWithKey('MyQRShareLinkKeepOpen'))
+    expect(line).toHaveTextContent('LateStep.KeepOpenShare')
+
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(3 * 60 * 1000)
+    })
+    expect(tree.getByTestId(testIdWithKey('MyQRShareLinkKeepOpen'))).toHaveTextContent('LateStep.NoScanArrived')
+  })
+
   test('Does not show wallet name edit in QR code view mode when defaultToConnect is true', async () => {
     // @ts-expect-error useAgent will be replaced with a mock which will have this method
     useAgent().agent?.modules.didcomm.oob.createInvitation.mockReturnValue({

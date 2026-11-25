@@ -1465,7 +1465,8 @@
       "InProgress": "Échange en cours...",
       "ExchangingCards": "Échange des cartes de contact...",
       "TookTooLong": "L'échange a pris trop de temps. Vous devrez peut-être vous reconnecter et réessayer.",
-      "DidNotComplete": "L'échange n'a pas abouti. Vous devrez peut-être réessayer de vous connecter."
+      "DidNotComplete": "L'échange n'a pas abouti. Vous devrez peut-être réessayer de vous connecter.",
+      "DidNotReach": "Votre scan n'a jamais atteint l'autre téléphone, qui attend donc toujours un scan. Demandez-lui un nouveau code et scannez à nouveau."
     },
     "Connected": {
       "Text": "Vous êtes connecté à {{name}} et pouvez maintenant échanger des messages en toute sécurité",
@@ -3088,6 +3089,7 @@
   },
   "LateStep": {
     "KeepOpenShare": "Keyring doit rester ouvert sur les deux téléphones jusqu'à la fin : les étapes de l'autre personne ne peuvent pas vous parvenir quand il est fermé.",
+    "NoScanArrived": "L'autre personne a déjà scanné et rien ne s'est passé ? Son téléphone n'a pas pu joindre le vôtre. Revenez en arrière et rouvrez cet écran pour obtenir un nouveau code.",
     "KeepOpen": "Keyring doit rester ouvert sur les deux téléphones jusqu'à la fin. Les étapes de {{name}} ne peuvent pas vous parvenir quand il est fermé.",
     "HeldTitleConnected": "{{name}} a accepté votre carte il y a {{minutes}} min",
     "HeldTitleAccepted": "{{name}} a accepté il y a {{minutes}} min",

@@ -1393,7 +1393,8 @@
       "InProgress": "Troca em andamento...",
       "ExchangingCards": "Trocando cartões de contato...",
       "TookTooLong": "A troca demorou demais. Talvez você precise se reconectar e tentar de novo.",
-      "DidNotComplete": "A troca não foi concluída. Talvez você precise tentar se conectar de novo."
+      "DidNotComplete": "A troca não foi concluída. Talvez você precise tentar se conectar de novo.",
+      "DidNotReach": "Sua leitura nunca chegou ao outro telefone, que ainda está esperando por uma. Peça um novo código e leia de novo."
     },
     "Connected": {
       "Text": "Você se conectou com {{name}} e agora pode trocar mensagens com segurança",
@@ -3004,6 +3005,7 @@
   },
   "LateStep": {
     "KeepOpenShare": "O Keyring precisa ficar aberto nos dois telefones até terminar: as etapas da outra pessoa não chegam até você com ele fechado.",
+    "NoScanArrived": "A outra pessoa já leu o código e nada aconteceu? O telefone dela não conseguiu alcançar o seu. Volte e abra esta tela de novo para um novo código.",
     "KeepOpen": "O Keyring precisa ficar aberto nos dois telefones até terminar. As etapas de {{name}} não chegam até você com ele fechado.",
     "HeldTitleConnected": "{{name}} aceitou seu cartão há {{minutes}} min",
     "HeldTitleAccepted": "{{name}} aceitou há {{minutes}} min",
