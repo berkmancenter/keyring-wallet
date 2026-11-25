@@ -569,6 +569,8 @@ export interface RoomsService {
    * Counted per room. None for the sample.
    */
   roomInView?(roomId: string, inView: boolean): void
+  /** Whether a room is open on a screen and in view now (roomInView): Messages reads its row first. */
+  isRoomInView?(roomId: string): boolean
   /**
    * Ask to hear when `roomId` moves past `sinceVersion` (the newest version read), instead of polling it: where the
    * agent and the room's host can watch, the room is armed at its host. Returns at once; nothing is said if it can't.

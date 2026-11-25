@@ -893,6 +893,10 @@ export class AgentRoomsService implements RoomsService {
     else this.inView.delete(roomId)
   }
 
+  public isRoomInView(roomId: string): boolean {
+    return this.inView.has(roomId)
+  }
+
   private namingMember(type: string, payload: Record<string, unknown>): Record<string, unknown> {
     if (!CUSTODY_TASK.test(type) || typeof payload.roomId !== 'string') return payload
     const roomId = payload.roomId
