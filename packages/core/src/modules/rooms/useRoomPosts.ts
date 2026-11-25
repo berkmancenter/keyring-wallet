@@ -280,7 +280,12 @@ function keptOf(post: RoomPost): CachedPost | undefined {
  * A listing, counted in `inFlight` until it settles, even when the call throws before it returns a promise: left
  * counted, every later poll would be skipped for the life of the screen.
  */
-function counted(inFlight: { current: number }, list: () => Promise<NoteList>): Promise<NoteList> {
+function counted(
+  inFlight: { current: number },
+  list: () => Promise<NoteList>,
+  /** Called once no listing is out any more, after what the last one answered has been taken in. */
+  idle?: () => void
+): Promise<NoteList> {
   let asked: Promise<NoteList>
   try {
     asked = list()
@@ -290,6 +295,8 @@ function counted(inFlight: { current: number }, list: () => Promise<NoteList>): 
   inFlight.current++
   return asked.finally(() => {
     inFlight.current--
+    // Later than the caller's own handlers, which are chained on what this returns: the listing is merged first.
+    if (inFlight.current === 0 && idle) setTimeout(idle, 0)
   })
 }
 
@@ -381,6 +388,18 @@ export function useRoomPosts(
   }, [])
   // The poll of the room while it is polled, for `pollNow`.
   const tickNow = useRef<(() => void) | undefined>(undefined)
+  /**
+   * A signal came while a listing was out, so its tick did not list (probe C, review of #1024). That listing may have
+   * been asked before the change, and a live watch's host signals each change once: it is read once more when no
+   * listing is out (`afterListings`).
+   */
+  const owedSignal = useRef(false)
+  const signalTick = useRef<(() => void) | undefined>(undefined)
+  const afterListings = useCallback(() => {
+    if (!owedSignal.current) return
+    owedSignal.current = false
+    signalTick.current?.()
+  }, [])
   /** When the last listing of the room was asked: a watched room's poll waits ROOM_WATCHED_POLL_MS from it. */
   const askedAt = useRef(0)
   /** The member's own successful writes the posts do not carry yet (awaitWrites): a watched room polls at its old pace. */
@@ -487,7 +506,7 @@ export function useRoomPosts(
         () => undefined
       )
     olderAsked.current = undefined
-    counted(listingsInFlight, () => listHead(service, roomId)).then(
+    counted(listingsInFlight, () => listHead(service, roomId), afterListings).then(
       (list) => {
         skips.current = 0
         if (!current) return
@@ -550,7 +569,11 @@ export function useRoomPosts(
         skips.current--
         return
       }
-      if (listingsInFlight.current > 0) return
+      if (listingsInFlight.current > 0) {
+        // A listing out answers what was there when it was asked. A signal is owed a read after it (afterListings).
+        if (signalled) owedSignal.current = true
+        return
+      }
       // Watched: a change is told and read at once (below), and a timed tick is only the fallback for a signal lost.
       // The tick a signal starts is never held here: a one-shot watch is spent by its signal, but a live one is not, so
       // it still reads as watched, and until IN-756 its signal was held like a timed tick and the open room showed the
@@ -565,8 +588,10 @@ export function useRoomPosts(
         return
       askedAt.current = Date.now()
       const sentOn = openedAt.current
-      counted(listingsInFlight, () =>
-        service.listNotes(roomId, { sinceVersion: newestVersion(listingNow.current?.notes ?? []) })
+      counted(
+        listingsInFlight,
+        () => service.listNotes(roomId, { sinceVersion: newestVersion(listingNow.current?.notes ?? []) }),
+        afterListings
       ).then(
         (newer) => {
           if (current) notePoll(false)
@@ -577,7 +602,7 @@ export function useRoomPosts(
             // session it was sent on, so only a session opened since asks again at once.
             const fullOn = openedAt.current
             const size = Math.min(1000, Math.max(ROOM_HEAD_WINDOW, now.notes.length))
-            counted(listingsInFlight, () => listHead(service, roomId, size)).then(
+            counted(listingsInFlight, () => listHead(service, roomId, size), afterListings).then(
               (full) => {
                 if (!current) return
                 const replaced = listingOf(full)
@@ -614,13 +639,17 @@ export function useRoomPosts(
     if (resumed.current && skips.current === 0) tick()
     resumed.current = false
     const timer = setInterval(() => tick(), ROOM_POLL_MS)
-    // The member's own "Try again": read now, as a signal is.
+    // Read now, as a signal is: the member's own "Try again" (pollNow), and the agent coming back after a failed poll
+    // (the effect below that watches the session).
     tickNow.current = () => {
       skips.current = 0
       tick(true)
     }
-    // The room's watch said it changed: read it now, once. A listing already out reads it, and arms the watch again
-    // from what it found, so a change it missed is signalled again at once.
+    signalTick.current = () => tick(true)
+    // The room's watch said it changed: read it now, once. With a listing already out, the read is owed and goes
+    // when no listing is out (afterListings): that listing may have been asked before the change. Only a one-shot watch
+    // is armed again by what a listing finds, so that a change it missed is signalled again; a live watch's host
+    // signals each change once, and a signal not read is not sent twice.
     const stopHearing = service.onRoomChanged?.((changed) => {
       if (changed === roomId) tick(true)
     })
@@ -630,6 +659,8 @@ export function useRoomPosts(
       clearInterval(timer)
       resumed.current = true
       tickNow.current = undefined
+      signalTick.current = undefined
+      owedSignal.current = false
     }
   }, [service, roomId, enabled, live, listed, notePoll])
 
@@ -667,7 +698,11 @@ export function useRoomPosts(
       const asked = { below, settled: false }
       olderAsked.current = asked
       const askedFor = reads.current
-      counted(listingsInFlight, () => service.listNotes(roomId, { head: ROOM_HEAD_WINDOW, beforeVersion: below })).then(
+      counted(
+        listingsInFlight,
+        () => service.listNotes(roomId, { head: ROOM_HEAD_WINDOW, beforeVersion: below }),
+        afterListings
+      ).then(
         (older) => {
           asked.settled = true
           const held = listingNow.current
