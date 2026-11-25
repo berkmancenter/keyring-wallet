@@ -291,6 +291,11 @@ async function readRoom(service: RoomsService, room: RoomSummary, track: Track |
     : isRoomsNewestFirstOn()
       ? await service.listNotes(room.roomId, { head: ROOM_HEAD_WINDOW })
       : await service.listNotes(room.roomId)
+  // The room was marked unread on another device while this read was out (adoptReadMarker dropped its track so the next
+  // read starts from the marker): the track carried in is stale, and building on it would put back the "seen" the mark
+  // took away. Read it afresh, as a room met for the first time is. Found in review of #1007 (a probe that held a
+  // listing while the marker moved back).
+  if (track && !tracks.get(service)?.has(room.roomId)) return readRoom(service, room, undefined)
   // A first listing that stopped early with nothing in it says nothing about the room: still unread, not empty. Only a
   // first read: a listing asked with `sinceVersion` is never complete (types.ts), so this on a refresh would leave every
   // room unread for ever. readAll catches it per room, so the other rooms read on.

@@ -1524,4 +1524,41 @@ describe("read markers kept by the person's agent", () => {
     expect(s.listNotes.mock.calls).toHaveLength(reads + 1)
     expect(s.listNotes.mock.calls[reads][1]?.sinceVersion).toBeUndefined()
   })
+
+  // Review of #1007 (the review lane's probe): a read of the room already out when the mark arrived carried the track
+  // from before it, and put back the "seen" the mark had taken away. Unread went to 0 where it should have been 2.
+  const markedWhileReading = async (withRead: boolean) => {
+    const s = serviceWith([room('planning')], { planning: [note('n1', 1), note('n2', 2), note('n3', 3)] })
+    const { tell } = withMarkers(s)
+    const { list } = mount(s)
+    await flush()
+    expect(list.result.current.rows.rows[0].unread).toBe(0)
+    let release: () => void = () => undefined
+    if (withRead) {
+      // The next listing of the room, from the newest version held, is held until after the mark.
+      s.listNotes.mockImplementationOnce(
+        () =>
+          new Promise<NoteList>(
+            (resolve) =>
+              (release = () => resolve({ notes: [], complete: true, check: { verdict: 'consistent', detail: '' } }))
+          )
+      )
+      act(() => refreshRoomRows())
+      await flush()
+    }
+    tell('planning', 1, 'moved')
+    await flush()
+    await act(async () => release())
+    await flush()
+    await flush()
+    return list.result.current.rows.rows[0].unread
+  }
+
+  test('marked unread while a read of the room is out: that read does not put back what the mark took away', async () => {
+    expect(await markedWhileReading(true)).toBe(2)
+  })
+
+  test('marked unread with no read out (control: the same answer either way)', async () => {
+    expect(await markedWhileReading(false)).toBe(2)
+  })
 })
