@@ -62,7 +62,7 @@ function run(
   host: ReturnType<typeof roomHost>,
   wallet: ReturnType<typeof cacheWallet>,
   seals: Record<number, 'hang' | 'fail'> = {},
-  { journal = true }: { journal?: boolean } = {}
+  { journal = true, stoppedEarly = false }: { journal?: boolean; stoppedEarly?: boolean } = {}
 ) {
   const clock = { now: T0 }
   let sealed = 0
@@ -71,6 +71,8 @@ function run(
       case ROOMS_TASK.keysList02:
         return { rooms: [{ roomId: ROOM, epoch: 3, earliestReadableEpoch: 0, member: ME }] }
       case ROOMS_TASK.keysBrowse:
+        // A host that stopped early: a page with nothing of the room's newer records, and not the end.
+        if (stoppedEarly) return { records: [{ key: 'older', version: 1, status: 'active' }], complete: false }
         return {
           records: [
             { key: 'older', version: 1, status: 'active' },
@@ -349,6 +351,49 @@ describe('a post kept as being written is let go', () => {
     await first.settle()
     await sweepMessageCache(wallet, [{ communityDid: COMMUNITY.did, personaDid: ME }], T0 + DAY)
     expect(keptSends(wallet)).toHaveLength(1)
+  })
+})
+
+describe('a post left under a wrong seal by a failed write is kept no longer than', () => {
+  test('a retry that fails too: let go, and the loss said', async () => {
+    const host = roomHost()
+    const wallet = cacheWallet()
+    const r = run(host, wallet, { 2: 'fail', 3: 'fail' })
+    await r.openWatched()
+    r.landsUnseen()
+    await expect(r.send('post-1')).rejects.toThrow()
+    expect(keptSends(wallet)).toHaveLength(1)
+    await expect(r.send('post-1')).rejects.toThrow()
+    expect(keptSends(wallet)).toEqual([])
+    expect(r.warn).toHaveBeenCalledWith(expect.stringContaining('let go: its retry failed'))
+  })
+
+  test("the same run's next listing of the room, which seals it again and lets it go", async () => {
+    const host = roomHost()
+    const wallet = cacheWallet()
+    const r = run(host, wallet, { 2: 'fail' })
+    await r.openWatched()
+    r.landsUnseen()
+    await expect(r.send('post-1')).rejects.toThrow()
+    expect(keptSends(wallet)).toHaveLength(1)
+    await r.list()
+    expect(opens(host, r.service, 'post-1')).toBe(true)
+    expect(keptSends(wallet)).toEqual([])
+  })
+
+  test('a next listing that cannot show it: let go unchecked, and said', async () => {
+    const host = roomHost()
+    const wallet = cacheWallet()
+    const first = run(host, wallet, { 2: 'hang' })
+    await first.openWatched()
+    first.landsUnseen()
+    void first.send('post-1')
+    await first.settle()
+    expect(keptSends(wallet)).toHaveLength(1)
+    const second = run(host, wallet, {}, { stoppedEarly: true })
+    await second.list()
+    expect(keptSends(wallet)).toEqual([])
+    expect(second.warn).toHaveBeenCalledWith(expect.stringContaining('let go unchecked'))
   })
 })
 

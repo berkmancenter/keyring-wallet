@@ -1216,9 +1216,11 @@ export class AgentRoomsService implements RoomsService {
    * - listed at the version it had before the write (an edit's), or absent where the listing would show it: nothing
    *   of it landed, and it is not sent again (an app stopped before it, as before);
    * - listed at another version: it landed under a wrong seal, and is sealed and put again over itself there;
-   * - absent where the listing could not show it (a window above it, a listing that stopped early): left for a later one.
+   * - absent where the listing could not show it (a window above it, a listing that stopped early): undecided, and let go
+   *   all the same, with a line saying so.
    *
-   * Settled once decided, whether or not the repair went through (Alberto's rule). Says one line a kind, never a word.
+   * Every kept post is let go at the room's next listing, whether or not its repair went through (Alberto's rule, 11-26):
+   * none outlives a listing. Says one line a kind, never a word.
    */
   private settleLeftSends(roomId: string, records: readonly { key: string; version: number }[], covers: ListingCovers) {
     const journal = this.backend.sendsInFlight
@@ -1243,7 +1245,12 @@ export class AgentRoomsService implements RoomsService {
     for (const send of await journal.left(place)) {
       if (this.sendingNow.has(listedKey(roomId, send.key))) continue
       const listed = records.find((r) => r.key === send.key)?.version
-      if (listed === undefined && !covers(send.from)) continue
+      // Where this listing cannot show it, nothing is decided, and it is let go all the same: a kept post never outlives
+      // the room's next listing (Alberto's rule, 11-26).
+      if (listed === undefined && !covers(send.from))
+        this.backend.warn(
+          `rooms: ${logRef(roomId)} a post left being written was let go unchecked: the listing could not show it`
+        )
       if (listed !== undefined && listed !== send.sealedFor && listed !== send.before) {
         try {
           const note = { title: '', body: send.body, members: send.members as RecordMembers }
@@ -2659,6 +2666,8 @@ export class AgentRoomsService implements RoomsService {
   ): Promise<{ key: string; version: number }> {
     const [room, , , key, , , , , sending] = args
     const sealedKey = listedKey(room.roomId, key)
+    // A retry of a post this run left under a wrong seal: kept no longer than this retry (Alberto's rule, 11-26).
+    const retry = this.wrongSeals.has(sealedKey)
     this.sendingNow.add(sealedKey)
     try {
       const written = await this.writeSealedOnce(...args)
@@ -2667,9 +2676,13 @@ export class AgentRoomsService implements RoomsService {
     } catch (e) {
       this.heldLast = undefined
       this.heads.delete(args[0].roomId)
-      // The write ended. Kept only where it left the post under another version's seal: the room's next listing
-      // finishes it, as a retry here would (wrongSeals).
-      if (!this.wrongSeals.has(sealedKey)) await this.settleSend(sending, key)
+      // The write ended. Kept only where it left the post under another version's seal, and only until the first of a
+      // retry ending or the room's next listing (settleLeftSends), which finishes it as a retry here would (wrongSeals).
+      if (retry && this.wrongSeals.has(sealedKey))
+        this.backend.warn(
+          `rooms: ${logRef(room.roomId)} a post left under another version's seal was let go: its retry failed`
+        )
+      if (retry || !this.wrongSeals.has(sealedKey)) await this.settleSend(sending, key)
       throw e
     } finally {
       this.sendingNow.delete(sealedKey)
