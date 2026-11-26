@@ -9,7 +9,7 @@
 
 import type { Agent } from '@credo-ts/core'
 
-import { deleteKeyed, getKeyed, listKeyed, putKeyed } from '../trust-tasks/module/keyedRecords'
+import { deleteKeyed, getKeyed, listKeyed, putKeyed, withKeyLock } from '../trust-tasks/module/keyedRecords'
 import type { LockoutStore } from './lockout'
 import type { SpentRequestStore } from './pairing'
 import type { AgentConnection } from './types'
@@ -19,7 +19,11 @@ const CONNECTION = 'connection'
 const LOCKOUT = 'lockout'
 const SPENT = 'spent-request'
 
-/** The `AgentConnection` records, one per agent (keyed by the agent's DID). */
+/**
+ * The `AgentConnection` records, one per agent, keyed by `id`: the agent's FIRST key, stable for the record's life.
+ * `agentDid` is its CURRENT key, which step 7.10's reconcile records after a rotation (§3.9); look a record up by `id`,
+ * and address the VTA by `agentDid`.
+ */
 export class AgentConnectionStore {
   public constructor(private readonly agent: Agent) {}
 
@@ -33,6 +37,30 @@ export class AgentConnectionStore {
 
   public put(record: AgentConnection): Promise<void> {
     return putKeyed(this.agent, RECORD_TYPE, CONNECTION, record.id, record as unknown as Record<string, unknown>)
+  }
+
+  /**
+   * Read, change and write one record as a single step, so two writers cannot lose each other's change (the driver's
+   * VDC grant and step 7.10's reconcile both write records at app start). `put` alone queues writes per key but does
+   * not make a read-modify-write atomic. Every read-modify-write goes through here. Undefined when there is no record.
+   */
+  public update(
+    id: string,
+    change: (record: AgentConnection) => AgentConnection
+  ): Promise<AgentConnection | undefined> {
+    return withKeyLock(`${RECORD_TYPE}|update|${id}`, async () => {
+      const record = await this.get(id)
+      if (!record) return undefined
+      const next = change(record)
+      if (next.id !== id) throw new Error('an update cannot change a record id')
+      await this.put(next)
+      return next
+    })
+  }
+
+  /** The record whose id or current key (`agentDid`) is `did`, if any. */
+  public async findByKey(did: string): Promise<AgentConnection | undefined> {
+    return (await this.list()).find((r) => r.id === did || r.agentDid === did)
   }
 
   public remove(id: string): Promise<void> {

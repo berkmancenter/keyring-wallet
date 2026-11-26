@@ -4,6 +4,7 @@ import { memoryGenericRecords } from '../../../../__tests__/modules/vrc/fixtures
 import { PairingLockout } from '../lockout'
 import { AgentConnectionStore, KeyedLockoutStore, KeyedSpentRequestStore } from '../store'
 import { agentRecord, FIXTURE_NOW } from '../testing/fixtures'
+import type { AgentConnection } from '../types'
 
 function fakeAgent() {
   const genericRecords = memoryGenericRecords()
@@ -30,6 +31,53 @@ describe('AgentConnectionStore (§3.11)', () => {
     await store.remove('did:key:z6MkNeverThere')
     expect((await store.list()).map((r) => r.id)).toEqual(['did:key:z6MkOther'])
     expect(await store.get(agentRecord().id)).toBeUndefined()
+  })
+})
+
+describe('AgentConnectionStore.update: one read-modify-write at a time per record', () => {
+  it("two concurrent updates of one record keep both changes (the driver's grant and 7.10's keyChanged)", async () => {
+    const { agent } = fakeAgent()
+    const store = new AgentConnectionStore(agent)
+    await store.put(agentRecord({ state: 'pairing' }))
+    const id = agentRecord().id
+    await Promise.all([
+      store.update(id, (r) => ({ ...r, state: 'active', vdcGrant: { issuer: 'p' } })),
+      store.update(id, (r) => ({ ...r, keyChanged: true, agentDid: 'did:key:z6MkRotated' })),
+    ])
+    expect(await store.get(id)).toMatchObject({
+      state: 'active',
+      vdcGrant: { issuer: 'p' },
+      keyChanged: true,
+      agentDid: 'did:key:z6MkRotated',
+    })
+  })
+
+  it('control: two read-then-put writers without update lose one change', async () => {
+    const { agent } = fakeAgent()
+    const store = new AgentConnectionStore(agent)
+    await store.put(agentRecord({ state: 'pairing' }))
+    const id = agentRecord().id
+    const [a, b] = await Promise.all([store.get(id), store.get(id)])
+    await store.put({ ...(a as AgentConnection), state: 'active' })
+    await store.put({ ...(b as AgentConnection), keyChanged: true })
+    expect((await store.get(id))?.state).toBe('pairing')
+  })
+
+  it('cannot change a record id, and an absent record is undefined', async () => {
+    const { agent } = fakeAgent()
+    const store = new AgentConnectionStore(agent)
+    await store.put(agentRecord())
+    await expect(store.update(agentRecord().id, (r) => ({ ...r, id: 'other' }))).rejects.toThrow(/cannot change/)
+    expect(await store.update('did:key:z6MkAbsent', (r) => r)).toBeUndefined()
+  })
+
+  it('findByKey finds a record by its first key or its current one', async () => {
+    const { agent } = fakeAgent()
+    const store = new AgentConnectionStore(agent)
+    await store.put(agentRecord({ agentDid: 'did:key:z6MkRotated' }))
+    expect((await store.findByKey(agentRecord().id))?.id).toBe(agentRecord().id)
+    expect((await store.findByKey('did:key:z6MkRotated'))?.id).toBe(agentRecord().id)
+    expect(await store.findByKey('did:key:z6MkNobody')).toBeUndefined()
   })
 })
 
