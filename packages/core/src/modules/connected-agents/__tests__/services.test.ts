@@ -118,7 +118,7 @@ describe('a memory create an approval rule holds (#1060 finding 20)', () => {
                     ? async () => {
                         throw refusal
                       }
-                    : (target as Record<string, unknown>)[method],
+                    : (target as unknown as Record<string, unknown>)[method],
               })
             )
           ),
