@@ -21,6 +21,14 @@ import { communityTarget } from './vtiCommunityLink'
 
 const reads = new WeakMap<object, Promise<number>>()
 
+/** The saved names, taught to `communityTarget`. Resolves with how many there were; rejects when they can't be read. */
+async function readSavedNames(agent: Agent): Promise<number> {
+  const names = await new GenericRecordsCommunityStore(agent).listCommunityNames()
+  for (const { communityDid, name } of names) communityTarget.publishedName(communityDid, name)
+  agent.config?.logger?.info?.(namesLoadedLine(names.length))
+  return names.length
+}
+
 /**
  * Read the saved names and teach them to `communityTarget`. Resolves with how many were saved; never rejects (a
  * failed read is logged and counts as none).
@@ -31,18 +39,11 @@ const reads = new WeakMap<object, Promise<number>>()
 export function loadSavedCommunityNames(agent: Agent): Promise<number> {
   const known = reads.get(agent)
   if (known) return known
-  const read = (async () => {
-    try {
-      const names = await new GenericRecordsCommunityStore(agent).listCommunityNames()
-      for (const { communityDid, name } of names) communityTarget.publishedName(communityDid, name)
-      agent.config?.logger?.info?.(namesLoadedLine(names.length))
-      return names.length
-    } catch (e) {
-      if (reads.get(agent) === read) reads.delete(agent)
-      agent.config?.logger?.info?.(namesNotLoadedLine(e instanceof Error ? e.name : 'unknown'))
-      return 0
-    }
-  })()
+  const read: Promise<number> = readSavedNames(agent).catch((e: unknown) => {
+    if (reads.get(agent) === read) reads.delete(agent)
+    agent.config?.logger?.info?.(namesNotLoadedLine(e instanceof Error ? e.name : 'unknown'))
+    return 0
+  })
   reads.set(agent, read)
   return read
 }
