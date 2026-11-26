@@ -3,9 +3,15 @@
  * read of a community's public profile, that it gave a name or why it gave none. The whole path was silent before,
  * so a report could not tell "no name saved" from "the profile was not answered".
  */
+import { act, renderHook } from '@testing-library/react-native'
+
 import { publishedName } from '../module/communityNameRefresh'
 import { communityLogRef, namesShownLine } from '../module/communityNamesLog'
-import { loadSavedCommunityNames } from '../module/savedCommunityNames'
+import {
+  forgetSavedCommunityNamesRead,
+  loadSavedCommunityNames,
+  useSavedCommunityNames,
+} from '../module/savedCommunityNames'
 import { readPublicProfile, readPublicProfileName, readPublicProfileOutcome } from '../module/vtiAgent'
 import { communityTarget } from '../module/vtiCommunityLink'
 
@@ -135,7 +141,7 @@ describe('each read from a screen ends as one log line', () => {
   })
 })
 
-describe('the names saved on the phone are put where the screens read them', () => {
+describe('the names saved on the phone are put where the screens read them, once at app start', () => {
   const record = (communityDid: string, name: string) => ({
     content: { communityDid, name, at: '2026-11-25T00:00:00.000Z' },
     getTags: () => ({ recordType: 'keyring/vti-community', kind: 'community-name', key: communityDid }),
@@ -159,25 +165,83 @@ describe('the names saved on the phone are put where the screens read them', () 
     expect(info).toHaveBeenCalledWith('[Community:names] saved on this phone: 2, loaded')
   })
 
-  test('two callers at once share one read; a later caller reads again', async () => {
+  test('read once for an agent: callers at once, and callers afterwards, share the one read', async () => {
     const find = jest.fn(async () => [record(VTC, 'Test VTC')])
     const { agent } = agentHolding(find)
     await Promise.all([loadSavedCommunityNames(agent), loadSavedCommunityNames(agent)])
+    expect(await loadSavedCommunityNames(agent)).toBe(1)
     expect(find).toHaveBeenCalledTimes(1)
-    // The names in memory can be cleared (a reset): the next caller puts them back.
-    communityTarget.clear()
+    // Another agent (another wallet) is read for itself.
+    const other = agentHolding(jest.fn(async () => []))
+    expect(await loadSavedCommunityNames(other.agent)).toBe(0)
+    expect(other.agent).not.toBe(agent)
+    // As after a start of the app: read again.
+    forgetSavedCommunityNamesRead(agent)
     await loadSavedCommunityNames(agent)
     expect(find).toHaveBeenCalledTimes(2)
-    expect(communityTarget.publishedNameOf(VTC)).toBe('Test VTC')
   })
 
-  test('a read that fails is none, said in the log, and never thrown', async () => {
+  test('a read that fails is none, said in the log, never thrown, and not kept: the next caller reads again', async () => {
     const failure = Object.assign(new Error('the wallet is closed'), { name: 'WalletError' })
-    const { agent, info } = agentHolding(jest.fn(async () => Promise.reject(failure)))
+    const find = jest
+      .fn<Promise<unknown[]>, []>()
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValue([record(VTC, 'Test VTC')])
+    const { agent, info } = agentHolding(find)
     expect(await loadSavedCommunityNames(agent)).toBe(0)
     expect(info).toHaveBeenCalledWith('[Community:names] saved on this phone: not read (WalletError)')
     // What failed is said by its kind, never by its message.
     expect(info.mock.calls.join(' ')).not.toContain('the wallet is closed')
+    expect(await loadSavedCommunityNames(agent)).toBe(1)
+    expect(communityTarget.publishedNameOf(VTC)).toBe('Test VTC')
+  })
+
+  test('the tab navigator starts the read as soon as there is an agent, and only then', async () => {
+    const find = jest.fn(async () => [record(VTC, 'Test VTC')])
+    const { agent } = agentHolding(find)
+    const started = renderHook(
+      ({ with: withAgent }: { with: never | undefined }) => useSavedCommunityNames(withAgent),
+      {
+        initialProps: { with: undefined as never | undefined },
+      }
+    )
+    await act(async () => undefined)
+    expect(find).not.toHaveBeenCalled()
+    started.rerender({ with: agent })
+    await act(async () => undefined)
+    expect(find).toHaveBeenCalledTimes(1)
+    expect(communityTarget.publishedNameOf(VTC)).toBe('Test VTC')
+    // Drawn again, it reads nothing more.
+    started.rerender({ with: agent })
+    await act(async () => undefined)
+    expect(find).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('one number that changes with the names, for a screen that names several communities', () => {
+  beforeEach(() => communityTarget.clear())
+
+  test('it changes when a name is learned or replaced, and not when the same name is said again', () => {
+    const start = communityTarget.namesLearned()
+    communityTarget.publishedName(VTC, 'Test VTC')
+    const learned = communityTarget.namesLearned()
+    expect(learned).not.toBe(start)
+    communityTarget.publishedName(VTC, 'Test VTC')
+    communityTarget.publishedName(VTC, '  ')
+    expect(communityTarget.namesLearned()).toBe(learned)
+    communityTarget.publishedName(VTC, 'Test VTC, renamed')
+    expect(communityTarget.namesLearned()).not.toBe(learned)
+  })
+
+  test('a screen that listens is told of each change, and it changes when the names are forgotten', () => {
+    const told = jest.fn()
+    const stop = communityTarget.subscribe(told)
+    communityTarget.publishedName(OTHER, 'Other')
+    expect(told).toHaveBeenCalledTimes(1)
+    const before = communityTarget.namesLearned()
+    communityTarget.clear()
+    expect(communityTarget.namesLearned()).not.toBe(before)
+    stop()
   })
 })
 

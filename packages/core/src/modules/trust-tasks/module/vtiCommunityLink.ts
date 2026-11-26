@@ -97,6 +97,8 @@ class CommunityTarget {
    * learned once should still be the name next time it is offered.
    */
   private readonly published = new Map<string, string>()
+  /** Goes up each time the published names change: a snapshot for a screen that names several communities. */
+  private learned = 0
   private readonly listeners = new Set<Listener>()
 
   /**
@@ -120,6 +122,13 @@ class CommunityTarget {
 
   /** What a community published about itself, for one it is not looking at. */
   publishedNameOf = (communityDid: string): string | undefined => this.published.get(communityDid)
+
+  /**
+   * A number that changes whenever a published name is learned, replaced or forgotten. A screen that names
+   * communities through the label functions (`communityLabelOf` and the like), which read the names without
+   * subscribing, redraws on it (`useCommunityNamesLearned`). A number, so the snapshot is stable between changes.
+   */
+  namesLearned = (): number => this.learned
 
   /** A link named this community: show it, change nothing else. */
   set(link: CommunityLink): void {
@@ -151,6 +160,7 @@ class CommunityTarget {
     const named = displayName?.trim()
     if (!communityDid || !named || this.published.get(communityDid) === named) return
     this.published.set(communityDid, named)
+    this.learned++
     // Write it into what is stored, so the snapshots stay stable and a reader
     // sees the name without anything being composed on the way out.
     if (this.viewing?.communityDid === communityDid) {
@@ -199,6 +209,7 @@ class CommunityTarget {
     this.viewing = undefined
     this.chosen = undefined
     this.published.clear()
+    this.learned++
     this.notify()
     keep()
   }
@@ -216,7 +227,10 @@ class CommunityTarget {
         // published names, and without this the phone's own community is
         // "unnamed" after each launch until a manifest is read again.
         const published = link.published ? link.name?.trim() : undefined
-        if (published) this.published.set(link.communityDid, published)
+        if (published) {
+          this.published.set(link.communityDid, published)
+          this.learned++
+        }
         this.notify()
       }
     } catch {

@@ -31,6 +31,7 @@ import { openInMyAgent } from '../modules/rooms/roomLinks'
 import { useHiddenRoomCount, useRoomRows } from '../modules/rooms/useRoomRows'
 import { namesShownLine } from '../modules/trust-tasks/module/communityNamesLog'
 import { loadSavedCommunityNames } from '../modules/trust-tasks/module/savedCommunityNames'
+import { useCommunityNamesLearned } from '../modules/trust-tasks/screens/useCommunity'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
 import { communityLabelAloneOf } from '../modules/trust-tasks/screens/communityName'
 import { conversations, isConversationPartner, messageRows, type MessageRow } from '../modules/vrc/contacts/messageRows'
@@ -110,20 +111,20 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
   )
   // The chips: All, People, then one per community that has a room. Only shown once there is a room to tell apart.
   const chips = useMemo(() => communityChips(roomRows), [roomRows])
-  // A chip is named from the names kept in memory (`communityTarget`). Nothing here put them there: only My Agent read
-  // the names saved on the phone, so after a start of the app every chip read "(no name published yet)" until My Agent
-  // had been opened in that run (IN-814). Messages now reads them itself, whenever it comes into view with a chip to
-  // name; and it redraws when a name is learned, by this read or by any other, while it is on screen.
+  // A chip is named from the names kept in memory (`communityTarget`), through a label function that reads them
+  // without subscribing. So a name learned while Messages was on screen did not reach its chip until something else
+  // redrew the list, and after a start of the app the names were not in memory at all until My Agent had been opened
+  // (IN-814). The names saved on the phone are now read at app start (the tab navigator's `useSavedCommunityNames`),
+  // and Messages redraws whenever one is learned.
+  useCommunityNamesLearned()
   const { agent } = useAgent()
   const chipDids = useMemo(() => chips.map((c) => c.communityDid).join('\n'), [chips])
-  useSyncExternalStore(communityTarget.subscribe, () =>
-    chips.map((c) => communityTarget.publishedNameOf(c.communityDid) ?? '').join('\n')
-  )
   useEffect(() => {
     if (!agent || !isFocused || !chipDids) return
     const shown = chipDids.split('\n')
+    // The same read the tab navigator started (it is made once), so this is said after it: a report then tells an
+    // unnamed chip whose name is not on the phone from one that was not loaded.
     void loadSavedCommunityNames(agent).then(() => {
-      // Said after the read, so a report tells an unnamed chip whose name is not on the phone from one not loaded.
       const unnamed = shown.filter((did) => !communityTarget.publishedNameOf(did))
       agent.config?.logger?.info?.(namesShownLine('Messages', shown, unnamed))
     })
