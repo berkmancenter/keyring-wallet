@@ -1,0 +1,78 @@
+name: TSP reference
+
+# The reference rungs' offline tests (tsp-reference/README.md). tsp-reference/ is outside every other workflow's paths,
+# so before this nothing ran them in CI. Advisory: not a required check on main.
+#
+# Which rungs: every tsp-reference/<rung>/ whose package.json defines a `test` script. That script is the offline
+# suite (`node --test` in ref-20 and ref-25): no network, no mediator, no stack. A new rung opts in by adding one, with
+# no edit here. Never `check` or `start`: for several rungs those are live runs against a lab stack.
+# The rules for a rung's `test` script (offline only, a lockfile) are in tsp-reference/README.md, "Offline tests, and CI".
+on:
+  pull_request:
+    # Any base branch, as Code Quality. Deliberately no "edited": this check is not required and is path-filtered, so
+    # a retarget need not re-run it; the next push does.
+    paths:
+      - "tsp-reference/**"
+      # A rung's tests may read a plan (ref-25's recordings test quotes the agent connect plan's tables).
+      - "docs/plans/**"
+      - ".github/workflows/tsp-reference.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tsp-reference/**"
+      - "docs/plans/**"
+      - ".github/workflows/tsp-reference.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-22.04
+    # Green means the rungs that opted in (a `test` script) passed, not that every rung is tested: most have none.
+    name: TSP reference offline tests (opted-in rungs)
+    timeout-minutes: 15
+    steps:
+      # The whole repository, not only tsp-reference/: a rung's tests may read files outside it.
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.2"
+
+      - name: Run every rung's offline tests
+        run: |
+          set -uo pipefail
+          found=0
+          failed=()
+          for pj in tsp-reference/*/package.json; do
+            dir=$(dirname "$pj")
+            node -e 'process.exit(require(require("path").resolve(process.argv[1])).scripts?.test ? 0 : 1)' "$pj" || continue
+            found=$((found + 1))
+            # npm ci installs exactly the lockfile; a rung with a test script and no lock would install whatever the
+            # registry serves today, so it is refused rather than run.
+            if [ ! -f "$dir/package-lock.json" ]; then
+              echo "::error file=$pj::$dir has a test script but no package-lock.json"
+              failed+=("$dir")
+              continue
+            fi
+            echo "::group::$dir"
+            if (cd "$dir" && npm ci --no-audit --no-fund --ignore-scripts && npm test); then
+              echo "::endgroup::"
+            else
+              echo "::endgroup::"
+              echo "::error::$dir: its offline tests failed"
+              failed+=("$dir")
+            fi
+          done
+          echo "$found rung(s) define a test script"
+          # A selector that finds nothing would pass while checking nothing.
+          if [ "$found" -eq 0 ]; then
+            echo "::error::no rung under tsp-reference/ defines a test script, so this job would check nothing"
+            exit 1
+          fi
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error::failed: ${failed[*]}"
+            exit 1
+          fi

@@ -84,6 +84,7 @@ Built, and relied on by this plan:
 - **A community-offered join exists**: `vtc/rooms/offers/list` 0.1–0.3 and `offers/accept/0.1` (`vtc-service/src/rooms/handlers.rs`; `docs/03-vtc/community-rooms.md`; `pnm rooms offers`). It is a supported path, but not self-service: the community extends the offer.
 - **Cryptographic deletion and record retention have verbs** on both hosts: `rooms/epoch/prune/0.1`/`0.2` raise the epoch floor, and `rooms/records/{prune,retention/set}/0.1` apply a room's record retention ([[ROOMS-GUIDE]] §10.4–§10.5). Pruning severs the rungs, not the records.
 - **Files have a task family**, `rooms/blobs/*` with `rooms/keys/file-key`, served by both hosts (§5; `docs/05-design-notes/data-rooms-files.md` §5, §12 P5/P6).
+- **A sealed record stored past the version it was sealed for still opens** on the reader's agent since VTI #2452 (`4614eabb9`, vta-service 0.75.0, 2026-11-05): `rooms/keys/read` opens a seal stored with no `version` at the record's version and then each earlier one (`vta-service/src/trust_tasks/room_read.rs` `Search::Earlier`, `operations/room_groups` `open_record_at`), and Keyring's puts send none (`wire.ts` `parseSealed`). A write that a version race cut short between its two puts therefore costs nothing on current agents. Read at source, not measured on a phone; the VTI pin watches both files (`scripts/openvtc/PINS.json`).
 
 ## 3. Where rooms sit in the Keyring architecture
 

@@ -101,6 +101,19 @@ for d in ref-*/; do (cd "$d" && npm run -s check); done
 Set up the upstream clones first: see
 [`scripts/openvtc/README.md`](../scripts/openvtc/README.md).
 
+### Offline tests, and CI
+
+A rung may define a `test` script in its `package.json` (today ref-20 and, on the agent connect branch, ref-25, each
+`node --test`). CI runs it in every rung that has one (`.github/workflows/tsp-reference.yml`, job "TSP reference
+offline tests (opted-in rungs)"), so a rung opts in by adding the script. Rules for that script:
+
+- **It must not touch the network, a mediator or a stack**: nothing outside the rung's own process (an in-process
+  server on `127.0.0.1` is fine). CI only enforces this by convention, so a test that reaches a live service makes CI
+  depend on it and fails like a flaky test. Live runs belong in `start` or `check`, which CI never runs.
+- **The rung needs a `package-lock.json`.** CI installs with `npm ci --ignore-scripts` and refuses a rung with a `test`
+  script and no lockfile. `ref-05-local-vta` and `ref-06p3-third-party-verify` have none today; one of them adding a
+  `test` script turns the job red with that message, which is the guard working.
+
 ## What is *not* proven yet
 
 Worth stating plainly, since the point of the corpus is honest evidence:

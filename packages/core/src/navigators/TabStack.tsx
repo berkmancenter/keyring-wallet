@@ -60,6 +60,7 @@ import { usePollsWaitingCheck } from '../modules/polls/pollsWaiting'
 import { useRoomNotices } from '../modules/rooms/roomNotices'
 import { useRoomsUnreadCount } from '../modules/rooms/useRoomRows'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
+import { useSavedCommunityNames } from '../modules/trust-tasks/module/savedCommunityNames'
 import { useChosenCommunityDid } from '../modules/trust-tasks/screens/useCommunity'
 
 import { useUnreadMessages } from '../hooks/useUnreadMessages'
@@ -105,6 +106,10 @@ const TabStack: React.FC = () => {
   useEffect(() => {
     void communityTarget.restore()
   }, [])
+  // And the names communities published, as saved on this phone: read here, once the tabs show, so every screen that
+  // names a community has them. Only My Agent read them before, so Messages' chips and the Wallet's community cards
+  // read "(no name published yet)" until My Agent had been opened in that run (IN-814).
+  useSavedCommunityNames(agent)
   // The community a link chose (else the build's suggestion) gets the inbox.
   const inboxCommunityDid = useChosenCommunityDid(vti?.communityDid)
   useVtiPersonaInbox(agent, { mediatorDid: vti?.mediatorDid, communityDid: inboxCommunityDid, onError: onInboxError })
