@@ -25,6 +25,8 @@ export type AgentRowData = {
 
 /** Which actions a row offers (§6 "Agent list rows"; #1060 findings 12 and 13 for Expired and Not finished). */
 export function rowActions(agent: AgentRowData): Array<'extend' | 'revoke' | 'remove' | 'connectAgain'> {
+  // No `default`, on purpose: with every status a case and a declared return type, a new status fails the type check
+  // here instead of silently offering nothing (or everything) on a state nobody decided.
   switch (agent.status) {
     case 'connected':
     case 'connectedUntil':
