@@ -21,28 +21,57 @@
  *    missing file is now a failure, because "upstream does not have this" is a
  *    result and silence is not.
  *
+ * And a third, the first one again by another route: the fix for (1) counted
+ * eight folders up from here, right while `packages/` sat inside the bifold
+ * checkout. Since the fold put `packages/` at the repository's root, that count
+ * landed one folder above the repository, so every drift test skipped on every
+ * machine. The root is now found by what is in it, not by counting.
+ *
  * @module trust-tasks/__tests__/fixtures/registryDrift
  */
 import { execFileSync } from 'child_process'
 import { existsSync, readFileSync } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { isDeepStrictEqual } from 'util'
 
+/** The file only this repository's root holds: the root is the nearest folder above that has it. */
+const ROOT_MARK = join('scripts', 'openvtc', 'PINS.json')
+
+/** The repository's root above `from`, found by the file only it holds, or undefined above any repository. */
+export function repoRootAbove(from: string): string | undefined {
+  for (let dir = from; ; dir = dirname(dir)) {
+    if (existsSync(join(dir, ROOT_MARK))) return dir
+    if (dirname(dir) === dir) return undefined
+  }
+}
+
 /**
- * The registry clone, or undefined when this machine has none.
+ * Where the drift tests read the registry clone, or undefined where they skip.
  *
- * `TRUST_TASKS_REGISTRY` overrides; otherwise it is `external/` beside the
- * wallet checkout that carries this submodule. A standalone bifold clone has
- * no such sibling, and CI has no clone at all — both of which are legitimately
- * "absent", and the only case that skips.
+ * `TRUST_TASKS_REGISTRY` overrides. Otherwise it is `external/dtgwg-trust-tasks-tf` in the repository's root
+ * (`scripts/openvtc/setup-external.mjs` clones it there). Only a checkout with no `external/` at all answers undefined,
+ * so only it skips: CI, which has no clone by design, and a fresh checkout. Where `external/` exists, or the variable is
+ * set, the path is answered whether or not it is there: the drift test then runs, and `expectNoDrift` fails it, that
+ * one test, saying what is missing. A setup gap never collapses the rest of the file, and never passes as a skip.
  */
-export function registryPath(): string | undefined {
+export function registryPath(from: string = __dirname): string | undefined {
   const fromEnv = process.env.TRUST_TASKS_REGISTRY
-  if (fromEnv) return existsSync(fromEnv) ? fromEnv : undefined
-  // __dirname is <bifold>/packages/core/src/modules/trust-tasks/__tests__/fixtures
-  const walletRoot = join(__dirname, '..', '..', '..', '..', '..', '..', '..', '..')
-  const guess = join(walletRoot, 'external', 'dtgwg-trust-tasks-tf')
-  return existsSync(guess) ? guess : undefined
+  if (fromEnv) return fromEnv
+  const root = repoRootAbove(from)
+  if (!root) return undefined
+  const external = join(root, 'external')
+  return existsSync(external) ? join(external, 'dtgwg-trust-tasks-tf') : undefined
+}
+
+/** Fails the drift test that asked, when the clone it was pointed at is not there. */
+function requireRegistry(registry: string): void {
+  if (existsSync(registry)) return
+  throw new Error(
+    process.env.TRUST_TASKS_REGISTRY
+      ? `TRUST_TASKS_REGISTRY is ${registry}, which does not exist: the drift test cannot compare anything`
+      : `${registry} is missing, so the drift test cannot compare anything: ` +
+        'run node scripts/openvtc/setup-external.mjs, or set TRUST_TASKS_REGISTRY'
+  )
 }
 
 /** A file's bytes at a commit, or undefined when that commit does not have it. */
@@ -74,8 +103,10 @@ export function expectNoDrift(
   map: Record<string, string>,
   { as = 'bytes' }: { as?: 'bytes' | 'json' } = {}
 ): void {
-  const registry = registryPath()
+  // From the fixtures' own folder: the same repository root the call site's guard found.
+  const registry = registryPath(fixtureDir)
   if (!registry) throw new Error('expectNoDrift called without a registry; guard with registryPath() first')
+  requireRegistry(registry)
   const sha = readFileSync(join(fixtureDir, 'PROVENANCE.sha'), 'utf8').trim()
   expect(sha).toMatch(/^[0-9a-f]{40}$/)
 
