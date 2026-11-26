@@ -156,6 +156,20 @@ describe('ConnectedAgents words', () => {
     expect(banned.test('Revoking is instant.')).toBe(true)
   })
 
+  it("never offers to try again when the owner's VTA holds a create for approval, in any language", () => {
+    // A retry fails the same way until the owner's rule changes, so these words must not suggest one (#1060 finding
+    // 20). The control: each pattern does match the transient failure, which may well work on a retry.
+    const retry: Array<[string, Strings, RegExp]> = [
+      ['en', EN, /try again/i],
+      ['fr', FR, /réessa/i],
+      ['pt-br', PT, /tente de novo|tentar de novo|tente novamente/i],
+    ]
+    for (const [lang, words, pattern] of retry) {
+      expect([lang, pattern.test(words.MemoryHeldForApproval)]).toEqual([lang, false])
+      expect([lang, pattern.test(words.MemoryCreateFailed)]).toEqual([lang, true])
+    }
+  })
+
   it('carries the §6 words for the number step in both forms, picked by the digit count', () => {
     expect(EN.NumberBodyTwoDigits).toBe('Type the two digits your terminal shows. You get one try.')
     expect(EN.NumberBodyFourDigits).toBe('Type the four digits your terminal shows. You get one try.')
@@ -316,6 +330,11 @@ describe('MemoryPicker', () => {
       'ConnectedAgents.MemoryNameTaken',
     ],
     ['the logic says it failed', { ok: false, code: 'failed' } as const, 'ConnectedAgents.MemoryCreateFailed'],
+    [
+      "the owner's VTA holds a create for approval",
+      { ok: false, code: 'heldForApproval' } as const,
+      'ConnectedAgents.MemoryHeldForApproval',
+    ],
   ])('says why when %s, and creates nothing', async (_, result, words) => {
     const tree = show(<Harness onCreate={async () => result} />)
     fireEvent.press(tree.getByTestId(id('MemoryPickerNew')))

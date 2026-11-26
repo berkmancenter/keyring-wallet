@@ -4109,6 +4109,7 @@
     "ContainsOtherMemories": "Contient d'autres mémoires",
     "MemoryNameTaken": "Vous avez déjà une mémoire portant ce nom.",
     "MemoryCreateFailed": "Impossible de créer la mémoire. Réessayez.",
+    "MemoryHeldForApproval": "Votre VTA demande une approbation avant de créer une mémoire, celle-ci n'a donc pas été créée.",
     "ScanTitle": "Scannez le code dans votre terminal",
     "PasteLinkInstead": "Coller le lien à la place",
     "NumberTitle": "Saisissez le nombre affiché dans votre terminal",
