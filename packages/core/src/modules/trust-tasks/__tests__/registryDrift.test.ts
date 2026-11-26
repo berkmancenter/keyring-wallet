@@ -120,6 +120,24 @@ describe('the registry clone the drift tests read', () => {
     )
   })
 
+  test('a vendored file the map does not name fails the drift test, and names it; mapped, it passes', () => {
+    const { root, fixtures } = repo({ clone: true })
+    const clone = join(root, 'external', 'dtgwg-trust-tasks-tf')
+    const git = (...args: string[]) => execFileSync('git', ['-C', clone, ...args], { encoding: 'utf8' }).trim()
+    git('init', '-q')
+    mkdirSync(join(clone, 'specs'))
+    writeFileSync(join(clone, 'specs', 'a.json'), '{"a":1}\n')
+    writeFileSync(join(clone, 'specs', 'b.json'), '{"b":1}\n')
+    git('add', '.')
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'both')
+    writeFileSync(join(fixtures, 'PROVENANCE.sha'), `${git('rev-parse', 'HEAD')}\n`)
+    mkdirSync(join(fixtures, 'nested'))
+    writeFileSync(join(fixtures, 'a.json'), '{"a":1}\n')
+    writeFileSync(join(fixtures, 'nested', 'b.json'), '{"b":1}\n')
+    expect(() => expectNoDrift(fixtures, { 'a.json': 'specs/a.json' })).toThrow(/nested\/b\.json/)
+    expect(() => expectNoDrift(fixtures, { 'a.json': 'specs/a.json', 'nested/b.json': 'specs/b.json' })).not.toThrow()
+  })
+
   test('above any repository there is no root, and nothing to read', () => {
     const lone = join(base, 'lone', 'a', 'b')
     mkdirSync(lone, { recursive: true })
