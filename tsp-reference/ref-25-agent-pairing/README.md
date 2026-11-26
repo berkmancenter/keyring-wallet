@@ -5,8 +5,9 @@ The reference program for step 7.1 of
 app change. It runs under Node with `ws`, on a lab that listens on loopback only, and it changes nothing in the
 app. A result that differs from the plan changes the plan, in the same pull request.
 
-**What is measured so far: the mediator half.** Items 0.1(a), 0.1(h), 0.1(j) and 0.1(q). The VTA items (0.1(b)
-to (f), (l), (o), (p)) need a VTA built at the pin and are not in this rung yet; they are listed at the end.
+**Two halves.** The mediator half covers items 0.1(a), (h), (j) and (q). The VTA half covers (b), (c), (d), (l),
+(o), the P0 parts of (p) and the memory part of (e), on three VTA versions. What is not measured is listed at the
+end.
 
 ## What runs
 
@@ -40,7 +41,7 @@ node scripts/openvtc/setup-external.mjs                  # once, at the reposito
 
 cd tsp-reference/ref-25-agent-pairing
 npm install
-npm test                                # 26 offline tests: packing, forward, refusal reading, the links
+npm test                                # 31 offline tests: packing, forward, refusal reading, the links, a VTA's answers
 lab/mediator.sh up mailbox              # or: open, deny
 npm start                               # every case for that mode, against the recorded result
 lab/mediator.sh down
@@ -134,13 +135,67 @@ holds it to that producer's own test vector.
 - **Not TSP.** Every frame here is DIDComm v2.
 - One machine, no load, no network faults.
 
+## The VTA half
+
+One VTA on localhost that serves its own `did:webvh`, started by `lab/vta.sh` after upstream's own local recipe
+(VTI `local-dev/vta-root-webvh-setup.toml`): a plaintext secret backend, no mediator,
+`VTA_ALLOW_PRIVATE_ENDPOINTS=1`. No tunnel, no DID host, no `pnm`, no keychain. Its one administrator is a
+`did:key` the rung holds, which plays Keyring; an agent is a fresh `did:key` the administrator grants an
+`application` entry to. Every call is a signed Trust Task over the VTA's HTTPS binding (`vta.mjs`).
+
+```sh
+# a checkout of OpenVTC/verifiable-trust-infrastructure at the commit under test
+cargo build --locked -p vta-service
+lab/vta.sh up <path to target/debug/vta> "$(git -C <that checkout> rev-parse HEAD)"
+node vta-serves.mjs        # which version of each task family this VTA serves
+node vta-run.mjs           # the 13 cases, against the recorded result for this version
+lab/vta.sh down
+```
+
+### Three versions (measured 2026-11-26)
+
+`scripts/openvtc/PINS.json` pins VTI at `f7b78e29d`, which is vta 0.79.0. The plan's VTA facts were read at later
+commits, so the rung ran on three builds, each a debug build from a checkout at that commit:
+
+| | vta 0.79.0 at `f7b78e29d` (the pin) | vta 0.84.0 at `97fda9813` (the tag the Farm's gate VTAs run) | vta 0.87.0 at `4e5861d95` (the commit the plan read) |
+|---|---|---|---|
+| `acl/grant`, `acl/revoke`, `acl/update`, `acl/show` | 0.2 | 0.3 | 0.3 |
+| `acl/list` | 0.3 | 0.4 | 0.4 |
+| `vta/memory/put`, `list`, `delete` | 0.1, 0.2 | 0.1, 0.2, 0.3 | 0.1, 0.2, 0.3 |
+| `vta/memory/get` | 0.1 | 0.1, 0.2 | 0.1, 0.2 |
+| `vta/contexts/delete` | 1.1 | 1.2 | 1.2 |
+| `rooms/keys/open` | 0.2 | 0.2, 0.3 | 0.2, 0.3 |
+| `acl/swap-key` 0.1, `device/register` 0.2, `device/list` 0.3, `device/disable` 0.1, `vta/contexts/create`, `list`, `update` 1.0, `rooms/keys/present` 0.2, `rooms/keys/seal` 0.2 and 0.3, `rooms/keys/act` 0.8 to 0.12, `task-consent/decision` 0.2, `vault/credentials/present` 0.1 | the same on all three | | |
+| `auth/oob/*`, `task-consent/request` | not served (`unsupportedType`) on all three | | |
+| The seeded administrator | roles `admin`, no scopes, 27 capabilities, on all three | | |
+| The 13 cases | **none can run**: `acl/grant` 0.3 and `vta/memory/put` 0.3 are not served | 13 recorded, each repeats | 13 recorded, each repeats, **the same as 0.84.0 on every case** |
+
+A VTA serves one version of each `acl` task, not two. So a client speaks `acl/grant` 0.3 to a 0.84.0 or a 0.87.0
+and 0.2 to a 0.79.0, and agent connect as the plan describes it needs 0.84.0 or later.
+
+### What the cases found (0.84.0 and 0.87.0)
+
+| Item | Result |
+|---|---|
+| (p) 1 | The seeded administrator is unrestricted: roles `admin`, scopes empty |
+| (p) 2 | The administrator creates a top-level memory and lists it with its name. A second create of the same id is refused `taskFailed`, with "conflict" in the message. An administrator scoped to one context is refused a top-level one (`permissionDenied`) and may create a child under its own |
+| (d) | `acl/grant` 0.3 with listed capabilities is accepted with kebab-case names (`memory-read`, `memory-write`) and refused with camelCase (`malformedRequest`). `purposes` is required. A purpose name nobody defined is accepted when it is well formed (`zzz`) and refused when it is not (`not-a-purpose`). The agent's `auth/whoami` shows role `application`, one scope and the two capabilities |
+| (p) 3, (p) 7 | An agent bound to one memory writes and reads it, and is refused another: `vta/memory/put:contextForbidden`, and the same for `get` and `list`. Two agents with a memory each reach only their own. A grant naming a context that does not exist is refused `taskFailed` |
+| (o) | A child is created with `{ id, parent }` and is named `<parent>/<id>`; a path as the id is refused. An entry naming the parent reads and writes the child. An entry naming the child is refused the parent (`contextForbidden`) |
+| (b) | `device/register` with `{ kind: "service", serviceKind: "aiAgent" }` is accepted and returns a `deviceId`. Before it, `rooms/keys/act` answers `rooms/keys/act:typeNotActable` for the probe's document; after it, `permissionDenied` ("a delegate presents under its own identifier"). Registering again is refused (`device/register:alreadyRegistered`) |
+| (c) | `acl/swap-key` by the entry's own subject needs a `linkProof`: a compact EdDSA JWT signed by the **new** key (without it, `acl:link_proof_required`). With it the whole entry moves: role, contexts, capabilities, purposes, `expiresAt`, label, and the device with the same `deviceId` and kind. The old key is no longer listed and its session is refused |
+| (l) | After one key swap and after two, `device/list` names the newest key for the `deviceId`. Revoking the first key is refused (`acl/revoke:subjectNotPresent`); revoking the key `device/list` names removes the entry and the device, and that key cannot sign in again. `device/disable` by `deviceId` makes the next sign-in refused (`permissionDenied`); the entry stays listed |
+| (p) 5 | `acl/update` never narrows `act` (`acl/update:narrowingNotPermitted`). `acl/revoke` 0.3 with `{ kind: "act", act }` does, and the `act` it names is **what remains** |
+| (p) 6 | `vta/memory/list` 0.3 with `includeValues: false` returns the items with no values, so they can be counted. A memory that holds only items is deleted without `force`. A memory an entry names is refused `vta/contexts/delete:notEmpty` without `force`; with it, the memory goes and so does an entry that named only it |
+
 ## Not measured yet
 
-The VTA items of step 0.1 need a VTA built at VTI `f7b78e29d` with an administrator session: (b) `device/register`
-and the delegate refusal, (c) what `acl/swap-key` keeps, (d) `acl/grant/0.3` with listed capabilities and
-purposes, (e) refusal after `acl/revoke`, (f) which task signs a credential as the persona, (l) revoke by
-`deviceId` across a key swap, (o) the context hierarchy rule, and (p) memory binding and creation. Items (g),
-(i), (k), (m), (n), (r) and (s) decide later tiers and follow them.
+- **(f)** which VTA task signs a credential with the persona as issuer. The lab VTA has no persona yet. What is
+  recorded: `keys/sign-document`, `vault/sign-trust-task` and `vta/credentials/issue` exist in the specs at
+  `4e5861d95`, and the administrator holds `sign-document`, `sign-trust-task` and `credential-write`.
+- **The DIDComm and TSP path to the VTA**, for every VTA case: the lab VTA has no mediator, and the cases run over
+  its HTTPS binding.
+- The parts that decide later tiers: (g), (i), (k), (m), (n), (r), (s), the room parts of (p) and (e).
 
-Pinned against: `affinidi-messaging-mediator` `f6ed8159a` (v0.53.0), VTI `f7b78e29d` (the link producer),
+Pinned against: `affinidi-messaging-mediator` `f6ed8159a` (v0.53.0); VTI `f7b78e29d` (the link producer, and vta 0.79.0), `97fda9813` (vta 0.84.0) and `4e5861d95` (vta 0.87.0);
 `@openvtc/vti-didcomm-js` 0.16.1, `@noble/curves` 2.x.
