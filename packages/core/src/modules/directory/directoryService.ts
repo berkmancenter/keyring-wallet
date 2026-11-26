@@ -33,6 +33,7 @@ import {
   parsePicture,
   parseQueryName,
   parseUploaded,
+  queryEntryId,
   queryFields,
   uploadPayload,
 } from './wire'
@@ -50,6 +51,8 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 export class AgentDirectoryService implements DirectoryService {
   /** The members-list version each community last answered, so a page after the first goes at that one. */
   private readonly listVersion = new Map<string, string>()
+  /** The `query` version each community last answered a card by DID at, so the next card goes at that one. */
+  private readonly queryVersion = new Map<string, string>()
 
   public constructor(private readonly backend: DirectoryBackend) {}
 
@@ -96,6 +99,7 @@ export class AgentDirectoryService implements DirectoryService {
     try {
       // `fields` narrows the answer to the name: nothing else about the member is asked for or kept.
       return parseQueryName(
+        // version-pinned: a name, kept a week (names.ts), so not 0.2's entry; 0.1 is served beside 0.2 (VTI #2827)
         await this.ask('lookupName', communityDid, DIRECTORY_TASK.query, { subject: memberDid, fields: NAME_FIELD }),
         memberDid
       )
@@ -110,9 +114,47 @@ export class AgentDirectoryService implements DirectoryService {
     return this.memberCard(communityDid, DIRECTORY_TASK.entriesShow, { entryId }, (p) => entryFields(p, entryId))
   }
 
+  /**
+   * At the version this community last answered, else 0.2, stepping to the other on a refusal of the version. A 0.2
+   * answer names the member's entry, which the card carries; 0.1 names none.
+   *
+   * @versionLadder vtc/directory/query
+   */
   public async memberCardByDid(communityDid: string, memberDid: string): Promise<MemberCard | undefined> {
     // No `fields` hint: the whole card, as the community projects it for this member.
-    return this.memberCard(communityDid, DIRECTORY_TASK.query, { subject: memberDid }, (p) => queryFields(p, memberDid))
+    const payload = { subject: memberDid }
+    const first = this.queryVersion.get(communityDid) ?? DIRECTORY_TASK.query02
+    let type: string = first
+    let answer: unknown
+    try {
+      answer = await this.queryCard(communityDid, type, payload)
+    } catch (e) {
+      // A community before 0.2 refuses it; the other version is asked once.
+      if (!(e instanceof DirectoryRefused) || (e.code !== 'unsupportedType' && e.code !== 'unsupportedVersion')) throw e
+      type = first === DIRECTORY_TASK.query02 ? DIRECTORY_TASK.query : DIRECTORY_TASK.query02
+      answer = await this.queryCard(communityDid, type, payload)
+    }
+    // Kept for the run: a community that upgrades to 0.2 while the app runs is asked 0.1, which it still serves, until
+    // the next start, and its authors' cards show no badges till then.
+    this.queryVersion.set(communityDid, type)
+    const card = await this.cardOf(communityDid, queryFields(answer, memberDid))
+    const entryId = type === DIRECTORY_TASK.query02 ? queryEntryId(answer, memberDid) : undefined
+    return card && entryId ? { ...card, entryId } : card
+  }
+
+  /**
+   * A `query` answer at `type`; undefined for "no such member" and "not shown to you", one answer by design.
+   *
+   * `notFound` is an answer, never a reason to step down a version: at 0.2 it can mean the member is withheld from
+   * this caller, and asking 0.1 then would ask an older version for what the newer one refused.
+   */
+  private async queryCard(communityDid: string, type: string, payload: Record<string, unknown>): Promise<unknown> {
+    try {
+      return await this.ask('showMember', communityDid, type, payload)
+    } catch (e) {
+      if (e instanceof DirectoryRefused && e.code === 'notFound') return undefined
+      throw e
+    }
   }
 
   public async showPicture(communityDid: string, entryId: string, picture: CardPicture): Promise<string | undefined> {
@@ -189,6 +231,11 @@ export class AgentDirectoryService implements DirectoryService {
       if (e instanceof DirectoryRefused && e.code === 'notFound') return undefined
       throw e
     }
+    return this.cardOf(communityDid, fields)
+  }
+
+  /** A card from a member's projected fields, labelled by the community's field definitions. */
+  private async cardOf(communityDid: string, fields: Record<string, unknown> | undefined) {
     if (!fields) return undefined
     const definitions = parseFields(await this.ask('showMember', communityDid, DIRECTORY_TASK.fieldsList, {}))
     return parseMemberCard(fields, definitions)
