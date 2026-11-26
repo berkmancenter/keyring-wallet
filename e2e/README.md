@@ -1188,3 +1188,5 @@ xcodebuild -project WebDriverAgent.xcodeproj -scheme WebDriverAgentRunner \
   `setAutoLockNever`'s collapsed-check, the `dismissVrcConfirmationOverlayIfPresent`
   checks in `assertVrcReceived`/`acceptRelationshipProposalIfPrompted`/
   `openContactDetail`/`returnToContacts`).
+
+<!-- path-filter probe, test/tspref-control: never merged -->
