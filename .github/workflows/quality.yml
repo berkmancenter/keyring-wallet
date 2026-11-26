@@ -2,9 +2,9 @@ name: Code Quality
 
 on:
   pull_request:
-    # feat/one-codebase: the integration branch of docs/plans/single-codebase-plan.md takes stacked PRs; fold/**: the
-    # PRs stacked on each other inside it (the filter names the PR's BASE branch).
-    branches: [main, feat/one-codebase, feat/one-tree, "fold/**", "fold2/**"]
+    # Every base branch, not only main: a stacked PR (based on the PR below it) gets the same checks as one into
+    # main. The main ruleset still only requires them for PRs into main. "edited" covers the retarget to main
+    # after the PR below merges.
     types: [opened, synchronize, reopened, labeled, edited]
 
 jobs:

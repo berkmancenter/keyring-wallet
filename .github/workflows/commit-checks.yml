@@ -2,7 +2,9 @@ name: Commit Requirements
 
 on:
   pull_request:
-    branches: [main]
+    # Every base branch, not only main: a stacked PR (based on the PR below it) gets the same checks as one into
+    # main. The main ruleset still only requires them for PRs into main. "edited" covers the retarget to main
+    # after the PR below merges.
     types: [opened, synchronize, reopened, edited]
 
 permissions:

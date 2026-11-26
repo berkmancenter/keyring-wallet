@@ -15,10 +15,11 @@ name: Framework quality
 
 on:
   pull_request:
-    # feat/one-codebase: the integration branch of docs/plans/single-codebase-plan.md; fold/**: the stacked PRs on
-    # it, which GitHub bases on each other (the filter names the PR's BASE branch).
-    branches: [main, feat/one-codebase, feat/one-tree, "fold/**", "fold2/**"]
-    types: [opened, synchronize, reopened, labeled]
+    # Every base branch, not only main, like Code Quality and Commit Requirements: a stacked PR (into a feature
+    # branch, or into the PR below it) gets the same framework checks as one into main. The main ruleset still only
+    # requires them for PRs into main. "edited" covers the retarget to main after the PR below merges, so the two
+    # required framework checks report on the new base.
+    types: [opened, synchronize, reopened, labeled, edited]
   push:
     branches: [main]
     paths:
