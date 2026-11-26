@@ -6,6 +6,7 @@ name: TSP reference
 # Which rungs: every tsp-reference/<rung>/ whose package.json defines a `test` script. That script is the offline
 # suite (`node --test` in ref-20 and ref-25): no network, no mediator, no stack. A new rung opts in by adding one, with
 # no edit here. Never `check` or `start`: for several rungs those are live runs against a lab stack.
+# The rules for a rung's `test` script (offline only, a lockfile) are in tsp-reference/README.md, "Offline tests, and CI".
 on:
   pull_request:
     # Any base branch, as Code Quality. Deliberately no "edited": this check is not required and is path-filtered, so
@@ -29,7 +30,8 @@ permissions:
 jobs:
   offline:
     runs-on: ubuntu-22.04
-    name: TSP reference offline tests
+    # Green means the rungs that opted in (a `test` script) passed, not that every rung is tested: most have none.
+    name: TSP reference offline tests (opted-in rungs)
     timeout-minutes: 15
     steps:
       # The whole repository, not only tsp-reference/: a rung's tests may read files outside it.
