@@ -730,6 +730,7 @@ export function agentAccessWrites(change: AgentAccessChange): { type: string; pa
     const added = to.some((c) => !from.has(c))
     if (removed) {
       writes.push({
+        // version-pinned: an agent's entry is written at acl 0.3 only, since 0.1 and 0.2 cannot state purposes (AgentAccessUnsupportedError)
         type: VTA_TASK.aclRevoke03,
         payload: {
           subject: change.subject,
@@ -744,6 +745,7 @@ export function agentAccessWrites(change: AgentAccessChange): { type: string; pa
   }
   if (change.capabilities) update.capabilities = capabilityScopeOf(change.capabilities)
   if (Object.keys(update).length > 0)
+    // version-pinned: an agent's entry is written at acl 0.3 only, since 0.1 and 0.2 cannot state purposes (AgentAccessUnsupportedError)
     writes.push({ type: VTA_TASK.aclUpdate03, payload: { subject: change.subject, ...update } })
   return writes
 }
@@ -802,7 +804,11 @@ export function pageContinuation(answer: unknown): { next?: string; complete: bo
 /** The most pages a listing reads before it gives up and says it is incomplete. */
 export const AGENT_LISTING_MAX_PAGES = 100
 
-/** `device/list` at 0.3, else 0.2 (`device/_shared/0.2` bindings in both). */
+/**
+ * `device/list` at 0.3, else 0.2 (`device/_shared/0.2` bindings in both), newest first.
+ *
+ * @versionLadder device/list
+ */
 const DEVICE_LIST_VERSIONS = [
   'https://trusttasks.org/spec/device/list/0.3',
   'https://trusttasks.org/spec/device/list/0.2',
@@ -2689,7 +2695,9 @@ export class VtaClient {
    */
   async grantApplication(grant: AgentGrant): Promise<VtaAclEntry> {
     const payload = agentGrantPayload(grant)
+    // version-pinned: an agent's entry is written at acl 0.3 only, since 0.1 and 0.2 cannot state purposes (AgentAccessUnsupportedError)
     const answer = await this.agentAccessTask(VTA_TASK.aclGrant03, payload)
+    // version-pinned: an agent's entry is written at acl 0.3 only, since 0.1 and 0.2 cannot state purposes (AgentAccessUnsupportedError)
     return answeredEntry(VTA_TASK.aclGrant03, answer)
   }
 
