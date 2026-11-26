@@ -12,7 +12,10 @@
  * Rows (lib/rows.js):
  *   signin-member-joined     the community lists the phone after its review-way request is approved
  *   signin-claimed           the phone claimed the code: the portal's redeem shows a match number
- *   signin-version           0.1 today: no SignInSigningScope on the review (a VTC with VTI #2190 offers one: 0.2)
+ *   signin-idle              with SIGNIN_IDLE_MIN: the phone sits unused that long after joining (the persona key store, 277.2)
+ *   signin-version-seen      a line for the report, never a verdict: no SignInSigningScope (0.1), or one (0.2, VTC 0.17)
+ *   signin-scope-above-approve  unscrolled, the scope sentence ends above Approve: a person sees it before approving (#872)
+ *   signin-scope-words       scrolled to, the sentence reads as words and doesn't overflow sideways; SKIP with no scope, as above
  *   signin-approved          redeem approved: subject = the phone's member DID, amr includes "uv"
  *   signin-phone-done        the phone's result screen says it signed in (SignInResult / SignInDone)
  * uvUnavailable / noUvKey on the phone is BROKEN (an environment without biometrics), never a sign-in FAIL.
@@ -105,7 +108,9 @@ try {
   await rows.row("signin-member-joined", async () => {
     await join.openCommunity(d, { did: C_DID, name: "" });
     await join.ask(d, { tag: "signin" });
-    await join.awaitSent(d, { required: true });
+    // One Continue when the screen says the agent didn't answer; the row then says it passed only after that retry.
+    const { retry } = (await join.awaitSent(d, { required: true, retryNoAnswer: true })).value;
+    const retried = (ok) => (retry ? `${ok ? "passed" : "failed"} after retry (Continue at ${retry.at}, after "${retry.error.slice(0, 60)}"); ` : "");
     // The community is shared with legs beside this one (hv on keyring-hv-lab1 on the MacBook): approve only when this
     // phone's request is the one new request on two reads, and remember only the member it made, so the cleanup never
     // removes someone else's (as run-agent-refused.mjs, #549).
@@ -119,9 +124,17 @@ try {
     // The phone learns it from its own inbox: the join screen ends on JoinDone.
     const done = await waitForTestId(d, "JoinDone", 240000).then(() => true, () => false);
     if (done) await join.done(d).catch(() => undefined);
-    return { ok: Boolean(member && done), detail: `request ${req.id} approved (${decided.status}); member ${member?.did ?? "not listed"} (its applicant); the phone reached JoinDone ${done}` };
+    return { ok: Boolean(member && done), detail: `${retried(Boolean(member && done))}request ${req.id} approved (${decided.status}); member ${member?.did ?? "not listed"} (its applicant); the phone reached JoinDone ${done}` };
   });
   if (!memberDid) throw new Error("not a member: nothing to sign in as");
+
+  // The persona key store died at 30 minutes on a Mac, even in use (277.2's fix). Nothing is tapped; the session stays open.
+  const idleMin = Number(process.env.SIGNIN_IDLE_MIN || 0);
+  if (idleMin) {
+    const startedAt = Date.now();
+    for (const until = startedAt + idleMin * 60000; Date.now() < until; await sleep(60000)) await d.getWindowRect();
+    await rows.row("signin-idle", () => ({ ok: true, detail: `unused for ${Math.round((Date.now() - startedAt) / 60000)} min; the sign-in below is the check` }));
+  }
 
   // 2. The portal's request and the code it would show.
   const origin = originOf(PORTAL);
@@ -151,7 +164,30 @@ try {
   const scope = await existsTestId(d, "SignInSigningScope", 3000);
   const session = await textOf(d, "SignInSessionOnly").catch(() => "");
   await screenshot(d, "signin-review").catch(() => undefined);
-  await rows.row("signin-version", () => ({ ok: !scope, detail: `${scope ? "SignInSigningScope offered: 0.2 (a VTC with VTI #2190)" : "no SignInSigningScope: 0.1, the fallback every VTC answers today"}; session line "${session.slice(0, 90)}"` }));
+  await rows.row("signin-version-seen", () => ({ ok: true, detail: `${scope ? "SignInSigningScope offered: 0.2 (a VTC with VTI #2190)" : "no SignInSigningScope: 0.1, the fallback every VTC answers today"}; session line "${session.slice(0, 90)}"` }));
+  // Before any scroll: what #872 lost was the sentence below the fold, behind the fixed buttons, with Approve still in reach.
+  await rows.row("signin-scope-above-approve", async () => {
+    if (!scope) return { skip: "this community offers no signing scope" };
+    const rectOf = async (key) => {
+      const el = await waitForTestId(d, key, 5000);
+      return { ...(await el.getLocation()), ...(await el.getSize()) };
+    };
+    const [sentence, approve, win] = [await rectOf("SignInSigningScope"), await rectOf("SignInApprove"), await d.getWindowRect()];
+    const ends = sentence.y + sentence.height;
+    return { ok: sentence.y >= 0 && ends <= approve.y && ends <= win.height, detail: `the sentence ends at y ${ends}; Approve starts at y ${approve.y} of ${win.height}` };
+  });
+  // 277.2 made this sentence longer: scrolled to, it reads as words and stays inside the width. French wraps it most: owed, the leg runs in English.
+  await rows.row("signin-scope-words", async () => {
+    if (!scope) return { skip: "this community offers no signing scope" };
+    const el = await scrollToTestId(d, "SignInSigningScope", 4).catch(() => undefined);
+    if (!el) return { ok: false, detail: "SignInSigningScope did not scroll into view" };
+    const words = await textOf(d, "SignInSigningScope").catch(() => "");
+    const [{ x }, { width }, win] = await Promise.all([el.getLocation(), el.getSize(), d.getWindowRect()]);
+    await screenshot(d, "signin-scope-sentence").catch(() => undefined);
+    const fits = x >= 0 && x + width <= win.width;
+    const read = words.length > 20 && !/SignIn\.|\{\{/.test(words);
+    return { ok: fits && read, detail: `"${words.slice(0, 120)}" · x ${x}, width ${width} of ${win.width}` };
+  });
 
   // 4. Approve with the fingerprint: Keyring's UV key prompts for biometrics.
   await tapBelow(d, "SignInApprove");

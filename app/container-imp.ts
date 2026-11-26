@@ -24,6 +24,14 @@ import {
   testIdWithKey,
   initializeVrcModule,
   setPeerLegCarriage,
+  setSharedConnectEnabled,
+  setSharedConnectInviteEnabled,
+  setTrustedApproversEnabled,
+  setStateVerifiedApproversEnabled,
+  setTrustTestStateEnabled,
+  setStateCardEnabled,
+  setDemoStateHost,
+  setSediDemoSide,
   ownerChecks,
   vtaAgent,
 } from '@bifold/core'
@@ -37,9 +45,10 @@ import { Config } from 'react-native-config'
 import { DependencyContainer } from 'tsyringe'
 
 import filePersistedLedgers from '@/configs/ledgers/indy/ledgers'
-import useBCAgentSetup from '@/hooks/useBCAgentSetup'
-import PushLinkListener from '@/push/PushLinkListener'
+import useBCAgentSetup, { restartPickupOnReturn } from '@/hooks/useBCAgentSetup'
+import AppGlobalListeners from '@/components/AppGlobalListeners'
 import { appPushNotificationsConfig } from '@/push/pushDefaults'
+import { appMessagePickupLifecycle, setLivePickupEnabled } from '@/utils/livePickup'
 import { offerFeedbackReport } from '@/utils/problemReport'
 import { expirationOverrideInMinutes } from '@utils/expiration'
 import BCLogger from '@utils/logger'
@@ -258,8 +267,10 @@ export class AppContainer implements Container {
     this._container.registerInstance(TOKENS.COMPONENT_HOME_HEADER, HomeHeaderView)
     this._container.registerInstance(TOKENS.COMPONENT_HOME_FOOTER, HomeFooterView)
     // Rendered with the main tabs: makes the phone wakeable after a new agent
-    // link when notifications were turned on before it (push/pushAfterLink.ts).
-    this._container.registerInstance(TOKENS.COMPONENT_APP_GLOBAL_LISTENER, PushLinkListener)
+    // link when notifications were turned on before it (push/pushAfterLink.ts),
+    // and opens the 1 s message-pickup window while the app is in use
+    // (utils/pickupBoost.ts).
+    this._container.registerInstance(TOKENS.COMPONENT_APP_GLOBAL_LISTENER, AppGlobalListeners)
     this._container.registerInstance(TOKENS.COMPONENT_CRED_EMPTY_LIST, EmptyList)
     this._container.registerInstance(TOKENS.COMPONENT_RECORD, Record)
     this._container.registerInstance(TOKENS.CACHE_CRED_DEFS, [
@@ -358,6 +369,14 @@ export class AppContainer implements Container {
           updateVal(data)
         }
       }
+      // A saved switch, read when it is false too: loadState skips a falsy value, so a saved "off" would lose to a
+      // default that is on.
+      const loadSwitch = async (key: BCLocalStorageKeys, updateVal: (val: boolean) => void) => {
+        const data = await this.storage.getValueForKey(key)
+        if (typeof data === 'boolean') {
+          updateVal(data)
+        }
+      }
 
       let loginAttempt = initialState.loginAttempt
       let preferences = initialState.preferences
@@ -365,8 +384,24 @@ export class AppContainer implements Container {
       let tours = initialState.tours
       let onboarding = initialState.onboarding
       let personCredOfferDissmissed = initialState.dismissPersonCredentialOffer
-      let { environment, remoteDebugging, enableProxy, enableAppToAppPersonFlow, enableTspCarriage, enableDidCommV2 } =
-        initialState.developer
+      let {
+        environment,
+        remoteDebugging,
+        enableProxy,
+        enableAppToAppPersonFlow,
+        enableTspCarriage,
+        enableDidCommV2,
+        enableV2Mailbox,
+        enableLivePickup,
+        enableSharedConnect,
+        enableSharedConnectInvite,
+        enableTrustedApprovers,
+        enableStateVerifiedApprovers,
+        enableTrustTestState,
+        enableStateCard,
+        demoStateHost,
+        sediDemoSide,
+      } = initialState.developer
       let witness = initialState.witness
 
       await Promise.all([
@@ -387,8 +422,41 @@ export class AppContainer implements Container {
         loadState<RemoteDebuggingState>(BCLocalStorageKeys.RemoteDebugging, (val) => (remoteDebugging = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableProxy, (val) => (enableProxy = val)),
         loadState<boolean>(BCLocalStorageKeys.EnableAppToAppPersonFlow, (val) => (enableAppToAppPersonFlow = val)),
-        loadState<boolean>(BCLocalStorageKeys.EnableTspCarriage, (val) => (enableTspCarriage = val)),
-        loadState<boolean>(BCLocalStorageKeys.EnableDidCommV2, (val) => (enableDidCommV2 = val)),
+        // On by default now, so read with loadSwitch: loadState skips a saved false, and an opt-out is a false. Their
+        // keys are new; the values saved under 'EnableTspCarriage' / 'EnableDidCommV2' while these were opt-in are left
+        // and ignored: a false saved against an opt-in experiment is not an opt-out of the default that now ships.
+        loadSwitch(BCLocalStorageKeys.EnableTspCarriage, (val) => (enableTspCarriage = val)),
+        loadSwitch(BCLocalStorageKeys.EnableDidCommV2, (val) => (enableDidCommV2 = val)),
+        loadSwitch(BCLocalStorageKeys.EnableV2Mailbox, (val) => (enableV2Mailbox = val)),
+        loadState<boolean>(BCLocalStorageKeys.EnableLivePickup, (val) => (enableLivePickup = val)),
+        loadSwitch(BCLocalStorageKeys.EnableSharedConnect, (val) => (enableSharedConnect = val)),
+        // A saved "on" outlives any default, so bifold's isSharedConnectInviteEnabled() (with its remote off) is this
+        // flag's only kill path: keep the read going through it, never inline the saved value.
+        loadSwitch(BCLocalStorageKeys.EnableSharedConnectInvite, (val) => (enableSharedConnectInvite = val)),
+        // As above: bifold's isTrustedApproversEnabled() (with its remote off) is this flag's only kill path, so every
+        // reader goes through it, never the saved value.
+        loadSwitch(BCLocalStorageKeys.EnableTrustedApprovers, (val) => (enableTrustedApprovers = val)),
+        // As above: isStateVerifiedApproversEnabled() and isTrustTestStateEnabled() (with the remote offs) are the
+        // only kill paths, so every reader goes through them, never the saved value.
+        loadSwitch(BCLocalStorageKeys.EnableStateVerifiedApprovers, (val) => (enableStateVerifiedApprovers = val)),
+        loadSwitch(BCLocalStorageKeys.EnableTrustTestState, (val) => (enableTrustTestState = val)),
+        // As above: isStateCardEnabled() (with STATE_CARD_REMOTE_OFF and SEDI_KERI_REMOTE_OFF) is the only kill path.
+        loadSwitch(BCLocalStorageKeys.EnableStateCard, (val) => (enableStateCard = val)),
+        // "Confirm it's you" is not loaded here any more: it is part of the app, with no setting, and bifold's own
+        // switch decides it (on as shipped; CONFIRM_ITS_YOU_REMOTE_OFF or SEDI_KERI_REMOTE_OFF turns it off). The
+        // value a phone saved while it was a Developer switch is left where it is and ignored.
+        // The saved Demo state host goes to bifold, which refuses a value that is not a bare public hostname and applies
+        // it only to demo roots and only while both switches hold: the saved text never redirects on its own.
+        (async () => {
+          const data = await this.storage.getValueForKey(BCLocalStorageKeys.DemoStateHost)
+          if (typeof data === 'string') demoStateHost = data
+        })(),
+        // Which SEDI demo side this phone took: anything but the two names reads as neither.
+        (async () => {
+          // Read as unknown: the store is typed for its whole state, and only the two names are taken.
+          const data: unknown = await this.storage.getValueForKey(BCLocalStorageKeys.SediDemoSide)
+          if (data === 'guardian' || data === 'ward') sediDemoSide = data
+        })(),
         loadState<WitnessSettings>(LocalStorageKeys.WitnessSettings, (val) => {
           // console.log('[DEBUG] Loaded WitnessSettings from storage:', JSON.stringify(val))
           witness = val
@@ -413,9 +481,35 @@ export class AppContainer implements Container {
           enableAppToAppPersonFlow,
           enableTspCarriage,
           enableDidCommV2,
+          enableV2Mailbox,
+          enableLivePickup,
+          enableSharedConnect,
+          enableSharedConnectInvite,
+          enableTrustedApprovers,
+          enableStateVerifiedApprovers,
+          enableTrustTestState,
+          enableStateCard,
+          demoStateHost,
+          sediDemoSide,
         },
         witness: { ...initialState.witness, ...witness },
       } as BCState
+      // Before any agent starts: configureMessagePickup reads it.
+      setLivePickupEnabled(state.developer.enableLivePickup)
+      // Before the first link is routed: the scanner, a pasted code and a deep link all read it.
+      setSharedConnectEnabled(state.developer.enableSharedConnect)
+      // Before the QR sheet first opens: it offers "Show a code" only while this is on.
+      setSharedConnectInviteEnabled(state.developer.enableSharedConnectInvite)
+      // Before the agent's first message is read: an offer or an approver's request that arrives is dropped while off.
+      setTrustedApproversEnabled(state.developer.enableTrustedApprovers)
+      // Before a Guardian card arrives or Who approves opens: both read these at each check.
+      setStateVerifiedApproversEnabled(state.developer.enableStateVerifiedApprovers)
+      setTrustTestStateEnabled(state.developer.enableTrustTestState)
+      // Before Credentials first draws: the state card reads it at each render.
+      setStateCardEnabled(state.developer.enableStateCard)
+      setDemoStateHost(state.developer.demoStateHost || null)
+      // Before the codes screen first opens: it shows only this side's code (both with no side).
+      setSediDemoSide(state.developer.sediDemoSide || null)
 
       const { enabledAt, sessionId } = state.developer.remoteDebugging
       if (enabledAt && sessionId) {
@@ -438,6 +532,18 @@ export class AppContainer implements Container {
     this._container.registerInstance(TOKENS.ONBOARDING, generateOnboardingWorkflowSteps)
 
     this._container.registerInstance(TOKENS.UTIL_LOGGER, logger)
+    // Background pauses live pickup or stops polling; on a return that doesn't
+    // lock, the restart is the app's own (useBCAgentSetup restartPickupOnReturn),
+    // so bifold's ActivityProvider never restarts pickup with a strategy of its own.
+    // This shadows bifold's default because it is registered in THIS child container
+    // and the app resolves from it (container-compose.ts, App.tsx). Registered on the
+    // parent, or resolved from bifold's container, ActivityProvider would silently get
+    // bifold's polling restart and undo live pickup on every return
+    // (__tests__/containerComposition.test.ts).
+    this._container.registerInstance(
+      TOKENS.UTIL_MESSAGE_PICKUP,
+      appMessagePickupLifecycle(logger, (agent) => restartPickupOnReturn(agent, logger))
+    )
 
     // Initialize VRC module (credential display handlers, localization, container registration)
     initializeVrcModule(this._container)

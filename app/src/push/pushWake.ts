@@ -25,6 +25,17 @@ export interface PushWakeDeps {
   agentDid(): string | undefined
   /** This phone's platform push token, or undefined when there is none (permission denied, no services). */
   pushRegistration(): Promise<PushRegistration | undefined>
+  /**
+   * The wallet mailbox mediator's DID, when a build names one (`MAILBOX_MEDIATOR_DID`): suggested to the agent as a
+   * trigger, so the gateway's allowlist admits that mediator's `push/wake` for a message waiting at the mailbox.
+   */
+  mailboxMediatorDid?: string
+  /**
+   * Leave the handle at the wallet mailbox's mediator (`messaging/wake/set`, bifold `setMailboxWakeHandle`), so a
+   * sender's wake request there rings this phone. Best effort, reported in the outcome; absent when no mailbox is
+   * wired.
+   */
+  setMailboxWake?(wake: GatewayWakeHandle): Promise<boolean>
   /** `device/set-wake` on the linked agent. */
   setWake(
     wake: GatewayWakeHandle,
@@ -110,6 +121,8 @@ export type PushWakeOutcome =
       allowedTriggers?: string[]
       /** Whether the mediator was given the handle, so a waiting message rings this phone. */
       messages?: 'set' | 'failed'
+      /** Whether the wallet mailbox's mediator holds the handle and can ring its gateway (`wakeCapable`). */
+      mailbox?: 'set' | 'failed'
     }
   | { status: 'notWakeable'; handle: GatewayWakeHandle }
 
@@ -143,19 +156,32 @@ export async function enablePushWake(deps: PushWakeDeps): Promise<PushWakeOutcom
   // (within UNCONFIRMED_HANDLE_REUSE_MS) instead of spending another.
   if (!reuse) await deps.handles?.set(agentDid, record).catch(() => undefined)
   // The gateway as a trigger too: it rings this handle for the mediator's
-  // waiting messages, and only if the agent allows it here.
+  // waiting messages, and only if the agent allows it here. The wallet
+  // mailbox's mediator as well, when a build names one: it rings this handle
+  // on a sender's wake request for mail waiting at the mailbox, and the
+  // gateway admits it only if the agent allows it here.
   const channel = await deps.setWake(handle, {
     pushPlatform: registration.platform,
-    suggestedTriggers: [handle.gateway],
+    suggestedTriggers: deps.mailboxMediatorDid ? [handle.gateway, deps.mailboxMediatorDid] : [handle.gateway],
   })
   if (!channel.pushCapable) return { status: 'notWakeable', handle }
   if (record.provisionedAt === undefined) {
     await deps.handles?.set(agentDid, { ...record, provisionedAt: now }).catch(() => undefined)
   }
-  if (!deps.setMediatorDeviceInfo) return { status: 'wakeable', handle, allowedTriggers: channel.allowedTriggers }
-  const messages = await deps.setMediatorDeviceInfo({ handle: handle.handle, platform: registration.platform }).then(
-    () => 'set' as const,
-    () => 'failed' as const
-  )
-  return { status: 'wakeable', handle, allowedTriggers: channel.allowedTriggers, messages }
+  const outcome: PushWakeOutcome = { status: 'wakeable', handle, allowedTriggers: channel.allowedTriggers }
+  if (deps.setMediatorDeviceInfo) {
+    outcome.messages = await deps
+      .setMediatorDeviceInfo({ handle: handle.handle, platform: registration.platform })
+      .then(
+        () => 'set' as const,
+        () => 'failed' as const
+      )
+  }
+  if (deps.setMailboxWake) {
+    outcome.mailbox = await deps.setMailboxWake(handle).then(
+      (wakeCapable) => (wakeCapable ? ('set' as const) : ('failed' as const)),
+      () => 'failed' as const
+    )
+  }
+  return outcome
 }

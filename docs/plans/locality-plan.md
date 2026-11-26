@@ -1,5 +1,13 @@
 # Locality — co-presence evidence a third party can trust
 
+**Roadmap epic:** [keyring-wallet#691](https://github.com/berkmancenter/keyring-wallet/issues/691)
+
+**Status.** The reference ladder (`ref-06p` … `ref-06p5`) is built. §10
+items 1–13 are implemented and on `main` in both repositories — the witness
+server and both phone platforms (keyring-bifold#40, #47, #49, #51, #53;
+keyring-wallet#21, #38). Item 14 is out of scope pending §11-Q5; §10.4 lists
+the open follow-ups.
+
 **Scope.** A witness deployed in a physical space observes, over a short-range
 radio channel it controls, that the devices completing a witnessed VRC exchange
 were within its range while the ceremony ran — and attests to that observation,

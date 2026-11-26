@@ -1,0 +1,214 @@
+{
+  "source": "verifiable-trust-infrastructure 3139e00e, vti-voting/tests/rules_and_tally.rs: manifest_json, full_answers, vot_032_a_complete_ballot_passes, vot_011_a_ballot_for_another_manifest_is_a_mismatch, vot_032_ballot_rules_are_enforced",
+  "manifest": {
+    "electionId": "agm-2027",
+    "community": "did:webvh:QmCommunity:vtc.example.org",
+    "title": "Annual general meeting 2027",
+    "questions": [
+      {
+        "key": "budget",
+        "type": "choice",
+        "text": "Approve the 2027 budget?",
+        "options": [
+          {
+            "key": "yes"
+          },
+          {
+            "key": "no"
+          },
+          {
+            "key": "abstain"
+          }
+        ],
+        "minSelections": 1,
+        "maxSelections": 1,
+        "optional": false
+      },
+      {
+        "key": "workshop",
+        "type": "choice",
+        "options": [
+          {
+            "key": "kiln"
+          },
+          {
+            "key": "laser"
+          },
+          {
+            "key": "textile"
+          }
+        ],
+        "minSelections": 0,
+        "maxSelections": 2,
+        "optional": false
+      },
+      {
+        "key": "formats",
+        "type": "ranking",
+        "options": [
+          {
+            "key": "evenings"
+          },
+          {
+            "key": "weekends"
+          },
+          {
+            "key": "online"
+          }
+        ],
+        "partial": false,
+        "optional": true
+      },
+      {
+        "key": "venue",
+        "type": "score",
+        "options": [
+          {
+            "key": "hall"
+          },
+          {
+            "key": "barn"
+          }
+        ],
+        "min": 1,
+        "max": 5,
+        "optional": true
+      },
+      {
+        "key": "improve",
+        "type": "text",
+        "maxLength": 40,
+        "optional": true
+      }
+    ],
+    "secrecy": "open",
+    "roll": {
+      "rule": "members"
+    },
+    "registrationOpensAt": "2026-11-01T00:00:00Z",
+    "votingOpensAt": "2026-11-03T00:00:00Z",
+    "votingClosesAt": "2026-11-07T18:00:00Z",
+    "revote": "replace",
+    "board": {
+      "visibility": "private",
+      "auditors": ["did:webvh:QmAudit:audit.example.com"]
+    },
+    "ballotBox": "did:webvh:QmVote:vote.example.net",
+    "binding": true,
+    "allowEarlyClose": false,
+    "resultsBeforeClose": false,
+    "textReleaseThreshold": 10
+  },
+  "manifestDigest": "zQmYGx9igaPfbozUZBFFRfvrDzncXzaqf5DFZWKpzcwtPiM",
+  "fullAnswers": [
+    {
+      "question": "budget",
+      "choice": ["yes"]
+    },
+    {
+      "question": "workshop",
+      "choice": ["kiln", "textile"]
+    },
+    {
+      "question": "formats",
+      "ranking": ["evenings", "weekends", "online"]
+    },
+    {
+      "question": "venue",
+      "scores": {
+        "hall": 4,
+        "barn": 2
+      }
+    },
+    {
+      "question": "improve",
+      "text": "Longer weekend hours"
+    }
+  ],
+  "refused": [
+    {
+      "index": 0,
+      "answer": {
+        "question": "budget",
+        "choice": ["yes", "no"]
+      }
+    },
+    {
+      "index": 0,
+      "answer": {
+        "question": "budget",
+        "abstain": true
+      }
+    },
+    {
+      "index": 1,
+      "answer": {
+        "question": "workshop",
+        "choice": ["kiln", "kiln"]
+      }
+    },
+    {
+      "index": 1,
+      "answer": {
+        "question": "workshop",
+        "choice": ["pottery"]
+      }
+    },
+    {
+      "index": 2,
+      "answer": {
+        "question": "formats",
+        "ranking": ["evenings"]
+      }
+    },
+    {
+      "index": 3,
+      "answer": {
+        "question": "venue",
+        "scores": {
+          "hall": 6,
+          "barn": 2
+        }
+      }
+    },
+    {
+      "index": 3,
+      "answer": {
+        "question": "venue",
+        "scores": {
+          "hall": 3
+        }
+      }
+    },
+    {
+      "index": 4,
+      "answer": {
+        "question": "improve",
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    },
+    {
+      "index": 4,
+      "answer": {
+        "question": "budget",
+        "choice": ["no"]
+      }
+    },
+    {
+      "index": 0,
+      "answer": {
+        "question": "budget",
+        "choice": ["yes"],
+        "abstain": true
+      }
+    }
+  ],
+  "refusedDroppingTheLast": true,
+  "admittedAbstainingTheLast": {
+    "index": 4,
+    "answer": {
+      "question": "improve",
+      "abstain": true
+    }
+  }
+}

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Talk to us on Signal
+    url: https://signal.group/#CjQKIEFrPntxzJWIqaymoPmBakVxfBcsiY8Hk4eVZzSZ44t8EhBTm3UCPt5SUSq6Z_H6H2eK
+    about: Join the Keyring testers group. A maintainer approves each request to join.
+  - name: Report a security problem privately
+    url: https://github.com/berkmancenter/keyring-wallet/security/advisories/new
+    about: For anything that could put people's data or keys at risk. Only the maintainers see it.

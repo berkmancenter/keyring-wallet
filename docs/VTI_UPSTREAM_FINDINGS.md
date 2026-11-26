@@ -1,6 +1,6 @@
 # VTI upstream findings
 
-**Version 1.44 — 2026-09-24.** A living document: every finding here was measured
+**Version 1.55 — 2026-11-25.** A living document: every finding here was measured
 against a local VTI stack this repository can build, and each carries the
 command that produced it, what was observed, and where in upstream's source the
 behaviour lives. Entries are updated in place as they are resolved — see
@@ -67,6 +67,20 @@ from a report or an issue always lands on the right entry.
 | [VTI-41](#vti-41--tsp-rev-3-does-not-cross-two-mediators-no-accept-comes-back-didcomm-does) | TSP Rev 3 does not cross two mediators: no accept comes back; DIDComm does | **High** | **Fixed upstream** in affinidi-tdk-rs #884 (SDK 0.26.27, 09-23) — the accept was posted to the wrong mediator. **Operator requirement remains:** the receiving mediator must admit the relayed hop (`enable_inter_mediator_relay`, or the sender in `relay_trusted_mediators`) — for the Farm, a Farm-side setting | F′ |
 | [VTI-42](#vti-42--a-community-names-withdraw01-as-the-remedy-and-its-didcomm-router-has-never-heard-of-it) | A DIDComm router that has never heard of verbs its own service dispatches (VTC and VTA) | **High** | **Resolved upstream** in VTI #1687 (09-23): the binding envelope is the intended — and now the only — DIDComm carriage for every verb, on both services; refusals of a task-typed message name the envelope and are threaded. Keyring sends it (keyring-bifold#76) | F′ |
 | [VTI-43](#vti-43--a-tsp-reply-sent-before-the-relationship-is-accepted-never-arrives) | A TSP reply sent before the relationship is accepted never arrives | **High** | **Fixed upstream** in VTI #1675 (09-23): a relationship-control frame now completes before anything the same sender sent after it. Recurred on the Farm before the fix reached it (VTA 0.39.0) | F′ |
+| [VTI-44](#vti-44--the-mediator-reads-a-discover-features-query-only-in-its-own-spelling-and-answers-the-specs-with-nothing) | The mediator reads a Discover Features query only in its own spelling, and answers the spec's with nothing | Low | New — read in source at the deployed mediator, the last pre-move commit and the current pin; measured live on a local mediator | I |
+
+## Findings by feature
+
+A plan that meets a gap in upstream registers it here, in the PR of the step
+that meets it, as a `VTI-QN` question until a measurement makes it a `VTI-NN`
+finding (`docs/plans/CLAUDE.md`, the completeness checklist's "Upstream gaps"
+item). This index groups what each feature asked or found, so a reader
+following one feature does not read the whole table. Features whose plans
+predate this index gain a row the next time their plan touches this file.
+
+| Feature | Plan | Questions and findings |
+| --- | --- | --- |
+| A person's own AI agent in Keyring (agent connect) | `docs/plans/agent-connect-plan.md`, ledger `agent-connect-plan/vti-asks.md` | VTI-Q26 (mentions in a room), VTI-Q27 (a VTA-side pairing flow), VTI-Q28 (consumer kind on `acl/grant`), VTI-Q29 (capabilities bound to a context), VTI-Q30 (member-side withdrawal of a leaf), VTI-Q31 (an `agents` room setting), VTI-Q32 (persona-issued credentials), VTI-Q33 (an author's chain with a record), VTI-Q34 (`acl/swap-key` and revoke by `deviceId`), VTI-Q35 (how an owner approves an agent's act: the consent flow, since `stepUp` gates nothing), VTI-Q36 (three starter-mediator measurements), VTI-Q37 (a room-scoped context binding, a convenience since rev 4), VTI-Q38 (a `delegation` member on a room name record), VTI-Q39 (top-level context creation without a super-admin), VTI-Q40 (memory items in the context delete preview), VTI-Q41 (a memory quota and item lifetime), VTI-Q42 (large or binary memory values), VTI-Q43 (a bulk memory clear), VTI-Q44 (the VTA's storage protection mode readable by a client), VTI-Q45 (a private or sealed label for a context; deferred), VTI-Q46 (a stale documentation line on per-entry capability overrides), VTI-Q47 (a typed credential value type for agent memory), VTI-Q48 (`rooms/join/request`) |
 
 ## Stack under test
 
@@ -87,6 +101,7 @@ particular none are the images a VTA Farm currently offers.
 | **D** | 2026-09-20 | unchanged from C — vta 0.34.1 · vtc 0.11.58 | `b544da04` — the **#829 branch tip**, mediator 0.28.0; this is *not* upstream main, which has since merged #829 and thirteen more (#830–#842) and stands at mediator 0.28.9 | `35244b7` — daemon 0.8.3 |
 | **H** | 2026-09-21 (evening) | `a96fe02f` — upstream main; carries #1579, #1581, #1591–#1593, #1601 and the persona/face work (#1594–#1606); `affinidi-messaging-sdk` 0.26.12 from upstream's own lockfile; `vta` built `--features tsp` | `ad36f0b1` — upstream main, mediator **0.28.11** (#843, #844), `--features tsp` | `5365da7` — upstream main (#205) |
 | **G** | 2026-09-21 | `6bd52cab` as era C, **plus `affinidi-messaging-sdk` 0.26.12** (carries tdk-rs #838) in the lockfile; `vta` built **`--features tsp`**; alice and the community VTA advertise `TSPTransport` (`vta services tsp enable`), the VTC by a DID-log edit (VTI-35) | `15499952` as era E — mediator 0.28.9, rebuilt **`--features tsp`** | `35244b7` — daemon 0.8.3 |
+| **I** | 2026-11-20 | not involved | `c0a69f1e` — the last `affinidi-tdk-rs` commit before the mediator moved to its own repository (#949), 20 commits after the version Keyring deploys (`55580615`, mediator **0.33.1**), default features, built locally; its own Redis, no persistence. The code in question reads identically at `55580615`, `c0a69f1e` and the current pin `7609754e` | not involved |
 
 **Era F′ — the Farm's VTAs upgraded, 2026-09-22.** The Farm moved its VTAs from
 `vta 0.36.0-d383d17e` to **`0.37.1-d9a5be02`** (upstream #1634), newer than the
@@ -1635,6 +1650,69 @@ rather than waiting out the timeout. Related: [VTI-27](#vti-27) (refusals that
 arrive as problem-reports) and [VTI-Q17](#open-questions-and-requests)
 (idempotency, which is what a safe retry of a non-idempotent verb would need).
 
+### VTI-44 — The mediator reads a Discover Features query only in its own spelling, and answers the spec's with nothing
+
+*Observed on era **I** (see [Stack under test](#stack-under-test)); read in source at three commits.*
+
+(a) **What happens.** A client asks the mediator which protocols it serves,
+with a Discover Features 2.0 `queries` message spelled as the DIDComm
+Messaging specification spells it:
+
+```json
+{ "queries": [ { "feature-type": "protocol", "match": "*" } ] }
+```
+
+The mediator answers with a well-formed `disclose` that discloses nothing:
+
+```json
+{ "disclosures": [] }
+```
+
+The same query in the mediator's own spelling is answered in full, from the
+same session, seconds later:
+
+```json
+{ "queries": [ { "feature_type": "Protocol", "match": "*" } ] }
+```
+
+→ `discover-features/2.0`, `routing/2.0`, `trust-ping/2.0`, `out-of-band/2.0`,
+`messagepickup/3.0`, `atm/1.0/authenticate`, `report-problem/2.0`.
+
+Two things differ, and both must be the mediator's way for a query to be read:
+the key (`feature_type`, not `feature-type`) and the value (`Protocol`, not
+`protocol`). A query that does not parse is treated as asking for nothing, so a
+spec-conformant client cannot tell "this mediator serves none of these" from
+"this mediator did not read the question". Credo sends the specification's
+spelling.
+
+**What it costs.** Nothing to Keyring today: our only Discover Features use
+asks another wallet, not a mediator or an agent. It would cost a client that
+decides what a mediator or VTA supports by asking it, which is what Discover
+Features is for: an empty answer reads as "unsupported".
+
+(b) **How to reproduce.** Authenticate to the mediator, open the live socket,
+and send the two queries above to the mediator's own DID; read the two
+`disclose` replies. Our lab run does exactly this beside a wallet-to-wallet run
+(two Credo agents through one mediator), and reports the first as an expected
+gap.
+
+(c) **Where it lives.** `crates/messaging/affinidi-messaging-sdk/src/protocols/discover_features.rs`:
+`FeatureType` derives `Deserialize` with no `rename`, and `Query` is
+`rename_all = "snake_case"`, so the accepted form is the Rust field and variant
+names. `calculate_disclosure` is reached only when the body parses;
+`generate_disclosure_message` substitutes an empty disclosure when it does not.
+`Disclosure` is serialised the same way, so a reply carries `feature_type` as
+well — not measured against a spec-conformant reader. The definitions are
+identical at `55580615`, `c0a69f1e` and `7609754e`. The SDK's own client
+serialises the same structs, so the SDK interoperates with itself; the gap is
+against the specification and other implementations.
+
+(d) **What we do meanwhile.** Nothing in the app. Our lab tooling asks in the
+mediator's spelling and records the spec's as a gap. If a client of ours ever
+asks a mediator or VTA what it serves, it must not read an empty `disclose` as
+a refusal. The fix we would suggest is accepting the specification's spelling
+(serde aliases on the key and lowercase variants), and answering in it.
+
 ## Beyond VTI
 
 Findings in other upstreams that a VTI deployment exposes. Numbered `EXT-NN`,
@@ -1873,6 +1951,29 @@ carries everything. Numbered `VTI-QN`; numbers are permanent like the findings.
 | VTI-Q23 | Could a client remove its own ACL entry when it stops using an agent, so unlinking leaves nothing behind? | `delete_acl` refuses the caller's own entry (409 *cannot delete your own ACL entry*) whatever its role, and no self-service verb removes one; `swap_acl` only rotates. Keyring's Unlink therefore forgets the key on the phone and says the entry stays until the agent's owner removes it. [Details](#question-details). |
 | VTI-Q24 | Could a vetter that refuses an applicant's Vetting Card tell the applicant, instead of only logging it? | openvtc's vetter logs *vetting card refused* and answers nothing, so the applicant reads "Card sent — the vetter is checking" and the vetter's screen stays on "waiting for their card". Neither side can see why. [Details](#question-details). |
 | VTI-Q25 | Can a community offer admission by invitation OR by vetting? And can an admin admit an applicant who is waiting for vetting? | A community that publishes any vetting criterion requires vetting of everyone. An invitation neither bypasses it nor can be chosen as the criterion, although the manifest lists both as if either would do. `decide` refuses a Deferred request, so an admin cannot admit that applicant either. [Details](#question-details). |
+| VTI-Q26 | Could a room record carry a registered `mentions` member (the DIDs it addresses), listable by a room profile, and could a presenter be given only the records that mention it, or a read leaf scoped to them? | A person's AI agent in a room is meant to act only when mentioned, but to see a mention it needs a read leaf, and so reads the whole room: mention-only is a client convention, not enforced. No such member or filter in `docs/02-vta/data-rooms.md` or `vti-specs-core/trust-tasks/rooms` at the pin `f7b78e29d`, nor at `origin/main` `71d524572`. Details below. |
+| VTI-Q27 | Is a VTA-side pairing flow for an agent wanted: an `agent/pair` task, or a registered trigger-link flow (a wallet proposes `agent-connect`) with its Trust Task type URIs? | Today an agent's setup is copy-and-paste: mint a `did:key`, run an `acl create` line where admin is held, rotate on connect (`vta-sdk/src/agent_connect.rs`; `docs/02-vta/examples/agent-memory-with-vta-mcp.md`). Nothing for "pairing" or "qr" in `vta-mcp/` or `docs/02-vta/vta-mcp.md` at the pin. A wallet that pairs an agent by QR has to carry the flow itself, with unregistered type URIs. |
+| VTI-Q28 | Could `acl/grant` carry the consumer kind, or could the VTA refuse `rooms/keys/act` to an `application` entry that has not registered a device? | A delegate is whoever's entry records consumer kind `ai-agent` or `mediator` (`vta-service/src/trust_tasks/room_act.rs`, `is_delegate`, at the pin), and the kind is set only by the agent's own `device/register`. Between the grant and that call the entry can act as the owner. A client works around it by adding room capabilities only after reading the kind back. |
+| VTI-Q29 | Could a capability be bound to one context (a resource-qualified grant the VTA enforces), or could room presentation not require the persona's context in `act`? | `rooms/keys/present` needs the agent to act in the persona's context, so adding a room widens the agent's memory capabilities to that context, and so for every other agent of the owner added to a room of it (`docs/02-vta/data-rooms.md` §7; `vta-service/src/operations/room_oracle.rs`; read at `71d524572`). Whether a resource-qualified `CapabilityGrant` is enforced is not measured. |
+| VTI-Q30 | Could a member withdraw, at the room's host, a credential its own VTA issued to its agent, so the 4-hour leaf tail can be closed without the room's owner? | A presenter's leaf lasts 4 hours and only the room's owner can withdraw it (`rooms/owner/revoke/0.1`; `docs/02-vta/data-rooms.md`, "Withdraw credentials without removing anyone", at the pin). `group/remove` does not apply: the agent has no leaf. A member who revokes their agent can only say "up to 4 hours". |
+| VTI-Q31 | Could a community's room record carry an `agents` setting (`allowed`, `notAllowed`), readable from the room profile? | No room-level setting says whether members may add their agents (nothing matching in `vti-specs-core/trust-tasks/rooms` or `docs/03-vtc` at the pin). A wallet-only check is advisory and binds no other client. |
+| VTI-Q32 | Which VTA task signs a W3C credential with the persona as issuer (a delegation credential a person issues to their agent), and is there a status-hosting path for it? | `docs/` and `vti-specs-core` carry VAC and VMC issuance and no VDC (nothing for "DelegationCredential" at the pin beyond a design-note HTML). A client falls back to a short validity re-issued while the entry is active. |
+| VTI-Q33 | Could a record's author chain, or the author's delegation credential, travel with a room record, or be a registered record kind (for example a member profile)? | A record carries its author DID only, and the community's member list is administrator-only, so another member's client cannot tell an agent from a person, nor show whose agent it is. Read at `71d524572`. |
+| VTI-Q34 | Could an administrator forbid, or require approval or step-up for, `acl/swap-key` on a delegate's entry; could `acl/revoke` address an entry by `deviceId`; and could an administrator session be told when an entry's subject changes? | `acl/swap-key` is self-service and moves the whole entry, device binding included, to a new DID the caller proves control of (`vta-service/src/operations/acl.rs`: "self-service write is the rotation (`acl/swap-key`)", at the pin; the copy of every member read at `71d524572`). An agent holding its key keeps every grant under a new DID while `acl/revoke` of the old one finds nothing, and the owner's wallet learns of the swap only when it lists. A client works around it with `device/list` and `deviceId`, at the cost of a listing and a re-list. |
+| VTI-Q35 | How does an owner's wallet approve an AI agent's act? Could an owner (not only the operator) put an `application` entry's memory and room writes under `requireConsent` with the wallet in the approver set, and is the consent request pushed to the wallet, in a documented format? (Reframed 2026-11-25; first asked as "which task types does an entry's `stepUp` gate".) | The SDK sends `stepUp` (`approver`, `require`; `vta-sdk/src/client/acl.rs`) and `docs/02-vta/personal-ai-agents.md` Step 5 calls passkey step-up the guardrail. Re-read at the pin `f7b78e29d` on 2026-11-25: the entry's `stepUp` fields gate nothing at runtime, step-up is only ever self-approval (`trust_tasks/policy_gate.rs:250`, `persona.rs:3110`; `step_up.rs:1127` returns early when the recipient is the caller), and `step_up.rs:1276-1282` says someone-else-approves "is the consent flow's job (`requireConsent` + an approver set)". Re-read at `3ee07a12` on 2026-11-25: it does reach the approver. A `requireConsent` disposition raises a pending (`vta-service/src/trust_tasks/policy_gate.rs:277`, `:376`; 900 s, `:43`), the VTA signs one `task-consent/request/0.1` per approver (`consent_request.rs:58`) and, only for a newly raised pending, pushes it through its push engine (TSP > DIDComm > REST; `policy_gate.rs:700`, `step_up.rs:1048`; `deliver_by` 300 s, `consent_request.rs:31`), then rings once (`step_up.rs:1193`); with no route nothing is pushed. The approver answers with `task-consent/decision/0.2` signed for `assertionMethod` (`received.rs:196,227`; `task_consent.rs:118`). Delivery receipts and the mediator wake exist only from `3ee07a12` (not at the pin), and the wake likely needs mediator 0.52. Keyring keeps and answers such a request (`packages/core/src/modules/trust-tasks/module/vtaAgent.ts:571-590`, `3987-4019`, on `main` at `c65701c91`). **Still open:** which task types an `application` entry's memory and room writes are held under, who writes the `requireConsent` rule (policy rules are the operator's), and whether `[policy] enforcement` is on (off by default, `vta-config/src/lib.rs:211-216`). Read, not run end to end. |
+| VTI-Q36 | Mediator: could the per-sender queue cap be documented, with a `Retry-After` on its refusal; is there a documented self-service ACL path for a `did:key` client on a closed mediator; and could a forward to a `did:peer` whose service names another host be refused at send rather than accepted and dropped? | Measured once on 2026-11-20 on the starter mediator image `e6e2c636` (0.48.0, DIDComm v2), not on the VTA Farm, and that image's digest differs from the starter's `pins.json`: the 50th queued message from one sender is refused HTTP 503 `e.p.limits.queue.peer` with no recovery hint; with `global_acl_default = DENY_ALL` the send is refused 403 `e.p.authorization.send` and the recipient's socket upgrade fails after authentication succeeded; a forward to another host returns 200 and is never delivered (`FORWARD_ABANDONED`, a problem report for the sender only). Belongs with the mediator's maintainers, as VTI-05 to VTI-07 do. A question until it is re-measured on a pinned image. |
+| VTI-Q37 | Could an ACL entry's context scope be bound to a room (an `act` that differs by the room the holder is acting in), or could a presenter leaf carry the contexts its holder may use, enforced on `vta/memory/*`? | A person who keeps several memory contexts (one for a college's room, one for a clinic's) and lets one agent into both rooms wants the agent to use only the matching context in each. Today `act` is per entry and covers each named context and its subtree (`vta-sdk/src/acl.rs`, `ActScope::covers`), and `vta/memory/*` is gated on `require_context` alone, so an entry that holds both contexts reads both from either room; the per-room choice can only be a rule the agent's software keeps. The enforced form today is one entry per distinct memory set, and since 2026-11-24 it is the design: Keyring binds an agent to a fixed set on its entry and uses another agent for another set, so this ask is a convenience, not the boundary. Read at the pin `f7b78e29d` on 2026-11-23; details below. |
+| VTI-Q38 | Could `rooms/_shared` register a `delegation` member on the `memberProfile` record (the author's DTG delegation credential and its acceptance), so a room's profile can list it and any member can verify whose agent an author is? | A member's AI agent posts in a room as a presenter under its own DID. Another member who taps it sees a DID and, at most, the name the agent gave itself, which is "a claim, not a verified one" (`data-rooms.md`, "Names"). The record members a profile may list are a registered set, and none can carry the delegation; the leaf chain that records who equipped the presenter is checked by the host and not shown to members. So a client can show whose agent an author is only for its own agents, from local records. Read at the pin `f7b78e29d` on 2026-11-23. |
+| VTI-Q39 | Could a session that is not an unrestricted administrator create **top-level** contexts, for example a `context-create` entry allowed to create roots under a reserved prefix, and could a scoped administrator rename the display `name` of a context it created? | A person's wallet creates one context per memory an AI agent is given. A root context needs unrestricted act authority (VTI-CTX-020), the `context-create` capability reaches sub-contexts only, and `vta/contexts/update` is super-admin only, so a wallet that is not a super-admin cannot make a memory at the root or rename one. The workaround is a parent made once by a super-admin. Read at `4e5861d95` on 2026-11-24; details below. |
+| VTI-Q40 | Could `vta/contexts/preview-delete` and the `delete` refusal count **memory items** with what a context holds? | `delete_context` purges a context's memory (`purge_context_rows`), but the preview and the not-empty refusal count sub-contexts, keys, DIDs, ACL entries and templates only, so a context holding only memory deletes without `force` and the person is shown no loss. A client has to count items itself. Read at `4e5861d95` on 2026-11-24. |
+| VTI-Q41 | Could a context's memory have a **quota** (items, total bytes) and could `vta/memory/put` take a **time to live**? | The limits are per request only (a value 64 KiB, a key 512 bytes, `put-many` 64 writes or 768 KiB); no per-context, per-principal or global cap on items or bytes and no expiry was found, the context policy's `quotas` count operations a day and are never applied to memory, and the operation budget (VTI-TRN-029) is a rate, not a total. A compromised AI agent with `memory-write` can fill the store at about 6.4 MB a second at the default rate (arithmetic, not measured). A client can only count and warn. Read at `4e5861d95` on 2026-11-24; details below. |
+| VTI-Q42 | Could memory hold **larger or binary values**, or a reference to a blob store? | A memory value is a UTF-8 string of at most 65,536 bytes, so a file or an image cannot be remembered; an agent keeps a text note instead. Read at `4e5861d95` on 2026-11-24. |
+| VTI-Q43 | Could a client **clear a context's memory, or a key prefix,** in one call, and could the specification say what a tombstone keeps? | "Also delete what it remembered" is one `vta/memory/delete` per key, not atomic, and each leaves a tombstone that keeps the key for a retention period (30 days by default), so a wiped memory's keys stay listable. Read at `4e5861d95` on 2026-11-24. |
+| VTI-Q44 | Could a VTA tell a client its **storage protection mode** (plain, hardened or TEE), for example in `auth/whoami` or a status answer? | Memory values are encrypted per keyspace only when the VTA holds a storage key: the standard (plain) mode has none and stores them in plaintext, hardened mode derives the key from the master seed (protective only as far as the seed's backend), and a TEE derives it in the enclave. The VTA's documents call memory "not a secret store" without saying plain mode is plaintext, and no read-only task returns the mode (it exists in code as `BackupEnvironment`), so a wallet cannot tell a person what protects what their AI agent remembers. Read at `4e5861d95` on 2026-11-24; details below. |
+| VTI-Q45 | **Deferred, not requested now.** Could a context carry a **private or sealed label**, so the topic a person names a memory for need not sit in plaintext in `name` for every administrator to read? | A wallet gives each memory a random id and keeps the person's label in the context's `name` (1 to 256 characters; `description` 1,024), which is plaintext in the context record, shown to anyone who reaches the context and changeable by a super-admin only. The alternatives, a label held only on the phone or sealed to the person's key, lose it with the phone or show ciphertext in the VTA's own tools. Read at `4e5861d95` on 2026-11-24; recorded, to be raised if owners object to administrators seeing memory names. |
+| VTI-Q46 | Could `docs/02-vta/vta-mcp.md` §2.3 be corrected: it still calls per-entry capability overrides "a deferred gap", while `personal-ai-agents.md` and the ACL code ship them? | A documentation discrepancy, not a behaviour: a reader choosing an agent's role from `vta-mcp.md` is told it cannot narrow an entry's capabilities, when it can. Read at `4e5861d95` on 2026-11-24 (`docs/02-vta/vta-mcp.md` lines 116 to 117). |
+| VTI-Q47 | Could `vta/memory/*` carry a **typed credential value** beside text (typed verification, status awareness, a larger cap or a reference), so attestable data can be held in an agent's memory and shared? | A memory value is UTF-8 text of at most 64 KiB and no blob type was found; a wallet gives an agent a credential as a JSON text envelope written by the wallet from a consented, selective presentation (`vault/credentials/present/0.1`). Read at `4e5861d95` on 2026-11-24 (`operations/app_state.rs:94,558-575`, `vta-vault/src/present.rs:1-40`). |
+| VTI-Q48 | Could a room have a **join request** (`rooms/join/request/0.1`) that a person's wallet can send after scanning a code? | Admission is push-shaped and `data-rooms-joining.md:11-25,122-131` is a proposal that recommends waiting; a wallet works around it with its own join message and the VIC flow. Read at `4e5861d95` on 2026-11-24. |
 ### Question details
 
 Filled in to the same standard as the findings: (a) what happens and what
@@ -2176,10 +2277,124 @@ vets. Keyring's harness checks the community's answer. The cause of Keyring
 showing "member" was ours, and it is fixed. This question is only about what a
 community can offer.
 
+**VTI-Q26 — mentions in a room.**
+(a) A member's AI agent, admitted to a room as a presenter (`rooms/keys/present`),
+is meant to act only when a member addresses it. There is no way to address it:
+`rooms/_shared` defines no `mentions` record member, no profile can list one,
+and nothing delivers to a presenter only the records that name it. So a client
+writes `@<handle>` in the body text and the agent's own software matches it,
+which means the agent holds a read leaf and reads every record in the room to
+find the ones meant for it. Expected: a registered `mentions` member (an array
+of DIDs), so a profile can list it and a record can address an agent
+structurally; and, so that "acts only when mentioned" can be enforced rather
+than promised, either delivery filtered to the records that mention the
+presenter or a read leaf scoped to them.
+
+(b) Read, not run: `git grep -i mention -- docs/02-vta/data-rooms.md
+vti-specs-core/trust-tasks/rooms` in `external/verifiable-trust-infrastructure`
+at the pin `f7b78e29d` finds nothing; the same search at `origin/main`
+`71d524572` found nothing. There is no runtime case: the member is absent.
+
+(c) `vti-specs-core/trust-tasks/rooms/_shared` (the record members a profile may
+list); `docs/02-vta/data-rooms.md` §5 ("Who the member is": a presenter is
+"never a member of the room") and §7 (a leaf of one action, 4 hours).
+
+(d) Meanwhile the client keeps the text convention: the composer inserts the
+agent's full handle, the agent matches only its own whole handle, and a
+`mentions` body member is written only where a room's profile lists it. The
+client says in its own screens that an agent added to a room can read all of
+it, not only the messages that mention it.
+
+**VTI-Q37 — a room-scoped context binding.**
+(a) A member's AI agent is admitted to rooms as a presenter and keeps its memory
+in the VTA's per-context store. The member may keep several contexts, one per
+subject, and want the agent to use only the matching one in each room. The
+authority model has no room in it: an entry's `act` names contexts "and their
+subtrees, and only these" and holds wherever the entry acts; `vta/memory/put`,
+`get`, `list` and `delete` check `require_context(contextId)` and the memory
+capabilities, nothing about where the caller is acting. So an entry that holds
+two contexts can read either from either room, and a client that offers a
+per-room choice can only pass it to the agent's software as a rule. Expected:
+either an `act` that can be qualified by room (which contexts the holder may use
+while acting in room R), or a presenter leaf that carries the contexts its holder
+may use, with `vta/memory/*` refusing a context the current leaf does not carry.
+
+(b) Read, not run: `vta-sdk/src/acl.rs` (`ActScope::covers`, "authority over a
+parent context covers its whole subtree"), `vta-sdk/src/context_path.rs`
+(`is_ancestor_or_self`, `MAX_CONTEXT_DEPTH` 8), `docs/02-vta/personal-ai-agents.md`
+Step 6 ("a context-A agent cannot read, write, or delete context-B memory"),
+`docs/02-vta/data-rooms.md` §7 (a presenter leaf is one action for 4 hours), all
+in `external/verifiable-trust-infrastructure` at the pin `f7b78e29d`. There is no
+runtime case: nothing in the model names a room beside a context. A hierarchy
+does not help: a child context under a parent is reachable by every holder of
+the parent, so a per-room child would be read from every room.
+
+(c) The same files; `vti-specs-vta/trust-tasks/vta/memory/list/0.2.bundle.json`
+("The VTA context the item is scoped to; the isolation boundary"; a key `prefix`
+narrows a read and gates nothing).
+
+(d) Meanwhile the client keeps one top-level context per memory, grants an agent
+each memory by its own path and never by a parent, sends the per-room list to
+the agent with the room offer, says in its own screens that the VTA cannot
+enforce the per-room choice, and offers one agent per room as the enforced form.
+
+**VTI-Q39 — top-level context creation without a super-admin.**
+(a) A person's wallet administers their personal VTA and creates a context for
+each memory an AI agent is given. `create_context` first needs the admin role or
+`context-create`, then `require_super_admin` for a root and reach to the parent
+for a sub-context (VTI-CTX-020); `context-create` is additive and only a
+super-admin can grant it; `vta/contexts/update` (the display `name`) is
+super-admin only. Expected: a way for a scoped session to create roots under a
+reserved prefix it is granted, and to rename what it created.
+
+(b) Read, not run: `vta-service/src/operations/contexts.rs:54-146,231-238`,
+`vti-common/src/acl/mod.rs:405-428`, spec `03-trust-contexts.md` VTI-CTX-020
+(dtgwg-vti-spec `416899c`), at VTI `4e5861d95` on 2026-11-24. (c) The same files.
+(d) Meanwhile the wallet creates memories directly when `auth/whoami` shows an
+unrestricted administrator, which is how a phone is linked to its own VTA, and
+otherwise uses a parent context a super-admin made once.
+
+**VTI-Q40 to VTI-Q43 — memory lifecycle.**
+(a) VTI-Q40: a context delete preview that counts memory items. VTI-Q41: a
+per-context quota and an item `ttl`. VTI-Q42: values beyond 64 KiB of UTF-8
+text. VTI-Q43: a bulk clear and a statement of what a tombstone keeps.
+
+(b) Read, not run, at VTI `4e5861d95` on 2026-11-24:
+`vta-service/src/operations/contexts.rs:578,1009,1487` (`NotEmpty`, the `force`
+gate, `memory::purge_context`); `vta-service/src/operations/app_state.rs:94,120,155`
+(64 KiB, 30-day tombstone retention, 512-byte key);
+`vti-specs-vta/trust-tasks/vta/memory/put/0.3.bundle.json` (no `ttl`).
+No quota in the memory operations was found; that is a search, not a proof.
+(c) The same files. (d) Meanwhile the wallet counts items itself, confirms a
+delete explicitly, warns above a count it chooses, wipes memory with a re-runnable
+client loop, and tells the person memory is text on their VTA, not a secret or
+file store.
+
+**VTI-Q41 (extended) — what a quota would take, and VTI-Q44 — the storage protection mode.**
+(a) Q41: an optional `max_items` and `max_bytes` in `ContextPolicy`; per-context counters (for example a `memstat:<context>` row) updated in the same write batch as `put` and `delete` in `operations/app_state.rs`; a `quotaExceeded` error; a server-wide default cap in configuration; optionally a heavier weight for `put-many` against the operation budget, and a `ttl` on `put`. Q44: the mode as a field a client can read.
+
+(b) Read, not run, at `4e5861d95` on 2026-11-24: `vta-service/src/operations/app_state.rs:94-112` (the per-request limits), `vta-sdk/src/context_policy.rs:70` (`quotas`), `vta-service/src/operations/keys/sign.rs:193` and `trust_tasks/vault.rs:1588` (the only callers of `enforce_daily_quota`), `vta-service/src/trust_tasks/operation_budget.rs:10` (100 operations a second per client); `vta-service/src/server.rs:597-602,650` (`apply_encryption` on the memory keyspace), `vta-service/src/main.rs:2544-2558,2622-2640,2672` (hardened key derivation, the plaintext-seed warning, `None` in standard mode), `vta-service/src/restore.rs:30-35` (`environment_of`), `vti-common/src/store/encryption.rs` (AES-256-GCM with the keyspace and key as associated data). Not re-read here, from a research pass: backups include memory and are password-encrypted in every mode; audit rows hold an HMAC commitment of the key, never a value. No read-only task that returns the mode was found; that is a search, not a proof.
+(c) The same files. (d) Meanwhile the wallet shows the count and warns, says nothing about encryption, and tells the person memory is text on their VTA and not a place for secrets (plan §3.15).
+
+**VTI-Q45 — a private label for a context (deferred).**
+(a) A wallet names each memory context with an opaque random id and puts the owner's label in `name`. Expected: a label the VTA stores but shows only to its owner, or a documented place for a client-sealed label.
+(b) Read, not run: `vti-specs-vta/trust-tasks/vta/contexts/create/1.0.bundle.json` and `update/1.0` (`name` 1 to 256 characters, "Operator-facing only"; `description` at most 1,024; "two contexts may share a name"), `vta-service/src/operations/contexts.rs:216-238` (`list_contexts` returns a context to a caller that reaches it; `update_context` is super-admin only), at `4e5861d95` on 2026-11-24. (c) The same files. (d) Meanwhile the label is in `name`, and administrators who reach the context see it (plan §3.15, D35).
+
 ## Changelog
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.55 | 2026-11-25 | **VTI-Q35 narrowed:** the consent request is pushed to the approver set (`task-consent/request/0.1`, through TSP, DIDComm or REST; delivery receipts and the mediator wake from `3ee07a12`) and answered with `task-consent/decision/0.2` signed for `assertionMethod`, which Keyring already does; still open are which tasks an agent's writes are held under, who writes the rule and whether enforcement is on. Read at `3ee07a12`. |
+| 1.54 | 2026-11-25 | **VTI-Q35 reframed:** an entry's `stepUp` fields gate nothing at runtime and step-up is only self-approval (read at the pin `f7b78e29d`), so the question is now how an owner's wallet approves an agent's act through the consent flow (`requireConsent` with the wallet in the approver set) and whether the request reaches the wallet. |
+| 1.53 | 2026-11-24 | **VTI-Q47** (new): a typed credential value for agent memory beside text; no blob type found. **VTI-Q48** (new): a room join request. Read at VTI `4e5861d95`. |
+| 1.52 | 2026-11-24 | **VTI-Q46** (new): `vta-mcp.md` §2.3 still calls per-entry capability overrides a deferred gap although they ship. A documentation correction. Read at VTI `4e5861d95`. |
+| 1.51 | 2026-11-24 | **VTI-Q45** (new, deferred): a private or sealed label for a context, since a memory's owner label sits in plaintext in `name`. Read at VTI `4e5861d95`. |
+| 1.50 | 2026-11-24 | **VTI-Q44** (new): the VTA's storage protection mode (plain, hardened or TEE) is not readable by a client, so a wallet cannot say what protects a person's memory; standard mode stores memory values in plaintext. **VTI-Q41** extended with the evidence (per-request limits only, `quotas` never applied to memory, the operation budget a rate) and the shape of a fix. Read at VTI `4e5861d95`. |
+| 1.49 | 2026-11-24 | **VTI-Q39 to VTI-Q43** (new), from the agent-connect plan's revision 4: top-level context creation without a super-admin (Q39), memory items in the context delete preview (Q40), a memory quota and item lifetime (Q41), large or binary values (Q42), a bulk clear and what a tombstone keeps (Q43). **VTI-Q37** reframed: an agent is now bound to a fixed memory set on its own entry and another set means another agent, so a room-scoped binding is a convenience, not the boundary. Read at VTI `4e5861d95`, spec `416899c`. |
+| 1.48 | 2026-11-23 | **VTI-Q38** (new): a `delegation` member on the `memberProfile` record, the author's delegation credential and acceptance, so any member can verify whose agent an author is; today an author can say only its name about itself, and the leaf chain is not shown to members. Read at the pin `f7b78e29d`. |
+| 1.47 | 2026-11-23 | **VTI-Q37** (new): a room-scoped context binding, so an agent that holds several memory contexts uses only the matching one in each room; today `act` is per entry and `vta/memory/*` checks the context alone. Read at the pin `f7b78e29d`. **Findings by feature** (new section): an index from each feature's plan to its questions and findings, starting with agent connect (VTI-Q26 to VTI-Q37), with the rule that a plan registers each gap here in the PR of the step that meets it. |
+| 1.46 | 2026-11-22 | **VTI-Q26 to VTI-Q36** (new): eleven questions arising from the plan for a person's own AI agent in Keyring (`docs/plans/agent-connect-plan.md` and its ledger `agent-connect-plan/vti-asks.md`): a `mentions` record member and mention-scoped delivery (Q26, with details), a VTA-side pairing flow (Q27), the consumer kind on `acl/grant` (Q28), capabilities bound to a context (Q29), a member-side withdrawal of an agent's leaf (Q30), an `agents` room setting (Q31), persona-issued credentials (Q32), an author's chain with a record (Q33), control over `acl/swap-key` and revoke by `deviceId` (Q34), what `stepUp` gates (Q35), and three starter-mediator measurements recorded as a question until re-measured on a pinned image (Q36). Read at the pin `f7b78e29d` where each row says so, otherwise at `origin/main` `71d524572` on 2026-11-20. |
+| 1.45 | 2026-11-20 | **VTI-44** (new): the mediator reads a Discover Features query only as `{"feature_type": "Protocol"}`; the specification's `{"feature-type": "protocol"}` (what Credo sends) is answered with an empty `disclose`. Measured live on era I (a locally built mediator at `c0a69f1e`) and read identically in source at the deployed `55580615` and the pin `7609754e`. No effect on Keyring today. |
 | 1.44 | 2026-09-24 | **VTI-Q25** (new): a community that publishes a vetting criterion requires vetting of everyone. An invitation does not admit on its own, and naming its criterion changes nothing; `decide` refuses a Deferred request, so an admin cannot admit that applicant either. Measured on the Farm's `keyring-test-vtc` (VTC 0.11.58); read at `a96fe02f`. |
 | 1.43 | 2026-09-24 | **VTI-Q24** (new): an openvtc vetter refuses a Vetting Card silently (a log line, no reply, no desk notice), so a failed card looks like a slow vetter to both people. Read from source at openvtc `177a218`. The card in the run that surfaced it was Keyring's fault (keyring-bifold#108). |
 | 1.42 | 2026-09-24 | **VTI-25 resolved as ours.** Traced from source at `460e0ebb` and `a96fe02f`: the `allow` reply carries the card inline on every transport, and the two `credential-exchange/issue` pushes are awaited inside the submit, so they arrive *before* the reply. Keyring took the first message after a send as the reply until keyring-bifold `4eddfbd2` (09-17). No upstream change asked; not re-measured live. |

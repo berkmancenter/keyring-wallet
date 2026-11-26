@@ -1,0 +1,565 @@
+/**
+ * 228 writer (W1): a Keyring vetter writes DTG Credentials v1's vetted/1
+ * statement when `setDtgV1WritingEnabled(true)`, and the old endorsement shape
+ * otherwise (the default, unchanged).
+ *
+ * What it writes is held to what an openvtc applicant requires (vta-sdk 0.58
+ * verify_statement; dtg-credentials 0.12.0), which is stricter than Keyring's
+ * reader: the exact context order, one concrete subtype, issuerScope, the task
+ * citation, and an object.value with the registry members only. The statement
+ * vta-sdk itself minted (fixtures/dtg-v1-minted.json, VTI 439a0333) is the
+ * yardstick for the members; Keyring's own full applicant check then takes
+ * what the desk wrote. Upstream judging it is the vti-conformance job (W2).
+ */
+const sent: { to: string; type: string; body: Record<string, unknown>; options?: unknown }[] = []
+const mockFetchManifest = jest.fn()
+
+jest.mock('../module/vtiAgent', () => ({
+  ...jest.requireActual('../module/vtiAgent'),
+  vtiAgent: {
+    send: jest.fn(async (to: string, type: string, body: Record<string, unknown>, options?: unknown) => {
+      sent.push({ to, type, body, options })
+    }),
+    fetchManifest: (...a: unknown[]) => mockFetchManifest(...a),
+    onInbound: () => () => undefined,
+  },
+}))
+jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+
+// eslint-disable-next-line import/order
+import { DidKey, TypedArrayEncoder } from '@credo-ts/core'
+// eslint-disable-next-line import/order
+import { ed25519 } from '@noble/curves/ed25519.js'
+// eslint-disable-next-line import/order
+import { taskDigestMultibase, vettingStatementShapeProblem } from '@bifold/trust-tasks'
+// eslint-disable-next-line import/order
+import minted from './fixtures/dtg-v1-minted.json'
+// eslint-disable-next-line import/order
+import {
+  DTG_V1_WRITING_RELEASE_DEFAULT,
+  chooseStatementShape,
+  getDtgV1WritingMode,
+  isDtgV1WritingEnabled,
+  publishedStatementType,
+  setDtgV1WritingEnabled,
+  setDtgV1WritingMode,
+  vettedV1Statement,
+} from '../module/dtgV1Writing'
+// eslint-disable-next-line import/order
+import { readManifest } from '../module/joinManifest'
+// eslint-disable-next-line import/order
+import { VtiRefusal } from '../module/vtiAgent'
+// eslint-disable-next-line import/order
+import { CREDENTIAL_EXCHANGE_ISSUE } from '../module/vtiInbox'
+// eslint-disable-next-line import/order
+import {
+  VtiApplicant,
+  VtiVetterDesk,
+  cardDigestMultibase,
+  identityCommitment,
+  type VettingApplication,
+  type VettingDeskRequest,
+  type VtiVettingStore,
+} from '../module/vtiVetting'
+
+type Json = Record<string, unknown>
+const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }
+
+function didKeySigner() {
+  const secret = ed25519.utils.randomSecretKey()
+  const publicKey = ed25519.getPublicKey(secret)
+  const did = `did:key:z${TypedArrayEncoder.toBase58(new Uint8Array([0xed, 0x01, ...publicKey]))}`
+  const verificationMethodId = DidKey.fromDid(did).didDocument.verificationMethod?.[0]?.id as string
+  const agent = {
+    config: { logger },
+    dids: { resolveDidDocument: async (d: string) => DidKey.fromDid(d).didDocument },
+    dependencyManager: {
+      resolve: () => ({ sign: async ({ data }: { data: Uint8Array }) => ({ signature: ed25519.sign(data, secret) }) }),
+    },
+  }
+  const persona = (communityDid: string) => ({
+    did,
+    communityDid,
+    vtaKeyIds: { signing: verificationMethodId, keyAgreement: verificationMethodId },
+    kmsKeyIds: { signing: 'sig', keyAgreement: 'ka' },
+  })
+  return { did, agent, persona }
+}
+
+const community = 'did:webvh:QmCommunity:dids.example:community'
+const vetter = didKeySigner()
+const applicant = didKeySigner()
+const SESSION_ID = 'urn:uuid:4c7d9e1f-2a3b-4c5d-8e6f-7a8b9c0d1e2f'
+const SALT = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8'
+const sessionDocument: Json = {
+  id: SESSION_ID,
+  type: 'https://trusttasks.org/spec/vetting/session/0.1',
+  threadId: SESSION_ID,
+  issuer: vetter.did,
+  recipient: applicant.did,
+  issuedAt: '2026-10-01T00:00:00Z',
+  payload: { requestId: 'r', domain: community },
+}
+const claims = [{ type: 'name.legal', value: 'Ada Lovelace', provenance: 'selfAsserted' }]
+const card: Json = {
+  id: 'urn:uuid:card-1',
+  type: ['VerifiableDataStructure', 'RelationshipCard', 'VettingCard'],
+  publisher: applicant.did,
+  community,
+  claims,
+  commitmentSalt: SALT,
+  identityCommitment: identityCommitment(SALT, claims),
+}
+
+const session = (digest?: string) => ({
+  documentId: SESSION_ID,
+  challenge: SALT,
+  domain: community,
+  requiredClaims: ['name.legal'],
+  method: 'inPerson' as const,
+  expiresAt: '2099-01-01T00:00:00Z',
+  matchCode: 'ABCD-1234',
+  ...(digest ? { taskDigestMultibase: digest } : {}),
+})
+
+function deskWith(digest?: string, communityStore: unknown = {}) {
+  const state: { desk: VettingDeskRequest[] } = {
+    desk: [
+      {
+        requestId: 'r',
+        requestDocumentId: 'urn:uuid:request-1',
+        applicantDid: applicant.did,
+        communityDid: community,
+        status: 'cardReceived',
+        receivedAt: 't',
+        card,
+        session: session(digest),
+      } as VettingDeskRequest,
+    ],
+  }
+  const store = {
+    listDesk: async () => state.desk.map((r) => ({ ...r })),
+    saveDesk: async (r: VettingDeskRequest) => {
+      state.desk = [...state.desk.filter((x) => x.requestId !== r.requestId), JSON.parse(JSON.stringify(r))]
+    },
+  } as unknown as VtiVettingStore
+  return new VtiVetterDesk(vetter.agent as never, vetter.persona(community) as never, store, communityStore as never)
+}
+
+const decision = { documentClasses: ['passport'], claimsVerified: ['name.legal'], livenessConfirmed: true }
+const delivered = () => ((sent.at(-1)!.body.payload as Json).credential_response as { credential: Json }).credential
+
+// A second read of the requirements waits no time here.
+VtiVetterDesk.shapeRetryMs = 0
+
+afterEach(() => {
+  setDtgV1WritingMode(DTG_V1_WRITING_RELEASE_DEFAULT)
+  sent.length = 0
+  mockFetchManifest.mockReset()
+})
+
+describe('the writer flag', () => {
+  it('is off in mode off, and the desk writes the endorsement shape as before', async () => {
+    setDtgV1WritingMode('off')
+    expect(isDtgV1WritingEnabled()).toBe(false)
+    await deskWith(taskDigestMultibase(sessionDocument)).attest('r', decision)
+    const statement = delivered()
+    expect(statement.type).toEqual(['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'])
+    expect((statement.credentialSubject as Json).endorsement).toMatchObject({
+      type: 'https://firstperson.network/endorsements/identity-vetting/0.1',
+      community,
+      method: 'inPerson',
+    })
+  })
+})
+
+describe('a vetted/1 statement, as written', () => {
+  const written = vettedV1Statement({
+    id: 'urn:uuid:s',
+    issuer: vetter.did,
+    subject: applicant.did,
+    validFrom: '2026-10-01T00:00:00Z',
+    validUntil: '2026-10-31T00:00:00Z',
+    taskContext: SESSION_ID,
+    taskDigestMultibase: taskDigestMultibase(sessionDocument),
+    attestation: {
+      community,
+      method: 'inPerson',
+      documentClasses: ['passport'],
+      claimsVerified: ['name.legal'],
+      livenessConfirmed: true,
+      identityCommitment: 'zQmTpxHiaisC5veqP3CFUD4EhUrWnhXNm1ZkAyULkD9DxTK',
+      cardDigestMultibase: 'zQmZdubwrW14GRABWD49GQ6DbRPZDA81uiaD9YDw5ZqVH5c',
+      declaredRelationship: 'none',
+    },
+  })
+
+  it('has the exact context order and one concrete subtype (dtg-credentials check_context, strict parse)', () => {
+    expect(written['@context']).toEqual([
+      'https://www.w3.org/ns/credentials/v2',
+      'https://registry.trustoverip.org/dtg/context/v1',
+    ])
+    expect(written.type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    expect(written.issuerScope).toBe('directed')
+  })
+
+  it('has the members vta-sdk sign_statement writes, top level and in object.value', () => {
+    const upstream = minted.boundVettingStatement as Json
+    const keys = (o: Json) =>
+      Object.keys(o)
+        .filter((k) => k !== 'proof')
+        .sort()
+    expect(keys(written)).toEqual(keys(upstream))
+    const value = (s: Json) => ((s.credentialSubject as Json).object as Json).value as Json
+    expect(Object.keys(value(written)).sort()).toEqual(Object.keys(value(upstream)).sort())
+    expect(value(written).type).toBeUndefined()
+    expect(Object.keys(written.credentialSubject as Json).sort()).toEqual(
+      Object.keys(upstream.credentialSubject as Json).sort()
+    )
+  })
+
+  it("passes Keyring's own shape check", () => {
+    expect(vettingStatementShapeProblem(written, Date.parse('2026-10-02T00:00:00Z'))).toBeUndefined()
+  })
+})
+
+describe('the desk with the flag on', () => {
+  it('writes a vetted/1 statement, signed once for assertionMethod by the vetter', async () => {
+    setDtgV1WritingEnabled(true)
+    await deskWith(taskDigestMultibase(sessionDocument)).attest('r', decision)
+    expect(sent.at(-1)!.type).toBe(CREDENTIAL_EXCHANGE_ISSUE)
+    const statement = delivered()
+    expect(statement.type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    expect(statement.taskDigestMultibase).toBe(taskDigestMultibase(sessionDocument))
+    const proof = statement.proof as Json
+    expect(Array.isArray(proof)).toBe(false)
+    expect(proof).toMatchObject({ type: 'DataIntegrityProof', proofPurpose: 'assertionMethod' })
+    expect(String(proof.verificationMethod).startsWith(vetter.did)).toBe(true)
+  })
+
+  it('refuses to write one for a session that kept no task digest', async () => {
+    setDtgV1WritingEnabled(true)
+    await expect(deskWith(undefined).attest('r', decision)).rejects.toThrow('no task digest')
+    expect(sent).toHaveLength(0)
+  })
+
+  it("is taken by Keyring's applicant, through the full check, digest binding included", async () => {
+    setDtgV1WritingEnabled(true)
+    const digest = taskDigestMultibase(sessionDocument)
+    await deskWith(digest).attest('r', decision)
+    const statement = delivered()
+    // The new shape, not the endorsement the applicant would also take.
+    expect(statement.type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+
+    let application: VettingApplication = {
+      communityDid: community,
+      joinDid: applicant.did,
+      minStatements: 1,
+      requiredClaims: ['name.legal'],
+      acceptedMethods: ['inPerson'],
+      commitmentSalt: SALT,
+      claims: { 'name.legal': 'Ada Lovelace' },
+      startedAt: 't',
+      requests: [
+        {
+          vetterDid: vetter.did,
+          requestDocumentId: 'urn:uuid:request-1',
+          status: 'cardSent',
+          session: session(digest),
+          cardCommitment: card.identityCommitment as string,
+          cardDigest: cardDigestMultibase(card),
+          updatedAt: 't',
+        },
+      ],
+    } as VettingApplication
+    const store = {
+      getApplication: async () => JSON.parse(JSON.stringify(application)),
+      saveApplication: async (a: VettingApplication) => {
+        application = JSON.parse(JSON.stringify(a))
+      },
+    } as unknown as VtiVettingStore
+    const held: unknown[] = []
+    const vti = new VtiApplicant(applicant.agent as never, applicant.persona(community) as never, store, {
+      saveHeldCredential: async (c: unknown) => {
+        held.push(c)
+      },
+    } as never)
+    // The suite pins Date.now(); the desk stamped validFrom with the real
+    // clock. Judge the statement a minute into its own window.
+    const at = jest.spyOn(Date, 'now').mockReturnValue(Date.parse(String(statement.validFrom)) + 60000)
+    await vti.receiveStatement({
+      id: 'm',
+      type: CREDENTIAL_EXCHANGE_ISSUE,
+      from: vetter.did,
+      body: sent.at(-1)!.body,
+    } as never)
+    at.mockRestore()
+    expect(application.requests[0].statementRefusal).toBeUndefined()
+    expect(application.requests[0]).toMatchObject({ status: 'attested', statementId: statement.id })
+    expect(held).toHaveLength(1)
+  })
+})
+
+// ---- 228: the shape follows the community (mode auto) ----------------------
+
+const VETTED = 'https://registry.trustoverip.org/dtg/vsc/vetted/1'
+const ENDORSEMENT = 'https://firstperson.network/endorsements/identity-vetting/0.1'
+const manifestNaming = (statementType: string) => ({ criteria: [{ id: 'vetted-member', vetting: { statementType } }] })
+
+describe('the release default', () => {
+  // The one line a release changes: 'auto' once the Farm 0.47 gate passes, else 'off'.
+  it('is a mode the release decision allows, and the mode a fresh app starts in', () => {
+    expect(['off', 'auto']).toContain(DTG_V1_WRITING_RELEASE_DEFAULT)
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+      const fresh = require('../module/dtgV1Writing') as typeof import('../module/dtgV1Writing')
+      expect(fresh.getDtgV1WritingMode()).toBe(DTG_V1_WRITING_RELEASE_DEFAULT)
+    })
+  })
+})
+
+describe('chooseStatementShape', () => {
+  it.each([
+    ['off ignores everything', { mode: 'off', statementType: VETTED, grantShape: 'vac' }, 'endorsement', 'mode'],
+    [
+      'force ignores everything',
+      { mode: 'force', statementType: ENDORSEMENT, grantShape: 'endorsement' },
+      'vetted/1',
+      'mode',
+    ],
+    ['auto: a moved community’s requirements', { mode: 'auto', statementType: VETTED }, 'vetted/1', 'requirements'],
+    [
+      'auto: a community that has not moved',
+      { mode: 'auto', statementType: ENDORSEMENT },
+      'endorsement',
+      'requirements',
+    ],
+    ['auto: no requirements, a VAC grant', { mode: 'auto', grantShape: 'vac' }, 'vetted/1', 'grant'],
+    [
+      'auto: no requirements, an endorsement grant',
+      { mode: 'auto', grantShape: 'endorsement' },
+      'endorsement',
+      'grant',
+    ],
+    [
+      'auto: an unknown statementType, a VAC grant',
+      { mode: 'auto', statementType: 'https://example/other', grantShape: 'vac' },
+      'vetted/1',
+      'grant',
+    ],
+    // Every community this app meets is on DTG v1, whose SDK refuses the old shape.
+    ['auto: nothing to go on', { mode: 'auto' }, 'vetted/1', 'default'],
+  ] as const)('%s', (_name, input, shape, by) => {
+    expect(chooseStatementShape(input as never)).toMatchObject({ shape, by })
+  })
+
+  it('follows the requirements when they and the grant disagree, and says so', () => {
+    expect(chooseStatementShape({ mode: 'auto', statementType: VETTED, grantShape: 'endorsement' })).toEqual({
+      shape: 'vetted/1',
+      by: 'requirements',
+      disagreement: { requirements: 'vetted/1', grant: 'endorsement' },
+    })
+  })
+
+  it('reads statementType from a manifest the way the applicant does (criteria[].vetting)', () => {
+    expect(publishedStatementType(manifestNaming(VETTED))).toBe(VETTED)
+    expect(publishedStatementType({ criteria: [{ id: 'invited-member' }] })).toBeUndefined()
+    expect(publishedStatementType(undefined)).toBeUndefined()
+  })
+})
+
+describe('the desk in mode auto', () => {
+  const digest = () => taskDigestMultibase(sessionDocument)
+  const grantStore = (shape: 'vac' | 'endorsement') => ({
+    listHeldCredentials: async () => [
+      {
+        kind: 'vetter-grant',
+        communityDid: community,
+        subjectDid: vetter.did,
+        receivedAt: '2026-10-01T00:00:00Z',
+        credential:
+          shape === 'vac'
+            ? {
+                type: ['VerifiableCredential', 'DTGCredential', 'AuthorityCredential'],
+                issuer: community,
+                credentialSubject: { id: vetter.did, authority: { scope: community, actions: ['role:vetter'] } },
+              }
+            : {
+                type: ['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'],
+                issuer: community,
+                credentialSubject: {
+                  id: vetter.did,
+                  endorsement: { type: 'CommunityRole', role: 'vetter', communityDid: community },
+                },
+              },
+      },
+    ],
+  })
+
+  it('writes vetted/1 for a community whose requirements name it', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockResolvedValue(manifestNaming(VETTED))
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    await deskWith(digest()).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    expect(mockFetchManifest).toHaveBeenCalledWith(community, expect.anything())
+    // What a device run reads to see the shape (a Release build's log).
+    expect(warn).toHaveBeenCalledWith('[VTI] statement shape: writing vetted/1 (by requirements)')
+    warn.mockRestore()
+  })
+
+  it('writes the endorsement shape for a community that has not moved', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockResolvedValue(manifestNaming(ENDORSEMENT))
+    await deskWith(digest()).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'])
+  })
+
+  // A community that vets and publishes no statement type: the read worked, and said nothing about the shape.
+  const manifestNamingNoShape = { criteria: [{ id: 'vetted-member', vetting: { minStatements: 1 } }] }
+
+  it('goes by its own grant when the requirements name no shape: a VAC means vetted/1', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockResolvedValue(manifestNamingNoShape)
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    await deskWith(digest(), grantStore('vac')).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    expect(warn).toHaveBeenCalledWith('[VTI] statement shape: writing vetted/1 (by grant)')
+    warn.mockRestore()
+  })
+
+  it('requirements that name no shape and no grant held: vetted/1 by default', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockResolvedValue(manifestNamingNoShape)
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    await deskWith(digest()).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    expect(warn).toHaveBeenCalledWith('[VTI] statement shape: writing vetted/1 (by default)')
+    warn.mockRestore()
+  })
+
+  it('requirements unread twice: nothing is signed or sent, whatever grant it holds, and it says why', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockReset()
+    mockFetchManifest.mockRejectedValue(new Error('the VTA did not answer'))
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const code = await deskWith(digest(), grantStore('vac'))
+      .attest('r', decision)
+      .then(() => undefined)
+      .catch((e: unknown) => (e as { code?: string }).code)
+    expect(code).toBe('keyring/hidden-vetter/attest:rulesUnread')
+    expect(sent).toHaveLength(0)
+    expect(mockFetchManifest).toHaveBeenCalledTimes(2)
+    expect(warn).toHaveBeenCalledWith(
+      "[VTI] statement not written: the community's requirements could not be read twice (the VTA did not answer)"
+    )
+    warn.mockRestore()
+  })
+
+  // Rules that came and cannot be used: the same again next time, so this code's words do not promise a retry helps.
+  // `readManifest` reads a malformed answer as no criteria rather than throwing, so it comes here as a manifest.
+  it.each([
+    ['a malformed answer, as the reader hands it over', () => readManifest({ criteria: 'nope' } as never, '0.3')],
+    ['an answer with no payload, as the reader hands it over', () => readManifest(undefined, '0.3')],
+    ['criteria that are not a list', () => ({ criteria: 'nope' })],
+    ['criteria of which none vets', () => ({ criteria: [{ id: 'open-door' }] })],
+    ['a vetting member that is not an object', () => ({ criteria: [{ id: 'vetted-member', vetting: 'nope' }] })],
+  ])('rules that cannot be used, %s: nothing is signed or sent', async (_what, manifest) => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockReset()
+    mockFetchManifest.mockResolvedValue(manifest())
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const code = await deskWith(digest(), grantStore('vac'))
+      .attest('r', decision)
+      .then(() => undefined)
+      .catch((e: unknown) => (e as { code?: string }).code)
+    expect(code).toBe('keyring/hidden-vetter/attest:rulesUnusable')
+    expect(sent).toHaveLength(0)
+    warn.mockRestore()
+  })
+
+  it('a community that serves no version this phone speaks: nothing is signed, and it is not asked twice', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockReset()
+    mockFetchManifest.mockRejectedValue(new VtiRefusal('unsupportedVersion', 'no such version'))
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const code = await deskWith(digest())
+      .attest('r', decision)
+      .then(() => undefined)
+      .catch((e: unknown) => (e as { code?: string }).code)
+    expect(code).toBe('keyring/hidden-vetter/attest:rulesUnusable')
+    expect(mockFetchManifest).toHaveBeenCalledTimes(1)
+    expect(sent).toHaveLength(0)
+    warn.mockRestore()
+  })
+
+  it('a requirements read that fails once and then answers: that answer decides', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockReset()
+    mockFetchManifest.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(manifestNaming(ENDORSEMENT))
+    await deskWith(digest()).attest('r', decision)
+    expect(mockFetchManifest).toHaveBeenCalledTimes(2)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'])
+  })
+
+  it('… and an endorsement grant means the old shape', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockResolvedValue(manifestNamingNoShape)
+    await deskWith(digest(), grantStore('endorsement')).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'])
+  })
+
+  it('follows the requirements over its grant, and logs the disagreement', async () => {
+    setDtgV1WritingMode('auto')
+    mockFetchManifest.mockResolvedValue(manifestNaming(VETTED))
+    logger.warn.mockClear()
+    await deskWith(digest(), grantStore('endorsement')).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'StatementCredential'])
+    expect(logger.warn.mock.calls.some((c) => String(c[0]).includes('statement shape'))).toBe(true)
+  })
+
+  // 2026-11-03 (277.7): an applicant's Keyring holding an earlier identity's
+  // private record sent a request without the private mark to a community that
+  // vets only privately; the vetter signed a statement naming them, which could
+  // not count there and was refused on arrival.
+  describe('a request without the private mark, for a community that vets privately', () => {
+    const PRIVATE_EXT = { ext: { 'org.openvtc.hidden-vetting': { suite: 'ps-ddh-bls12381' } } }
+    const privateOnly = { criteria: [{ id: 'vetted-member', vetting: { statementType: VETTED, ...PRIVATE_EXT } }] }
+
+    it('signs and sends nothing, and says why in a code the screen words', async () => {
+      setDtgV1WritingMode('auto')
+      mockFetchManifest.mockResolvedValue(privateOnly)
+      const code = await deskWith(digest())
+        .attest('r', decision)
+        .then(() => undefined)
+        .catch((e: unknown) => (e as { code?: string }).code)
+      expect(code).toBe('keyring/hidden-vetter/attest:requestNotPrivate')
+      expect(sent).toHaveLength(0)
+    })
+
+    it('control: the same community with a named way in as well still gets the statement', async () => {
+      setDtgV1WritingMode('auto')
+      mockFetchManifest.mockResolvedValue({
+        criteria: [...privateOnly.criteria, { id: 'named-member', vetting: { statementType: VETTED } }],
+      })
+      await deskWith(digest()).attest('r', decision)
+      expect(sent).toHaveLength(1)
+    })
+
+    it('control: a community that vets by name gets the statement as before', async () => {
+      setDtgV1WritingMode('auto')
+      mockFetchManifest.mockResolvedValue(manifestNaming(VETTED))
+      await deskWith(digest()).attest('r', decision)
+      expect(sent).toHaveLength(1)
+    })
+  })
+
+  it('in mode off, writes the old shape even for a moved community, and reads nothing', async () => {
+    setDtgV1WritingMode('off')
+    mockFetchManifest.mockResolvedValue(manifestNaming(VETTED))
+    await deskWith(digest()).attest('r', decision)
+    expect(delivered().type).toEqual(['VerifiableCredential', 'DTGCredential', 'EndorsementCredential'])
+    expect(mockFetchManifest).not.toHaveBeenCalled()
+    expect(getDtgV1WritingMode()).toBe('off')
+  })
+})

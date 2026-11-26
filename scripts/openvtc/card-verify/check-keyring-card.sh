@@ -12,14 +12,14 @@
 # check_against_session (what an openvtc applicant runs on a statement it
 # receives), and the vetter's eligibility presentation with its role VAC.
 #
-#   BIFOLD_DIR=<bifold checkout> …   # check a bifold other than the submodule
+#   BIFOLD_DIR=<checkout root> …   # check a framework checkout other than this repository (its packages/core)
 #
 # Exit 0 and the OK lines when both pass; non-zero otherwise.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 HERE="$ROOT/scripts/openvtc/card-verify"
 VTI="$ROOT/external/verifiable-trust-infrastructure"
-BIFOLD="${BIFOLD_DIR:-$ROOT/bifold}"
+BIFOLD="${BIFOLD_DIR:-$ROOT}"
 BIN="$VTI/target/release/card-verify"
 
 # The verifier is only as good as the SDK it is built from: the pinned one.
@@ -50,14 +50,14 @@ trap 'rm -rf "$OUT"' EXIT
   trap - EXIT
   exit 1
 }
-echo "check-keyring-card: VTI ${have:0:8} (pinned), bifold $(git -C "$BIFOLD" rev-parse --short=8 HEAD)"
+echo "check-keyring-card: VTI ${have:0:8} (pinned), framework $(git -C "$BIFOLD" rev-parse --short=8 HEAD)"
 "$BIN" "$OUT/card.json" "$OUT/expect.json"
 if [ "$("$BIN" shape 2>/dev/null)" != v1 ]; then
   echo "check-keyring-card: $BIN is not a DTG Credentials v1 build; rerun with CARD_VERIFY_BUILD=1" >&2
   exit 1
 fi
 if [ ! -f "$OUT/statement-v1.json" ] || [ ! -f "$OUT/eligibility-v1.json" ]; then
-  echo "check-keyring-card: this bifold writes no statement-v1.json or eligibility-v1.json (before keyring-bifold#358); the statement and eligibility checks were not run" >&2
+  echo "check-keyring-card: this framework writes no statement-v1.json or eligibility-v1.json (before keyring-bifold#358); the statement and eligibility checks were not run" >&2
   exit 1
 fi
 "$BIN" verify-statement "$OUT/statement-v1.json" "$OUT/card.json" "$OUT/session.json" "$OUT/expect.json"

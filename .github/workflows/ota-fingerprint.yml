@@ -23,18 +23,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
       - uses: ./.github/workflows/actions/setup-node
       - uses: ruby/setup-ruby@v1
         with:
           working-directory: ./app
       - run: sudo xcode-select --switch /Applications/Xcode_26.3.app
-      - name: Build bifold packages
-        working-directory: bifold
-        run: |
-          yarn install --immutable
-          yarn build
+      # One install for the whole repository; the framework's packages are its workspaces and bundle from source.
       - run: yarn install --immutable
       - name: Install iOS dependencies
         run: |
@@ -53,14 +47,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
       - uses: ./.github/workflows/actions/setup-node
-      - name: Build bifold packages
-        working-directory: bifold
-        run: |
-          yarn install --immutable
-          yarn build
+      # One install for the whole repository; the framework's packages are its workspaces and bundle from source.
       - run: yarn install --immutable
       - name: Record the native fingerprint
         run: bash scripts/ota/record-fingerprint.sh android "$RUNNER_TEMP/fp"
@@ -79,14 +67,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
       - uses: ./.github/workflows/actions/setup-node
-      - name: Build bifold packages
-        working-directory: bifold
-        run: |
-          yarn install --immutable
-          yarn build
+      # One install for the whole repository; the framework's packages are its workspaces and bundle from source.
       - run: yarn install --immutable
       - if: ${{ matrix.platform == 'ios' }}
         uses: ruby/setup-ruby@v1

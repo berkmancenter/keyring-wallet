@@ -6,10 +6,6 @@
 # to summarising the feat/fix commits. Lines starting with # are ignored.
 # App Store Connect allows at most 4000 characters.
 
-• Build 260: private vetting uses your community identity throughout, so vouching tokens draw and private vouches count. If your agent's vetter enrolment was set up for another identity, Keyring says so and how to reset it.
-• Private vetting. Communities that use private vetting now work in Keyring, both when you apply and when you vouch for someone. It uses the same vetting steps as before, with a "Private vetting" mark where it applies: your vetters stay private, and the community learns that enough members vouched for you, not who. It needs your agent on version 0.60 or later.
-• Vouching privately: when you open the vetting desk in such a community, Keyring enrols you and draws your vouching tokens by itself, and shows how many people you can vouch for now. Open Keyring at least every few days to keep vouching. When you vouch, Keyring asks how you know the person.
-• Relationship and witness records now use the new DTG credential formats. Your existing contacts keep working.
-• After an update, a community identity whose key was held only in the app gets it back from your agent, or Keyring asks you to reconnect your agent, instead of failing to sign in.
-• A vetter opening the vetting screen no longer briefly sees the applicant's steps.
-
+• Confirm it's you (behind its Developer switch): the "Confirm with …" sheet in a chat now opens clean, with the hint, the note and Send, and no record of the last answer. A request still waiting shows, with Cancel. Earlier answers stay on the chat cards and the contact page.
+• Answers in the chat are short cards of one or two lines: "… confirmed · Face ID · time", "… says it wasn't them · May be a scam. Don't act on it.", "No answer · Ask again", or "You cancelled the request". Tap a card for the note you sent and the details, and Hide to fold it back. The "wasn't them" card stays red, and screen readers announce it as an alert.
+• What to do now after "wasn't them" says: contact them using details you already have. Don't use details the request gave you.

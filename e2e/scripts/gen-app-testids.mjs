@@ -11,7 +11,6 @@
  * Normally run by sync-testids.sh. The generator resolves its own `typescript`
  * from the bifold checkout it lives in.
  */
-import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -39,14 +38,6 @@ const parseArgs = (argv) => {
   return opts
 }
 
-const gitHead = (cwd) => {
-  try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
-  } catch {
-    return 'unknown'
-  }
-}
-
 const main = async () => {
   const opts = parseArgs(process.argv.slice(2))
   if (!fs.existsSync(opts.generator)) {
@@ -54,7 +45,9 @@ const main = async () => {
     process.exit(1)
   }
   const { generateManifest, formatManifest } = await import(pathToFileURL(opts.generator).href)
-  const manifest = generateManifest({ root: opts.root, generatedFrom: gitHead(walletDir) })
+  // No generatedFrom: a commit id rewritten on every regeneration made any two branches that regenerate conflict on it.
+  const manifest = generateManifest({ root: opts.root })
+  delete manifest.generatedFrom
   fs.mkdirSync(path.dirname(opts.out), { recursive: true })
   fs.writeFileSync(opts.out, formatManifest(manifest))
   console.log(

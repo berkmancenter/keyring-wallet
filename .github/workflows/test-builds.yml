@@ -10,8 +10,9 @@ name: Test builds
 #
 # With `push: on` a build also names the push gateway, and its artifact name
 # ends in -push-on, so it cannot be taken for the testers' configuration.
-# What each build carries, like the staging build: MEDIATOR_URL and nothing else
-# baked in (no VTI_* value: testers link their own agent and community), except
+# What each build carries, like the staging build: MEDIATOR_URL and the wallet
+# mailbox's address (MAILBOX_MEDIATOR_DID), and nothing else baked in (no VTI_*
+# value: testers link their own agent and community), except
 # E2E_CLOCKS=short: the grant windows wait 60 s and the auto-lock defaults to
 # 1 minute, so the release checks wait a minute instead of ten (gate efficiency
 # item 3). Only this workflow sets it; quality.yml fails if another does, and
@@ -24,13 +25,13 @@ name: Test builds
 #   gh workflow run test-builds.yml -R berkmancenter/keyring-wallet --ref <branch>
 #   gh run download <run-id> -R berkmancenter/keyring-wallet
 #
-# Every artifact is named after the wallet commit and the bifold commit it pins,
+# Every artifact is named after the wallet commit and the framework tree it carries (packages/, under the historical bf label),
 # and carries a manifest (commits, bundle SHA-256, native fingerprint), so a
 # check can prove which build it ran.
 
 on:
   push:
-    # TEMPORARY for validating this workflow; removed before merge.
+    # Keep this: gate-smoke.yml, gate-ci.yml and gate.sh watch --main all take "the newest green push build of main".
     branches: [main]
     paths-ignore:
       - "docs/**"
@@ -38,6 +39,7 @@ on:
       - "e2e/**"
       - "tsp-reference/**"
       - "scripts/openvtc/**"
+      - "scripts/roadmap/**"
   # A pull request that changes what the native compilers see gets both builds
   # before it merges. No required check compiles Objective-C, Swift or Kotlin,
   # and #562 reached main with an AppDelegate.mm that didn't compile (#568).
@@ -52,8 +54,12 @@ on:
       - "yarn.lock"
       - "app/patches/**"
       - ".yarn/patches/**"
-      # The submodule pin: a bifold bump can carry native code (react-native-attestation).
-      - "bifold"
+      # The framework's native modules and dependency manifests (packages/* are workspaces of this repository). The
+      # react-native-* glob is the shape scripts/release/tier.mjs's "native module package" rule follows too. WARNING: a
+      # native package named otherwise needs both places, and only this glob fails safe (tier.mjs would grade its specs
+      # as JavaScript); tier.test.mjs reads this glob and fails when the two diverge.
+      - "packages/react-native-*/**"
+      - "packages/*/package.json"
       - ".github/workflows/test-builds.yml"
       # Below: files that decide what the bundle and the native build resolve, none of
       # which any required check exercises. A wrong value here builds or boots a
@@ -67,12 +73,10 @@ on:
       - "app/babel.config.js"
       # Assets linked into the native projects (fonts).
       - "app/react-native.config.js"
-      # `preinstall` builds the bifold submodule and `postinstall` repairs the portal
-      # symlinks, so this file changes the install that every build starts from and
-      # yarn.lock does not record either hook.
+      # The root manifest: workspaces, resolutions and the install hooks, so this file
+      # changes the install that every build starts from.
       - "package.json"
-      - "scripts/ensure-bifold-ready.js"
-      - "scripts/fix-portal-symlinks.js"
+      - ".yarnrc.yml"
   workflow_dispatch:
     inputs:
       platform:
@@ -123,18 +127,22 @@ jobs:
       native: ${{ steps.h.outputs.native }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
       - id: h
         name: Commits and native fingerprint
         run: |
           set -euo pipefail
           wallet=$(git rev-parse --short=8 HEAD)
-          bifold=$(git -C bifold rev-parse --short=8 HEAD)
+          # The framework at this commit: the tree id of packages/ (the output keeps its historical name, `bifold`,
+          # which the manifests, the gate and the artifact names carry; before Phase 2 it was the bifold/ tree, before
+          # the fold the submodule's pin; all three name "the framework at this build").
+          bifold=$(git rev-parse --verify --quiet --short=8 HEAD:packages) || { echo "::error::no packages/ tree at HEAD"; exit 1; }
           # Everything that decides the native half of the app. If this is equal
-          # between two builds, their difference is JavaScript only.
+          # between two builds, their difference is JavaScript only. The native packages are every
+          # packages/react-native-*/ (the glob the pull_request trigger above and tier.mjs follow). The move of
+          # Phase 2 changed every path below once, so the first one-tree build's id differs from every earlier
+          # one by design: no JS-only swap across it (as across the fold before).
           native=$( { git ls-files -s app/ios app/android app/package.json yarn.lock \
-                        bifold/packages/react-native-attestation/ios bifold/packages/react-native-attestation/android \
+                        'packages/react-native-*/ios' 'packages/react-native-*/android' \
                         | grep -vE '\.(md|txt)$'; } | sha256sum | cut -c1-12 )
           echo "wallet=$wallet" >> "$GITHUB_OUTPUT"
           echo "bifold=$bifold" >> "$GITHUB_OUTPUT"
@@ -149,8 +157,6 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Require the mediator URL
         env:
@@ -178,8 +184,11 @@ jobs:
           sudo xcode-select --switch /Applications/Xcode_26.3.app
           xcodebuild -version
 
+      # Restore here, save after the pod install on main only: a pull request's save lands on its own ref, which no
+      # other PR can read (the wallet cache filled its 10 GB that way with yarn copies, 10-30).
       - name: Cache pod dependencies
-        uses: actions/cache@v4
+        id: pods
+        uses: actions/cache/restore@v4
         with:
           path: |
             app/ios/Pods
@@ -189,17 +198,17 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-
 
-      - name: Build bifold packages
-        working-directory: bifold
-        run: |
-          yarn install --immutable
-          yarn build
-
+      # One install for the whole repository (app and packages/* are its workspaces). The packages Metro bundles
+      # resolve from source; the Node-consumed ones (trust-tasks, vrc-contexts, …) keep a build/ as their entry,
+      # made here so the linking check below sees every entry the install promises.
       - name: Install dependencies
         run: yarn install --immutable
 
-      - name: Verify bifold linking
-        run: node scripts/verify-bifold-linking.js
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
+
+      - name: Verify workspace linking
+        run: node scripts/verify-workspace-linking.js
 
       - name: Create .xcode.env.local file
         working-directory: app/ios
@@ -211,10 +220,24 @@ jobs:
           export USE_HERMES=1
           yarn run ios:setup
 
+      - name: Save pod dependencies (main only)
+        # By ref, not event: many runs here are branch dispatches, and a save there lands on that branch alone.
+        if: github.ref == 'refs/heads/main' && steps.pods.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            app/ios/Pods
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods
+          key: ${{ runner.os }}-pods-${{ hashFiles('app/ios/Podfile.lock') }}
+
       - name: Create environment settings (store configuration)
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          # The wallet mailbox's address, the store build's own secret: with it the mailbox opens (on by default since
+          # 281.2), so the gate's pairs mint v2 invitations as testers' phones do. Empty when the secret is unset.
+          MAILBOX_MEDIATOR_DID: ${{ secrets.MAILBOX_MEDIATOR_DID }}
           FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
           PUSH: ${{ inputs.push }}
           CLOCKS: ${{ inputs.clocks || 'short' }}
@@ -223,7 +246,7 @@ jobs:
           PUSH_GATEWAY_URL: ${{ vars.PUSH_GATEWAY_URL || 'https://keyring-push.asml.berkmancenter.org' }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" > .env
-          echo "MEDIATOR_V2_URL=" >> .env
+          echo "MAILBOX_MEDIATOR_DID=${MAILBOX_MEDIATOR_DID}" >> .env
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
           # The test build's short clocks (see the top of this file), unless this
@@ -276,6 +299,8 @@ jobs:
             | xxd -r -p || true)
           echo "$ents" | grep -q application-identifier \
             || { echo "::error::the simulator app carries no application-identifier entitlement: its keychain would refuse every read"; exit 1; }
+          # Rooms' sample data never in a CI build (the metro stub; ROOMS_SAMPLE unset).
+          bash "$GITHUB_WORKSPACE/scripts/ci/check-no-rooms-sample.sh" "$app/main.jsbundle" "iOS simulator bundle"
           bundle_sha=$(shasum -a 256 "$app/main.jsbundle" | cut -c1-12)
           mkdir -p out
           (cd "$(dirname "$app")" && zip -qry "$GITHUB_WORKSPACE/out/keyring-sim.zip" "$(basename "$app")")
@@ -306,8 +331,6 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Require the mediator URL
         env:
@@ -337,22 +360,25 @@ jobs:
           distribution: "zulu"
           java-version: 17
 
-      - name: Build bifold packages
-        working-directory: bifold
-        run: |
-          yarn install --immutable
-          yarn build
-
+      # One install for the whole repository (app and packages/* are its workspaces). The packages Metro bundles
+      # resolve from source; the Node-consumed ones (trust-tasks, vrc-contexts, …) keep a build/ as their entry,
+      # made here so the linking check below sees every entry the install promises.
       - name: Install dependencies
         run: yarn install --immutable
 
-      - name: Verify bifold linking
-        run: node scripts/verify-bifold-linking.js
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
+
+      - name: Verify workspace linking
+        run: node scripts/verify-workspace-linking.js
 
       - name: Create environment settings (store configuration)
         working-directory: app
         env:
           MEDIATOR_URL: ${{ secrets.MEDIATOR_URL }}
+          # The wallet mailbox's address, the store build's own secret: with it the mailbox opens (on by default since
+          # 281.2), so the gate's pairs mint v2 invitations as testers' phones do. Empty when the secret is unset.
+          MAILBOX_MEDIATOR_DID: ${{ secrets.MAILBOX_MEDIATOR_DID }}
           FEEDBACK_EMAIL: ${{ vars.FEEDBACK_EMAIL }}
           PUSH: ${{ inputs.push }}
           CLOCKS: ${{ inputs.clocks || 'short' }}
@@ -363,7 +389,7 @@ jobs:
           PUSH_FCM_PROJECT_ID: ${{ vars.PUSH_FCM_PROJECT_ID || 'hls-asml-identity-ba68' }}
         run: |
           echo "MEDIATOR_URL=${MEDIATOR_URL}" > .env
-          echo "MEDIATOR_V2_URL=" >> .env
+          echo "MAILBOX_MEDIATOR_DID=${MAILBOX_MEDIATOR_DID}" >> .env
           echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}" >> .env
           if grep -qE '^VTI_' .env; then echo "::error::a VTI_ value would be baked in"; exit 1; fi
           # The test build's short clocks (see the top of this file), unless this
@@ -421,6 +447,8 @@ jobs:
           set -euo pipefail
           npx react-native bundle --platform android --dev false --reset-cache \
             --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle
+          # Rooms' sample data never in a CI build (the metro stub; ROOMS_SAMPLE unset).
+          bash ../scripts/ci/check-no-rooms-sample.sh android/app/src/main/assets/index.android.bundle "Android release bundle"
           # As the staging build does: no restored Gradle caches (a restored cache
           # left the libraries' codegen folders missing, so CMake failed), and the
           # same Gradle tasks.

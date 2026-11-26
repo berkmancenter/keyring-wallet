@@ -185,18 +185,21 @@ export function buildLacks(id, opts = {}) {
   return buildHas(id, opts) === false ? `build lacks ${id}` : undefined;
 }
 
-/** The manifests' keys (testids.json and testids.app.json: keys and raw ids), for the caps count. */
+/**
+ * The manifests' keys (testids.json and testids.app.json: keys and raw ids), for the caps count. `from`, the
+ * cache's manifest version, is a hash of the sorted keys: the manifests carry no commit id (one rewritten on
+ * every regeneration made any two branches that regenerate conflict on it).
+ */
 export function manifestKeys(libDir = here) {
   const keys = new Set();
-  let from = "";
   for (const name of ["testids.json", "testids.app.json"]) {
     const file = path.join(libDir, name);
     if (!existsSync(file)) continue;
     const m = JSON.parse(readFileSync(file, "utf8"));
-    from += `${name}@${m.generatedFrom ?? "?"};`;
     for (const k of Object.keys(m.keys ?? {})) keys.add(k);
     for (const k of Object.keys(m.raw ?? {})) keys.add(k);
   }
+  const from = createHash("sha256").update([...keys].sort().join("\n")).digest("hex").slice(0, 16);
   return { keys: [...keys], from };
 }
 

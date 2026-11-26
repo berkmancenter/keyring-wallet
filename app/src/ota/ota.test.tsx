@@ -5,7 +5,7 @@ import { Platform, Text } from 'react-native'
 import { exists, readFile } from 'react-native-fs'
 
 import { isOtaEnabled, otaUpdateUrl } from './otaConfig'
-import { otaLabel, OtaClient, readOtaStatus } from './otaStatus'
+import { otaLabel, OtaClient, readOtaStatus, releaseText } from './otaStatus'
 import { DEFAULT_RING, ensureRing, isRing, setRing } from './rings'
 import { withOta } from './withOta'
 
@@ -90,6 +90,30 @@ describe('otaStatus', () => {
 
   it('has no label when OTA is off', () => {
     expect(otaLabel(readOtaStatus(client('min-0000'), false))).toBeUndefined()
+  })
+
+  it('names an update by the release it was published as, with its short id', () => {
+    const status = readOtaStatus(client('0192f3a4-5b6c-7d8e-9f00-112233445566'), true, '276.10')
+    expect(status.release).toBe('276.10')
+    expect(otaLabel(status)).toBe('276.10 · 0192f3a4')
+    expect(releaseText(status, '276')).toBe('276.10')
+  })
+
+  it('gives the shipped bundle no release, whatever the bundle says, and names the store build instead', () => {
+    const status = readOtaStatus(client('min-0000'), true, '276.10')
+    expect(status.release).toBeNull()
+    expect(otaLabel(status)).toBe('embedded')
+    expect(releaseText(status, '276')).toBe('store build 276')
+  })
+
+  it('says so when an update was published before releases were stamped', () => {
+    const status = readOtaStatus(client('0192f3a4-5b6c-7d8e-9f00-112233445566'), true, null)
+    expect(otaLabel(status)).toBe('0192f3a4')
+    expect(releaseText(status, '276')).toBe('not named in this update')
+  })
+
+  it('reads the release the repository holds: none, outside a published bundle', () => {
+    expect(readOtaStatus(client('0192f3a4-5b6c-7d8e-9f00-112233445566'), true).release).toBeNull()
   })
 })
 
@@ -279,6 +303,31 @@ describe('withOta', () => {
         expect.objectContaining({ apply: false, reason: 'blocked: vta-task', blockers: ['vta-task'] })
       )
       expect(JSON.stringify(log.mock.calls)).not.toContain('vta/join')
+    })
+
+    it('keeps a blocker held at the return even when the lock-out releases it during the read', async () => {
+      // A chat with an unsent draft holds 'chat-draft'. Locking out unmounts the chat, which
+      // releases it, and with an update staged that happens while the metadata is being read.
+      let release = registerOtaApplyBlocker('chat-draft')
+      jest.mocked(exists).mockResolvedValue(true)
+      jest.mocked(readFile).mockImplementation(async () => {
+        release()
+        release = () => undefined
+        return staged271
+      })
+      const { reload, log } = wrapped()
+      notifyReturnLocked(away)
+      await flush()
+      expect(log).toHaveBeenCalledWith(
+        'return',
+        expect.objectContaining({
+          staged: STAGED,
+          apply: false,
+          reason: 'blocked: chat-draft',
+          blockers: ['chat-draft'],
+        })
+      )
+      expect(reload).not.toHaveBeenCalled()
     })
 
     it('logs a metadata read that fails, and does not reload', async () => {

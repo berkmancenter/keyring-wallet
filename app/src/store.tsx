@@ -6,6 +6,7 @@ import {
   PersistentStorage,
   ReducerAction,
 } from '@bifold/core'
+import Config from 'react-native-config'
 
 export interface IASEnvironment {
   name: string
@@ -25,8 +26,48 @@ export interface Developer {
   remoteDebugging: RemoteDebuggingState
   enableProxy: boolean
   enableAppToAppPersonFlow: boolean
+  /** Wallet-to-wallet TSP carriage, to contacts that read it (bifold contactTspCapability.ts). On unless opted out. */
   enableTspCarriage: boolean
+  /** Accept DIDComm v2 (the agent's didcommVersions ['v1','v2']). On unless opted out. */
   enableDidCommV2: boolean
+  /** The wallet mailbox (bifold walletMailbox.ts), needed to mint v2 invitations. On unless opted out (281.2). */
+  enableV2Mailbox: boolean
+  /** Mediator pickup over a live WebSocket instead of polling (utils/livePickup.ts). */
+  enableLivePickup: boolean
+  /** Connecting from a code someone shared (shared-connect, keyring-wallet #853): bifold's setSharedConnectEnabled. */
+  enableSharedConnect: boolean
+  /**
+   * Showing a shared-connect code for someone else to scan ("Show a code", plan WP9): bifold's
+   * setSharedConnectInviteEnabled. Only takes effect while enableSharedConnect is on too.
+   */
+  enableSharedConnectInvite: boolean
+  /**
+   * Trusted approvers (docs/plans/trusted-approver-plan.md): naming someone to approve sensitive actions on this
+   * person's agent, and approving for someone else's. bifold's setTrustedApproversEnabled.
+   */
+  enableTrustedApprovers: boolean
+  /**
+   * State-verified approvers (trusted-approver plan, stage 2, S1): an approver's state Guardian card, checked on the
+   * phone of the person they approve for. bifold's setStateVerifiedApproversEnabled; holds only with trusted approvers.
+   */
+  enableStateVerifiedApprovers: boolean
+  /**
+   * "Trust the test state (K0)": a tester build trusts the K0 test State root, so a K0 test card can verify. bifold's
+   * setTrustTestStateEnabled; holds only with trusted approvers and state-verified approvers both on.
+   */
+  enableTrustTestState: boolean
+  /**
+   * "State card (demo)": the person holding a state Guardian card sees it in Credentials. bifold's
+   * setStateCardEnabled; needs neither approver switch (the card says when it can't be checked yet).
+   */
+  enableStateCard: boolean
+  /** Developer "Demo state host": where a demo state root's did:webs is fetched while testing; '' for none. */
+  demoStateHost: string
+  /**
+   * Developer › Demos: which side of the SEDI demo this phone takes ('' for neither). bifold's setSediDemoSide at
+   * start-up, so the codes screen shows this side's code after a restart.
+   */
+  sediDemoSide: '' | 'guardian' | 'ward'
 }
 
 export interface DismissPersonCredentialOffer {
@@ -44,6 +85,16 @@ enum DeveloperDispatchAction {
   TOGGLE_APP_TO_APP_PERSON_FLOW = 'developer/toggleAppToAppPersonFlow',
   TOGGLE_TSP_CARRIAGE = 'developer/toggleTspCarriage',
   TOGGLE_DIDCOMM_V2 = 'developer/toggleDidCommV2',
+  TOGGLE_V2_MAILBOX = 'developer/toggleV2Mailbox',
+  TOGGLE_LIVE_PICKUP = 'developer/toggleLivePickup',
+  TOGGLE_SHARED_CONNECT = 'developer/toggleSharedConnect',
+  TOGGLE_SHARED_CONNECT_INVITE = 'developer/toggleSharedConnectInvite',
+  TOGGLE_TRUSTED_APPROVERS = 'developer/toggleTrustedApprovers',
+  TOGGLE_STATE_VERIFIED_APPROVERS = 'developer/toggleStateVerifiedApprovers',
+  TOGGLE_TRUST_TEST_STATE = 'developer/toggleTrustTestState',
+  TOGGLE_STATE_CARD = 'developer/toggleStateCard',
+  SET_DEMO_STATE_HOST = 'developer/setDemoStateHost',
+  SET_SEDI_DEMO_SIDE = 'developer/setSediDemoSide',
 }
 
 enum DismissPersonCredentialOfferDispatchAction {
@@ -102,8 +153,35 @@ const developerState: Developer = {
   environment: iasEnvironments[0],
   remoteDebugging: remoteDebuggingState,
   enableAppToAppPersonFlow: false,
-  enableTspCarriage: false,
-  enableDidCommV2: false,
+  // On for everyone. The saved opt-outs live under new keys (below), so a value saved while these were opt-in
+  // switches, off by default, is never read: a false saved against an unfinished experiment is not an opt-out of what
+  // now ships.
+  enableTspCarriage: true,
+  enableDidCommV2: true,
+  // On for everyone from 281.2, once the two-phone mailbox test passed on 281.1. Same rule as the two above: a false
+  // saved under the old key, while the mailbox was testers-only, is not an opt-out of what now ships.
+  enableV2Mailbox: true,
+  // Off unless the build says otherwise: LIVE_MESSAGE_PICKUP=true in app/.env
+  // turns it on for a review build with no code change. A value saved from
+  // Developer options wins over this at startup (container-imp.ts).
+  enableLivePickup: Config.LIVE_MESSAGE_PICKUP === 'true',
+  // On for everyone. A saved choice, off included, wins on load (container-imp.ts).
+  enableSharedConnect: true,
+  // On for everyone from 278.6 (WP9's live run passed on 2026-11-07). This default is the one place it is turned on.
+  // A saved choice wins on load, so someone who switched it off keeps it off. To turn it off for everyone, use
+  // bifold's SHARED_CONNECT_REMOTE_OFF.invite, which beats a saved "on"; changing this default cannot.
+  enableSharedConnectInvite: true,
+  // Off by default. A saved choice wins on load. To turn it off for everyone, whatever was saved, use bifold's
+  // TRUSTED_APPROVERS_REMOTE_OFF, which beats a saved "on"; changing this default cannot.
+  enableTrustedApprovers: false,
+  // Off by default, as above: STATE_VERIFIED_APPROVERS_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on".
+  enableStateVerifiedApprovers: false,
+  // Off by default; it holds only while the two switches above hold, so their remote offs beat a saved "on" here too.
+  enableTrustTestState: false,
+  // Off by default: STATE_CARD_REMOTE_OFF (or SEDI_KERI_REMOTE_OFF) beats a saved "on"; changing this default cannot.
+  enableStateCard: false,
+  demoStateHost: '',
+  sediDemoSide: '',
 }
 
 const dismissPersonCredentialOfferState: DismissPersonCredentialOffer = {
@@ -117,13 +195,35 @@ export enum BCLocalStorageKeys {
   RemoteDebugging = 'RemoteDebugging',
   EnableProxy = 'EnableProxy',
   EnableAppToAppPersonFlow = 'EnableAppToAppPersonFlow',
-  EnableTspCarriage = 'EnableTspCarriage',
-  EnableDidCommV2 = 'EnableDidCommV2',
+  // New keys for switches that are now on by default. The old 'EnableTspCarriage' and 'EnableDidCommV2' values a phone
+  // saved while they were opt-in are left where they are and ignored (container-imp.ts).
+  EnableTspCarriage = 'TspCarriageOnByDefault',
+  EnableDidCommV2 = 'DidCommV2OnByDefault',
+  // The same for the mailbox: 'EnableV2Mailbox' held the testers-only switch and is ignored from 281.2.
+  EnableV2Mailbox = 'V2MailboxOnByDefault',
+  EnableLivePickup = 'EnableLivePickup',
+  EnableSharedConnect = 'EnableSharedConnect',
+  EnableSharedConnectInvite = 'EnableSharedConnectInvite',
+  EnableTrustedApprovers = 'EnableTrustedApprovers',
+  EnableStateVerifiedApprovers = 'EnableStateVerifiedApprovers',
+  EnableTrustTestState = 'EnableTrustTestState',
+  EnableStateCard = 'EnableStateCard',
+  // 'EnableConfirmItsYou' was here: the Developer switch for "Confirm it's you" while it was a demo. It is part of the
+  // app now, with no setting (Alberto, 2026-11-18), so the key is no longer read or written. A phone that saved it
+  // keeps the value; it is left and ignored, never migrated: a saved "off" cannot be told from one never touched.
+  DemoStateHost = 'DemoStateHost',
+  SediDemoSide = 'SediDemoSide',
 }
 
 export const initialState: BCState = {
   ...defaultState,
-  preferences: { ...defaultState.preferences, useDataRetention: false, disableDataRetentionOption: true },
+  preferences: {
+    ...defaultState.preferences,
+    useDataRetention: false,
+    disableDataRetentionOption: true,
+    // Rooms are on for everyone from 276; Developer settings has the off switch. A saved choice still wins on load.
+    featureRooms: true,
+  },
   developer: developerState,
   dismissPersonCredentialOffer: dismissPersonCredentialOfferState,
 }
@@ -187,6 +287,99 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
       const developer = { ...state.developer, enableDidCommV2 }
 
       PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableDidCommV2, developer.enableDidCommV2)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_V2_MAILBOX: {
+      const enableV2Mailbox: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableV2Mailbox }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableV2Mailbox, developer.enableV2Mailbox)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_LIVE_PICKUP: {
+      const enableLivePickup: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableLivePickup }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableLivePickup, developer.enableLivePickup)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_SHARED_CONNECT: {
+      const enableSharedConnect: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableSharedConnect }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableSharedConnect, developer.enableSharedConnect)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_SHARED_CONNECT_INVITE: {
+      const enableSharedConnectInvite: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableSharedConnectInvite }
+
+      PersistentStorage.storeValueForKey<boolean>(
+        BCLocalStorageKeys.EnableSharedConnectInvite,
+        developer.enableSharedConnectInvite
+      )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_TRUSTED_APPROVERS: {
+      const enableTrustedApprovers: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableTrustedApprovers }
+
+      PersistentStorage.storeValueForKey<boolean>(
+        BCLocalStorageKeys.EnableTrustedApprovers,
+        developer.enableTrustedApprovers
+      )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_STATE_VERIFIED_APPROVERS: {
+      const enableStateVerifiedApprovers: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableStateVerifiedApprovers }
+
+      PersistentStorage.storeValueForKey<boolean>(
+        BCLocalStorageKeys.EnableStateVerifiedApprovers,
+        developer.enableStateVerifiedApprovers
+      )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_TRUST_TEST_STATE: {
+      const enableTrustTestState: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableTrustTestState }
+
+      PersistentStorage.storeValueForKey<boolean>(
+        BCLocalStorageKeys.EnableTrustTestState,
+        developer.enableTrustTestState
+      )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_STATE_CARD: {
+      const enableStateCard: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableStateCard }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableStateCard, developer.enableStateCard)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.SET_DEMO_STATE_HOST: {
+      const demoStateHost: string = (action?.payload || []).pop() || ''
+      const developer = { ...state.developer, demoStateHost }
+
+      PersistentStorage.storeValueForKey<string>(BCLocalStorageKeys.DemoStateHost, developer.demoStateHost)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.SET_SEDI_DEMO_SIDE: {
+      const value = (action?.payload || []).pop()
+      const sediDemoSide: Developer['sediDemoSide'] = value === 'guardian' || value === 'ward' ? value : ''
+      const developer = { ...state.developer, sediDemoSide }
+
+      PersistentStorage.storeValueForKey<string>(BCLocalStorageKeys.SediDemoSide, developer.sediDemoSide)
 
       return { ...state, developer }
     }

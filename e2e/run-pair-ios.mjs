@@ -9,6 +9,21 @@
  *   pair-share-link-connects  A leaves the code screen; B opens the link through iOS (simctl openurl, as a tapped link);
  *                             the relationship exchange completes and each lists the other (the VRC gate check)
  *
+ * Chat drafts (bifold #765, #763), on A with B as the other side:
+ *   draft-kept-after-restart  A types a draft in B's chat and leaves; reopened, the draft is there; A leaves without
+ *                             typing (the composer's first-layout '' must not clear it), restarts the app and unlocks:
+ *                             the draft is still there
+ *   draft-sent-not-back       A sends that kept draft (B gets it): the field is empty right after, after leaving and
+ *                             reopening the chat, and after a restart (the old draft is not read back)
+ *   draft-emoji-then-send     A types words, adds 😀 from the composer's picker and taps Send at once: the field ends up
+ *                             empty and Send goes (a Send handled in the render that hands text over used to put the
+ *                             sent words back), and B gets the message
+ * These rows read the fixes end to end; they are not the regression guard. That is the unit tests: #765's in
+ * modules/chat/__tests__/useChatDraft.test.ts, #763's "sent" block in __tests__/components/chat/useComposerText.test.tsx
+ * (with its own control: "without it, the sent words stay in the field"). No pre-fix build ran these rows, and
+ * draft-emoji-then-send closes the picker before Send, which may settle the hand-over and close #763's race window: its
+ * green says the send path works, not that the race cannot come back.
+ *
  * Emoji picker (bifold #574; rich messaging Step 2, W2). Each side reads the other's change from its own screen:
  *   pair-react-picker         B sends A a message; A long-presses it, opens the full picker from the reaction bar's
  *                             "+", searches "cat" and chooses 🐱: B's message shows "🐱 1" on B
@@ -55,10 +70,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { acceptSystemAlertIfPresent, byTestId, ensureAppium, existsTestId, screenshot, scrollToTestId, sleep, stopAppium, tapTestId } from "./lib/driver.js";
-import { acceptRelationshipProposalOnEitherSide, assertVrcReceived, completeOnboarding, dismissTourIfPresent, openQrSheet, returnToContacts, unlockIfLocked } from "./lib/flows.js";
+import { acceptRelationshipProposalOnEitherSide, assertVrcReceived, completeOnboarding, dismissTourIfPresent, openQrSheet, pressAnyBack, restartApp, returnToContacts, unlockIfLocked } from "./lib/flows.js";
 import { appLogged } from "./lib/appLog.js";
+import { exifConcerns } from "./lib/exifTags.mjs";
 import { jpegMetadata } from "./lib/jpegMetadata.mjs";
-import { TEST_ID_PREFIX } from "./lib/config.js";
 import { createRows } from "./lib/rows.js";
 import { deviceLog, keepAlive, openDevice } from "./openvtc/hvDevices.js";
 
@@ -70,6 +85,9 @@ const rows = createRows({
   label: "pair-ios",
   needs: {
     "pair-share-link-connects": ["pair-share-link-made"],
+    "draft-kept-after-restart": ["pair-share-link-connects"],
+    "draft-sent-not-back": ["draft-kept-after-restart"],
+    "draft-emoji-then-send": ["pair-share-link-connects"],
     "pair-react-picker": ["pair-share-link-connects"],
     "pair-react-same": ["pair-react-picker"],
     "pair-react-remove": ["pair-react-same"],
@@ -109,14 +127,17 @@ async function pushAndTapWake(d, udid, tag) {
   await sleep(2000);
 }
 
-/** How many elements carry `key` on screen now. */
-async function countTestId(d, key) {
-  return (await d.$$(`~${TEST_ID_PREFIX}${key}`)).length;
+/**
+ * The photo bubbles in the open chat, by their label ("📷 Photo, <time>", ChatMessage.tsx). Not by the ChatMessageImage
+ * id: once a transcript is long the driver's snapshot stops short of it (0 on B and 8 on A with 11 photos on screen, 10-25).
+ */
+async function countPhotos(d) {
+  return (await d.$$('-ios predicate string:label BEGINSWITH "📷 Photo,"')).length;
 }
 
-/** Whether `key` reaches `count` elements within `timeout`. */
-async function waitForCount(d, key, count, timeout) {
-  for (const until = Date.now() + timeout; Date.now() < until; await sleep(2000)) if ((await countTestId(d, key)) >= count) return true;
+/** Whether the open chat shows at least `count` photo bubbles within `timeout`. */
+async function waitForPhotos(d, count, timeout) {
+  for (const until = Date.now() + timeout; Date.now() < until; await sleep(2000)) if ((await countPhotos(d)) >= count) return true;
   return false;
 }
 
@@ -142,20 +163,64 @@ async function onChat(d, peer) {
   return composer && named;
 }
 
+/**
+ * Tap Send in the open chat. Since the slim composer (bifold #610), Send exists only once the field holds text (Camera
+ * stands in its place before), so wait for it to appear rather than tap the moment the text is set.
+ */
+async function tapSend(d) {
+  const send = await d.$("~GC_SEND_TOUCHABLE"); // gifted-chat Send.js
+  await send.waitForExist({ timeout: 5000 });
+  await send.click();
+}
+
 /** Send `text` from the open chat. The composer has no testID (gifted-chat; MessageInput.tsx): found by type. */
 async function sendChat(d, text) {
   const input = await d.$("-ios class chain:**/XCUIElementTypeTextView");
   await input.waitForExist({ timeout: 15000 });
   await input.setValue(text);
-  const send = await d.$("~GC_SEND_TOUCHABLE"); // gifted-chat Send.js
-  await send.click();
+  await tapSend(d);
   await sleep(2000);
 }
 
-/** From the Contacts list, open `peer`'s chat. */
+/** The open chat's field as typed. An empty field has no value: RN draws its placeholder as a separate element. */
+async function fieldText(d) {
+  const input = await d.$("-ios class chain:**/XCUIElementTypeTextView");
+  if (!(await input.isExisting())) return "(no field)";
+  return ((await input.getAttribute("value").catch(() => "")) || "").trim();
+}
+
+/** Type `text` into the open chat's field and read it back: the simulator's keyboard can move a character. */
+async function typeDraft(d, text) {
+  const input = await d.$("-ios class chain:**/XCUIElementTypeTextView");
+  await input.waitForExist({ timeout: 15000 });
+  for (let i = 0; i < 3; i++) {
+    await input.clearValue().catch(() => undefined);
+    await input.setValue(text);
+    await sleep(800);
+    if ((await fieldText(d)) === text) return true;
+  }
+  return false;
+}
+
+/**
+ * Back out of stacked screens (a chat, its Contact Details) toward the tabs: up to four presses of whichever back the
+ * screen has (pressAnyBack, lib/flows.js). returnToContacts knows BackButton only,
+ * and a chat opened through Contact Details sits two screens deep behind headers without it.
+ */
+async function backOut(d) {
+  for (let i = 0; i < 4; i++) {
+    if (await existsTestId(d, "Contacts", 1000)) return;
+    if (!(await pressAnyBack(d))) return;
+    await sleep(1000);
+  }
+}
+
 async function openChatWith(d, peer) {
+  await backOut(d);
   await returnToContacts(d);
   await (await d.$(`-ios predicate string:label CONTAINS "${peer.first} ${peer.last}" AND visible == 1`)).click();
+  // A contact opens on its details page; its "View Messages" (ContactDetails.tsx) opens the chat.
+  if (await existsTestId(d, "ContactViewMessages", 5000)) await tapTestId(d, "ContactViewMessages", 5000);
   for (const until = Date.now() + 15000; Date.now() < until; await sleep(1000)) if (await onChat(d, peer)) return;
   throw new Error(`driver: ${peer.first}'s chat did not open`);
 }
@@ -275,8 +340,14 @@ try {
       // (the RC rerun 1021-0328 stopped there with the sheet open).
       const copy = await a.$('-ios predicate string:type == "XCUIElementTypeCell" AND label == "Copy"');
       await copy.waitForExist({ timeout: 15000 });
-      await copy.click();
-      await sleep(1000);
+      // A tap while the sheet is still sliding in can miss: the sheet stays up and nothing is copied (10-25 run 3 and
+      // 4 on the MacBook, screenshot shows the sheet still open). Copy dismisses the sheet, so tap until it goes.
+      for (let i = 0; i < 3 && (await copy.isExisting()); i++) {
+        await sleep(800);
+        await copy.click().catch(() => undefined);
+        await sleep(1200);
+      }
+      if (await copy.isExisting()) return { ok: false, detail: "the share sheet stayed open after three taps on Copy: nothing was copied" };
       // The message is the words, then the link on its own line (QRScanner.tsx). Read through WebDriverAgent first, as
       // lib/pages/link.js does: simctl pbpaste came back empty for 10 s on the MacBook while WDA had the link (10-23).
       const clip = Buffer.from((await a.getClipboard("plaintext").catch(() => "")) || "", "base64").toString("utf8").trim();
@@ -307,6 +378,68 @@ try {
       await acceptRelationshipProposalOnEitherSide(a, b);
       await Promise.all([assertVrcReceived(a, `${B.first} ${B.last}`), assertVrcReceived(b, `${A.first} ${A.last}`)]);
       return { ok: true, detail: `B opened A's shared link with A off the code screen; each lists the other (${A.first} ${A.last} ↔ ${B.first} ${B.last}) (iOS; Android unproven)` };
+    });
+
+    // Chat drafts (#765, #763). Before the emoji rows: they leave messages in this chat, which these rows don't read.
+    const DRAFT = "gate: kept draft";
+    await rows.row("draft-kept-after-restart", async () => {
+      await openChatWith(a, B);
+      if (!(await typeDraft(a, DRAFT))) return { ok: false, detail: "driver: the field would not take the draft" };
+      await sleep(1500);
+      await backOut(a);
+      await openChatWith(a, B);
+      await sleep(2500);
+      const shown = await fieldText(a);
+      await sleep(2000);
+      await backOut(a);
+      await restartApp(a);
+      await unlockIfLocked(a);
+      await openChatWith(a, B);
+      await sleep(3000);
+      const after = await fieldText(a);
+      await screenshot(a, "draft-kept-after-restart").catch(() => undefined);
+      return { ok: shown === DRAFT && after === DRAFT, detail: `reopened: "${shown}" · after leaving without typing, a restart and the PIN: "${after}" (want "${DRAFT}")` };
+    });
+    await rows.row("draft-sent-not-back", async () => {
+      // Opens the chat itself, not relying on where the row above ended (a draft kept over a reopen is that row's claim).
+      await openChatWith(a, B);
+      await sleep(3000);
+      const before = await fieldText(a);
+      await tapSend(a);
+      const onB = Boolean(await waitForText(b, DRAFT));
+      await sleep(1500);
+      const rightAfter = await fieldText(a);
+      await backOut(a);
+      await openChatWith(a, B);
+      await sleep(3000);
+      const reopened = await fieldText(a);
+      await backOut(a);
+      await restartApp(a);
+      await unlockIfLocked(a);
+      await openChatWith(a, B);
+      await sleep(3000);
+      const restarted = await fieldText(a);
+      await screenshot(a, "draft-sent-not-back").catch(() => undefined);
+      return {
+        ok: before === DRAFT && onB && rightAfter === "" && reopened === "" && restarted === "",
+        detail: `sent "${before}" · B got it ${onB} · the field after Send "${rightAfter}", after leaving and reopening "${reopened}", after a restart "${restarted}" (want all "")`,
+      };
+    });
+    await rows.row("draft-emoji-then-send", async () => {
+      const words = "gate: emoji then send";
+      await openChatWith(a, B);
+      if (!(await typeDraft(a, words))) return { ok: false, detail: "driver: the field would not take the words" };
+      await tapTestId(a, "ChatComposerEmojiButton", 10000);
+      if (!(await existsTestId(a, "EmojiPickerSheet", 10000))) return { ok: false, detail: "the composer's emoji button did not open the picker" };
+      await chooseEmoji(a, "grinning", "1F600");
+      await tapTestId(a, "EmojiPickerSheetClose", 5000);
+      await tapSend(a);
+      let field = "?";
+      for (const until = Date.now() + 5000; Date.now() < until; await sleep(500)) if ((field = await fieldText(a)) === "") break;
+      const sendStill = await a.$("~GC_SEND_TOUCHABLE").isExisting();
+      const onB = Boolean(await waitForText(b, words));
+      await screenshot(a, "draft-emoji-then-send").catch(() => undefined);
+      return { ok: field === "" && !sendStill && onB, detail: `the field after Send "${field}" · Send still shown ${sendStill} · B got the message ${onB}` };
     });
 
     // Emoji picker: reactions chosen from the full picker, and an emoji typed in from the composer's button. Each verdict
@@ -352,7 +485,7 @@ try {
       // The composer's sheet stays open for more; it closes only when asked.
       const stayed = await existsTestId(a, "EmojiPickerSheet", 2000);
       await tapTestId(a, "EmojiPickerSheetClose", 5000);
-      await (await a.$("~GC_SEND_TOUCHABLE")).click();
+      await tapSend(a);
       const onB = Boolean(await waitForText(b, "gate: picked 😀"));
       await screenshot(b, "pair-emoji-composer").catch(() => undefined);
       return { ok: stayed && onB, detail: `the sheet stayed open after a choice ${stayed} · B shows "gate: picked 😀" ${onB}` };
@@ -361,25 +494,41 @@ try {
     // Photos (Step 3): before the timer rows, so the photo is untimed and still on both phones when its file is read.
     const PHOTO_FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "test-chat-photo-gps.jpg");
     await rows.row("pair-photo-send", async () => {
+      // No `simctl privacy grant photos`: on iOS 26 it kills the running app and still does not give full access, so
+      // the app asks anyway (10-25). The app's own prompt is answered below instead.
       simctl("addmedia", A.udid, PHOTO_FIXTURE);
-      simctl("privacy", A.udid, "grant", "photos", APP);
       await openChatWith(a, B);
-      const imagesBefore = { a: await countTestId(a, "ChatMessageImage"), b: await countTestId(b, "ChatMessageImage") };
-      await tapTestId(a, "ChatActionsButton", 10000);
-      await tapTestId(a, "ChatAttachLibrary", 10000);
-      await acceptSystemAlertIfPresent(a);
-      // The system photo picker: the photo just added is the newest, the last cell of its grid.
-      const cells = await a.$$("-ios class chain:**/XCUIElementTypeCell");
-      if (cells.length === 0) return { ok: false, detail: "the system photo picker showed no photos" };
-      await cells[cells.length - 1].click();
+      const before = { a: await countPhotos(a), b: await countPhotos(b) };
+      // iOS 26 asks for the photo library with three buttons (Limit Access…, Allow Full Access, Don't Allow). The
+      // session auto-accepts alerts the moment they appear, and its default button left access denied (10-25), so the
+      // button it accepts is named before the tap that raises the prompt, and reset after.
+      await a.updateSettings({ acceptAlertButtonSelector: '**/XCUIElementTypeButton[`label == "Allow Full Access"`]' }).catch(() => undefined);
+      try {
+        await tapTestId(a, "ChatActionsButton", 10000);
+        await tapTestId(a, "ChatAttachLibrary", 10000);
+        await sleep(2000);
+        const full = await a.$('-ios predicate string:type == "XCUIElementTypeButton" AND label == "Allow Full Access"');
+        if (await full.isExisting()) await full.click();
+      } finally {
+        await a.updateSettings({ acceptAlertButtonSelector: "" }).catch(() => undefined);
+      }
+      await sleep(2000);
+      // A denied permission shows only a passing toast (Chat.PhotoNoPermission), which once read as "no picker".
+      if (await a.$('-ios predicate string:label CONTAINS "needs permission to use the camera or your photos"').isExisting()) {
+        return { ok: false, detail: "the app reports no permission for the photo library (Chat.PhotoNoPermission)" };
+      }
+      // The system picker runs out of process: its grid is not in the app's tree and cannot be queried, so the newest
+      // photo is tapped where it is drawn. The picker lists newest first by capture date; the fixture has none, so
+      // the photo just added is first, top left (checked on screen, iPhone 17, 10-25).
+      await a.execute("mobile: tap", { x: 66, y: 216 });
       for (const label of ["Add", "Choose", "Done"]) {
         const button = await a.$(`-ios predicate string:type == "XCUIElementTypeButton" AND label == "${label}" AND visible == 1`);
         if (await button.isExisting()) await button.click();
       }
-      const onA = await waitForCount(a, "ChatMessageImage", imagesBefore.a + 1, 60000);
-      const onB = await waitForCount(b, "ChatMessageImage", imagesBefore.b + 1, 90000);
+      const onA = await waitForPhotos(a, before.a + 1, 60000);
+      const onB = await waitForPhotos(b, before.b + 1, 90000);
       await screenshot(b, "pair-photo-send").catch(() => undefined);
-      return { ok: onA && onB, detail: `A shows the photo it sent ${onA} · B shows the photo ${onB} (images before: A ${imagesBefore.a}, B ${imagesBefore.b})` };
+      return { ok: onA && onB, detail: `A shows the photo it sent ${onA} · B shows the photo ${onB} (photo bubbles before: A ${before.a}, B ${before.b})` };
     });
     await rows.row("pair-photo-no-location", async () => {
       const fixture = jpegMetadata(readFileSync(PHOTO_FIXTURE));
@@ -395,9 +544,12 @@ try {
         }
         const bytes = readFileSync(file);
         const m = jpegMetadata(bytes);
-        const clean = m.jpeg && !m.exif && !m.gps && !m.xmp && Math.max(m.width ?? 0, m.height ?? 0) <= 1600 && bytes.length <= 256 * 1024;
+        // The re-encode keeps a small Exif block of layout tags, so the check is that nothing in it is about a person,
+        // a device, a place or a time, and that no thumbnail (IFD1) rides along: lib/exifTags.mjs's allowlist.
+        const concerns = exifConcerns(bytes);
+        const clean = m.jpeg && !m.gps && !m.xmp && concerns.length === 0 && Math.max(m.width ?? 0, m.height ?? 0) <= 1600 && bytes.length <= 256 * 1024;
         ok &&= clean;
-        verdicts.push(`${who}: Exif ${m.exif} · GPS ${m.gps} · XMP ${m.xmp} · ${m.width}x${m.height} · ${bytes.length} bytes`);
+        verdicts.push(`${who}: GPS ${m.gps} · XMP ${m.xmp} · Exif beyond layout tags: ${concerns.join(", ") || "none"} · ${m.width}x${m.height} · ${bytes.length} bytes`);
       }
       return { ok, detail: `the fixture carries GPS ${fixture.gps} · ${verdicts.join(" · ")}` };
     });
@@ -455,8 +607,7 @@ try {
     // outcome line (logger.info, TabStack.tsx) reaches the device log only when the build logs at info, so it is detail.
     await rows.row("pair-wake-opens-chat", async () => {
       await a.execute("mobile: pressButton", { name: "home" });
-      await returnToContacts(b);
-      await (await b.$(`-ios predicate string:label CONTAINS "${A.first} ${A.last}" AND visible == 1`)).click();
+      await openChatWith(b, A);
       await sendChat(b, "gate: a message for the wake");
       const since = Date.now();
       await pushAndTapWake(a, A.udid, "chat");

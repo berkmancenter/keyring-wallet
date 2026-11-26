@@ -1,0 +1,139 @@
+import { StackScreenProps } from '@react-navigation/stack'
+import { useTranslation } from 'react-i18next'
+import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native'
+
+import { MdocRecord, SdJwtVcRecord, W3cCredentialRecord, W3cV2CredentialRecord } from '@credo-ts/core'
+import React, { useEffect, useState } from 'react'
+import RecordLoading from '../../../components/animated/RecordLoading'
+import { hitSlop } from '../../../constants'
+import { ThemedText } from '../../../components/texts/ThemedText'
+import { useTheme } from '../../../contexts/theme'
+import ScreenLayout from '../../../layout/ScreenLayout'
+import { DeliveryStackParams, Screens } from '../../../types/navigators'
+import { testIdWithKey } from '../../../utils/testable'
+import { useOpenIDCredentials } from '../context/OpenIDCredentialRecordProvider'
+import CredentialCardGen from '../../../components/misc/CredentialCardGen'
+import { OpenIDCredentialRecord } from '../credentialRecord'
+
+type Props = StackScreenProps<DeliveryStackParams, Screens.OpenIDProofCredentialSelect>
+type TypedCred = {
+  credential: OpenIDCredentialRecord
+  claimFormat: string
+}
+
+const isDisplayableOpenIDProofCredential = (
+  credential: OpenIDCredentialRecord
+): credential is TypedCred['credential'] =>
+  credential instanceof W3cCredentialRecord ||
+  credential instanceof W3cV2CredentialRecord ||
+  credential instanceof SdJwtVcRecord ||
+  credential instanceof MdocRecord
+
+const OpenIDProofCredentialSelect: React.FC<Props> = ({ route, navigation }: Props) => {
+  if (!route?.params) {
+    throw new Error('Change credential route params were not set properly')
+  }
+  const selectedCredentialID = route.params.selectedCredID
+  const altCredentials = route.params.altCredIDs
+  const onCredChange = route.params.onCredChange
+  const { ColorPalette, SelectedCredTheme } = useTheme()
+  const { getCredentialById } = useOpenIDCredentials()
+
+  const { t } = useTranslation()
+  const [loading, setLoading] = useState(false)
+
+  const [credentialsRequested, setCredentialsRequested] = useState<Array<TypedCred>>([])
+
+  useEffect(() => {
+    async function fetchCreds() {
+      if (!altCredentials) return
+      setLoading(true)
+
+      const creds: TypedCred[] = []
+
+      for (const { id, claimFormat } of Object.values(altCredentials)) {
+        const credential = await getCredentialById(id)
+
+        if (credential && isDisplayableOpenIDProofCredential(credential)) {
+          creds.push({
+            credential,
+            claimFormat,
+          })
+        }
+      }
+      setCredentialsRequested(creds)
+      setLoading(false)
+    }
+    fetchCreds()
+  }, [altCredentials, getCredentialById])
+
+  const styles = StyleSheet.create({
+    pageContainer: {
+      flex: 1,
+    },
+    pageMargin: {
+      marginHorizontal: 20,
+    },
+    cardLoading: {
+      backgroundColor: ColorPalette.brand.secondaryBackground,
+      flex: 1,
+      flexGrow: 1,
+      marginVertical: 35,
+      borderRadius: 15,
+      paddingHorizontal: 10,
+    },
+  })
+
+  const changeCred = (selection: TypedCred) => {
+    onCredChange({
+      inputDescriptorID: route.params.inputDescriptorID,
+      id: selection.credential.id,
+      claimFormat: selection.claimFormat,
+    })
+    navigation.goBack()
+  }
+
+  const listHeader = () => {
+    return (
+      <View style={{ ...styles.pageMargin, marginTop: 40, marginBottom: 20 }}>
+        {loading ? (
+          <View style={styles.cardLoading}>
+            <RecordLoading />
+          </View>
+        ) : (
+          <ThemedText variant={'bold'}>{t('ProofRequest.AvailableCards')}</ThemedText>
+        )}
+      </View>
+    )
+  }
+
+  return (
+    <ScreenLayout screen={Screens.OpenIDProofCredentialSelect}>
+      <FlatList
+        data={credentialsRequested}
+        ListHeaderComponent={listHeader}
+        renderItem={({ item }) => {
+          return (
+            <View style={styles.pageMargin}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={t('ProofRequest.SelectCredential')}
+                testID={testIdWithKey(`select:${item.credential.id}`)}
+                onPress={() => changeCred(item)}
+                hitSlop={hitSlop}
+                style={[
+                  item.credential.id === selectedCredentialID ? SelectedCredTheme : undefined,
+                  { marginBottom: 10 },
+                ]}
+              >
+                <CredentialCardGen credential={item.credential}></CredentialCardGen>
+              </TouchableOpacity>
+            </View>
+          )
+        }}
+      ></FlatList>
+    </ScreenLayout>
+  )
+}
+
+export default OpenIDProofCredentialSelect

@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { deflateRawSync } from "node:zlib";
 import { test } from "node:test";
 
-import { buildCaps, buildFile, buildHas, buildLacks, bundleOf, forget, platformOf } from "./buildHas.js";
+import { buildCaps, buildFile, buildHas, buildLacks, bundleOf, forget, manifestKeys, platformOf } from "./buildHas.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -171,6 +171,24 @@ test("buildCaps counts the manifests' keys the build holds, and is cached with t
   // The real manifests: a number, never a throw, on a fixture that holds a few of their keys.
   const real = buildCaps({ app, env });
   assert.ok(real.total > 100 && real.present >= 1 && real.present <= real.total, JSON.stringify(real));
+});
+
+test("the caps cache's manifest version is the ids, not a commit id: same count, other ids, a new version", () => {
+  const lib = (manifests) => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "caps-lib-"));
+    for (const [name, m] of Object.entries(manifests)) writeFileSync(path.join(dir, name), JSON.stringify(m));
+    return dir;
+  };
+  const a = lib({ "testids.json": { keys: { A: [], B: [] }, raw: {} }, "testids.app.json": { keys: { C: [] } } });
+  const reordered = lib({ "testids.json": { generatedFrom: "f".repeat(40), keys: { B: [], A: [] }, raw: {} }, "testids.app.json": { keys: { C: [] } } });
+  const other = lib({ "testids.json": { keys: { A: [], D: [] }, raw: {} }, "testids.app.json": { keys: { C: [] } } });
+  try {
+    assert.equal(manifestKeys(a).from, manifestKeys(reordered).from, "order and a leftover generatedFrom do not count");
+    assert.equal(manifestKeys(a).keys.length, manifestKeys(other).keys.length);
+    assert.notEqual(manifestKeys(a).from, manifestKeys(other).from, "the same number of other ids is another version");
+  } finally {
+    for (const d of [a, reordered, other]) rmSync(d, { recursive: true, force: true });
+  }
 });
 
 test("the CLI: has exits 0/1/2 and says which; caps prints present/total", () => {

@@ -8,7 +8,9 @@ evidence behind every position here:
 [`2026-09-15-al.md`](./2026-09-15-al.md),
 [`2026-09-16-bam.md`](./2026-09-16-bam.md) (the `identityFromDid` /
 `checkV2ThreadCorrelation` / first-contact-identity fixes from the
-`feat/credo-0.7` code review). Sibling subtasks:
+`feat/credo-0.7` code review),
+[`2026-11-20-al.md`](./2026-11-20-al.md) (the Affinidi mediator measured
+locally, and one mailbox per phone, §7.2). Sibling subtasks:
 [`trust_tasks_subtask.md`](./trust_tasks_subtask.md) (the documents this
 carries), [`pnm_cnm_subtask.md`](./pnm_cnm_subtask.md) (P1 stands up the VTA
 leg this plan's V3 replaces or adopts), [`vta-carriage_subtask.md`](./vta-carriage_subtask.md)
@@ -728,12 +730,17 @@ Answering `2026-09-07-al.md` Finding 1 for the modes this plan owns:
 | Mode | Mediator | Why |
 |---|---|---|
 | Wallet ↔ wallet, v1 (today) | Keyring's Credo mediator | unchanged |
-| Wallet ↔ wallet, v2 (V2) | Keyring's Credo mediator in v2 mode | v2 routing without an ACL or ATM; ref-17 |
+| Wallet ↔ wallet, v2 | the Affinidi mediator, one mailbox per phone (§7.2) | the migration plan's D1; it has no Coordinate Mediation 2.0, so Credo's v2 mediation client does not apply |
 | Wallet ↔ VTA (V3 / P1) | the VTI stack's Affinidi mediator | the VTA's `DIDCommMessaging` entry names it; ATM auth; TSP on the same socket |
 
 `vta-carriage_subtask.md`'s VTA-mediated `propose` is the third row.
 
 ### 7.1 Two codebases, and the production one is never upgraded in place
+
+This section governs any v2 mode of Keyring's **Credo** mediator. That mediator
+is not the wallet-to-wallet v2 route (§7.2); the rules stand because the
+development mediator still carries ref-17 and the lab's v2 runs, and because
+they are the reason the production v1 mediator is never touched.
 
 "Keyring's Credo mediator" is two deployments of two codebases:
 
@@ -780,6 +787,88 @@ stack non-negotiable. So the rules are:
 A merged v1+v2 mediator (`didcommVersions: ['v1','v2']` on one deployment)
 is a later consolidation, considered only after the v2 deployment has run
 beside the v1 one for a release cycle with no rollback.
+
+### 7.2 Wallet ↔ wallet v2 through the Affinidi mediator: one mailbox per phone
+
+The wallet-to-wallet v2 route is the Affinidi mediator
+([`../mediator-migration-plan.md`](../mediator-migration-plan.md) D1). Three of
+its properties decide the client's shape:
+
+- **No Coordinate Mediation 2.0, by contract.** Its advertised protocols are
+  pinned in source, and the absence is deliberate: *"There is no
+  `coordinate-mediation` entry, and the absence is structural rather than an
+  oversight … DIDComm v2 routing is DID-addressed: a `routing/2.0` forward
+  names its next hop as a DID, which hashes straight into the recipient's
+  account lookup"* (affinidi-tdk-rs `55580615`,
+  `affinidi-messaging-mediator/src/messages/protocols/discover_features.rs`,
+  `ADVERTISED_PROTOCOLS`; guarded by the test
+  `coordinate_mediation_is_not_advertised`, upstream issue #755). Credo's v2
+  mediation client (Coordinate Mediation 2.0, then Message Pickup 4.0) has
+  nothing to talk to, so `v2Routing.ts`'s second mediation record and
+  `pickUpNow`'s `'v4'` branch do not apply to this mediator.
+- **Pickup is 3.0 over its own socket.** It discloses
+  `https://didcomm.org/messagepickup/3.0`, not Credo's
+  `https://didcomm.org/message-pickup/4.0`, and a client signs in with the
+  ATM challenge before opening one WebSocket per DID — the shape
+  `VtiMediatorSession` already speaks for the VTA leg (§3.4, ref-18).
+- **One account and one live socket per DID, newest wins**, with a takeover
+  damper (`vtiIdentityListeners.ts` cites it). A pairwise DID per contact,
+  each signed in, is a socket per contact: ruled out.
+
+So a phone has **one mailbox** (`trust-tasks/module/walletMailbox.ts`):
+
+1. **The mailbox DID** is a `did:peer:2` whose DIDComm v2 service names the
+   mediator by DID. It is minted once per mediator, kept, and is the only
+   identity the phone signs in as there, on one `VtiMediatorSession`.
+2. **Every v2 contact gets a fresh pairwise `did:peer:2`** whose service names
+   the mailbox DID: the invitation's `from` when the phone invites (Credo's
+   v2 create reads it as `ourDid`), and `ourDid` when it accepts
+   (`acceptConfigForInvitation`).
+3. **Outbound:** the sender's Credo follows contact DID → mailbox DID and wraps
+   the message in a `routing/2.0` forward for the mailbox's key. A transport
+   for the `did` scheme sends that over the sender's own mailbox session, as a
+   forward whose `next` is the mailbox the peer's contact DID names. Not the
+   endpoint Credo hands over (the mediator) and not the `did:key` the wrapping
+   names: neither is an account at the mediator.
+4. **Inbound:** the mediator holds it for the recipient's mailbox; the phone
+   opens the forward with its mailbox key and gives the message inside to
+   Credo's receiver, which opens it with the contact key. A forward to a DID
+   the phone did not create is dropped.
+
+**Linkability.** Every contact DID of a phone names the same mailbox DID, so
+two contacts who compare documents can tell they reach the same phone. The
+mediator learns nothing a mediator does not already learn: it sees mailbox
+DIDs, never a contact DID. This is accepted for now (product decision,
+2026-11-20). A mailbox per group of contacts stays possible: nothing in the
+design assumes one mailbox, only that each contact DID names the mailbox that
+receives for it.
+
+**Which mediator hosts mailboxes is a deployment decision, not made here.**
+The phone's VTI mediator today is the Farm's shared one, which Keyring does
+not operate; Keyring's own Affinidi deployment refuses public sign-in until the
+migration plan's M3. A build opens the mailbox only at a mediator it is
+configured with; with none, it has nowhere for a v2 reply to land and mints v1
+invitations.
+
+**Push wake is not solved by this.** The mediator calls nobody when it stores
+for an absent recipient (no webhook, push hook or configuration key for one);
+the options are the migration plan's D2.
+
+**Acceptance:**
+
+- Unit: the mailbox drops a forward for a DID it did not create and anything
+  that is not a forward; the transport's `next` is the mailbox the peer's
+  contact DID names, and it refuses when there is none.
+- Real Credo agents on Askar, with an in-memory stand-in for the mediator's
+  routing rule (`__tests__/modules/trust-tasks/walletMailbox.credo.test.ts`):
+  two phones connect and both directions deliver on the right connection; only
+  mailbox DIDs ever sign in; the mailbox DID is kept across a close and open;
+  **two contacts of one phone see different contact DIDs naming the same
+  mailbox DID** (the linkability property, asserted).
+- Against a real Affinidi mediator: three wallets, all six directions live,
+  and an offline phone collecting from two senders on reconnect, each message
+  on its own connection — run on a locally built mediator in the lab; to be
+  re-run on the deployed version before the route is relied on.
 
 ## 8. Contributions this generates
 

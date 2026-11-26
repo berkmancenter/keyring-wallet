@@ -1,0 +1,182 @@
+import globals from 'globals'
+import pluginJs from '@eslint/js'
+import tseslint from 'typescript-eslint'
+import reactPlugin from 'eslint-plugin-react'
+import importPlugin from 'eslint-plugin-import'
+import reactHooks from 'eslint-plugin-react-hooks'
+import jestPlugin from 'eslint-plugin-jest'
+
+import requireTestId from './eslint-rules/require-testid.mjs'
+
+export default [
+  {
+    settings: {
+      react: {
+        version: 'detect',
+      },
+    },
+  },
+  { files: ['**/*.{js,mjs,cjs,ts,jsx,tsx}'] },
+  { files: ['**/*.js'], languageOptions: { sourceType: 'commonjs' } },
+  { languageOptions: { globals: globals.node } },
+  pluginJs.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+      // Prettier (semi: false) owns semicolon style and re-inserts the leading ';' before a
+      // statement that starts with '(' or '['; the deprecated core rule flags those as extra.
+      'no-extra-semi': 'off',
+    },
+  },
+  {
+    plugins: {
+      import: importPlugin,
+    },
+  },
+  {
+    plugins: {
+      'react-hooks': reactHooks,
+    },
+  },
+  {
+    files: ['**/*.{js,mjs,cjs,jsx,mjsx,ts,tsx,mtsx}'],
+    ...reactPlugin.configs.flat.recommended,
+    languageOptions: {
+      ...reactPlugin.configs.flat.recommended.languageOptions,
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+      ...reactPlugin.configs.flat.recommended.rules,
+      'react/react-in-jsx-scope': 'off',
+      'react/prop-types': 'off',
+      'react-hooks/exhaustive-deps': 'error',
+      'no-console': 'error',
+      '@typescript-eslint/no-unused-expressions': [
+        'error',
+        {
+          allowShortCircuit: true,
+          allowTernary: true,
+          allowTaggedTemplates: true,
+        },
+      ],
+    },
+  },
+  {
+    // Allow console statements in vrc_reference / vrc-reference / witness-server (reference/example code)
+    files: [
+      'vrc_reference/**/*.{js,mjs,cjs,ts,jsx,tsx}',
+      'packages/vrc-reference/**/*.{js,mjs,cjs,ts,jsx,tsx}',
+      'packages/witness-server/**/*.{js,mjs,cjs,ts,jsx,tsx}',
+      'packages/mediator-server/**/*.{js,mjs,cjs,ts,jsx,tsx}',
+    ],
+    rules: {
+      'no-console': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-var-requires': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
+      'no-case-declarations': 'off',
+    },
+  },
+  {
+    files: ['scripts/**/*.{js,ts}', '*.config.{js,mjs,cjs,ts}', 'commitlint.config.js'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  {
+    ignores: [
+      'eslint.config.mjs',
+      '.eslintrc-common.js',
+      '**/.eslintrc.js',
+      'scripts/make-blocks.js',
+      '**/jest.config.js',
+      '**/metro.config.js',
+      '.changeset/commit.js',
+      '.yarn/',
+      'packages/verifier/build/',
+      'packages/oca/build/',
+      'packages/remote-logs/build/',
+      'packages/react-native-attestation/build/',
+      'packages/vrc-shared/build/',
+      'packages/vrc-contexts/build/',
+      'packages/core/lib/',
+      'packages/legacy/core/lib',
+      'packages/react-hooks/build/',
+      'samples/app/lib/',
+      'vrc_reference/**/dist/',
+      'packages/witness-server/dist/',
+    ],
+  },
+  {
+    files: ['**/*.test.{js,mjs,cjs,jsx,mjsx,ts,tsx,mtsx}', '**/__mocks__/*.{js,mjs,cjs,jsx,mjsx,ts,tsx,mtsx}'], // Adjust the pattern to match your test files
+    plugins: {
+      jest: jestPlugin,
+    },
+    languageOptions: {
+      globals: {
+        'jest/globals': true,
+      },
+    },
+    rules: {
+      'jest/no-disabled-tests': 'warn',
+      'jest/no-focused-tests': 'error',
+      'jest/no-identical-title': 'error',
+      'jest/prefer-to-have-length': 'warn',
+      'jest/valid-expect': 'error',
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/no-unsafe-function-type': 'off',
+      'react/display-name': 'off',
+    },
+  },
+  {
+    files: ['**/app.config.js', '**/cli.js', '**/jestSetup.js', '**/jestSetupAfterEnv.js'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  // For images, inline require statements that metro needs
+  {
+    files: ['**/theme.ts', '**/theme.tsx'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  {
+    files: ['packages/core/**/*.{js,mjs,cjs,ts,jsx,tsx}'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off',
+    },
+  },
+  {
+    // Interactive controls carry a testID the test drivers can find. Fork-owned modules
+    // (trust-tasks, vrc) fail on a miss; the rest of core warns while the inherited
+    // backlog is cleared. Test files are exempt.
+    files: ['packages/core/src/**/*.{jsx,tsx}'],
+    ignores: ['**/*.test.{jsx,tsx}', '**/__tests__/**', '**/__mocks__/**'],
+    plugins: {
+      keyring: { rules: { 'require-testid': requireTestId } },
+    },
+    rules: {
+      'keyring/require-testid': 'warn',
+    },
+  },
+  {
+    files: ['packages/core/src/modules/trust-tasks/**/*.{jsx,tsx}', 'packages/core/src/modules/vrc/**/*.{jsx,tsx}'],
+    ignores: ['**/*.test.{jsx,tsx}', '**/__tests__/**', '**/__mocks__/**'],
+    rules: {
+      'keyring/require-testid': 'error',
+    },
+  },
+]

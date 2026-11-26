@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vta/pcs/root-request/0.1",
+  "title": "VTA PCS — Root Request — payload",
+  "description": "A vetter's client asks its VTA for the blinded request that enrols the vetter with a community for a vetting period; the VTA creates the vetter's PCS key on first use and keeps the blinding state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contextId",
+    "community",
+    "memberDid",
+    "parameters",
+    "label"
+  ],
+  "properties": {
+    "contextId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The context the engine belongs to. Its key is derived from this context's base."
+    },
+    "community": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The community's DID: the helper whose parameters the engine runs under."
+    },
+    "memberDid": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The vetter's member DID in the community: the DID that signs the requests the client sends on the vetter's behalf."
+    },
+    "parameters": {
+      "$ref": "../../../_shared/0.4/pcs-engine.schema.json#/$defs/CommunityParameters",
+      "description": "The community's published hidden-vetting parameters, copied verbatim from its join manifest."
+    },
+    "label": {
+      "type": "string",
+      "pattern": "^vetter/[0-9]{4}-[0-9]{2}$",
+      "description": "The class label to enrol under: the community's current one."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "RootRequest": {
+      "title": "RootRequest",
+      "description": "The payload of a vtc/vetting/vetters/pcs-root/0.1 request, without its ext: what the client sends the community.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "id",
+        "request"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "pattern": "^vetter/[0-9]{4}-[0-9]{2}$"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+          "description": "The vetter's PCS identifier for this community."
+        },
+        "request": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "proof"
+          ],
+          "properties": {
+            "encoding": {
+              "type": "string",
+              "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$"
+            },
+            "t0": {
+              "type": "string",
+              "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$"
+            },
+            "proof": {
+              "type": "string",
+              "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$"
+            }
+          }
+        }
+      }
+    },
+    "Response": {
+      "$anchor": "response",
+      "title": "VTA PCS — Root Request — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request"
+      ],
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/RootRequest"
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

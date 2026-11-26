@@ -20,6 +20,8 @@ import {
 } from "./driver.js";
 export { sleep };
 import { PIN, APP_ID, TEST_ID_PREFIX } from "./config.js";
+import { answerConfirmSheet } from "./confirmSheet.js";
+import { switchState, toggleAction } from "./developerToggle.js";
 import { REAL_CLOCKS, parseClocks, textInSource } from "./clocks.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -693,8 +695,9 @@ async function setAutoLockNever(driver) {
 }
 
 /**
- * Enable the "Enable TSP envelope carriage" developer setting (OFF by
- * default) — the dev/test-only toggle for the real TSP envelope Carriage
+ * Make sure the "Enable TSP envelope carriage" developer setting is on (ON by
+ * default since build 278, app/src/store.tsx; a blind tap would turn it OFF,
+ * see ensureDeveloperToggle) — the toggle for the real TSP envelope Carriage
  * (@bifold/trust-tasks's tsp.pack/unpack over @bifold/credo-tsp-adapter's
  * Askar-backed ports) as an alternative to the default DIDComm-v1 carriage.
  * See docs/plans/openvtc-integration-plan/2026-09-02-bam.md for why this
@@ -703,14 +706,14 @@ async function setAutoLockNever(driver) {
  *
  * The "Developer" row on Settings (testID DeveloperOptions) only exists
  * once `store.preferences.developerModeEnabled` is already persisted true
- * (bifold/packages/core/src/screens/Settings.tsx) — i.e. on a LATER visit
+ * (packages/core/src/screens/Settings.tsx) — i.e. on a LATER visit
  * to Settings, after developer mode has already been turned on. Tripping
  * the tap counter for the FIRST time takes a different path entirely:
  * Settings' own onDevModeTriggered fires as soon as the threshold trips
  * and calls `navigation.navigate(Screens.Developer)` directly, so the app
  * jumps straight to the Developer screen — there is no "DeveloperOptions"
  * row to see or tap on Settings in that transition, only afterwards.
- * (bifold/packages/core/src/hooks/developer-mode.ts:
+ * (packages/core/src/hooks/developer-mode.ts:
  * TOUCH_COUNT_TO_ENABLE_DEVELOPER_MODE = 10 taps on the version footer,
  * but the counter is checked BEFORE incrementing, so it only trips on the
  * 11th tap despite the constant's name.)
@@ -718,49 +721,88 @@ async function setAutoLockNever(driver) {
  * setupTrustTasksInbound only registers the TSP carriage's inbound handler
  * at agent setup — a restart is required for the inbound side to pick it
  * up (same restart-to-apply behavior as most developer toggles), so this
- * restarts the app before returning.
+ * restarts the app when it had to flip the switch.
  */
 export async function enableTspCarriage(driver) {
+  await ensureDeveloperToggle(driver, "ToggleEnableTspCarriage", "TSP envelope carriage");
+}
+
+/**
+ * Make sure the "DIDComm v2" developer setting is on (didcomm_v2_subtask.md
+ * C12/C14; ON by default since build 278): the agent runs with
+ * didcommVersions ['v1','v2'] and new relationship invitations are
+ * out-of-band/2.0 on did:peer:2, routed through the wallet mailbox (see
+ * enableV2Mailbox). Restarts the app only when it had to flip the switch: the
+ * agent's DIDComm versions are fixed at construction.
+ */
+export async function enableDidCommV2(driver) {
+  await ensureDeveloperToggle(driver, "ToggleEnableDidCommV2", "DIDComm v2");
+}
+
+/**
+ * Make sure the "wallet mailbox" developer setting is on (ON by default since
+ * build 282, wallet #996): at agent start the wallet opens one mailbox at
+ * Keyring's mailbox mediator (the build's MAILBOX_MEDIATOR_DID; blank in Test
+ * and OTA-gate builds, which open nothing) and mints its out-of-band/2.0
+ * invitations through it. assertWalletMailboxOpen reads the open from the log.
+ */
+export async function enableV2Mailbox(driver) {
+  await ensureDeveloperToggle(driver, "ToggleEnableV2Mailbox", "wallet mailbox");
+}
+
+/**
+ * Make sure a Developer-screen switch row (testID `key`) is on, tapping it
+ * only when it reads off: DIDComm v2, the wallet mailbox and TSP carriage are
+ * on by default, so the old "open the screen and tap" turned them OFF on
+ * every current build (the runners came back on v1 with no mailbox). The
+ * state comes from the Switch's `checked` on Android and from the row's
+ * accessibilityValue on iOS, where the accessible row hides its Switch
+ * (developerToggle.js). Unreadable: left alone, never tapped blind; the
+ * runner's markers prove the state afterwards.
+ *
+ * A flip restarts the app, as before: the agent's DIDComm versions, the
+ * mailbox open and the inbound TSP handler are all fixed at agent setup. A
+ * switch already on needs no restart, which also keeps the fresh install's
+ * first agent start (and its mailbox open) as the one the run reads.
+ */
+export async function ensureDeveloperToggle(driver, key, label, { wantOn = true } = {}) {
   await openDeveloperScreen(driver);
 
   // Near the bottom of the Developer screen's long ScrollView — same
   // scroll-into-view need as the Version footer above.
-  const tspToggle = await scrollToTestId(driver, "ToggleEnableTspCarriage");
-  await tspToggle.click();
-  console.log(`[e2e] ${driver.e2ePlatform}: TSP envelope carriage enabled (developer setting)`);
-  // The toggle's dispatch updates React state immediately, but persisting it
-  // to disk is a separate async side effect — restartApp's terminateApp()
-  // below is a hard force-kill, and on a slow real device (or a fast
-  // returnToContacts that leaves little natural buffer) it can race ahead of
-  // that write, silently losing the toggle (confirmed via device logcat
-  // reading the flag back as still "off" post-restart).
-  await sleep(1000);
-
+  const row = await scrollToTestId(driver, key);
+  const state = await readDeveloperToggle(driver, row);
+  const action = toggleAction(state, wantOn);
+  if (action === "tap") {
+    await row.click();
+    console.log(`[e2e] ${driver.e2ePlatform}: ${label} switched ${wantOn ? "on" : "off"} (developer setting, was ${state})`);
+    // The toggle's dispatch updates React state immediately, but persisting it
+    // to disk is a separate async side effect — restartApp's terminateApp()
+    // below is a hard force-kill, and on a slow real device (or a fast
+    // returnToContacts that leaves little natural buffer) it can race ahead of
+    // that write, silently losing the toggle (confirmed via device logcat
+    // reading the flag back as still "off" post-restart).
+    await sleep(1000);
+    await returnToContacts(driver);
+    await restartApp(driver);
+    return;
+  }
+  console.log(
+    action === "leave"
+      ? `[e2e] ${driver.e2ePlatform}: ${label} already ${wantOn ? "on" : "off"} (developer setting), left as is`
+      : `[e2e] ${driver.e2ePlatform}: ${label} switch state not readable here; left as is (the default is ${wantOn ? "on" : "off"}; the run's markers check it)`
+  );
   await returnToContacts(driver);
-  await restartApp(driver);
 }
 
-/**
- * Enable the "DIDComm v2" developer setting (didcomm_v2_subtask.md C12/C14):
- * the agent restarts with didcommVersions ['v1','v2'], provisions Coordinate
- * Mediation 2.0 with MEDIATOR_V2_URL when the build has one, and new
- * relationship invitations become out-of-band/2.0 on did:peer:2. Restarts the
- * app: the agent's DIDComm versions are fixed at construction.
- */
-export async function enableDidCommV2(driver) {
-  await openDeveloperScreen(driver);
-
-  const toggle = await scrollToTestId(driver, "ToggleEnableDidCommV2");
-  await toggle.click();
-  console.log(`[e2e] ${driver.e2ePlatform}: DIDComm v2 enabled (developer setting)`);
-  // See the same wait in enableTspCarriage above: the toggle's persistence
-  // write is async and can race restartApp's hard force-kill, silently
-  // losing the flag on a slow device (confirmed via device logcat reading
-  // the flag back as still "off" post-restart, on a real witnessed run).
-  await sleep(1000);
-
-  await returnToContacts(driver);
-  await restartApp(driver);
+/** The state of a Developer-screen switch row, true/false, or null when the platform exposes nothing readable. */
+async function readDeveloperToggle(driver, row) {
+  if (driver.e2ePlatform === "android") {
+    const sw = row.$("android.widget.Switch");
+    const checked = (await sw.isExisting().catch(() => false)) ? await sw.getAttribute("checked").catch(() => null) : null;
+    return switchState({ platform: "android", checked });
+  }
+  return switchState({ platform: "ios", value: await row.getAttribute("value").catch(() => null) });
 }
 
 /**
@@ -820,7 +862,7 @@ export async function openDeveloperScreen(driver, { keepAutoLock = false } = {})
     // Developer mode was already enabled in a prior session (persisted store).
     await tapTestId(driver, "DeveloperOptions", 15000);
   } else {
-    // useDeveloperMode's counter (bifold/packages/core/src/hooks/developer-
+    // useDeveloperMode's counter (packages/core/src/hooks/developer-
     // mode.ts) has no time-window reset — any 11 taps that land trip it,
     // however spaced out. So a plain "click 11 times" loop assumes every
     // click lands, but real devices under load occasionally drop a tap
@@ -1276,19 +1318,48 @@ async function dumpConnectStrategyError(driver) {
 }
 
 /**
- * Real devices only: the issuer side shows the in-app biometric confirmation
- * modal (hardware attestation) while the VRC is being issued in the background.
- * Tap Confirm, then hand off to the human operator for the OS biometric prompt
- * (fingerprint / Face ID / device PIN) — Appium cannot satisfy those.
- * No-op on emulators/simulators: hardware signing is unavailable there, so the
- * modal never appears.
+ * The confirm sheet a signing act asks before it goes ahead (join, invitation, vetting step, room offer). See
+ * lib/confirmSheet.js for what it can ask.
+ * - It asks for the Keyring PIN (every emulator and simulator from bifold #937 on, since they have no biometrics,
+ *   and a phone with Biometric Unlock off): the run's PIN is typed.
+ * - It asks for the phone's biometrics (a real device): Confirm is tapped and the OS prompt is handed to the operator.
+ * - With no sheet, nothing happens.
+ * `appearWithin` is how long to look for the sheet. Right after a tap that asks for a confirm, the callers pass
+ * CONFIRM_APPEARS_WITHIN_MS. In a waiting loop that only might meet one, the short default keeps each pass short.
  */
-export async function handleBiometricConfirmIfPresent(driver) {
-  if (!(await existsTestId(driver, "ConfirmBiometric", 1500))) return false;
+/**
+ * How long to look for the confirm sheet right after a tap that asks for one. Not measured on an emulator yet: the
+ * sheet's own work before it shows is a settings read and a short slide, and the helper logs how long it took
+ * ("confirm sheet up after N ms"), so a run can show it. Generous because the cost of missing it is a stalled leg.
+ */
+export const CONFIRM_APPEARS_WITHIN_MS = 6000;
+
+export async function handleBiometricConfirmIfPresent(driver, { appearWithin = 1500 } = {}) {
+  const io = {
+    exists: (key, ms) => existsTestId(driver, key, ms),
+    tap: (key) => tapTestId(driver, key),
+    // As unlockIfLocked types it: one setValue of the whole PIN can drop a keystroke on an iOS simulator.
+    typePin: async (key, pin) => {
+      const field = byTestId(driver, key);
+      await field.click();
+      if (driver.e2ePlatform === "ios") {
+        for (const digit of pin) {
+          await field.addValue(digit);
+          await sleep(200);
+        }
+      } else {
+        await field.setValue(pin);
+      }
+    },
+    sleep,
+    log: (line) => console.log(`[e2e] ${driver.e2ePlatform}: ${line}`),
+  };
+  const how = await answerConfirmSheet(io, { pin: PIN, appearWithin });
+  if (how === "none") return false;
+  if (how === "pin") return true;
   console.log(
-    `[e2e] ${driver.e2ePlatform}: biometric confirmation modal — tapping Confirm`
+    `[e2e] ${driver.e2ePlatform}: biometric confirmation modal — tapped Confirm`
   );
-  await tapTestId(driver, "ConfirmBiometric");
   const deviceLabel =
     driver.e2ePlatform === "android" ? "ANDROID PHONE" : "IPHONE";
   console.log(
@@ -1737,6 +1808,26 @@ export async function assertWitnessCredential(driver, peerName, timeout = 60000)
   );
 }
 
+/**
+ * One press of whichever back the screen has: its testID Back (a stacked screen's header back, e.g. the "Scan QR code"
+ * code screen), else BackButton, else (iOS) a header button labelled "Back". Returns whether it pressed one.
+ */
+export async function pressAnyBack(driver) {
+  if (await existsTestId(driver, "Back", 1000)) {
+    await tapTestId(driver, "Back", 3000).catch(() => undefined);
+    return true;
+  }
+  if (await existsTestId(driver, "BackButton", 1000)) {
+    await tapTestId(driver, "BackButton", 3000).catch(() => undefined);
+    return true;
+  }
+  if (driver.e2ePlatform !== "ios") return false;
+  const back = await driver.$('-ios predicate string:type == "XCUIElementTypeButton" AND label == "Back" AND visible == 1');
+  if (!(await back.isExisting())) return false;
+  await back.click();
+  return true;
+}
+
 export async function assertVrcReceived(driver, peerName, timeout = 120000) {
   const deadline = Date.now() + timeout;
   // we may still be on a stacked screen (chat) — pop back until the tab bar is reachable
@@ -1761,9 +1852,9 @@ export async function assertVrcReceived(driver, peerName, timeout = 120000) {
     // be in flight here, requesting biometric confirmation. No-op elsewhere.
     await handleBiometricConfirmIfPresent(driver);
     await unlockIfLocked(driver);
-    if (await existsTestId(driver, "BackButton", 2000)) {
-      await tapTestId(driver, "BackButton");
-    }
+    // Whichever back the screen has: on a Release build the side that accepted the proposal can still be on the
+    // stacked code screen, whose header back is testID Back, not BackButton.
+    await pressAnyBack(driver);
   }
   // The contact row shows the peer's R-card name once the VRC is stored —
   // proves the credential (not just the connection) made it across.
@@ -2061,27 +2152,33 @@ export async function assertTspOverDidCommV2Markers(driver, timeout = 90000) {
 }
 
 /**
- * The v2 mediation marker: the wallet provisioned Coordinate Mediation 2.0
- * with MEDIATOR_V2_URL ([TrustTasks:V2Mediation] ... granted). Proves the
- * exchange went through the v2 mediator rather than unmediated routing.
+ * The wallet-mailbox marker: at agent start the wallet opened its mailbox at
+ * Keyring's mailbox mediator and turned forwarding on
+ * ([TrustTasks:WalletMailbox] forwarding on for <mailbox DID> at <mediator>).
+ * Proves the v2 exchange that follows routes through the mailbox (the
+ * invitation carries the mailbox as its service) rather than unmediated.
+ * Replaces the Coordinate Mediation 2.0 marker, retired with #1166: no build
+ * provisions mediation 2.0 any more, so that line can never appear.
  * No-op where no log is reachable (physical iPhones).
  */
-export async function assertV2MediationMarker(driver, timeout = 60000) {
-  const re = /\[TrustTasks:V2Mediation\] Coordinate Mediation 2\.0 granted/;
+export async function assertWalletMailboxOpen(driver, timeout = 60000) {
+  const re = /\[TrustTasks:WalletMailbox\] forwarding on for /;
   const deadline = Date.now() + deviceWait(driver, timeout);
   while (Date.now() < deadline) {
-    // Provisioning runs at agent start, which only happens after unlock: a
+    // The open runs at agent start, which only happens after unlock: a
     // wallet left on its PIN screen would make this wait pointless.
     await unlockIfLocked(driver).catch(() => false);
     const log = await readAppJsLog(driver);
     if (log === null) return;
     if (re.test(log)) {
-      console.log(`[e2e] ${driver.e2ePlatform}: Coordinate Mediation 2.0 provisioned`);
+      console.log(`[e2e] ${driver.e2ePlatform}: wallet mailbox open (forwarding on)`);
       return;
     }
     await sleep(3000);
   }
-  throw new Error(`${driver.e2ePlatform}: no Coordinate Mediation 2.0 grant marker after ${timeout}ms`);
+  throw new Error(
+    `${driver.e2ePlatform}: no wallet-mailbox "forwarding on" marker after ${timeout}ms (does the build carry MAILBOX_MEDIATOR_DID? Test and OTA-gate builds leave it blank)`
+  );
 }
 
 /**

@@ -57,6 +57,11 @@ export const withOta = <P extends object>(
   // screen after a while away (applyOnReturn.ts). Nothing is kept between
   // returns: each reads what hot-updater has staged right then (stagedUpdate.ts).
   onReturnLocked(async (awayMs) => {
+    // Taken now, before anything is awaited. Locking out unmounts the screens that
+    // hold a blocker (a chat with an unsent draft), and with an update staged the
+    // metadata read below lasts long enough for that unmount to release them: read
+    // only after it, a draft never held a staged update back (a 273 device, 10-26).
+    const blockersAtReturn = otaApplyBlockerReasons()
     // bifold drops a listener's failure without a word; logged here, so a return
     // that stopped checking shows in a problem report.
     try {
@@ -80,12 +85,14 @@ export const withOta = <P extends object>(
         staged = {}
         readError = String(error)
       }
-      // Read after the file, right before deciding: a flow that began during the
-      // read blocks this return. By kind only, for the decision's reason and the
-      // log alike: a VTA task's blocker names its Trust Task type
-      // (vta-task:<type>), and this line, in every problem report, need not say
-      // which flow the person was in.
-      const blockers = otaApplyBlockerReasons().map((blocker) => blocker.split(':')[0])
+      // Those held at the return and those held now, right before deciding: a flow
+      // that began during the read blocks this return too. By kind only, for the
+      // decision's reason and the log alike: a VTA task's blocker names its Trust
+      // Task type (vta-task:<type>), and this line, in every problem report, need
+      // not say which flow the person was in.
+      const blockers = [
+        ...new Set([...blockersAtReturn, ...otaApplyBlockerReasons()].map((blocker) => blocker.split(':')[0])),
+      ]
       const decision = decideApplyOnReturn({
         awayMs,
         stagedBundleId: staged.id,

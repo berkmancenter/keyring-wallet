@@ -46,7 +46,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
           fetch-depth: 0
           persist-credentials: false
 
@@ -67,13 +66,14 @@ jobs:
           java-version: 17
 
       # One full install for the build and every publish: the fingerprint covers node_modules, and a skip-build
-      # install (no crypto native libraries) hashes differently.
-      - name: Install (full) and build bifold
+      # install (no crypto native libraries) hashes differently. The framework's packages are workspaces of this
+      # install and bundle from source: nothing to build before Metro.
+      - name: Install (full)
         shell: bash
         run: |
-          (cd bifold && yarn install --immutable && yarn build)
           yarn install --immutable
-          node scripts/verify-bifold-linking.js
+          yarn build:packages
+          node scripts/verify-workspace-linking.js
 
       - name: Update server behind a quick tunnel
         shell: bash
@@ -113,7 +113,7 @@ jobs:
           npx hot-updater keys generate -o "$RUNNER_TEMP/keys"
           npx hot-updater keys export-public -i "$RUNNER_TEMP/keys/private-key.pem" -y
           npx hot-updater channel set "$OTA_CHANNEL"
-          { echo "MEDIATOR_URL=${MEDIATOR_URL}"; echo "MEDIATOR_V2_URL="; echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}"; echo "OTA_UPDATE_URL=${OTA_PUBLIC_URL}/hot-updater"; } > .env
+          { echo "MEDIATOR_URL=${MEDIATOR_URL}"; echo "MAILBOX_MEDIATOR_DID="; echo "FEEDBACK_EMAIL=${FEEDBACK_EMAIL}"; echo "OTA_UPDATE_URL=${OTA_PUBLIC_URL}/hot-updater"; } > .env
           npx hot-updater fingerprint create
           cd ..
           git config user.email ota-ci@example.invalid; git config user.name "OTA CI"; git config commit.gpgsign false

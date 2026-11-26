@@ -228,6 +228,45 @@ pnm() {
 
 # The community's admin calls (decide join requests, list and remove members).
 c_admin() { galarm 90 node "$VTC_ADMIN" "$C_REST" "$C_DID" "$C_ADMIN_CRED" "$@" 2>&1; }
+# c_members_remove <why> <driver output>…: take off C every member the leg's drivers named (`JOIN_MEMBER <did>` lines),
+# as the other joining legs do. Side by side (GATE_DEFER_KEYS=1, a gate's iOS and Android groups) a leg's member can be
+# another leg's that is still running, so they are deferred: written to $GATE_HOME/defer-members with the community
+# they belong to, which outlives the run, and drained by c_members_deferred after both groups and at the start of every
+# later run (under the run lock, beside gate_sweep), so a killed gate's members are still removed (ac on #873).
+# IN-560, W5 of docs/plans/farm-test-footprint-plan.md.
+c_members_remove() {
+  local why=$1 m; shift
+  for m in $(grep -hoE '^JOIN_MEMBER did:[^ ]+' "$@" 2>/dev/null | awk '{print $2}' | sort -u); do
+    if [ "${GATE_DEFER_KEYS:-}" = 1 ]; then
+      printf '%s\t%s\t%s\n' "${C_DID:-}" "$m" "$why" >> "$GATE_HOME/defer-members"; echo "  C member …${m: -24}: deferred (gate.sh removes it once no leg runs)"; continue
+    fi
+    echo "  C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
+  done
+}
+# c_members_deferred: remove the deferred members of this env's community (C_DID), once each, and keep only the lines
+# of other communities (another env's), for a run that uses them.
+c_members_deferred() {
+  local f=$GATE_HOME/defer-members c m why keep
+  [ -s "$f" ] && [ -n "${C_DID:-}" ] && [ -n "${C_REST:-}" ] || return 0
+  keep=$(mktemp "$GATE_HOME/defer-members.XXXXXX") || return 0
+  while IFS=$'\t' read -r c m why; do
+    [ -n "$m" ] || continue
+    if [ "$c" != "$C_DID" ]; then printf '%s\t%s\t%s\n' "$c" "$m" "$why" >> "$keep"; continue; fi
+    say "cleanup C member …${m: -24}: $(c_admin member-remove "$m" "$why" | grep -oE -- '-> [0-9]+' | tail -1)"
+  done < <(sort -u -t$'\t' -k1,2 "$f" | awk -F'\t' '!seen[$1 FS $2]++')
+  mv "$keep" "$f"
+}
+# link_trimmed: whether a link leg (linkwait, linkfail, pnmlink) runs its trimmed rows: on a nightly or changed run, with
+# no rows asked for by name (E2E_ONLY_ROWS) and LINK_FULL not 1. The store-build gate (kind gate), a dry run and anything
+# else run every row. W1 of docs/plans/farm-test-footprint-plan.md (IN-560): fewer links on runners short of memory.
+link_trimmed() {
+  case "${GATE_KIND:-}" in nightly | changed) [ -z "${E2E_ONLY_ROWS:-}" ] && [ "${LINK_FULL:-}" != 1 ] ;; *) return 1 ;; esac
+}
+# link_trim_skips <leg> <kept> <all>: a SKIP row for each case of <all> not in <kept> on a trimmed run.
+link_trim_skips() {
+  local c; link_trimmed || return 0
+  for c in $3; do [[ " $2 " == *" $c "* ]] || row "$c" SKIP "trimmed on a ${GATE_KIND} run (W1): the store-build gate runs it"; done
+}
 
 # ---- builds: one download per (wallet, bifold) pair, reused by every later run ----
 
@@ -420,13 +459,22 @@ avd_writable() {
   [ -f "$dir/keyring-verity-off" ] && return 0
   local s=emulator-$port
   AVD=$name EMU_EXTRA=-writable-system emu_start "$port" || return 1
-  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb -s "$s" wait-for-device
-  adb -s "$s" disable-verity 2>&1 | tail -1; adb -s "$s" reboot; sleep 10; adb -s "$s" wait-for-device
+  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb_wait "$s" || return 1
+  adb -s "$s" disable-verity 2>&1 | tail -1; adb -s "$s" reboot; sleep 10; adb_wait "$s" 300 || return 1
   local i; for i in $(seq 1 60); do [ "$(adb -s "$s" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && break; sleep 5; done
-  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb -s "$s" wait-for-device
+  adb -s "$s" root >/dev/null 2>&1; sleep 3; adb_wait "$s" || return 1
   adb -s "$s" remount 2>&1 | tail -1
   emu_stop
   touch "$dir/keyring-verity-off"; echo "avd_writable: $name ready (verity off)"
+}
+# adb_wait <serial> [seconds]: `adb wait-for-device` with a deadline (default 120 s), through galarm. A bare wait has
+# none: on 11-09 emulator-5572 died mid-lostreq and its wait held the whole nightly 4 h 15 min (08:20Z-12:36Z). It
+# says which device did not come back and returns galarm's code (142 on the deadline); the caller decides what breaks.
+adb_wait() {
+  local s=$1 t=${2:-120} rc
+  GALARM_STEPS=0 galarm "$t" adb -s "$s" wait-for-device; rc=$?
+  [ "$rc" = 0 ] || echo "adb_wait: $s did not come back within ${t} s (rc $rc)" >&2
+  return "$rc"
 }
 emu_stop() { is_ci && return 0; "$EMU_SH" stop 2>&1 | tail -1; }
 sim_boot() { local t0 rc; t0=$(date +%s); xcrun simctl boot "$1" 2>/dev/null; GALARM_STEPS=0 galarm 180 xcrun simctl bootstatus "$1" >/dev/null 2>&1; rc=$?; step_rec sim_boot "$t0" "$(( $(date +%s) - t0 ))"; return $rc; }
@@ -440,14 +488,47 @@ sim_down() { xcrun simctl shutdown "$1" 2>/dev/null; }
 # named gate-* or e2e-approvals (or $APPROVER_SET), and policies whose id starts "gate-". Anything else is logged as
 # "foreign … left in place", visible but not destroyed. Called by run and rerun right after the run lock, so it never
 # sweeps under a running gate. A runner named twice is swept once.
+# gate_sweep <leg>…: only the runners those legs use (sweep_runners_for), so a run never calls pnm on a runner it does
+# not touch: the MacBook's pair-ios-only nightly swept mini1, uiux and openvtc every night (IN-560, W9 of
+# docs/plans/farm-test-footprint-plan.md). A runner no leg of this run names cannot have been left anything by it; one
+# a killed earlier run left something on is swept by the next run that uses it, before its first leg. With no legs
+# named, or a leg with no script, every runner (the old behaviour: never skip a runner it cannot rule out).
 GATE_RULE_TASKS="https://trusttasks.org/spec/acl/swap-key/0.1 https://trusttasks.org/spec/vta/contexts/get/1.0"
 gate_sweep() {
-  local slug seen=" "
+  local slug v n seen=" " vars skipped=""
   galarm_reap
-  for slug in "${RUNNER_MAIN_SLUG:-}" "${RUNNER_A_SLUG:-}" "${RUNNER_B_SLUG:-}"; do
-    [ -n "$slug" ] && [[ "$seen" != *" $slug "* ]] || continue; seen="$seen$slug "
+  vars=$(sweep_runners_for "$@")
+  for v in RUNNER_MAIN RUNNER_A RUNNER_B; do
+    n=${v}_SLUG; slug=${!n:-}
+    [ -n "$slug" ] || continue
+    [[ " $vars " == *" $v "* ]] || { [[ " $skipped " == *" $slug "* ]] || skipped="$skipped $slug"; continue; }
+    [[ "$seen" != *" $slug "* ]] || continue; seen="$seen$slug "
     gate_sweep_runner "$slug"
   done
+  # A slug that is also a used runner (an env with A = MAIN) was swept above, so it is not "not swept".
+  local s out=""; for s in $skipped; do [[ "$seen" == *" $s "* ]] || out="$out $s"; done
+  [ -z "$out" ] || say "sweep: not swept, no leg of this run uses them:$out"
+}
+# sweep_runners_for <leg>…: the runner variables (RUNNER_MAIN, RUNNER_A, RUNNER_B) the legs' own scripts reach, by
+# slug. Only a slug counts: pnm reaches a runner by its slug alone, so a leg naming only a runner's DID (linkfail's
+# approver, RUNNER_A_DID) writes nothing there. Any *_SLUG a script names counts, by its value: p2 reaches runners
+# through TUI_APPLICANT_SLUG and P2_VETTER_RUNNER_SLUG, and a farm may set either to MAIN's, A's or B's slug (ac on
+# #871). Every runner when no leg is named or a leg has no script.
+sweep_runners_for() {
+  local leg f n v s vals=" " out=" "
+  [ $# -gt 0 ] || { echo RUNNER_MAIN RUNNER_A RUNNER_B; return 0; }
+  for leg in "$@"; do
+    f=$GATE_SRC/legs/$leg.sh
+    [ -f "$f" ] || { echo RUNNER_MAIN RUNNER_A RUNNER_B; return 0; }
+    for n in $(grep -o -E '[A-Z][A-Z0-9_]*_SLUG' "$f" | sort -u); do
+      s=${!n:-}; [ -n "$s" ] && [[ "$vals" != *" $s "* ]] && vals="$vals$s "
+    done
+  done
+  for v in RUNNER_MAIN RUNNER_A RUNNER_B; do
+    n=${v}_SLUG; s=${!n:-}
+    [ -n "$s" ] && [[ "$vals" == *" $s "* ]] && out="$out$v "
+  done
+  echo $out
 }
 # gate_sweep_runner <slug>: the sweep for one runner (also a leg's end-of-leg cleanup, e.g. agents.sh). A runner whose
 # approvals cannot be read (network, keychain) is said so, never taken for a clean one.
@@ -494,6 +575,18 @@ farm_drift() {
   echo "$line"
 }
 
+# leg_cleaned_slugs <leg>: the slugs whose phone keys the leg's own cleanup removes (its keys_since "$X" lines), by
+# value. run_leg hands them to the leg's drivers as E2E_ACL_LEG_SLUGS, so a link driver on one of them leaves its keys
+# to that one list-and-delete pass at the leg's end instead of listing the ACL again per link (IN-560, W3 of
+# docs/plans/farm-test-footprint-plan.md). A slug the leg does not clean is not named, and its driver cleans per link.
+leg_cleaned_slugs() {
+  local f=$GATE_SRC/legs/$1.sh n s out=" "
+  [ -f "$f" ] || return 0
+  for n in $(grep -o -E 'keys_since "\$[A-Z][A-Z0-9_]*"' "$f" | grep -o -E '[A-Z][A-Z0-9_]*' | sort -u); do
+    s=${!n:-}; [ -n "$s" ] && [[ "$out" != *" $s "* ]] && out="$out$s "
+  done
+  echo $out
+}
 keys_since() { local s0 rc; s0=$(date +%s); keys_since_run "$@"; rc=$?; step_rec "cleanup keys $1" "$s0" "$(( $(date +%s) - s0 ))"; return $rc; }
 keys_since_run() {
   local slug=$1 t0=$2 k r i
@@ -603,13 +696,16 @@ row() {
 }
 selected() { [ -z "${E2E_ONLY_ROWS:-}" ] || [[ ",$E2E_ONLY_ROWS," == *",$1,"* ]]; }
 broken() { LEG_BROKEN=$*; echo "LEG $LEG_NAME BROKEN — $*"; exit 1; }
-# Fold a driver's own ROW lines (rows.js, or the older drivers' ROW lines) into this leg's counts.
+# Fold a driver's own ROW lines (rows.js, or the older drivers' ROW lines) into this leg's counts. Its RETRY lines (a
+# step that retried once, as the screen asked: join.awaitSent) pass through with the leg and its agent (LEG_AGENT, set
+# by the leg), so the report can count retries per agent instead of a retry hiding an agent that answers on and off.
 take_rows() {
-  local st name detail
+  local st name detail l
   while IFS=$'\t' read -r st name detail; do
     case $st in PASS) LEG_PASS=$((LEG_PASS + 1)) ;; FAIL) LEG_FAILS=$((LEG_FAILS + 1)) ;; SKIP) LEG_SKIP=$((LEG_SKIP + 1)) ;; esac
     echo "ROW $name $st — $detail"
   done < <(leg_rows "$1")
+  while IFS= read -r l; do echo "RETRY leg=$LEG_NAME agent=${LEG_AGENT:-?} ${l#RETRY }"; done < <(grep -aE '^RETRY ' "$1")
 }
 leg_end() {
   local rc=$?
@@ -625,7 +721,9 @@ leg_end() {
   # Auto-unlocks (driver.js autoUnlockIfLocked: a test build locks after 30 s without a touch): counted, so a lock
   # nobody expected shows in the verdict rather than being papered over.
   local unlocks=0; [ -d "${LEG_DIR:-}" ] && unlocks=$(cat "$LEG_DIR"/*.out 2>/dev/null | grep -c '^AUTO-UNLOCK ' || true)
-  echo "LEG $LEG_NAME DONE $rc pass=$LEG_PASS fail=$LEG_FAILS skip=$LEG_SKIP $(( $(date +%s) - LEG_T0 ))s auto-unlocks=${unlocks:-0}"
+  # Retries (take_rows' RETRY lines), counted the same way: a row that passed only after one says so in its detail.
+  local retries=0; [ -f "${LEG_DIR:-}/leg.log" ] && retries=$(grep -c '^RETRY ' "$LEG_DIR/leg.log" || true)
+  echo "LEG $LEG_NAME DONE $rc pass=$LEG_PASS fail=$LEG_FAILS skip=$LEG_SKIP $(( $(date +%s) - LEG_T0 ))s auto-unlocks=${unlocks:-0} retries=${retries:-0}"
   exit $rc
 }
 

@@ -1,0 +1,715 @@
+/**
+ * "I want to join a community" — Door 2. The community comes from a link (or
+ * the build's suggestion), then what it asks for, then the identity for it,
+ * then vetting at the ticket.
+ */
+import { useNavigation } from '@react-navigation/native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
+import React from 'react'
+import { DeviceEventEmitter, StyleSheet } from 'react-native'
+
+import { useAgent } from '@bifold/react-hooks'
+
+import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import { Screens, Stacks } from '../../../types/navigators'
+import { testIdWithKey } from '../../../utils/testable'
+import { vtaAgent } from '../module/vtaAgent'
+import { GenericRecordsIdentityStore } from '../module/VtiIdentityStore'
+import { vtiAgent } from '../module/vtiAgent'
+import { emitCommunityChanged, VTI_JOIN_STATUS_LATE_EVENT } from '../module/communityChanged'
+import { communityJourneys } from '../module/communityJourney'
+import { communityTarget } from '../module/vtiCommunityLink'
+import VtiJoin, { asksFrom } from '../screens/VtiJoin'
+
+jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+jest.mock('../../vrc/vrc-biometric', () => ({
+  requestBiometricConfirmationWithUI: jest.fn(async () => ({ success: true, reason: 'confirmed' })),
+}))
+const mockEnsurePersona = jest.fn(async () => ({ did: 'did:webvh:QmPersona:p' }))
+const mockReadJoinState = jest.fn(async (): Promise<unknown> => ({ kind: 'none' }))
+// Check again's ask for an approved request's card: nothing waits on a card unless a test says so.
+const mockAskForCard = jest.fn(async (): Promise<unknown> => ({ polled: false }))
+jest.mock('../module/vtiJoin', () => ({
+  ensurePersonaFor: (...args: unknown[]) => mockEnsurePersona(...(args as [])),
+  readJoinState: (...args: unknown[]) => mockReadJoinState(...(args as [])),
+  askForCardIfOwed: (...args: unknown[]) => mockAskForCard(...(args as [])),
+}))
+
+type Setter = { set(next: Record<string, unknown>): void }
+const suggested = 'did:webvh:QmSuggested:vtc.suggested.example'
+const linked = 'did:webvh:QmLinked:vtc.linked.example'
+const config = { mediatorDid: 'did:peer:2:mediator', communityDid: suggested }
+
+describe('what a community asks for', () => {
+  it('reads statements and claims from a vetting criterion', () => {
+    expect(
+      asksFrom({ criteria: [{ vetting: { minStatements: 2, requiredClaims: ['name.legal'] } }] } as never)
+    ).toEqual({
+      kind: 'vetting',
+      statements: 2,
+      claims: ['name.legal'],
+      descriptions: [],
+      invitationOnly: false,
+      invitationAdmits: false,
+    })
+  })
+  // join.rego: where every way in is vetted, an invitation does not bypass it.
+  it('an invitation admits alone only through a criterion that asks no vetting', () => {
+    const vets = { vetting: { minStatements: 1, requiredClaims: ['name.legal'] } }
+    expect(asksFrom({ criteria: [vets] } as never).invitationAdmits).toBe(false)
+    expect(asksFrom({ criteria: [{ id: 'invited-member', ...vets }] } as never).invitationAdmits).toBe(false)
+    // Any vetting criterion makes vetting mandatory upstream: an invitation criterion beside it does not admit alone.
+    expect(asksFrom({ criteria: [vets, { id: 'invited-member' }] } as never).invitationAdmits).toBe(false)
+    expect(asksFrom({ criteria: [{ id: 'invited-member' }] } as never).invitationAdmits).toBe(true)
+  })
+  it('only invitation criteria: admits by invitation', () => {
+    expect(asksFrom({ criteria: [{ id: 'invited-member' }] } as never).invitationOnly).toBe(true)
+  })
+  it('another kind of criterion is described, not taken for invitation-only', () => {
+    const asks = asksFrom({
+      criteria: [{ id: 'invited-member' }, { id: 'staff', description: 'A staff credential' }],
+    } as never)
+    expect(asks).toMatchObject({ kind: 'other', invitationOnly: false, descriptions: ['A staff credential'] })
+  })
+  it('no criteria: nothing to ask (upstream cannot publish this yet, KR-13)', () => {
+    expect(asksFrom({ criteria: [] } as never).kind).toBe('open')
+  })
+})
+
+describe('I want to join a community', () => {
+  beforeEach(() => {
+    jest.useFakeTimers()
+    communityTarget.clear()
+    communityJourneys.forget()
+    mockEnsurePersona.mockClear()
+    // No network in tests: a community that cannot be read, unless a test says otherwise.
+    jest.spyOn(vtiAgent, 'fetchManifest').mockRejectedValue(new Error('offline'))
+    const mockUseAgent = useAgent as jest.Mock
+    mockUseAgent.mockReturnValue({
+      agent: {
+        config: { logger: { info: jest.fn(), error: jest.fn() } },
+        // A store that holds nothing: the identities on the phone are read, and there are none.
+        genericRecords: { findAllByQuery: async () => [] },
+      },
+    })
+    const controller = vtaAgent as unknown as Setter
+    controller.set({
+      link: {
+        kind: 'linked',
+        vtaDid: 'did:webvh:example:vta',
+        label: 'bob',
+        linkedAt: '2026-09-22T00:00:00Z',
+        connection: { kind: 'online', since: 0 },
+      },
+    })
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+    jest.restoreAllMocks()
+  })
+
+  const renderJoin = async () => {
+    const tree = render(
+      <BasicAppContext>
+        <VtiJoin config={config} />
+      </BasicAppContext>
+    )
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    return tree
+  }
+
+  // A community's code can arrive before any agent is linked — the phone's
+  // camera opens Keyring on it. Join says what is missing and offers the way.
+  it('with no agent linked: says so and offers to link one, as "I was invited" does', async () => {
+    const controller = vtaAgent as unknown as Setter
+    controller.set({ link: { kind: 'notLinked' } })
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinNeedsAgent'))).toBeTruthy()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinLinkAgent'))))
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtaLink)
+  })
+
+  // IN-350 (Glenn's community-side report): after the agent refused this phone,
+  // its link to a community it already holds an identity in said "Link your
+  // agent first", as if it had never been linked.
+  describe('when the agent no longer accepts this phone', () => {
+    const revoked = {
+      kind: 'revoked',
+      vtaDid: 'did:webvh:example:vta',
+      label: 'bob',
+      reason: 'forbidden: DID not in ACL',
+      cause: 'notInAcl',
+    }
+
+    it('a community it holds an identity in says so, and the way out is My Agent', async () => {
+      ;(vtaAgent as unknown as Setter).set({ link: revoked })
+      const getPersona = jest
+        .spyOn(GenericRecordsIdentityStore.prototype, 'getPersona')
+        .mockResolvedValue({ did: 'did:webvh:QmPersona:p', communityDid: suggested } as never)
+      const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+      navigation.navigate.mockClear()
+      const tree = await renderJoin()
+      expect(getPersona).toHaveBeenCalledWith(suggested, 'did:webvh:example:vta')
+      expect(tree.getByTestId(testIdWithKey('JoinAgentRefused'))).toHaveTextContent(/VtaLink\.PersonaAgentRefusedBody/)
+      expect(tree.queryByTestId(testIdWithKey('JoinNeedsAgent'))).toBeNull()
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinOpenMyAgent'))))
+      expect(navigation.navigate).toHaveBeenCalledWith(Screens.MyAgent)
+    })
+
+    // 7a's #473 review: the first paint said "Link your agent first" (the
+    // sentence IN-350 is about) until the identity lookup resolved.
+    it('while it is not yet known whether it holds an identity here, neither sentence is said', async () => {
+      ;(vtaAgent as unknown as Setter).set({ link: revoked })
+      let answer: (v: unknown) => void = () => undefined
+      jest
+        .spyOn(GenericRecordsIdentityStore.prototype, 'getPersona')
+        .mockReturnValue(new Promise((resolve) => (answer = resolve)) as never)
+      const tree = await renderJoin()
+      expect(tree.getByTestId(testIdWithKey('JoinCheckingAgent'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinNeedsAgent'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('JoinAgentRefused'))).toBeNull()
+      await act(async () => answer({ did: 'did:webvh:QmPersona:p', communityDid: suggested }))
+      expect(tree.getByTestId(testIdWithKey('JoinAgentRefused'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinCheckingAgent'))).toBeNull()
+    })
+
+    it("a community it holds no identity in: today's words, to link an agent", async () => {
+      ;(vtaAgent as unknown as Setter).set({ link: revoked })
+      jest.spyOn(GenericRecordsIdentityStore.prototype, 'getPersona').mockResolvedValue(undefined)
+      const tree = await renderJoin()
+      expect(tree.getByTestId(testIdWithKey('JoinNeedsAgent'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinAgentRefused'))).toBeNull()
+    })
+
+    it("a phone never linked keeps today's words, whatever it holds", async () => {
+      ;(vtaAgent as unknown as Setter).set({ link: { kind: 'notLinked' } })
+      jest
+        .spyOn(GenericRecordsIdentityStore.prototype, 'getPersona')
+        .mockResolvedValue({ did: 'did:webvh:QmPersona:p', communityDid: suggested } as never)
+      const tree = await renderJoin()
+      expect(tree.getByTestId(testIdWithKey('JoinNeedsAgent'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinAgentRefused'))).toBeNull()
+    })
+  })
+
+  it('offers the suggested community, then what it asks, then the identity → vetting', async () => {
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinSuggested'))).toBeTruthy()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinThisCommunity'))))
+    expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinStart'))))
+    expect(tree.getByTestId(testIdWithKey('JoinMakeIdentity'))).toBeTruthy()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinAsContinue'))))
+    expect(mockEnsurePersona).toHaveBeenCalledWith(expect.objectContaining({ communityDid: suggested }), {
+      fresh: false,
+    })
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtiVetting)
+  })
+
+  /**
+   * A tester was offered "Join keyring-vti-vtc.ngrok.app" by a community that
+   * had published no name (report #14). A hostname where a name belongs reads
+   * as a name, so the card says there is none, shows the DID's handle as the
+   * identifier, and keeps the full DID behind Details.
+   */
+  it('does not pass a hostname off as the suggested community\u2019s name', async () => {
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedName'))).toHaveTextContent('Join.Unnamed')
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedWhere'))).toHaveTextContent('…gested')
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedWhere'))).not.toHaveTextContent('vtc.suggested.example')
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedToggle'))).toBeTruthy()
+    // and the button cannot be "Join <hostname>" either
+    expect(tree.getByTestId(testIdWithKey('JoinThisCommunity'))).toHaveTextContent('Join.JoinSuggested')
+    // nothing claimed a name, so there is nothing to caveat
+    expect(tree.queryByTestId(testIdWithKey('JoinNameClaimed'))).toBeNull()
+  })
+
+  /**
+   * A name the community published is remembered for the community, not for
+   * the visit, so the suggestion is offered by name from then on — the build's
+   * suggested community is named by no link at all. (A link's claimed name is
+   * rendered on the community screen; a link also takes this screen straight
+   * past the suggestion, which is why the caveat is tested there.)
+   */
+  /**
+   * A fresh phone has read nothing about the community yet. The card must ask
+   * the community on its own first step, and show its published name — not
+   * "hasn't published a name" (Farm gate, 2026-09-23: keyring-test-vtc
+   * publishes "Keyring Lab Community" and a fresh phone was told it had none).
+   */
+  it('on a fresh phone, learns the published name on the first step and offers it', async () => {
+    jest.spyOn(vtiAgent, 'fetchManifest').mockImplementation(async (did: string) => {
+      communityTarget.publishedName(did, 'Keyring Lab Community')
+      return { criteria: [] } as never
+    })
+    const tree = await renderJoin()
+    // With this screen's agent: a fresh phone has no session to lend the read one.
+    expect(vtiAgent.fetchManifest).toHaveBeenCalledWith(
+      suggested,
+      expect.objectContaining({ config: expect.anything() })
+    )
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedName'))).toHaveTextContent('Keyring Lab Community')
+  })
+
+  it('says it is checking, not "unnamed", while the community has not answered', async () => {
+    jest.spyOn(vtiAgent, 'fetchManifest').mockImplementation(() => new Promise(() => undefined))
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedChecking'))).toHaveTextContent('Join.CheckingName')
+    expect(tree.queryByTestId(testIdWithKey('JoinSuggestedName'))).toBeNull()
+  })
+
+  it('offers the suggestion by the name the community published, with no caveat', async () => {
+    communityTarget.publishedName(suggested, 'Keyring Lab Community')
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedName'))).toHaveTextContent('Keyring Lab Community')
+    expect(tree.queryByTestId(testIdWithKey('JoinNameClaimed'))).toBeNull()
+  })
+
+  /**
+   * "Suggested for this app" for a community the person had joined on an
+   * earlier build told them their software has an opinion it does not have —
+   * and sent two sessions hunting a configuration leak that did not exist
+   * (report #23). The label has to say which of the two it is.
+   */
+  it('says the build suggests a community only when the build does', async () => {
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedSource'))).toHaveTextContent('Join.Suggested')
+  })
+
+  it('says a remembered community is remembered, not suggested', async () => {
+    // What a phone carries after joining on an earlier build: a CHOSEN
+    // community and no link being viewed — a link would take this screen
+    // straight past the card.
+    communityTarget.choose(suggested)
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinSuggestedSource'))).toHaveTextContent('Join.Remembered')
+  })
+
+  it('a remembered community that does not answer says so, beside a different one', async () => {
+    // An upgrader from a build that named the lab: the lab may be gone.
+    communityTarget.choose(suggested)
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinRememberedUnreachable'))).toHaveTextContent('Join.RememberedUnreachable')
+    expect(tree.getByTestId(testIdWithKey('JoinScanCommunity'))).toBeTruthy()
+  })
+
+  // 238, iPhone: "Which community?" sat at the top and its button at the
+  // foot, the screen between them. Kept together and centred.
+  it('"Which community?" and its button sit together, centred', async () => {
+    const tree = await renderJoin()
+    const scroll = StyleSheet.flatten(tree.getByTestId(testIdWithKey('JoinScroll')).props.contentContainerStyle)
+    expect(scroll.justifyContent).toBe('center')
+    expect(StyleSheet.flatten(tree.getByTestId(testIdWithKey('JoinActions')).props.style).marginTop).toBe(8)
+  })
+
+  it('a suggested community that does not answer is not called gone', async () => {
+    const tree = await renderJoin()
+    expect(tree.queryByTestId(testIdWithKey('JoinRememberedUnreachable'))).toBeNull()
+  })
+
+  it('a community a link brought can still be swapped for a different one', async () => {
+    // On a build that names no community, every community arrives by a link,
+    // and reopening Join lands on what it asks. It must not be a dead end.
+    communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+    const tree = await renderJoin()
+    expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
+    expect(tree.getByTestId(testIdWithKey('JoinScanCommunity'))).toHaveTextContent('Join.Different')
+  })
+
+  it('a community chosen by a link goes straight to what it asks, and is the one joined', async () => {
+    communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+    const tree = await renderJoin()
+    expect(tree.queryByTestId(testIdWithKey('JoinSuggested'))).toBeNull()
+    expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinStart'))))
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinAsContinue'))))
+    expect(mockEnsurePersona).toHaveBeenCalledWith(expect.objectContaining({ communityDid: linked }), { fresh: false })
+  })
+
+  it('Join as can create a profile in the real profile editor', async () => {
+    const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+    navigation.navigate.mockClear()
+    communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+    const tree = await renderJoin()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinStart'))))
+    expect(tree.getByTestId(testIdWithKey('JoinAs'))).toBeTruthy()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinAsCreateProfile'))))
+    expect(navigation.navigate).toHaveBeenCalledWith(Screens.EditRCard)
+  })
+
+  describe('where the person already stands (220)', () => {
+    const submission = {
+      communityDid: linked,
+      personaDid: 'did:webvh:QmPersona:p',
+      sentAt: 't0',
+      withInvitation: false,
+      via: 'join',
+    }
+    const standAt = async (state: unknown) => {
+      mockReadJoinState.mockResolvedValue(state)
+      communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+      const tree = await renderJoin()
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      return tree
+    }
+    afterEach(() => mockReadJoinState.mockResolvedValue({ kind: 'none' }))
+
+    // Phase 2b: the asks card showed, filled with defaults, until where the
+    // person stands came back — a member saw "Ask to join" first.
+    it('while where the person stands is not known: no way in shown, only that it is being read', async () => {
+      let answer: (state: unknown) => void = () => undefined
+      mockReadJoinState.mockImplementation(() => new Promise((resolve) => (answer = resolve)))
+      communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+      const tree = await renderJoin()
+      expect(tree.getByTestId(testIdWithKey('JoinReading'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('JoinStandingText'))).toBeNull()
+      await act(async () => answer({ kind: 'member', membership: { communityDid: linked, role: 'member' } }))
+      expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingMember')
+      expect(tree.queryByTestId(testIdWithKey('JoinReading'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
+      mockReadJoinState.mockImplementation(async () => ({ kind: 'none' }))
+    })
+
+    // #494 review: a standing that could not be read showed the spinner for as long as the person stayed.
+    it('a standing that cannot be read: said, with Check again, which reads it again', async () => {
+      mockReadJoinState.mockRejectedValue(new Error('store unavailable'))
+      communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+      const tree = await renderJoin()
+      expect(tree.getByTestId(testIdWithKey('JoinReadFailed'))).toHaveTextContent(/Join\.StandingUnread/)
+      expect(tree.queryByTestId(testIdWithKey('JoinReading'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
+      mockReadJoinState.mockResolvedValue({ kind: 'member', membership: { communityDid: linked, role: 'member' } })
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinReadAgain'))))
+      expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingMember')
+      expect(tree.queryByTestId(testIdWithKey('JoinReadFailed'))).toBeNull()
+      mockReadJoinState.mockImplementation(async () => ({ kind: 'none' }))
+    })
+
+    it('once known to stand nowhere, the way in shows', async () => {
+      let answer: (state: unknown) => void = () => undefined
+      mockReadJoinState.mockImplementation(() => new Promise((resolve) => (answer = resolve)))
+      communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+      const tree = await renderJoin()
+      expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
+      await act(async () => answer({ kind: 'none' }))
+      expect(tree.getByTestId(testIdWithKey('JoinStart'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinReading'))).toBeNull()
+      mockReadJoinState.mockImplementation(async () => ({ kind: 'none' }))
+    })
+
+    // 238: the community holds no request this phone sent. Said, with the way
+    // to send it again; the plain ways in alone said nothing of what happened.
+    it('a request that never reached the community: said, and Send it again starts it over', async () => {
+      const tree = await standAt({ kind: 'none', lost: true })
+      expect(tree.getByTestId(testIdWithKey('JoinRequestLost'))).toHaveTextContent(/Join\.RequestLost/)
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinSendAgain'))))
+      expect(tree.getByTestId(testIdWithKey('JoinAsContinue'))).toBeTruthy()
+    })
+
+    it('a request merely unanswered is not said to be lost', async () => {
+      const tree = await standAt({ kind: 'sent', submission })
+      expect(tree.queryByTestId(testIdWithKey('JoinRequestLost'))).toBeNull()
+    })
+
+    it('a late answer about the request makes the screen ask again, at once', async () => {
+      await standAt({ kind: 'sent', submission })
+      mockReadJoinState.mockClear()
+      await act(async () => {
+        DeviceEventEmitter.emit(VTI_JOIN_STATUS_LATE_EVENT, { communityDid: linked })
+      })
+      expect(mockReadJoinState).toHaveBeenCalledWith(
+        expect.anything(),
+        linked,
+        expect.not.objectContaining({ poll: false })
+      )
+    })
+
+    // The several-agents device check (R2): with B current, A's membership
+    // showed as B's ("You're a member"), and A was never offered.
+    // Joining uses the current agent, as chosen on "Your agent": no "with
+    // which agent?" and no other agent offered (Alberto, 239).
+    it("another agent's membership is not the current agent's: Join goes on with the current agent", async () => {
+      const A = 'did:webvh:join-screen:agent-a'
+      const B = 'did:webvh:join-screen:agent-b'
+      const personaOfA = {
+        tags: { recordType: 'keyring/vti-identity', kind: 'persona', key: `${A}|${linked}` },
+        content: { did: 'did:webvh:me-at-a', communityDid: linked, vtaDid: A },
+      }
+      ;(useAgent as jest.Mock).mockReturnValue({
+        agent: {
+          config: { logger: { info: jest.fn(), error: jest.fn() } },
+          genericRecords: {
+            findAllByQuery: async (q: Record<string, string>) =>
+              [personaOfA].filter((r) =>
+                Object.entries(q).every(([k, v]) => (r.tags as Record<string, string>)[k] === v)
+              ),
+          },
+        },
+      })
+      ;(vtaAgent as unknown as Setter).set({
+        agents: [
+          { vtaDid: A, label: 'A' },
+          { vtaDid: B, label: 'B' },
+        ],
+        link: { kind: 'linked', vtaDid: B, label: 'B', linkedAt: 't', connection: { kind: 'online', since: 0 } },
+      })
+      const tree = await standAt({ kind: 'member', membership: { personaDid: 'did:webvh:me-at-a' } })
+      await act(async () => {
+        jest.advanceTimersByTime(10)
+      })
+      expect(tree.queryByTestId(testIdWithKey('JoinStandingText'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('JoinWithAgent'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('JoinUseSuggestedAgent'))).toBeNull()
+      expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
+      ;(vtaAgent as unknown as Setter).set({ agents: undefined })
+    })
+
+    // Whose identity it is is read from this phone after the standing: until it was, another agent's membership
+    // showed as this agent's ("You're a member"), then went (UI-smoothness plan, Phase 5).
+    describe("another agent's membership, while whose it is is read", () => {
+      const A = 'did:webvh:join-screen:agent-a'
+      const B = 'did:webvh:join-screen:agent-b'
+      const personaOfA = {
+        tags: { recordType: 'keyring/vti-identity', kind: 'persona', key: `${A}|${linked}` },
+        content: { did: 'did:webvh:me-at-a', communityDid: linked, vtaDid: A },
+      }
+      /** The agent, whose persona read waits on `held` and fails while `fail.next` is set. */
+      const agentWith = (held?: Promise<void>, fail = { next: false }) => ({
+        agent: {
+          config: { logger: { info: jest.fn(), error: jest.fn() } },
+          genericRecords: {
+            findAllByQuery: async (q: Record<string, string>) => {
+              if (q.kind === 'persona') {
+                if (held) await held
+                if (fail.next) {
+                  fail.next = false
+                  throw new Error('store unavailable')
+                }
+              }
+              return [personaOfA].filter((r) =>
+                Object.entries(q).every(([k, v]) => (r.tags as Record<string, string>)[k] === v)
+              )
+            },
+          },
+        },
+      })
+      beforeEach(() =>
+        (vtaAgent as unknown as Setter).set({
+          agents: [
+            { vtaDid: A, label: 'A' },
+            { vtaDid: B, label: 'B' },
+          ],
+          link: { kind: 'linked', vtaDid: B, label: 'B', linkedAt: 't', connection: { kind: 'online', since: 0 } },
+        })
+      )
+      afterEach(() => (vtaAgent as unknown as Setter).set({ agents: undefined }))
+
+      it("is never shown as this agent's while it is read", async () => {
+        let release: () => void = () => undefined
+        const held = new Promise<void>((resolve) => (release = resolve))
+        ;(useAgent as jest.Mock).mockReturnValue(agentWith(held))
+        const tree = await standAt({ kind: 'member', membership: { personaDid: 'did:webvh:me-at-a' } })
+        expect(tree.queryByTestId(testIdWithKey('JoinStandingText'))).toBeNull()
+        expect(tree.getByTestId(testIdWithKey('JoinReading'))).toBeTruthy()
+        await act(async () => {
+          release()
+          jest.advanceTimersByTime(10)
+        })
+        expect(tree.queryByTestId(testIdWithKey('JoinStandingText'))).toBeNull()
+        expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
+      })
+
+      it('a failed read is said, and Check again reads it', async () => {
+        ;(useAgent as jest.Mock).mockReturnValue(agentWith(undefined, { next: true }))
+        const tree = await standAt({ kind: 'member', membership: { personaDid: 'did:webvh:me-at-a' } })
+        expect(tree.getByTestId(testIdWithKey('JoinReadFailed'))).toBeTruthy()
+        expect(tree.queryByTestId(testIdWithKey('JoinStandingText'))).toBeNull()
+        await act(async () => {
+          fireEvent.press(tree.getByTestId(testIdWithKey('JoinReadAgain')))
+          jest.advanceTimersByTime(10)
+        })
+        expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
+      })
+    })
+
+    // The journey-state audit (F): the standing was read once, on mount.
+    it('a membership stored while the screen is open shows at once, with no poll', async () => {
+      const tree = await standAt({ kind: 'none' })
+      expect(tree.queryByTestId(testIdWithKey('JoinStandingText'))).toBeNull()
+      mockReadJoinState.mockResolvedValue({ kind: 'member', membership: {} })
+      await act(async () => {
+        emitCommunityChanged(linked, 'membership')
+        jest.advanceTimersByTime(10)
+      })
+      expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingMember')
+      expect(mockReadJoinState).toHaveBeenLastCalledWith(
+        expect.anything(),
+        linked,
+        expect.objectContaining({ poll: false })
+      )
+    })
+
+    // Alberto, 238: a success state in place. Done goes back to Your agent
+    // with the community's card picked out; View community takes Join's
+    // place, so back from it is Your agent, not this screen again.
+    it('a member: a success state, Done back to Your agent, View community in place of Join', async () => {
+      const navigation = useNavigation() as unknown as { navigate: jest.Mock; replace: jest.Mock }
+      navigation.navigate.mockClear()
+      navigation.replace.mockClear()
+      const tree = await standAt({ kind: 'member', membership: {} })
+      expect(tree.getByTestId(testIdWithKey('JoinMemberCheck'))).toBeTruthy()
+      expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingMember')
+      expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
+      expect(tree.queryByTestId(testIdWithKey('JoinWays'))).toBeNull()
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinDone'))))
+      expect(navigation.navigate).toHaveBeenCalledWith(Screens.VtaAgent, { highlightCommunity: linked })
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinOpenCommunity'))))
+      expect(navigation.replace).toHaveBeenCalledWith(Screens.VtiCommunity, { communityDid: linked })
+    })
+
+    // IN-142: a member of one community opened Join and found no way to another.
+    it('a member can still reach a different community', async () => {
+      const navigation = useNavigation() as unknown as { navigate: jest.Mock }
+      navigation.navigate.mockClear()
+      const tree = await standAt({ kind: 'member', membership: {} })
+      const different = tree.getByTestId(testIdWithKey('JoinScanCommunity'))
+      expect(different).toHaveTextContent('Join.Different')
+      await act(async () => fireEvent.press(different))
+      expect(navigation.navigate).toHaveBeenCalledWith(
+        Stacks.ConnectStack,
+        expect.objectContaining({ screen: Screens.Scan })
+      )
+    })
+
+    it('sent and not yet answered: says so, and whether the invitation went with it; Check again asks', async () => {
+      const tree = await standAt({ kind: 'sent', submission: { ...submission, withInvitation: true } })
+      expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingSent')
+      expect(tree.getByTestId(testIdWithKey('JoinStandingInvitation'))).toBeTruthy()
+      expect(tree.queryByTestId(testIdWithKey('JoinStart'))).toBeNull()
+      mockReadJoinState.mockClear()
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinCheckAgain'))))
+      expect(mockReadJoinState).toHaveBeenCalledWith(
+        expect.anything(),
+        linked,
+        expect.not.objectContaining({ poll: false })
+      )
+    })
+
+    // IN-617: approved, the card never came, and Check again asks the community to send it again.
+    it('approved with no card: Check again asks for the card, says so, and reads what that stored', async () => {
+      const tree = await standAt({ kind: 'pending', submission: { ...submission, status: 'approved' } })
+      expect(tree.queryByTestId(testIdWithKey('JoinCardAsk'))).toBeNull()
+      mockReadJoinState.mockClear()
+      mockAskForCard.mockResolvedValueOnce({ polled: true, resend: 'queued' })
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinCheckAgain'))))
+      expect(mockAskForCard).toHaveBeenCalledWith(expect.anything(), linked, { mediatorDid: config.mediatorDid })
+      expect(tree.getByTestId(testIdWithKey('JoinCardAsk'))).toHaveTextContent('Join.CardAskedAgain')
+      // It polled already: the standing is read from what it stored, not asked of the community again.
+      expect(mockReadJoinState).not.toHaveBeenCalledWith(
+        expect.anything(),
+        linked,
+        expect.not.objectContaining({ poll: false })
+      )
+    })
+
+    it('a Check again whose ask for the card fails still reads where the request stands', async () => {
+      const tree = await standAt({ kind: 'pending', submission: { ...submission, status: 'approved' } })
+      mockReadJoinState.mockClear()
+      // Thrown before any promise exists, as an absent or broken ask throws: a rejection alone is caught by a
+      // plain .catch, and would pass without the guard this test is for.
+      mockAskForCard.mockImplementationOnce(() => {
+        throw new Error('the ask could not start')
+      })
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinCheckAgain'))))
+      expect(mockReadJoinState).toHaveBeenCalledWith(
+        expect.anything(),
+        linked,
+        expect.not.objectContaining({ poll: false })
+      )
+      expect(tree.queryByTestId(testIdWithKey('JoinCardAsk'))).toBeNull()
+    })
+
+    it('deferred: what is missing, in words, and the way back to vetting', async () => {
+      const tree = await standAt({
+        kind: 'deferred',
+        submission,
+        needs: [{ kind: 'statements', count: 1 }, { kind: 'invitation' }],
+      })
+      const needs = tree.getAllByTestId(testIdWithKey('JoinStandingNeed'))
+      expect(needs[0]).toHaveTextContent(/Vetting\.NeedsStatements/)
+      expect(needs[1]).toHaveTextContent(/Vetting\.NeedsInvitation/)
+      expect(tree.getByTestId(testIdWithKey('JoinContinueVetting'))).toBeTruthy()
+    })
+
+    it('turned down: the reason, and Join again with a fresh identity', async () => {
+      const tree = await standAt({
+        kind: 'rejected',
+        submission,
+        code: 'policyDenied',
+        reason: 'Not a member of the club',
+      })
+      expect(tree.getByTestId(testIdWithKey('JoinStandingText'))).toHaveTextContent('Join.StandingRejected')
+      expect(tree.getByTestId(testIdWithKey('JoinStandingReason'))).toHaveTextContent('Join.StandingReason')
+      // 240, Android: "Join again" sat below the read-only ways, off the
+      // screen. It is in the card that says the request was turned down.
+      expect(
+        within(tree.getByTestId(testIdWithKey('JoinStanding'))).getByTestId(testIdWithKey('JoinAgain'))
+      ).toBeTruthy()
+      const actions = tree.queryByTestId(testIdWithKey('JoinActions'))
+      if (actions) expect(within(actions).queryByTestId(testIdWithKey('JoinAgain'))).toBeNull()
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinAgain'))))
+      expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinStart'))))
+      await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinAsContinue'))))
+      expect(mockEnsurePersona).toHaveBeenLastCalledWith(expect.objectContaining({ communityDid: linked }), {
+        fresh: true,
+      })
+    })
+  })
+
+  it('the "what it asks" card says the whole sentence itself', async () => {
+    communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+    const tree = await renderJoin()
+    const card = tree.getByTestId(testIdWithKey('JoinAsks'))
+    // Without a session the screen shows what every vetting community asks.
+    expect(card.props.accessibilityLabel).toContain('Join.AsksStatements')
+    expect(card.props.accessibilityLabel).toContain('Join.AsksLegalName')
+  })
+
+  it('a community that vets everyone says an invitation does not replace it, and keeps its code behind Details', async () => {
+    jest
+      .spyOn(vtiAgent, 'fetchManifest')
+      .mockResolvedValue({ criteria: [{ vetting: { minStatements: 1, requiredClaims: ['name.legal'] } }] } as never)
+    communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+    const tree = await renderJoin()
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('JoinNoInvitationBypass'))).toHaveTextContent('Join.AsksNoInvitationBypass')
+    expect(tree.queryByText(linked)).toBeNull()
+    await act(async () => fireEvent.press(tree.getByTestId(testIdWithKey('JoinCommunityToggle'))))
+    expect(tree.getByTestId(testIdWithKey('JoinCommunityDid'))).toHaveTextContent(linked)
+  })
+
+  it('a community an invitation admits does not say so', async () => {
+    jest.spyOn(vtiAgent, 'fetchManifest').mockResolvedValue({
+      criteria: [{ id: 'invited-member' }],
+    } as never)
+    communityTarget.set({ communityDid: linked, name: 'Linked Lab' })
+    const tree = await renderJoin()
+    await act(async () => {
+      jest.advanceTimersByTime(10)
+    })
+    expect(tree.getByTestId(testIdWithKey('JoinAsks'))).toBeTruthy()
+    expect(tree.queryByTestId(testIdWithKey('JoinNoInvitationBypass'))).toBeNull()
+  })
+})

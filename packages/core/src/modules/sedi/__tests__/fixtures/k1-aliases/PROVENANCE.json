@@ -1,0 +1,22 @@
+{
+  "note": "THROWAWAY test material for designatedAliases.test.ts, made by the K1 State office (keyring-wallet tools/sedi-state-office) on a fresh store whose passcode is a known test value. Never the demo state: these AIDs are trusted by no build.",
+  "root": "IACQg23100QMBcnrf576nwmcFebXw3ymHWhOLQAOzg8J",
+  "aids": {
+    "roy": "IACQg23100QMBcnrf576nwmcFebXw3ymHWhOLQAOzg8J",
+    "deb": "IBU-uYDkpEgRFwTgpeauWgeUoBksyIQg0mh2hqdhFdhi",
+    "sue": "IOQCzkCtGbiYrmTdwzU8lCB5toeBy5GB86_wCiZuoet9"
+  },
+  "schema": "EHttrKD3K6Ic6ryJziTCsfScU_jNrtpvv1VsfD2iPFdO",
+  "hosts": {
+    "a": "demo-a.example",
+    "b": "demo-b.example"
+  },
+  "files": {
+    "a.*": "the root's keri.cesr, did.json and designated-aliases.json while demo-a.example was designated",
+    "b.*": "the same after re-designating to demo-b.example (the a ACDC revoked, a new one issued)",
+    "a-revoked.designated-aliases.json": "the a ACDC with its revoke",
+    "wrong-issuer.designated-aliases.json": "an aliases ACDC naming demo-b, issued by the org unit, not the root",
+    "wrong-schema.designated-aliases.json": "the root's Unit ACDC, in the aliases file's shape"
+  },
+  "generatedAt": "2026-11-13T00:27:05.103950+00:00"
+}

@@ -2,7 +2,9 @@ name: Code Quality
 
 on:
   pull_request:
-    branches: [main]
+    # Every base branch, not only main: a stacked PR (based on the PR below it) gets the same checks as one into
+    # main. The main ruleset still only requires them for PRs into main. "edited" covers the retarget to main
+    # after the PR below merges.
     types: [opened, synchronize, reopened, labeled, edited]
 
 jobs:
@@ -51,8 +53,6 @@ jobs:
     steps:
       - name: Checkout KeyRing
         uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - uses: actions/setup-python@v4
         with:
@@ -61,17 +61,23 @@ jobs:
       - name: Setup NodeJS
         uses: ./.github/workflows/actions/setup-node
 
-      - name: Cache app node_modules
-        uses: actions/cache@v3
+      # Restore only: a pull request's own save landed on refs/pull/<n>/merge, which no other PR can read, so every
+      # PR saved its own 176 MiB copy and filled the 10 GB cache. deps-cache.yml saves the one copy, on main.
+      - name: Restore the yarn cache (saved on main)
+        uses: actions/cache/restore@v4
         with:
           path: .yarn/cache
-          # Cache will be invalidated if yarn.lock changes
           key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
           restore-keys: ${{ runner.os }}-yarn-
 
       - name: Install dependencies
         working-directory: app
         run: yarn install --immutable
+
+      # The Node-consumed framework packages (trust-tasks, vrc-contexts, …) declare their types at build/; the app's
+      # typecheck resolves them there. The React Native packages typecheck from their source and need nothing.
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
 
       - name: Check style
         working-directory: app
@@ -108,9 +114,12 @@ jobs:
           done < <(find e2e -name '*.js' -not -path 'e2e/node_modules/*' -not -path 'e2e/artifacts/*')
           # Every testID the drivers name must exist in the app (e2e/lib/testids*.json,
           # see e2e/scripts/sync-testids.sh): a renamed id fails here, not at the gate. And e2e/lib/testids.json must be
-          # bifold's packages/core/testids.json at the pinned submodule, both ways: a pin bump carries its resync
-          # (e2e/scripts/sync-testids.sh bifold), and a check that cannot read the pin fails here (CI is set).
-          node e2e/scripts/check-testids.mjs || fail=1
+          # packages/core/testids.json in this tree, both ways: a change to the manifest carries its resync
+          # (e2e/scripts/sync-testids.sh), and a check that cannot read it fails here (CI is set).
+          # Said as an error of its own, as the branches around it are: left to its exit code, this one failed the job
+          # with no annotation, under a log that read "14/14 ok" (#1020, three heads red before anyone saw why).
+          node e2e/scripts/check-testids.mjs \
+            || { echo "::error file=e2e/lib/testids.json::check-testids failed (its lines above say which): a driver names a testID the app does not have, or e2e/lib/testids.json is out of step with packages/core/testids.json. For the second, run e2e/scripts/sync-testids.sh and commit the result"; fail=1; }
           # The harness's and the scripts' own tests (node built-ins and bash only, no install), found rather than named
           # (scripts/ci/find-tests.mjs): every *.test.mjs and *.test.sh under e2e/ and scripts/, so a new one runs here
           # without anyone adding it. Named lists left 21 of them running nowhere, check-testids.test.mjs among them,
@@ -119,7 +128,7 @@ jobs:
           # scripts/ci/tests-need-install.json; a listed file that is gone fails here. Among what they cover: the leg
           # cleanup through the CI guard (keys-since), the pnm call cap, the CI lane's configuration, phone-grant expiry
           # and the gate turn lock, gate.sh --rows, the release tier check, the openvtc helpers, fetch-binaries' refusal
-          # of an unpinned moving build, and the testid manifest's drift from the pinned bifold.
+          # of an unpinned moving build, and the testid manifest's drift from packages/core's.
           tests=$(node scripts/ci/find-tests.mjs) || { echo "::error file=scripts/ci/tests-need-install.json::a listed test no longer exists"; fail=1; }
           while IFS= read -r t; do
             [ -n "$t" ] || continue
@@ -137,8 +146,6 @@ jobs:
     steps:
       - name: Checkout KeyRing
         uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - uses: actions/setup-python@v5
         with:
@@ -147,11 +154,12 @@ jobs:
       - name: Setup NodeJS
         uses: ./.github/workflows/actions/setup-node
 
-      - name: Cache app node_modules
-        uses: actions/cache@v3
+      # Restore only: a pull request's own save landed on refs/pull/<n>/merge, which no other PR can read, so every
+      # PR saved its own 176 MiB copy and filled the 10 GB cache. deps-cache.yml saves the one copy, on main.
+      - name: Restore the yarn cache (saved on main)
+        uses: actions/cache/restore@v4
         with:
           path: .yarn/cache
-          # Cache will be invalidated if yarn.lock changes
           key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
           restore-keys: ${{ runner.os }}-yarn-
 
@@ -159,8 +167,23 @@ jobs:
         working-directory: app
         run: yarn install --immutable
 
+      # app/jest.config.js maps every @bifold/* package to its source, so the suite needs no package build; one is made
+      # anyway, so a subpath import that no mapper covers resolves as it does at runtime rather than failing here only.
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
+
       - name: Automated testing
         run: yarn test
+
+      # The framework's platform-neutral module graph, evaluated out of a Metro bundle with the bundle's own resolution
+      # and lazily, as the device evaluates it (scripts/ci/bundle-evaluates.mjs says why: Phase 2's first Test build
+      # crashed at the first lazy require of @bifold/trust-tasks while every jest suite was green).
+      - name: Bundle evaluates
+        run: |
+          (cd app && npx react-native bundle --platform android --dev true --entry-file index.js \
+            --bundle-output "$RUNNER_TEMP/dev.bundle" --assets-dest "$RUNNER_TEMP/dev-assets" > "$RUNNER_TEMP/bundle.log" 2>&1) \
+            || { tail -40 "$RUNNER_TEMP/bundle.log"; echo "::error::the dev bundle did not build"; exit 1; }
+          node scripts/ci/bundle-evaluates.mjs "$RUNNER_TEMP/dev.bundle"
 
       # The OTA publishing scripts' own tests (node:test, Node built-ins only):
       # among them, which key each channel signs with (scripts/ota/signing-key.mjs).

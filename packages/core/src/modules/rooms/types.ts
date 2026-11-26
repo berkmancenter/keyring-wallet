@@ -1,0 +1,691 @@
+/**
+ * The rooms data layer's contract with the screens: one `RoomsService`, injected through
+ * `TOKENS.UTIL_ROOMS_SERVICE`, with a status for every operation so a screen never guesses
+ * what is available.
+ *
+ * A room is a shared, encrypted set of records with its own DID. Members hold credentials the
+ * room issued, and the person's own agent (VTA) holds the room's keys. The phone never does:
+ * it asks its agent, which reads and writes for it (VTI `docs/02-vta/data-rooms.md` §2, §9).
+ * Upstream's code is the reference for every shape here. The reasoning is in
+ * docs/plans/openvtc-rooms-plan.md in the wallet repository.
+ */
+import type { InertText } from './inertText'
+
+export type { InertText } from './inertText'
+
+/** Every operation a screen can ask about. */
+export type RoomsOperation =
+  | 'listMyRooms'
+  | 'getRoom'
+  | 'listNotes'
+  | 'readNote'
+  | 'write'
+  | 'curate'
+  | 'listOffers'
+  | 'acceptOffer'
+  | 'hideOffer'
+  | 'listFiles'
+  | 'openFile'
+  | 'uploadFile'
+  | 'listCommunityMembers'
+  | 'agentAccess'
+  | 'leaveViaCommunity'
+  | 'groupChat'
+  | 'requestToJoin'
+
+/**
+ * Why an operation is or is not available. The screens choose the words from this, never from
+ * their own guess:
+ * - `ok`: available.
+ * - `sample`: available, on fixture data; show the "Sample data" banner.
+ * - `clientNotBuilt`: the person's agent serves it, but Keyring has not built it yet ("Coming soon").
+ * - `notBuiltUpstream`: nothing anywhere serves it, e.g. group chat ("Not available yet").
+ * - `agentDoesNotServe`: this person's agent is too old to serve it ("Your agent needs an update").
+ * - `adminOnly`: only a community's administrators may do it.
+ * - `noAgentLinked`: the phone has no agent to ask.
+ * - `agentUnknown`: the agent could not be asked what it serves; try again later.
+ * - `communityDoesNotServe`: the community's service is too old for it. Community operations are not discovered in
+ *   advance, so this comes from a call the community refused as a task it doesn't have.
+ * - `detailsNotLoaded`: a room known only from the agent's key custody, without the community's
+ *   record of it (rights, host). The operation needs those ("Details not loaded").
+ * - `noRight`: this member's rights in the room do not include it ("You can't post here").
+ * - `communityUnreachable`: none of the member's communities answered for their rooms; try again later.
+ * - `noIdentity`: the phone holds a membership in the community but no identity it can sign in as there, so nothing
+ *   was asked of it; trying again does not help (IN-517).
+ * - `keysNotHeld`: the identity is on the phone but its keys are not yet: the agent hands them over when it next
+ *   connects, and trying again then helps.
+ * - `tierNotYet`: served, but Keyring does not yet do it in a room of this tier, e.g. writing in an `attributed`
+ *   room, whose records are sealed ("not available yet in this kind of room").
+ */
+export type RoomsReason =
+  | 'ok'
+  | 'sample'
+  | 'clientNotBuilt'
+  | 'notBuiltUpstream'
+  | 'agentDoesNotServe'
+  | 'adminOnly'
+  | 'noAgentLinked'
+  | 'agentUnknown'
+  | 'communityDoesNotServe'
+  | 'detailsNotLoaded'
+  | 'noRight'
+  | 'communityUnreachable'
+  | 'noIdentity'
+  | 'keysNotHeld'
+  | 'tierNotYet'
+  // Never in this kind of room: files exist on attributed and private rooms only (upstream refuses them on open ones).
+  | 'notOnThisTier'
+
+export type RoomsStatus = 'available' | 'comingSoon' | 'unavailable'
+
+export interface OperationStatus {
+  status: RoomsStatus
+  reason: RoomsReason
+  /** A plain explanation for logs and support, not copy for the screen. */
+  detail: string
+}
+
+export type RoomsCapabilities = Record<RoomsOperation, OperationStatus>
+
+/** Upstream's visibility tiers (vti-rooms `Visibility`). `private` is stored but not served yet. */
+export type RoomTier = 'open' | 'attributed' | 'private'
+
+/** What a room's authority credential lets this member do (vti-rooms `Action`). */
+export type RoomVerb = 'read' | 'write' | 'curate' | 'admin'
+
+/**
+ * Where a member has seen one room's conversation up to: the room version, and the host's `createdAt` of the newest
+ * message seen (else its `updatedAt`), as the host returned it. `version` 0 is none of it.
+ */
+export interface RoomReadMarker {
+  version: number
+  createdAt?: string
+}
+
+/**
+ * An identity as a person sees it: never a name. `identityWords` are the community's words for the
+ * DID when the community supplied them; without them a screen shows a short form of the DID.
+ */
+export interface Identity {
+  identityWords?: string
+  did: string
+}
+
+/**
+ * A room as a list row. Its details come from the community's record of the member's rooms
+ * (`vtc/rooms/memberships/list`: labels, tiers, actions, expiries, states). The agent's own list
+ * (`rooms/keys/list`) says only which rooms it holds keys for, so a room known only that way has
+ * `source: 'custody'` and no rights, host or expiry yet.
+ */
+export interface RoomSummary {
+  roomId: string
+  /** Never empty: the community's label, else the member's own label, else a short form of the room ID. */
+  name: InertText
+  /** Which of those `name` is. An ID is shown as an ID ("Room 3f9a…"), never as if the community named it. */
+  nameFrom: 'community' | 'personal' | 'roomId'
+  /** Where this room's details come from. */
+  source: 'community' | 'custody'
+  communityDid?: string
+  communityName?: InertText
+  /** `unknown` for a custody-only room: show no tier badge. */
+  tier: RoomTier | 'unknown'
+  /** Undefined: not known yet. `[]`: known, and none (e.g. lapsed). Screens use `roomCapabilities` for words. */
+  verbs?: RoomVerb[]
+  /** When this member's access ends unless renewed (ISO 8601). Unknown for a custody-only room. */
+  validUntil?: string
+  /** The DID of the host serving this room. Unknown for a custody-only room. */
+  host?: string
+  standing: 'member' | 'lapsed' | 'removed'
+  /**
+   * False for a sealed room the community lists for this identity while the agent holds none of its keys as it: not
+   * joined yet. A community's re-invite does not re-admit to a room, and its posts, notes and files said "Couldn't
+   * read… Try again later" for ever (34VR-Y58H, 277.8, 11-03). Absent: joined, or not known to be otherwise.
+   */
+  joined?: false
+}
+
+/** The operations whose status also depends on the room: its source and this member's rights in it. */
+export type RoomOperation =
+  | 'listNotes'
+  | 'readNote'
+  | 'write'
+  | 'curate'
+  | 'listFiles'
+  | 'openFile'
+  | 'uploadFile'
+  | 'agentAccess'
+  | 'listCommunityMembers'
+
+export type RoomCapabilities = Record<RoomOperation, OperationStatus>
+
+export interface Room extends RoomSummary {
+  /** The identity this member acts as in the room. */
+  actingAs: Identity
+}
+
+export interface NoteSummary {
+  /** The record's key. Opaque on attributed and private rooms; never shown as a title. */
+  key: string
+  version: number
+  /**
+   * Present only where the host can see it: an open room's records carry it. On attributed and
+   * private rooms the title is sealed with the body, so it appears on the note once it is read.
+   */
+  title?: InertText
+  author?: Identity
+  /** Set when an AI agent wrote it under its person's membership. */
+  byAgent?: boolean
+  updatedAt?: string
+  /** When the host first stored the record; neither an edit nor a curation moves it. Only where an agent serves it. */
+  createdAt?: string
+  /** Who wrote the record's first version, as the host recorded it. Only where an agent serves it, never on a private room. */
+  createdBy?: Identity
+  /** When the host stored the body now held (an edit moves it; a curation does not). Only where an agent serves it. */
+  bodyStoredAt?: string
+  /** Upstream's curation state (`RecordMetadata.status`). `retracted` is a tombstone: no body. */
+  status: 'active' | 'deprecated' | 'retracted'
+  pinned: boolean
+  /**
+   * The files the record carries (`rooms/records/put` 0.2 `blobs`), with the details its body gives each: listed
+   * from the host's metadata, with no file key and no download. Usually one; more when another client attached them.
+   */
+  files?: RoomFile[]
+}
+
+/**
+ * What the person's agent concluded about the host's answer (`ReadVerification`): whether it is
+ * consistent with what the host committed to and what the agent saw before. A host that drops or
+ * rolls back records shows as `conflict`.
+ * - `consistent`: every check the agent could make agreed.
+ * - `unverified`: some checks could not be made, e.g. a first read or no anchor published.
+ * - `conflict`: a check failed; show it, the host may be withholding or replaying records.
+ */
+export interface HostCheck {
+  verdict: 'consistent' | 'unverified' | 'conflict'
+  detail: string
+}
+
+/**
+ * A room's last prune (`rooms/_shared/0.2` RecordPrune), as `rooms/keys/browse` 0.3 passes it on: the room version
+ * the prune took it to, when, and how many records it removed outright, tombstones included.
+ */
+export interface RecordPrune {
+  version: number
+  prunedAt: string
+  removed: number
+}
+
+export interface NoteList {
+  notes: NoteSummary[]
+  /** False when the host's listing stopped early. */
+  complete: boolean
+  /**
+   * A window (`listNotes`'s `head`): the room holds records below the lowest version listed, left for a later window
+   * asked with `beforeVersion`. Only a window sets it, and it is not `complete` false: nothing was withheld, the reader
+   * asked for no more. Absence of a record from a window says nothing about it.
+   */
+  older?: boolean
+  check: HostCheck
+  /** The room's last prune, when the agent passes one on (browse 0.3). */
+  lastPrune?: RecordPrune
+}
+
+/** What `RoomsService.listNotes` lists: everything above `sinceVersion` (all, absent), or a window. */
+export interface ListNotesOptions {
+  sinceVersion?: number
+  /** A window of at most this many records, newest version first (1 to 1000). */
+  head?: number
+  /** With `head`: only records below this version, to page back from the lowest one held. */
+  beforeVersion?: number
+}
+
+export interface InertFlags {
+  /** The text contains something that looks like a link. It is shown as text and never followed. */
+  containsLink: boolean
+  /** The text reads like an instruction to an agent. It is shown as text and never acted on. */
+  looksLikeInstruction: boolean
+}
+
+export interface Note extends NoteSummary {
+  body: InertText
+  flags: InertFlags
+  check: HostCheck
+  /** What the record says it is (trust-tasks-tf #1027). An open set: see `placeOf`. Only once it is read. */
+  kind?: string
+  /** The record it answers, in this room. */
+  inReplyTo?: { key: string; version?: number }
+  /** When its author says they wrote it, and last edited it: the author's claim, not an attested time. */
+  writtenAt?: string
+  editedAt?: string
+  /** A reaction whose body, as written and before it was made inert, a reader must not show. */
+  reactionRefused?: true
+  /**
+   * The record was opened and holds nothing this client can show: JSON that is no record it knows, or a record with
+   * no title, words, file or kind. Its `body` is empty; a screen says one line in its place, never the record.
+   */
+  notShown?: true
+}
+
+/** A file to post, as the phone picked it: a local copy the service reads and uploads through the member's agent. */
+export interface RoomsAttachment {
+  uri: string
+  name: string
+  mimeType?: string
+  size: number
+}
+
+/** The longest note title, in characters: the room schema's cleartext title (`RecordMetadata.title`). */
+export const NOTE_TITLE_MAX = 512
+/** The longest note body, in characters: the member sprint's 16 KiB cap on a record. */
+export const NOTE_BODY_MAX = 16384
+
+export interface WriteDraft {
+  title: string
+  body: string
+  /** Replace this note instead of adding one. */
+  replaceKey?: string
+  /** One file to post with it (`rooms/records/put` 0.2 `blobs`). The service refuses one over its limit. */
+  attachment?: RoomsAttachment /**
+   * The post's own id, the same on every retry. The service derives the record's key from it and writes create-only,
+   * so a retry of a post that already landed answers with that post instead of writing it twice; within one app run
+   * a retried upload resumes rather than starting again. Without it, a retry may post twice.
+   */
+  idempotencyKey?: string
+}
+
+/**
+ * What the confirmation sheet shows before anything leaves the phone. `confirmWrite(token)` sends
+ * exactly this. The identity is named before consent, never after.
+ *
+ * A preview token is single-use and lasts `PREVIEW_TOKEN_TTL_MS`. A token that is spent, too old, or
+ * from before the app restarted gives `RoomsPreviewExpired`, and the sheet says "prepare it again". If
+ * a note being replaced changed since the preview, `confirmWrite` gives `RoomsConflict` with the
+ * current version, and the sheet offers "Re-read". Nothing is sent in either case.
+ */
+export interface WritePreview {
+  token: string
+  roomId: string
+  roomName: InertText
+  communityName?: InertText
+  tier: RoomSummary['tier']
+  actingAs: Identity
+  /** `members`: only members can read it. `membersAndHost`: an open room, readable by its host too. */
+  visibleTo: 'members' | 'membersAndHost'
+  /** Whether members (and on attributed rooms, the host) see that it is this member's. */
+  authorShown: boolean
+  title: InertText
+  body: InertText
+  validUntil?: string
+}
+
+export interface RoomOffer {
+  /** Names the offer to `previewOffer` and `hideOffer`: a route parameter, opaque to screens. */
+  offerId: string
+  roomId: string
+  /** The community's name for the room, else what tells it apart (`roomRef`): then `roomNameFrom` is `roomId`. */
+  roomName: InertText
+  roomNameFrom?: 'roomId'
+  /** What the room is for, as the community's administrators wrote it. Absent when the room has none. */
+  description?: InertText
+  communityDid: string
+  /** Absent when the community published no name: a screen says `offerCommunity`, never a cut of the DID. */
+  communityName?: InertText
+  tier: RoomTier
+  verbs: RoomVerb[]
+  validUntil?: string
+}
+
+/** What the offer sheet shows before accepting. `acceptOffer(token)` accepts exactly this. */
+export interface OfferPreview {
+  token: string
+  offer: RoomOffer
+  actingAs: Identity
+}
+
+/** Bytes moved so far, and in all. Upload or download alike. */
+export interface RoomsTransferProgress {
+  sent: number
+  total: number
+}
+
+export interface RoomsTransferOptions {
+  onProgress?: (progress: RoomsTransferProgress) => void
+  /** Aborting it stops the transfer and rejects with an error named `AbortError`; no partial copy is kept. */
+  signal?: AbortSignal
+}
+
+export interface RoomFile {
+  /** The blob's id: what `openFile` takes. */
+  fileId: string
+  name: InertText
+  mediaType?: string
+  size?: number
+  /**
+   * Whether the signature on the record the file came in was checked: `confirmed`, it holds; `unconfirmed`, it could
+   * not be checked, and the file opens without saying who shared it; `refused`, it does not hold, and the file is not
+   * opened. Absent: the service made no check (the sample rooms).
+   */
+  sender?: RoomFileSender
+  /** Who shared it: set by the agent's service only once `sender` is `confirmed`. */
+  sharedBy?: Identity
+  sharedAt?: string
+}
+
+export type RoomFileSender = 'confirmed' | 'unconfirmed' | 'refused'
+
+/**
+ * A file opened for viewing: a protected local copy. The file's key never leaves the service:
+ * upstream warns it never expires (VTI `docs/05-design-notes/data-rooms-files.md`).
+ */
+export interface OpenedFile {
+  localUri: string
+  mediaType?: string
+  size: number
+  /** Its bytes are an image the sheet can draw. Set from the bytes, never from `mediaType`, which is only claimed. */
+  image?: boolean
+}
+
+export interface CommunityRoomMember {
+  identity: Identity
+  verbs: RoomVerb[]
+}
+
+/**
+ * What an AI agent's grant lets it do in the rooms it covers: the capabilities its ACL entry on the
+ * person's agent is narrowed to (VTI `vti-common` acl; docs/02-vta/personal-ai-agents.md).
+ * - `roomPresent`: obtain short-lived, one-action presentations (`rooms/keys/present`, at most 4 h)
+ *   for what the member may do, so it can read open text and act as itself, never as the member.
+ * - `roomOpen`: also read sealed text, through the member's agent (`rooms/keys/open`). No key is ever
+ *   handed to the AI agent.
+ */
+export type AgentRoomCapability = 'roomPresent' | 'roomOpen'
+
+/**
+ * An AI agent's access, as its grant scopes it upstream: by the person's persona **context**, covering
+ * every room held by personas in it. Upstream cannot narrow an agent to one room, so the interface
+ * does not pretend to. Withdrawing it stops new presentations; ones already issued last up to 4 h
+ * unless the room's owner revokes them at the host.
+ */
+export interface AgentGrant {
+  grantId: string
+  agentDid: string
+  agentLabel: InertText
+  contextId: string
+  contextLabel?: InertText
+  capabilities: AgentRoomCapability[]
+  expiresAt?: string
+}
+
+export interface AgentGrantRequest {
+  agentDid: string
+  contextId: string
+  capabilities: AgentRoomCapability[]
+  expiresAt: string
+}
+
+/** How long a write or offer preview token stays valid. */
+export const PREVIEW_TOKEN_TTL_MS = 10 * 60 * 1000
+
+/** Thrown by an operation whose status is not `available`. */
+export class RoomsUnavailable extends Error {
+  public constructor(
+    public readonly operation: RoomsOperation,
+    public readonly reason: RoomsReason,
+    detail: string
+  ) {
+    super(`${operation} is not available (${reason}): ${detail}`)
+    this.name = 'RoomsUnavailable'
+  }
+}
+
+/** A preview token that is spent, older than `PREVIEW_TOKEN_TTL_MS`, or unknown. Nothing was sent. */
+export class RoomsPreviewExpired extends Error {
+  public constructor(public readonly token: string) {
+    super('this preview has expired; prepare it again')
+    this.name = 'RoomsPreviewExpired'
+  }
+}
+
+/**
+ * A community or the person's agent refused the operation, in its own terms. `code` is the refusal's code
+ * without its task prefix (`vtc/rooms/offers/accept:alreadyAccepted` → `alreadyAccepted`), plus a few of
+ * Keyring's own for a step that went wrong between them (`welcomeMissing`, `joinFailed`). Screens word the
+ * codes they know and show a generic line for any other. `retryable`: the same request again may succeed.
+ * A transport failure (no answer) is not a refusal and arrives as a plain `Error`.
+ */
+export class RoomsRefused extends Error {
+  public constructor(
+    public readonly operation: RoomsOperation,
+    public readonly code: string,
+    public readonly retryable: boolean,
+    detail?: string,
+    /** The agent's or community's own refusal, where this passes one on: what a log reads its reason from. */
+    public readonly refusal?: unknown
+  ) {
+    super(`${operation} was refused (${code})${detail ? `: ${detail}` : ''}`)
+    this.name = 'RoomsRefused'
+  }
+}
+
+/**
+ * Why the person's agent could not open a record, as it says in a `rooms/keys/read` refusal (`unknownEpoch`,
+ * `details.reason`; vta-service `room_group.rs` `open_refused`). The agent has already tried to repair its keys
+ * before answering (VTI #2231), so the phone does not ask it to again. `removed`: the record was sealed in an epoch
+ * this member was not in. `beyondChain`: the history the agent can reach does not go back that far.
+ * `notDelivered`: the agent is behind on the room's membership changes.
+ */
+export type RecordUnopenedReason = 'removed' | 'beyondChain' | 'notDelivered'
+
+export const RECORD_UNOPENED_REASONS: readonly RecordUnopenedReason[] = ['removed', 'beyondChain', 'notDelivered']
+
+/** The note being replaced changed since the preview. Nothing was sent; re-read it first. */
+export class RoomsConflict extends Error {
+  public constructor(
+    public readonly key: string,
+    public readonly currentVersion: number
+  ) {
+    super(`note ${key} changed since the preview (now version ${currentVersion})`)
+    this.name = 'RoomsConflict'
+  }
+}
+
+/** A community whose rooms are still to come: the screens say "Still loading…" under its name, and nothing of why. */
+export interface HeldBackCommunity {
+  communityDid: string
+  communityName?: InertText
+}
+
+/** One thing a member writes. A key is opaque: it never says what a record is, answers or holds. */
+export type RecordWrite =
+  /** A message, a reply if it names one. `idempotencyKey`: this send's own, so a retry after a lost answer is one record. */
+  | { type: 'message'; body: string; inReplyTo?: { key: string; version?: number }; idempotencyKey?: string }
+  /** A new reaction. A writer already holding one with this value and target reuses it: `changeReaction`. */
+  | { type: 'reaction'; value: string; target: { key: string; version?: number } }
+  /** A new value on this member's own reaction record, in one write. */
+  | { type: 'changeReaction'; key: string; value: string }
+  /** An empty version of this member's own reaction or message. Its replies stay. */
+  | { type: 'withdraw'; key: string }
+  /** New words on this member's own message. */
+  | { type: 'edit'; key: string; body: string }
+
+/** What a room lets this member write now. */
+export interface RecordFeatures {
+  /** What the room's profile lists. Empty when it can't be read: that permits none. */
+  listed: string[]
+  /** This member's agent will seal these members (`rooms/keys/seal/0.3`). */
+  canSeal: boolean
+  /** The profile could not be read, as opposed to listing nothing. */
+  unresolved: boolean
+  /**
+   * The room's current profile no longer permits replies or reactions, the agent still seals, and this phone saw them
+   * permitted before (`recordsWereOn`): at `epoch`, where it was known. Absent for every other reason they are off.
+   */
+  wereOn?: { epoch?: number }
+}
+
+export interface RoomsService {
+  /** True for the fixture service: every screen it feeds shows the "Sample data" banner. */
+  readonly isSample: boolean
+  /** For logs and support. The sample service puts its build marker here, where it is read at runtime. */
+  readonly label: string
+  /** The app's agent a real service is built on (`RoomsBackend.runsOn`); none for the sample. */
+  readonly runsOn?: object
+  /**
+   * Each community this phone is a member of now and the identity it acts as there, from the wallet alone (no agent
+   * or community is asked): what a room's kept posts are drawn by before the room is known (rooms/messageCache
+   * `readRoomPostsBeforeRoom`). None for the sample.
+   */
+  localCommunities?(): Promise<ReadonlyArray<{ did: string; personaDid: string }>>
+  /** A line for the app's log, from a screen's read of the rooms: what failed, and each retry. None for the sample. */
+  note?(line: string): void
+  /** One status per operation. Cached per agent; `refresh` asks again. */
+  capabilities(options?: { refresh?: boolean }): Promise<RoomsCapabilities>
+
+  /**
+   * `onPartial`: while the listing waits for every community, the rooms of those that have answered so far, each time
+   * one answers, with their DIDs (rooms/partialListingSwitch). For drawing only: the listing that resolves is the
+   * member's rooms. None from the sample.
+   */
+  listMyRooms(options?: {
+    onPartial?: (rooms: RoomSummary[], answered: readonly string[]) => void
+  }): Promise<RoomSummary[]>
+  /**
+   * The communities the last `listMyRooms` could not read for now because the community session was kept for another
+   * of this phone's identities: their rooms come with a read again (`onReadable`). Never why. None for the sample.
+   */
+  heldBack?(): HeldBackCommunity[]
+  getRoom(roomId: string): Promise<Room>
+  /** One status per room operation: the service-wide status, narrowed by the room's source and rights. */
+  roomCapabilities(roomId: string): Promise<RoomCapabilities>
+  /**
+   * The room's records, metadata only. With `sinceVersion`, only those written or curated after it (a version is
+   * the host's, monotonic per room), so a refresh asks only for what is new; such a listing is never complete
+   * against the room's record count.
+   *
+   * With `head`, a window instead: at most that many records, newest version first, below `beforeVersion` when it is
+   * given (exclusive), and `older` when more lie below. `sinceVersion` does not apply to a window. Asked newest first
+   * where the agent and host can (rooms/newestFirstSwitch), else cut from the whole room.
+   */
+  listNotes(roomId: string, options?: ListNotesOptions): Promise<NoteList>
+  /**
+   * One record, opened. Refused with `RoomsRefused('readNote', reason)` when the agent says why it could not open it
+   * (a {@link RecordUnopenedReason}); any other failure arrives as it came.
+   */
+  readNote(roomId: string, key: string): Promise<Note>
+  /**
+   * Several records, together where the agent can. Returns exactly one promise per key, in the order asked: callers
+   * pair `answers[i]` with `keys[i]` (useRoomPosts), so the length and the order are part of the contract. Each settles
+   * as `readNote` would for its key.
+   */
+  readNotes?(roomId: string, keys: readonly string[]): Promise<Note>[]
+  /**
+   * The room open on a screen comes into view, or goes (useRoomPosts): its reads may go ahead of the agent's queue.
+   * Counted per room. None for the sample.
+   */
+  roomInView?(roomId: string, inView: boolean): void
+  /** Whether a room is open on a screen and in view now (roomInView): Messages reads its row first. */
+  isRoomInView?(roomId: string): boolean
+  /**
+   * Ask to hear when `roomId` moves past `sinceVersion` (the newest version read), instead of polling it: where the
+   * agent and the room's host can watch, the room is armed at its host. Returns at once; nothing is said if it can't.
+   *
+   * `live: true` says the room is on screen: where its host allows it, every change is then told, with no arming
+   * between them, until `live: false` says the screen let go of it. Without `live` the room stays as it is held.
+   */
+  watchRoom?(roomId: string, sinceVersion: number, options?: { live?: boolean }): void
+  /**
+   * For the room on screen, at each tick: keeps its live watch from lapsing (a host leases one for two minutes), and
+   * asks for one again after a wait where the host had none to give. Sends nothing otherwise.
+   */
+  renewRoomWatch?(roomId: string): void
+  /**
+   * The person has seen `roomId` up to `marker` on this phone (its screen showed that post). Where their agent keeps
+   * read markers it is told, so their other devices count the same posts as read (`real/readMarkers.ts`). Returns at
+   * once; nothing is said if it can't. None for the sample.
+   */
+  markRoomRead?(roomId: string, marker: RoomReadMarker): void
+  /**
+   * True from when the person marked `roomId` unread on another device until its screen is entered again here
+   * ({@link RoomsService.roomEntered}): a screen left open on the room does not count what it shows as seen, so their
+   * choice is not undone.
+   */
+  roomMarkedUnread?(roomId: string): boolean
+  /**
+   * The person navigated to `roomId`'s screen (useRoomEntered): from here on what it shows is seen. Not the app coming
+   * back to the foreground with the room still open: that is the moment a room marked unread elsewhere must stay so.
+   */
+  roomEntered?(roomId: string): void
+  /** Where the person's agent says they have read `roomId` to, as last heard from it; undefined when it said nothing. */
+  roomReadMarker?(roomId: string): RoomReadMarker | undefined
+  /**
+   * Hear where the person has read a room to, as their agent holds it. `further`: it may only move what this phone
+   * holds forward. `moved`: the agent's marker went back (the room was marked unread on another device), and is taken
+   * as it is.
+   * Returns the way to stop hearing.
+   */
+  onRoomReadMarker?(listener: (roomId: string, marker: RoomReadMarker, how: 'further' | 'moved') => void): () => void
+  /**
+   * The key a post's record takes, from its idempotency key, known before it is sent: the room's list showing it means
+   * the post is there, whatever its write's answer said (useRoomSend). Absent: posts are matched by the key a write
+   * answers with, and only then.
+   */
+  postKeyFor?(idempotencyKey: string): string
+  /** True while `roomId` has a watch armed: its timed poll can wait, and a change comes through `onRoomChanged`. */
+  roomWatched?(roomId: string): boolean
+  /** Hear each room a watch said changed: read it once. Returns the way to stop hearing. */
+  onRoomChanged?(listener: (roomId: string) => void): () => void
+  /** For logs: how long a post took from Send until it was written or failed, and how it was sent. None for the sample. */
+  notePostSent?(roomId: string, ms: number, how: { failed: boolean; asRecord: boolean; file: boolean }): void
+  /** For logs: how many records one page of a room could not open, by reason (`other` for any other failure). */
+  noteUnread?(roomId: string, counts: Readonly<Record<string, number>>): void
+  prepareWrite(roomId: string, draft: WriteDraft): Promise<WritePreview>
+  /** Sends what the preview showed; with an attachment, `options` reports the upload and can cancel it (nothing is written). */
+  confirmWrite(token: string, options?: RoomsTransferOptions): Promise<{ key: string; version: number }>
+  curate(roomId: string, key: string, action: 'pin' | 'unpin' | 'retract'): Promise<void>
+
+  listOffers(communityDid?: string): Promise<RoomOffer[]>
+  /**
+   * Called when a community a listing had to skip for now (another identity's step kept the community session) can
+   * be read again; returns the unsubscribe. Absent where nothing is skipped that way (the sample).
+   */
+  onReadable?(listener: () => void): () => void
+  previewOffer(offerId: string): Promise<OfferPreview>
+  acceptOffer(token: string): Promise<{ roomId: string }>
+  /** Hides an offer on this phone only. Upstream has no decline: the community is not told. */
+  hideOffer(offerId: string): Promise<void>
+
+  listFiles(roomId: string): Promise<RoomFile[]>
+  /** The largest file this room's host takes, in bytes, where that is less than the picker's own limit. */
+  fileLimit?(roomId: string): Promise<number>
+  /**
+   * Whether `sendRecord` is switched on in this build, asked before anything else: off, a screen offers no write and
+   * reads no profile for one. Absent reads as off.
+   */
+  recordSendingOn?(): boolean
+  /** What this room lets its member write: `real/recordWrites.ts`. Absent: the sheet offers less. */
+  recordFeaturesIn?(roomId: string): Promise<RecordFeatures>
+  /** Writes a message, reply or reaction, by the writer's rule. Off in every build until a maintainer says otherwise. */
+  sendRecord?(roomId: string, write: RecordWrite): Promise<{ key: string; version: number }>
+  openFile(roomId: string, fileId: string, options?: RoomsTransferOptions): Promise<OpenedFile>
+  /**
+   * Deletes the protected local copy a completed `openFile` made (a cancelled one keeps none). Call it when the viewer closes. The wallet
+   * locking deletes every copy, and the app's start deletes any a killed app left.
+   */
+  releaseFile(localUri: string): Promise<void>
+
+  /** Administrator-only upstream (`vtc.rooms.manage`); a member gets `adminOnly`. */
+  listCommunityMembers(communityDid: string, roomId?: string): Promise<CommunityRoomMember[]>
+
+  /** The AI agents allowed into rooms, in one persona context or in all of them. */
+  listAgentAccess(contextId?: string): Promise<AgentGrant[]>
+  grantAgentAccess(request: AgentGrantRequest): Promise<AgentGrant>
+  withdrawAgentAccess(grantId: string): Promise<void>
+
+  /** Leaving goes through the community: leaving it takes the member out of its rooms. */
+  leaveViaCommunity(communityDid: string): Promise<void>
+  /**
+   * The phone left `communityDid` another way (the community's own screen): its rooms and what was read of them
+   * go now, and the next listing is asked afresh. None for the sample.
+   */
+  leftCommunity?(communityDid: string): void
+}

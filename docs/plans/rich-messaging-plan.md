@@ -1,6 +1,8 @@
 # Rich Messaging — Plan
 
-**Status:** Proposed. Nothing here is built.
+**Roadmap epic:** [keyring-wallet#703](https://github.com/berkmancenter/keyring-wallet/issues/703)
+
+**Status:** Steps 1–4 built and shipped, first in store build 272: the `chat/1.0` message, reactions and replies (keyring-bifold#525, #530, #556, #561, #564), the emoji picker (#552, #559, #574), inline photos (#577, #581, #584, #588, #591, #592), and message history with disappearing messages (#551, #560, #562, #570, #572, #573), with the two-phone run in keyring-wallet#639. Chat runs over DIDComm v1 only; chat over v2 (§4.1) is still to build. D2 is not recorded as decided.
 **Scope:** The smallest set of changes that makes one-to-one Keyring chat feel like a modern messenger:
 - **reactions;**
 - **quoted replies;**
@@ -13,9 +15,11 @@ Nothing in this plan needs a server, a file store or new hosting of any kind. La
 **Companions:**
 - [`rich-messaging-plan/2026-10-21-al.md`](./rich-messaging-plan/2026-10-21-al.md) — the research this plan is built on: current code, what the protocols allow, how Signal, WhatsApp and Matrix move media, and whether a VTA can host media.
 - [`rich-messaging-plan/2026-10-24-al.md`](./rich-messaging-plan/2026-10-24-al.md) — the response to the review of 2026-10-22, point by point, and the evaluation of message history and disappearing messages.
-- [`rich-messaging-plan/2026-10-25-al.md`](./rich-messaging-plan/2026-10-25-al.md) — design changes made while building Step 1 (the capability check, the message class, chat over DIDComm v1 only with v2 as a later item, and the capability notice), Step 0's unknown-type finding, and corrections to the mediator facts from the Step 3 research, including the Credo mediator's 7-day cleanup; and Step 4's bounds on what a peer can set (a 1-hour floor, a version cap) and the backstop for a received message's clock.
+- [`rich-messaging-plan/2026-10-25-al.md`](./rich-messaging-plan/2026-10-25-al.md) — design changes made while building Step 1 (the capability check, the message class, chat over DIDComm v1 only with v2 as a later item, and the capability notice), Step 0's unknown-type finding, and corrections to the mediator facts from the Step 3 research, including the Credo mediator's 7-day cleanup; Step 4's bounds on what a peer can set (a 1-hour floor, a version cap) and the backstop for a received message's clock; D2's acceptance for the Credo mediator; and Step 0's attachment ceiling on the Credo path, measured.
+- [`rich-messaging-plan/2026-10-27-al.md`](./rich-messaging-plan/2026-10-27-al.md) — D2 and Step 3: photos shipped in store build 272; what is on record about D2's acceptance and Step 0's measurements, and what is not.
 
 **Related plans:**
+- [`rooms-chat-plan.md`](./rooms-chat-plan.md) — a room's conversation on the shared record format, reusing this plan's reaction and reply components.
 - [`openvtc-rooms-plan/rooms_group_messaging_subtask.md`](./openvtc-rooms-plan/rooms_group_messaging_subtask.md) — group messaging on VTI data rooms. This plan reuses its event vocabulary.
 - The mediator migration plan (wallet PR #530, in review) — moves Keyring↔Keyring mailboxes to the Affinidi mediator (M1 → M5, no date yet). It sets the 1 MiB message ceiling this plan designs against.
 - [`rcard-profile-picture-plan.md`](./rcard-profile-picture-plan.md) — the existing image-over-DIDComm precedent.
@@ -62,7 +66,7 @@ The plan adds five things, all carried by the messages we already send through t
   - turn on disappearing messages for a chat, which both phones honour.
 
 **Non-goals**
-- **Videos, documents and full-resolution photos.** They do not fit in a 1 MiB message, and every way to move them needs storage that someone hosts (§8).
+- **Videos, documents and full-resolution photos.** They do not fit in a 1 MiB message, and every way to move them needs storage that someone hosts (§8). Upstream data rooms now serve that storage as `rooms/blobs/*`, so large media can use a room; this plan's no-hosting goal (G5) does not adopt that path.
 - **Group chat.** It belongs to the rooms subtask.
 - **Third-party GIF search** (Giphy, Tenor). It sends users' search terms to a third party and needs an API key in the app. GIFs come from the phone.
 - **Edits, delete-for-everyone, read receipts and typing indicators.** The event format leaves room for them (§4.2), but they are not part of the minimum.
@@ -188,18 +192,24 @@ The sender is the authenticated DIDComm sender of the connection, never a field 
 **One message, including its attachments, stays under 256 KiB of raw bytes.**
 - **The ceiling that matters** is the Affinidi mediator's `message_size = 1_048_576` (`external/affinidi-tdk-rs/…/affinidi-messaging-mediator/src/common/config/limits.rs`; `deploy/keyring-messaging/mediator/mediator.toml` on `origin/main`). Today's 5 MB Credo HTTP limit (`@credo-ts/node/.../DidCommHttpInboundTransport.mjs`) is not.
 - **Why 256 KiB.** The image is base64'd into the attachment, then base64url'd again inside the JWE, so 1 MiB holds about 560 KiB of raw bytes before JSON and forwarding overhead. 256 KiB leaves headroom, and it keeps the pickup batches of up to 10 messages light on mobile networks.
-- **This figure is an estimate until Step 0 measures it.**
+- **On today's path, measured (Step 0).** Photos in this plan's first release travel over DIDComm v1 through the Credo mediator (§4.1), sent and picked up over HTTPS.
+  - The largest raw attachment that arrives is about 2.06 MiB. 2,112 KiB arrives; 2,176 KiB does not.
+  - It is set by the mediator's 5 MB inbound HTTP body limit (`express.text({ limit: "5mb" })` in `@credo-ts/node`, the same in the production mediator's version). A message is about 2.37 times its raw attachment on the wire.
+  - **Above the limit, the mediator refuses the request and the sender's Credo raises no error.** The message looks sent and never arrives. So the size limit is enforced on the sender, before anything is sent (Step 3), never left to the transport.
+  - 256 KiB is confirmed on this path, with about eight times the margin.
+- **On the Affinidi mediator** the 430 KiB figure below is derived from its configuration, not measured. It is measured with the chat-over-v2 item, before the mediator migration's M4 (§7).
 
 **Effect on the mediator's queue.** The queue limits count messages, not bytes. On Affinidi they are `queued_send_messages_per_peer = 50` and `queued_receive_messages_soft = 200`, the enforced default per recipient. 1,000 (`_hard`) is only the ceiling an account's limit can be raised to (`deploy/keyring-messaging/mediator/mediator.toml`, enforced through `limits.queue.peer` / `PEER_Q`; see `docs/VTI_UPSTREAM_FINDINGS.md`).
 - **Message counts.** Photos reach those gates no sooner than text does. A burst of photos counts one message each against the 50-per-peer cap.
 - **Bytes held.** This is what grows.
   - **On Affinidi:** at the enforced 200, about 50 MiB for one recipient (about 256 MiB at a raised 1,000), against a few hundred KiB for text. It sits in Redis memory until pickup or the 7-day expiry.
   - **On the current Credo mediator:** there is no queue cap, per connection or in total. Queued messages wait on disk, in Postgres, until pickup, and a daily job deletes any queued for more than 7 days.
-- **Pickup batches.** The Affinidi mediator returns queued messages to the phone as base64 attachments of a pickup `delivery`, so each queued photo is about 830 KB in the batch. Ten of them come to about 8.3 MB, close to the 10 MiB `ws_size`/`http_size` frame limit. That is why the client caps the batch size while photos are queued (§5, "Pickup pacing").
+- **Pickup batches on Credo, measured.** Ten queued 256 KiB photos came back as one pickup response of 6,227,799 bytes (about 623 KB each), and all ten arrived. The 5 MB limit applies to requests sent to the mediator, not to its responses, so a full batch does not fail on it.
+- **Pickup batches on Affinidi.** The Affinidi mediator returns queued messages to the phone as base64 attachments of a pickup `delivery`, so each queued photo is about 830 KB in the batch. Ten of them come to about 8.3 MB, close to the 10 MiB `ws_size`/`http_size` frame limit. That is why the client caps the batch size while photos are queued (§5, "Pickup pacing").
 - **The forward on the way in** is a JSON attachment, in both Credo's own v2 routing and the wallet's VTI mediator transport. So about 430 KiB of raw media fits under `message_size`, and 256 KiB leaves room.
 - **The contentless push wake** is unaffected by size.
 
-Step 0 measures the storage each queued photo takes on both mediators (disk on Credo, memory on Affinidi), and the mediator operator signs off on the worst case before Step 3 ships (D2).
+**D2 is accepted for the Credo mediator** (2026-10-25): a queued photo takes up to about 470 KB of its disk, for at most 7 days under the daily cleanup. The Affinidi mediator's cost is memory, not disk, and it is decided when the migration carries Keyring↔Keyring chat. Step 0's ceiling measurement replaces the 256 KiB figure if it changes; until then Step 3 builds to 256 KiB.
 
 **What fits:**
 - **Photos:** resized to 1600 px on the long edge and re-encoded as JPEG with `expo-image-manipulator`, stepping quality down (0.8 → 0.6 → 0.4) until the result fits. A typical phone photo lands at 150–250 KiB. If a photo still does not fit at the lowest step, it is resized further. The re-encode is expected to drop EXIF, including GPS, and Step 3 tests that it does.
@@ -380,7 +390,7 @@ Steps 1 and 2 are useful on their own and can ship before Step 3. Step 4's local
 | # | Decision | Recommendation | Blocks |
 |---|---|---|---|
 | D1 | Is this minimum (reactions, replies, emoji picker, inline photos/GIFs, history controls) the target? | Yes | Step 1 |
-| D2 | Is it acceptable for compressed photos to pass through the mediator's encrypted queue, as text already does? The mediator holds ciphertext it cannot read until pickup (at most 7 days on either mediator), and the bytes it holds per queued message grow up to 256 KiB (§4.4). | Yes, once the mediator operator accepts the measured worst case; this is the same position the app is in for every text message today | Step 3 |
+| D2 | Is it acceptable for compressed photos to pass through the mediator's encrypted queue, as text already does? The mediator holds ciphertext it cannot read until pickup (at most 7 days on either mediator), and the bytes it holds per queued message grow up to 256 KiB (§4.4). | **Accepted 2026-10-25 for the Credo mediator:** up to about 470 KB of disk per queued photo, for at most 7 days. The Affinidi mediator is decided with the migration | Step 3 |
 | D3 | Namespace and profile name: Keyring's own (`keyring.chat/1`), or adopt the rooms name (`org.openvtc.msg/1`)? | Keyring's own, shaped to match, offered upstream once Step 1 proves it | Step 1 |
 | D4 | When does a disappearing message's clock start? | As in Signal: the sender's copy at send, the recipient's at first display, so nothing disappears unread | Step 4 |
 | D5 | Should timed messages also shorten the mediator queue (the DIDComm v2 `expires_time` header)? | No. The queue holds only ciphertext, at most 7 days on either mediator; shortening it would drop undelivered messages instead of expiring read ones | Step 4 |
@@ -389,7 +399,6 @@ Steps 1 and 2 are useful on their own and can ship before Step 3. Step 4's local
 
 | What | Owner | Effect |
 |---|---|---|
-| The worst-case queue size for photos (D2) | The mediator operator | Step 3 does not ship until the measured worst case is accepted |
 | The wake and preview changes (§5, "Wake") | The message-notifications work | Made together with it; it does not block Steps 1–2 |
 | The Affinidi mediator run in Step 3 | The mediator migration (#530, M1 → M5, no date) | Step 3 can be done on the Credo mediator alone, with the Affinidi run added when M1 is live |
 | Keeping non-content events from waking the phone (§4.2) | The peer-message-notifications work | This plan adopts its answer; it does not block any step |
@@ -406,7 +415,7 @@ Videos, documents and full-resolution photos need bytes to live **outside** the 
   - VTA app-state is JSON only, capped at 64 KiB per record (`MAX_VALUE_BYTES = 65_536`, `vta-service/src/operations/app_state.rs`), and has **no blob member by design**: "1.0 has no blob member at all … [the cap] is what keeps a consumer from quietly treating `value` as a blob store" (`docs/05-design-notes/appstate-store.md`).
   - No grant scoped to a peer exists. Giving a peer read access means an admin adding them to the ACL for a whole context, with write access too, since "a namespace in 1.0 is collision avoidance, **not** a trust boundary" (`appstate-store.md`). There is no share link.
   - Not every Keyring user has a VTA. The Farm path is "optional and additive" (`docs/plans/keyring-on-the-vta-farm.md` on `origin/main`).
-- **Data rooms** are hosted by a VTC or the `room-host` binary, and the room host "is not part of the VTA, on purpose" (`docs/02-vta/data-rooms.md`). Their blob layer is a design in Keyring's own rooms subtask that "**does** need an upstream spec" (`rooms_group_messaging_subtask.md` §1). Bytes would still sit with whoever runs the host.
+- **Data rooms** are hosted by a VTC or the `room-host` binary, and the room host "is not part of the VTA, on purpose" (`docs/02-vta/data-rooms.md`). Their blob layer is served upstream: `rooms/blobs/*` with `rooms/keys/file-key/0.2` and a pluggable `BlobStore` (VTI `fc157f76`; `docs/05-design-notes/data-rooms-files.md`; Keyring's `rooms_group_messaging_subtask.md` §8.2). Large media can therefore use a room. Bytes still sit with whoever runs the host, so this does not meet G5 for one-to-one chat, which has no room and hosts nothing.
 - **Splitting media into many messages** through the mediator would let a video arrive in pieces. It turns the mediator into a file store by the back door, fills the queue caps (200 soft, 1,000 hard per DID on Affinidi) and costs every pickup. Rejected.
 
-**The path that fits the no-hosting goal** is upstream: an app-state `blobRef` (a MINOR addition the VTI design note leaves open, `appstate-store.md`) together with a peer-scoped read grant, or the rooms blob layer. Either one would put a user's media on infrastructure the *user* chose, at the cost and under the terms of that operator. Keyring would then add a link-based attachment variant (§4.3). Until one of those exists upstream, large media stays out of scope.
+**The paths that fit the no-hosting goal** are upstream: the rooms blob layer, which now exists, or an app-state `blobRef` (a MINOR addition the VTI design note leaves open, `appstate-store.md`) together with a peer-scoped read grant, which does not. Either one puts a user's media on infrastructure the *user* chose, at the cost and under the terms of that operator. Keyring would add a link-based attachment variant (§4.3) on top of either. One-to-one chat's no-hosting goal is unchanged, so large media stays out of this plan's scope until a product decision picks a room-hosted or app-state attachment path.

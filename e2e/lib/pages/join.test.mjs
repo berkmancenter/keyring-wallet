@@ -97,6 +97,64 @@ test("awaitSent: the standing within the deadline; past it, stuck where it was �
   }
 });
 
+const NO_ANSWER = "Your agent didn't answer. Tap Continue to try again — this usually works the second time.";
+const noAnswerScreen = { JoinScroll: {}, JoinMakeIdentity: {}, JoinAsContinue: {}, JoinError: { text: NO_ANSWER } };
+
+test("awaitSent with retryNoAnswer: Continue once on the no-answer error, said on a RETRY line, and the standing after it", async () => {
+  const s = session({ JoinScroll: {}, JoinMakeIdentity: {}, JoinAsContinue: {} });
+  const printed = [];
+  console.log = (l) => printed.push(l);
+  s.clock.schedule(15000, () => s.d.set(noAnswerScreen));
+  s.d.onTap.JoinAsContinue = (d) => d.clock.schedule(5000, () => d.set({ JoinScroll: {}, JoinStanding: {} }));
+  try {
+    const record = await join.awaitSent(s.d, { timeoutMs: 240000, retryNoAnswer: true, owner: s.owner }, s.opts);
+    assert.deepEqual(record.value, { shown: "standing", retry: { at: "00:00:20Z", error: NO_ANSWER } });
+    assert.deepEqual(s.d.taps, ["JoinAsContinue"]);
+    assert.deepEqual(s.owners, ["retry identity"]);
+    assert.deepEqual(printed.filter((l) => l.startsWith("RETRY ")), [`RETRY join 00:00:20Z — ${NO_ANSWER}`]);
+  } finally {
+    s.done();
+  }
+});
+
+test("awaitSent with retryNoAnswer: never a second Continue; the failure names the retry", async () => {
+  const s = session(noAnswerScreen);
+  const printed = [];
+  console.log = (l) => printed.push(l);
+  try {
+    await assert.rejects(join.awaitSent(s.d, { timeoutMs: 60000, retryNoAnswer: true }, s.opts), (err) => {
+      assert.ok(err instanceof StepError);
+      assert.equal(err.message, 'join.awaitSent: no JoinStanding in 60 s (last on "JoinMakeIdentity", after one retry at 00:00:10Z)');
+      return true;
+    });
+    assert.deepEqual(s.d.taps, ["JoinAsContinue"]);
+    assert.equal(printed.filter((l) => l.startsWith("RETRY ")).length, 1);
+  } finally {
+    s.done();
+  }
+});
+
+test("awaitSent without retryNoAnswer: the same screen gets no tap (control)", async () => {
+  const s = session(noAnswerScreen);
+  try {
+    await assert.rejects(join.awaitSent(s.d, { timeoutMs: 30000 }, s.opts), /stuck at "JoinMakeIdentity" for 30 s/);
+    assert.deepEqual(s.d.taps, []);
+  } finally {
+    s.done();
+  }
+});
+
+test("awaitSent with retryNoAnswer: another error is not retried", async () => {
+  const s = session({ ...noAnswerScreen, JoinError: { text: "This community isn't taking requests." } });
+  try {
+    const late = await join.awaitSent(s.d, { timeoutMs: 30000, retryNoAnswer: true, required: false }, s.opts);
+    assert.deepEqual(late.value, { shown: "no standing in 30 s", retry: null });
+    assert.deepEqual(s.d.taps, []);
+  } finally {
+    s.done();
+  }
+});
+
 test("readStanding / readEntry: the waiting screen's lines, and how Join lets this phone in", async () => {
   const s = session({
     JoinScroll: {},

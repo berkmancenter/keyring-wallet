@@ -1,5 +1,7 @@
 # Editable R-Card profile, then multiple selectable profiles
 
+**Roadmap epic:** [keyring-wallet#692](https://github.com/berkmancenter/keyring-wallet/issues/692)
+
 *Phase 1: let a user change the profile (name/email/organization/photo) they set up during
 onboarding, at any time afterward. Phase 2: let a user hold more than one such profile and
 choose which one to present when connecting to someone. Both phases are built; see the

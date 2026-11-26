@@ -8,7 +8,6 @@ import {
   ErrorModal,
   initLanguages,
   initStoredLanguage,
-  MainContainer,
   NavContainer,
   NetworkProvider,
   openAppLink,
@@ -30,7 +29,6 @@ import Orientation from 'react-native-orientation-locker'
 import SplashScreen from 'react-native-splash-screen'
 import Toast from 'react-native-toast-message'
 import { Config } from 'react-native-config'
-import { container } from 'tsyringe'
 
 import Root from '@/Root'
 import { KeyRingThemeNames, surveyMonkeyExitUrl, surveyMonkeyUrl } from '@/constants'
@@ -45,7 +43,7 @@ import { themes } from '@/theme'
 import BCLogger from '@/utils/logger'
 import tours from '@keyring-theme/features/tours'
 import WebDisplay from '@screens/WebDisplay'
-import { AppContainer } from './container-imp'
+import { useAppContainer } from './container-compose'
 import { registerDemoProfiles, selectDemoProfiles } from './src/demo-profiles'
 
 initLanguages(localization)
@@ -72,9 +70,10 @@ registerHiddenVettingModules()
 const App = () => {
   const { t } = useTranslation()
   const navigationRef = useNavigationContainerRef()
-  const bifoldContainer = new MainContainer(container.createChildContainer()).init()
   const [surveyVisible, setSurveyVisible] = useState(false)
-  const bcwContainer = new AppContainer(bifoldContainer, t, navigationRef.navigate, setSurveyVisible).init()
+  // Bifold's container with the app's as its child; the app resolves from the child. Once per mount, not per render
+  // (container-compose.ts).
+  const bcwContainer = useAppContainer(t, navigationRef.navigate, setSurveyVisible)
   // Demo profiles (demo-profiles/README.md) are opt-in per build: with
   // ACTIVE_DEMO_PROFILE unset this registers none, so a shipped build shows the
   // plain contact list and home header. A demo build sets a profile id, or

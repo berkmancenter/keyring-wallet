@@ -1,0 +1,239 @@
+import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { createHash } from 'crypto'
+
+import { VtiMediatorSession, type VtiClientIdentity, type VtiMediatorEndpoints } from '../module/VtiMediatorTransport'
+
+// `VtiMediatorSession.ask`: a signed Trust Task to the mediator itself, answered by the frame threaded to it. The
+// mailbox uses it for its account at the mediator (walletMailbox.ts): measured against affinidi-messaging-mediator
+// v0.53.0 in the lab; here the frame handling is the shipping one, with the decrypt step standing in.
+
+const identity: VtiClientIdentity = {
+  did: 'did:peer:2.mailbox-of-this-phone',
+  kid: 'did:peer:2.mailbox-of-this-phone#key-2',
+  senderKey: {} as never,
+}
+const mediator: VtiMediatorEndpoints = {
+  did: 'did:peer:2:mediator',
+  authEndpoint: 'https://mailbox.example/mediator/v1',
+  wsEndpoint: 'wss://mailbox.example/mediator/v1/ws',
+  publicJwk: {} as never,
+  kid: 'did:peer:2:mediator#key-1',
+}
+const agent = {
+  config: { logger: { info: () => undefined, debug: () => undefined, warn: () => undefined, error: () => undefined } },
+} as never
+const ENVELOPE = 'https://trusttasks.org/binding/didcomm/0.1/envelope'
+const PROBLEM_REPORT = 'https://didcomm.org/report-problem/2.0/problem-report'
+const FORWARD = 'https://didcomm.org/routing/2.0/forward'
+const document = { id: 'urn:uuid:d-1', type: 'https://trusttasks.org/spec/messaging/account/update/0.1', payload: {} }
+
+function sessionAsking() {
+  const onMessage = jest.fn()
+  const session = new VtiMediatorSession(agent, identity, mediator, { onMessage })
+  const sent: DidCommV2PlaintextMessage[] = []
+  session['send'] = jest.fn(async (plaintext: DidCommV2PlaintextMessage) => {
+    sent.push(plaintext)
+  })
+  session['acknowledge'] = jest.fn(async (_ids: string[]) => undefined)
+  /** A frame from the socket whose decrypt step yields `plaintext`. */
+  const frame = (plaintext: Record<string, unknown>) => {
+    session['unpack'] = async () => plaintext as DidCommV2PlaintextMessage
+    return session['handleFrame'](JSON.stringify({ protected: 'e30', ciphertext: 'x' }))
+  }
+  return { session, sent, frame, onMessage }
+}
+
+describe('asking the mediator', () => {
+  test('the document goes in the binding envelope, from this identity to the mediator, and the frame threaded to it is the answer', async () => {
+    const { session, sent, frame, onMessage } = sessionAsking()
+    const asked = session.ask(document)
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({ type: ENVELOPE, from: identity.did, to: [mediator.did], body: document })
+    await frame({
+      type: ENVELOPE,
+      from: mediator.did,
+      thid: sent[0].id,
+      body: { type: `${document.type}#response`, payload: { acl: { sendForwarded: true } } },
+    })
+    await expect(asked).resolves.toMatchObject({ body: { payload: { acl: { sendForwarded: true } } } })
+    // The answer is the asker's: not handed on, not acknowledged.
+    expect(onMessage).not.toHaveBeenCalled()
+    expect(session['acknowledge']).not.toHaveBeenCalled()
+    await session.stop()
+  })
+
+  test('the mediator’s problem-report threaded to the ask refuses it, with its words', async () => {
+    const { session, sent, frame } = sessionAsking()
+    const asked = session.ask(document)
+    await frame({
+      type: PROBLEM_REPORT,
+      from: mediator.did,
+      thid: sent[0].id,
+      body: { code: 'authorization.permission', comment: 'admin access is required to add accounts' },
+    })
+    await expect(asked).rejects.toThrow(/refused: authorization\.permission/)
+    await session.stop()
+  })
+
+  test('the mediator’s problem-report threaded to the ask by pthid alone (v0.54.0 refusing a request without the document ask) refuses it at once', async () => {
+    const { session, sent, frame, onMessage } = sessionAsking()
+    const before = Date.now()
+    // The shipping bound, 15 s: the refusal must settle the ask, not the timer.
+    const asked = session.ask(document)
+    // error_response.rs: a new id, `pthid` naming the refused envelope, no `thid`, and the mediator's `e.p.<code>`.
+    await frame({
+      id: 'urn:uuid:pr-1',
+      type: PROBLEM_REPORT,
+      from: mediator.did,
+      pthid: sent[0].id,
+      body: { code: 'e.p.permissionDenied', comment: 'account {1} may not change its own ACL', args: ['x'] },
+    })
+    await expect(asked).rejects.toThrow(/refused: e\.p\.permissionDenied/)
+    expect(Date.now() - before).toBeLessThan(2_000)
+    expect(session['asks'].size).toBe(0)
+    // The refusal is the asker's: not handed on, not acknowledged, said only through the rejection.
+    expect(onMessage).not.toHaveBeenCalled()
+    expect(session['acknowledge']).not.toHaveBeenCalled()
+    await session.stop()
+  })
+
+  test('a frame carrying both ids settles the ask either names: thid naming something else, pthid naming the ask', async () => {
+    const { session, sent, frame } = sessionAsking()
+    const asked = session.ask(document)
+    await frame({
+      id: 'urn:uuid:pr-3',
+      type: PROBLEM_REPORT,
+      from: mediator.did,
+      thid: 'urn:uuid:a-thread-of-its-own',
+      pthid: sent[0].id,
+      body: { code: 'e.p.malformedRequest', comment: 'body is not a Trust Task document' },
+    })
+    await expect(asked).rejects.toThrow(/refused: e\.p\.malformedRequest/)
+    expect(session['asks'].size).toBe(0)
+    await session.stop()
+  })
+
+  test('CONTROL: the mediator’s problem-report about another envelope is not the answer; the ask keeps waiting', async () => {
+    const { session, sent, frame, onMessage } = sessionAsking()
+    const asked = session.ask(document)
+    await frame({
+      id: 'urn:uuid:pr-2',
+      type: PROBLEM_REPORT,
+      from: mediator.did,
+      pthid: 'urn:uuid:some-forward',
+      body: { code: 'e.p.me.res.storage.limit', comment: 'queue is full' },
+    })
+    expect(session['asks'].size).toBe(1)
+    expect(onMessage).not.toHaveBeenCalled()
+    expect(sent).toHaveLength(1)
+    await session.stop()
+    await expect(asked).rejects.toThrow(/session stopped/)
+  })
+
+  test('a trust-task-error document threaded to the ask (the refusal a request that asks gets) is its answer, resolved for the caller to read', async () => {
+    const { session, sent, frame } = sessionAsking()
+    const asked = session.ask(document)
+    await frame({
+      type: ENVELOPE,
+      from: mediator.did,
+      thid: sent[0].id,
+      body: { type: 'https://trusttasks.org/spec/trust-task-error/0.5', payload: { code: 'permissionDenied' } },
+    })
+    await expect(asked).resolves.toMatchObject({ body: { payload: { code: 'permissionDenied' } } })
+    expect(session['asks'].size).toBe(0)
+    await session.stop()
+  })
+
+  test('CONTROL: a frame threaded to something else is no answer; a peer’s message still goes to the consumer, and the ask waits', async () => {
+    const { session, sent, frame, onMessage } = sessionAsking()
+    const asked = session.ask(document)
+    await frame({
+      type: 'https://didcomm.org/basicmessage/2.0/message',
+      from: 'did:peer:2.a-peer',
+      thid: 'urn:uuid:other',
+      body: {},
+    })
+    expect(onMessage).toHaveBeenCalledTimes(1)
+    expect(sent).toHaveLength(1)
+    // Stopping the session is what ends a wait with no answer.
+    await session.stop()
+    await expect(asked).rejects.toThrow(/session stopped/)
+  })
+
+  test('no answer within the bound: the ask fails, and nothing is left waiting', async () => {
+    const { session } = sessionAsking()
+    await expect(session.ask(document, 20)).rejects.toThrow(/did not answer within 20 ms/)
+    expect(session['asks'].size).toBe(0)
+    await session.stop()
+  })
+
+  test('the socket refusing to carry it fails the ask at once, and nothing is left waiting', async () => {
+    const { session } = sessionAsking()
+    session['send'] = jest.fn(async () => {
+      throw new Error('socket is not open')
+    })
+    await expect(session.ask(document)).rejects.toThrow('socket is not open')
+    expect(session['asks'].size).toBe(0)
+    await session.stop()
+  })
+})
+
+describe('a forward for the mailbox path', () => {
+  const sha256hex = (s: string) => createHash('sha256').update(s).digest('hex')
+  const attached = (sent: DidCommV2PlaintextMessage) =>
+    (sent as unknown as { attachments: { data: { base64?: string; json?: unknown } }[] }).attachments[0].data
+
+  test('the inner JWE goes as its exact bytes, base64, and the stored id is their sha256', async () => {
+    const { session, sent } = sessionAsking()
+    const inner = {
+      protected: 'eyJ0eXAiOiJ4In0',
+      recipients: [{ header: { kid: 'did:key:z6LSmailbox#z6LSmailbox' } }],
+      iv: 'i',
+      ciphertext: 'c',
+      tag: 't',
+    }
+    const { id } = await session.forwardForMailbox('did:peer:2.peer-mailbox', inner)
+    const bytes = JSON.stringify(inner)
+    expect(id).toBe(sha256hex(bytes))
+    expect(sent[0]).toMatchObject({
+      type: FORWARD,
+      from: identity.did,
+      to: [mediator.did],
+      body: { next: 'did:peer:2.peer-mailbox' },
+    })
+    expect(attached(sent[0]).json).toBeUndefined()
+    expect(Buffer.from(attached(sent[0]).base64 as string, 'base64url').toString('utf8')).toBe(bytes)
+    await session.stop()
+  })
+
+  test('CONTROL: a string inner is attached as given, never re-serialised, so its id is of the string', async () => {
+    const { session, sent } = sessionAsking()
+    const given = '{"protected": "x",  "ciphertext":"c"}'
+    const { id } = await session.forwardForMailbox('did:peer:2.peer-mailbox', given)
+    expect(Buffer.from(attached(sent[0]).base64 as string, 'base64url').toString('utf8')).toBe(given)
+    expect(id).toBe(sha256hex(given))
+    expect(id).not.toBe(sha256hex(JSON.stringify(JSON.parse(given))))
+    await session.stop()
+  })
+})
+
+describe('after an ask gave up', () => {
+  test('a late answer is the mediator’s own frame, dropped unsaid: not handed on, not acknowledged, nothing waiting', async () => {
+    const { session, sent, frame, onMessage } = sessionAsking()
+    await expect(session.ask(document, 20)).rejects.toThrow(/did not answer within 20 ms/)
+    await frame({ type: ENVELOPE, from: mediator.did, thid: sent[0].id, body: { payload: { late: true } } })
+    expect(onMessage).not.toHaveBeenCalled()
+    expect(session['acknowledge']).not.toHaveBeenCalled()
+    expect(session['asks'].size).toBe(0)
+    await session.stop()
+  })
+
+  test('CONTROL: a frame threaded to a live ask but not from the mediator is not its answer', async () => {
+    const { session, sent, frame, onMessage } = sessionAsking()
+    const asked = session.ask(document)
+    await frame({ type: ENVELOPE, from: 'did:peer:2.a-peer', thid: sent[0].id, body: { payload: { forged: true } } })
+    expect(onMessage).toHaveBeenCalledTimes(1)
+    await session.stop()
+    await expect(asked).rejects.toThrow(/session stopped/)
+  })
+})

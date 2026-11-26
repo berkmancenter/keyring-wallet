@@ -1,5 +1,7 @@
 # Message protection — the client half of the Life of a Message
 
+**Roadmap epic:** [keyring-wallet#695](https://github.com/berkmancenter/keyring-wallet/issues/695)
+
 **Parent and siblings.** This plan is independent of, but sequenced against,
 [`keyring-on-the-vta-farm.md`](./keyring-on-the-vta-farm.md) (its F0 pin advance
 puts us on the mediator this contract describes) and that plan's

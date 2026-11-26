@@ -1,0 +1,35 @@
+{
+  "@context": ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"],
+  "type": ["VerifiableCredential", "DTGCredential", "StatementCredential"],
+  "issuer": "did:webvh:QmPEQVM1JPTyrvEgBcDXwjK4TeyLGSX1PxjgyeAisdWM1p:chess-club.example:carol",
+  "issuerScope": "directed",
+  "validFrom": "2026-09-20T10:14:00Z",
+  "validUntil": "2027-01-18T10:14:00Z",
+  "taskContext": "urn:uuid:5b0c7e0e-3f7a-4c52-9d0e-2a7c1f6b9e41",
+  "taskDigestMultibase": "zQmNLei78zWmzUdbeRB3CiUfAizWUrbeeZh5K1rhAQKCh51",
+  "credentialSubject": {
+    "id": "did:key:z6MkjRagNiMu91DduvCvgEsqLZDVzrJzFrwahc4tXLt9DoHd",
+    "predicate": "https://registry.trustoverip.org/dtg/vsc/vetted/1",
+    "object": {
+      "value": {
+        "community": "did:webvh:QmSbCcXWDDJmqE8m1nZt7Ew5DhN3w2Lq6G2rB9sX4yYk1a:chess-club.example",
+        "method": "video",
+        "documentClasses": ["passport"],
+        "claimsVerified": ["name.legal"],
+        "livenessConfirmed": true,
+        "identityCommitment": "zQmYtUc4iTCbbfVSDNKvtQqrfyezPPnFvE33wFmutw9PBBk",
+        "cardDigestMultibase": "zQmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n",
+        "declaredRelationship": "communityColleague",
+        "attestationTextDigest": "zQmWhCFfStzUE4HGseiQ1XWi2eEp1GTQEKnt2jyBe7uqzXD"
+      }
+    }
+  },
+  "proof": {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "eddsa-jcs-2022",
+    "created": "2026-09-20T10:14:00Z",
+    "proofPurpose": "assertionMethod",
+    "verificationMethod": "did:webvh:QmPEQVM1JPTyrvEgBcDXwjK4TeyLGSX1PxjgyeAisdWM1p:chess-club.example:carol#key-1",
+    "proofValue": "z3FXQjecWJKT…illustrative…"
+  }
+}
