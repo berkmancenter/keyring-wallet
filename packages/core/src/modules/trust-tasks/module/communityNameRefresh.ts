@@ -12,6 +12,7 @@
  */
 import type { Agent } from '@credo-ts/core'
 
+import { nameReadLine, type ProfileNameMiss } from './communityNamesLog'
 import { readPublicProfileName } from './vtiAgent'
 import { GenericRecordsCommunityStore } from './VtiCommunityStore'
 import { communityTarget } from './vtiCommunityLink'
@@ -28,16 +29,32 @@ export function communityNameIsStale(kept: { at?: string } | undefined, now = Da
   return !kept || !(now - keptAt < COMMUNITY_NAME_TTL_MS)
 }
 
-/** The name a community's public profile gives it, or undefined (unreachable, unnamed, not answered in 3 s). */
+/**
+ * The name a community's public profile gives it, or undefined (unreachable, unnamed, or another community's).
+ * Each read ends as one log line: named, or not and why (`communityNamesLog`).
+ */
 export async function publishedName(agent: Agent, vtcDid: string): Promise<string | undefined> {
+  const began = Date.now()
+  let name: string | undefined
+  let missed: ProfileNameMiss | undefined
   try {
     const doc = await agent.dids.resolveDidDocument(vtcDid)
     const service = doc.service?.find((s) => s.type === 'VTCRest')
     const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
-    return base ? await readPublicProfileName(base, vtcDid) : undefined
+    if (!base) missed = 'its DID document names no VTCRest service'
+    else {
+      name = await readPublicProfileName(base, vtcDid, undefined, (why) => {
+        missed = why
+      })
+      // A read that says nothing of why it gave no name (a stand-in) is still a read that gave none.
+      if (!name && !missed) missed = 'the profile has no name'
+    }
   } catch {
-    return undefined
+    name = undefined
+    missed = 'its DID document was not resolved'
   }
+  agent.config?.logger?.info?.(nameReadLine(vtcDid, name ? undefined : missed, Date.now() - began))
+  return name
 }
 
 /**
