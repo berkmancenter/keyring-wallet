@@ -73,8 +73,9 @@ describe('who needs the update, where the refusal says it in details that mean i
     expect(readNotComing(byAgent('0.9', ['0.10']))).toBe('appNeedsUpdate')
   })
 
-  test('the served list is a hint: an agent that also answers an older version it does not list is still the one behind', () => {
-    // vta-service v0.60.0 to v0.66.0: a refusal of device/list 0.3 names only 0.1, while 0.2 is answered too.
+  test('the served list is a hint: an agent that also answers a version it does not list is still the one behind', () => {
+    // vta-service v0.60.0 to v0.66.0: a refusal of device/list 0.3 names only 0.1, while 0.2 is answered too (a 0.2
+    // request is converted down onto the 0.1 handler). The unlisted 0.2 sits between the listed one and the one refused.
     const hinted = refusal('unsupportedVersion', 'unsupported version', {
       requestedType: `${SPEC}device/list/0.3`,
       servedVersions: [`${SPEC}device/list/0.1`],
