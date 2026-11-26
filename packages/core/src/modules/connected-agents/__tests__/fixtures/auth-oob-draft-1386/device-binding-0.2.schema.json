@@ -1,0 +1,338 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/device/_shared/0.2/device-binding",
+  "title": "DeviceBinding — shared definition for the device/* spec family",
+  "description": "Canonical metadata view of a registered consumer device — a Companion (browser plugin, mobile app, desktop app) or a Service (mediator, AI agent, daemon) enrolled to a VTA. Referenced by every device/* specification. Pairs with the ACL: a DeviceBinding is the device-facing half of an AclEntry. Most fields are maintainer-side observations (device id, attestation, timestamps); a few are consumer-supplied at registration time (form factor, display name).",
+  "$defs": {
+    "DeviceBinding": {
+      "title": "DeviceBinding",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["deviceId", "consumerKind", "displayName", "registeredAt", "consumerDid"],
+      "properties": {
+        "deviceId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Maintainer-assigned opaque id for this device. Stable across the device's lifetime — never re-used after disable or wipe."
+        },
+        "consumerDid": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The long-term VTA-derived key (DID) the device authenticates with. Established via the ACL-swap pattern at registration."
+        },
+        "consumerKind": { "$ref": "#/$defs/ConsumerKind" },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Human-readable name (e.g. \"Glenn's MacBook — Chrome\", \"iPhone 17\")."
+        },
+        "platform": {
+          "type": "string",
+          "description": "Free-form platform descriptor (e.g. \"macOS 16 / Chrome 142\", \"iOS 19.1\", \"Android 16\", \"Linux/x86_64\"). Producer-supplied at registration; consumer-supplied updates are accepted on heartbeat."
+        },
+        "attestation": { "$ref": "#/$defs/DeviceAttestation" },
+        "pushCapable": {
+          "type": "boolean",
+          "description": "Whether this device has a usable push channel — i.e. it has registered a push token with a push gateway and conveyed the resulting opaque WakeHandle to its VTA via device/set-wake (https://trusttasks.org/binding/push/0.1). Informational visibility for device/list only. The raw platform push token is held ONLY by the gateway; the maintainer/VTA holds the opaque WakeHandle and the VTA-owned trigger allowlist, never the token. Set from the presence of a current WakeHandle for this device."
+        },
+        "keyCustody": {
+          "$ref": "#/$defs/KeyCustody",
+          "description": "How the device custodies its private key material (tier + algorithms). Maintainer policy input, mirroring `attestation` — a maintainer MAY apply stricter policy to `software`-tier devices. See docs/design-notes/mobile-key-custody-profile.md."
+        },
+        "capabilities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Capability" },
+          "uniqueItems": true,
+          "description": "Capability bitset granted to this device (mirrors the ACL-side scope). Returned for inspection; mutated only via acl/change-role or device/disable."
+        },
+        "registeredAt": { "type": "string", "format": "date-time" },
+        "lastSeenAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Updated on every device/heartbeat and on any successful auth."
+        },
+        "disabledAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Present when the device has been disabled (device/disable). Disabled devices cannot authenticate but their record is retained for audit."
+        },
+        "wipedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Present when a wipe has been issued (device/wipe). Distinct from disabledAt — a wiped device is also disabled, but wipe additionally communicates a wipe-cache instruction that the device may or may not have executed (see device/wipe)."
+        },
+        "ext": { "$ref": "../../../_framework/0.2/framework.schema.json#/$defs/Ext" }
+      }
+    },
+    "KeyCustody": {
+      "title": "KeyCustody",
+      "description": "How a device custodies its private key material — maintainer policy input, mirroring `attestation`. See docs/design-notes/mobile-key-custody-profile.md.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tier"],
+      "properties": {
+        "tier": {
+          "type": "string",
+          "enum": ["hardware", "software"],
+          "description": "`hardware`: the key is non-exportable in the secure keystore (iOS Secure Enclave / Android StrongBox) and every signing / key-agreement operation runs in-chip — achievable only with P-256. `software`: the key is held in app memory during use, stored hardware-wrapped at rest. Maintainers MAY apply stricter policy (shorter sessions, more frequent step-up) to `software`-tier devices."
+        },
+        "signingAlg": {
+          "type": "string",
+          "description": "JOSE `alg` of the holder's signing key, e.g. `ES256` (hardware-custodiable on mobile) or `EdDSA` (not)."
+        },
+        "keyAgreementCurve": {
+          "type": "string",
+          "description": "Curve of the holder's keyAgreement key, e.g. `P-256` (hardware-custodiable on mobile) or `X25519` (not)."
+        }
+      }
+    },
+    "ConsumerKind": {
+      "title": "ConsumerKind",
+      "description": "Discriminator: is this consumer a user-driven Companion or a headless Service?",
+      "oneOf": [
+        {
+          "title": "Companion",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "formFactor"],
+          "properties": {
+            "kind": { "const": "companion" },
+            "formFactor": {
+              "type": "string",
+              "enum": ["browser", "mobile", "desktop"]
+            }
+          }
+        },
+        {
+          "title": "Service",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "serviceKind"],
+          "properties": {
+            "kind": { "const": "service" },
+            "serviceKind": {
+              "type": "string",
+              "enum": ["mediator", "aiAgent", "daemon"]
+            }
+          }
+        }
+      ]
+    },
+    "Capability": {
+      "title": "Capability",
+      "type": "string",
+      "enum": [
+        "vaultRead",
+        "vaultWrite",
+        "proxyLogin",
+        "fillRelease",
+        "policyAdmin",
+        "deviceAdmin",
+        "sign",
+        "keyMint",
+        "signTrustTask",
+        "credentialWrite",
+        "memoryRead",
+        "memoryWrite",
+        "roomPresent",
+        "roomOpen",
+        "keyExport",
+        "signSshsig",
+        "signJws",
+        "signCsr",
+        "signDocument",
+        "externalAccountsManage",
+        "externalAuthUse",
+        "pcsVetter",
+        "pcsApplicant",
+        "witnessRequest",
+        "pcsVoter",
+        "pcsTrustee",
+        "credentialPresent"
+      ],
+      "description": "Fine-grained capability flag scoped to the device's allowed contexts. See SPEC.md for the full semantics of each. Capability values are additive: a consumer MUST ignore a value it does not recognise rather than reject the binding, and MUST NOT treat an unrecognised value as conferring anything."
+    },
+    "DeviceAttestation": {
+      "title": "DeviceAttestation",
+      "description": "Producer-supplied attestation at registration time, verifiable by the maintainer against the platform's attestation infrastructure. Tagged union over the discriminator `kind`.",
+      "oneOf": [
+        {
+          "title": "WebAuthnAttestation",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "aaguid"],
+          "properties": {
+            "kind": { "const": "webauthn" },
+            "aaguid": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "WebAuthn Authenticator AAGUID (UUID)."
+            },
+            "attestationStatement": {
+              "type": "string",
+              "description": "Base64url-encoded WebAuthn attestation statement, when supplied by the platform."
+            }
+          }
+        },
+        {
+          "title": "AppleAppAttest",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "keyId", "attestation"],
+          "properties": {
+            "kind": { "const": "appleAppAttest" },
+            "keyId": { "type": "string", "minLength": 1 },
+            "attestation": { "type": "string" }
+          }
+        },
+        {
+          "title": "PlayIntegrity",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "token"],
+          "properties": {
+            "kind": { "const": "playIntegrity" },
+            "token": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "title": "Tpm",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "quote"],
+          "properties": {
+            "kind": { "const": "tpm" },
+            "quote": { "type": "string" }
+          }
+        },
+        {
+          "title": "NitroEnclave",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "quote"],
+          "properties": {
+            "kind": { "const": "nitroEnclave" },
+            "quote": { "type": "string" }
+          }
+        },
+        {
+          "title": "NoAttestation",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": { "const": "none" }
+          },
+          "description": "No device-level attestation is available. Maintainers MAY still register the device but SHOULD apply stricter policy (shorter session TTL, more frequent step-up)."
+        }
+      ]
+    },
+    "WakeHandle": {
+      "title": "WakeHandle",
+      "description": "An opaque, gateway-issued reference to a device's push channel (push wake-up binding, https://trusttasks.org/binding/push/0.1). The push gateway returns it to the device at registration; the device conveys it to its VTA (device/set-wake), and the VTA provisions it to authorized triggers (its mediator and/or itself). The raw platform push token (APNs/FCM/WebPush) is held ONLY by the gateway and is never represented here — the handle abstracts the platform, so adding new push methods (e.g. PWA Web Push) needs no change to triggers or VTA config. A handle is a bearer capability to *request* a wake (subject to the gateway's allowlist), never to read the channel.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gateway", "handle"],
+      "properties": {
+        "gateway": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The push gateway that issued this handle and acts on it — a DID (DIDComm-reachable gateway) or an https URL (REST gateway). A trigger sends its contentless wake request here."
+        },
+        "handle": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opaque gateway-issued identifier for the device's push channel. Reveals no platform token. Rotates whenever the device re-registers a new platform token with the gateway; the device then re-conveys the fresh handle via device/set-wake."
+        }
+      }
+    },
+    "WakeTriggerPolicy": {
+      "title": "WakeTriggerPolicy",
+      "description": "VTA-owned allowlist of the DIDs permitted to trigger a wake for a given WakeHandle (push wake-up binding, https://trusttasks.org/binding/push/0.1). The VTA is the source of truth for this policy — all device config state resides at the VTA — and provisions it to the gateway, which ENFORCES it: a wake request from a DID not on the list is refused. Typically holds the device's mediator DID (queue-driven wake, where the mediator alone knows the device is offline) and/or the VTA's own DID (policy-driven wake, e.g. a step-up the VTA is delegating to this device).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowedTriggers"],
+      "properties": {
+        "allowedTriggers": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "description": "DIDs authorized to trigger a wake for this handle. An empty array means no party may wake the device (push effectively disabled while the handle exists). The gateway authenticates the trigger's DID before checking membership."
+        }
+      }
+    },
+    "PushRegistration": {
+      "title": "PushRegistration",
+      "description": "A device's platform push channel — the body the device registers with its push GATEWAY (push wake-up binding, https://trusttasks.org/binding/push/0.1; modeled on Aries RFC 0699/0734). The gateway holds this token and returns an opaque WakeHandle in exchange; the token is held by the gateway ONLY, never by the mediator or the maintainer/VTA. The gateway uses it to send a contentless wake-up when an authorized trigger asks — the push payload never carries Trust Task content. Tagged union over the discriminator `platform`.",
+      "oneOf": [
+        {
+          "title": "Apns",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["platform", "token", "topic"],
+          "properties": {
+            "platform": { "const": "apns" },
+            "token": {
+              "type": "string",
+              "minLength": 1,
+              "description": "APNs device token (hex string issued by Apple Push Notification service)."
+            },
+            "topic": {
+              "type": "string",
+              "minLength": 1,
+              "description": "APNs topic — typically the app bundle identifier the gateway pushes to."
+            },
+            "environment": {
+              "type": "string",
+              "enum": ["sandbox", "production"],
+              "description": "Which APNs environment issued the token. Maintainers route to the matching APNs endpoint."
+            }
+          }
+        },
+        {
+          "title": "Fcm",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["platform", "token"],
+          "properties": {
+            "platform": { "const": "fcm" },
+            "token": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Firebase Cloud Messaging registration token. The gateway sends a data message (not a notification message) so the app controls wake and display."
+            }
+          }
+        },
+        {
+          "title": "WebPush",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["platform", "endpoint", "keys"],
+          "properties": {
+            "platform": { "const": "webpush" },
+            "endpoint": {
+              "type": "string",
+              "format": "uri",
+              "description": "RFC 8030 Web Push subscription endpoint."
+            },
+            "keys": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["p256dh", "auth"],
+              "properties": {
+                "p256dh": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "base64url-encoded P-256 ECDH public key."
+                },
+                "auth": { "type": "string", "minLength": 1, "description": "base64url-encoded auth secret." }
+              },
+              "description": "Web Push (RFC 8291) encryption keys. Note: per the push binding the payload remains contentless regardless of this encryption."
+            }
+          }
+        }
+      ]
+    }
+  }
+}

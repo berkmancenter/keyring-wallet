@@ -251,6 +251,7 @@ describe('the access list, against an agent that serves 0.2 (v0.67.0)', () => {
         createdAt: '2026-10-03T08:00:00Z',
         act: { stated: 'all' },
         capabilityScope: { stated: 'ceiling' },
+        keys: { scope: 'all' },
       },
     ])
   })

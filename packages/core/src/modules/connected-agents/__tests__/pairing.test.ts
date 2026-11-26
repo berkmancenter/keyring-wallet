@@ -237,6 +237,7 @@ describe('the auth/oob path, step by step', () => {
         purposes: ['personalisation', 'taskExecution'],
         expiresAt: new Date(T0 + TEMPORARY_GRANT_MS).toISOString(),
         grantType: 'temporary',
+        contextsToAdd: [],
       },
     })
   })

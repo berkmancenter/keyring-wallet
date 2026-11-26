@@ -511,6 +511,11 @@ export interface VtaAclEntry {
    * everything the role implies.
    */
   capabilityScope?: { stated: 'ceiling' } | { stated: 'none' } | { stated: 'listed'; capabilities: string[] }
+  /**
+   * The key scope, as stated (`acl/_shared` 0.2 and later: `all`, `none` or `listed`). Absent on a 0.1 entry, which
+   * carries none. An AI agent's entry must state `none` (agent connect, §3.3).
+   */
+  keys?: { scope: string }
 }
 
 /** Where an entry's capability narrowing travels in the 0.1 shape, the VTA's own extension member. */
@@ -605,6 +610,12 @@ function capabilityScopeFrom(raw: Record<string, unknown>): {
   return fromExt ? { capabilityScope: { stated: 'listed', capabilities: fromExt } } : {}
 }
 
+/** An entry's stated key scope: `{scope}` with a string scope, or nothing. */
+function keysFrom(value: unknown): { keys?: { scope: string } } {
+  const stated = statedScope(value)
+  return stated ? { keys: { scope: stated.scope } } : {}
+}
+
 /** Read an `AclEntry` off the wire, keeping only the members Keyring uses; undefined if it is not one. */
 function aclEntryFrom(value: unknown): VtaAclEntry | undefined {
   if (!value || typeof value !== 'object') return undefined
@@ -621,6 +632,7 @@ function aclEntryFrom(value: unknown): VtaAclEntry | undefined {
     ...capabilitiesFrom(raw.ext),
     ...actFrom(raw),
     ...capabilityScopeFrom(raw),
+    ...keysFrom(raw.keys),
     ...text('label'),
     ...text('expiresAt'),
     ...purposesFrom(raw.purposes),
