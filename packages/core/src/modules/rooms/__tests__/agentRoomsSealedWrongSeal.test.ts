@@ -1,12 +1,15 @@
 /**
  * A sealed record binds the version it is sealed for, and the host gives it the room's next version, so a wrong
- * guess of the room's newest version stores the post under a seal for another version: it does not open until the
- * phone seals it again and puts it over what landed. Since a message skips the whole-room listing while the room is
+ * guess of the room's newest version stores the post under a seal for another version, until the phone seals it
+ * again and puts it over what landed. An agent before vta-service 0.75.0 cannot open it meanwhile; one since (VTI
+ * #2452, 2026-11-05) opens it at the version it was sealed for (read at source, not measured on a phone). Most rows
+ * here model the older agent, where the repair matters; the last group models the current one. Since a message skips the whole-room listing while the room is
  * watched (IN-776), a post that lands unseen is enough for that guess to be wrong. If the second seal or put then
  * fails, the post reads "Not sent", and a retry used to find its record there and either take it as sent or be
- * refused for good: the record stayed one nobody could open ("couldn't be read").
+ * refused for good: on an older agent the record stayed one nobody could open ("couldn't be read").
  */
 import { AgentRoomsService, type RoomsBackend, type RoomsCommunity } from '../real/agentRoomsService'
+import { postOf } from '../roomPosts'
 import { ROOMS_TASK } from '../real/wire'
 
 const COMMUNITY: RoomsCommunity = { did: 'did:webvh:community:a', name: 'Garden club', personaDid: 'did:key:persona-a' }
@@ -44,7 +47,7 @@ interface Stored {
  * seal, so a read opens a record only at the version it was sealed for. `expectedVersion` is checked as the host does:
  * 0 is create-only.
  */
-function setup() {
+function setup(agent: { searchesEarlier?: boolean } = {}) {
   const clock = { now: T0 }
   const host = { head: 4, records: new Map<string, Stored>() }
   /** Seals and puts to fail, by their number from the first (1-based), as an agent or a network that drops one. */
@@ -62,8 +65,19 @@ function setup() {
       case ROOMS_TASK.keysRead: {
         const stored = host.records.get(String(payload.key))
         if (!stored) throw refusal('rooms/keys/read:notFound')
-        // Sealed for another version: the associated data does not match, so it does not open.
-        if (stored.sealedFor !== stored.version) throw new Error('the record did not decrypt at its version')
+        if (stored.sealedFor !== stored.version) {
+          // An agent since vta-service 0.75.0 tries the record's version and then each earlier one, and opens it at the
+          // version it was sealed for, saying so (`sealedAt`). An older agent's read does not open it.
+          if (agent.searchesEarlier)
+            return {
+              key: payload.key,
+              version: stored.version,
+              status: 'active',
+              plaintext: stored.plaintext,
+              ext: { 'org.openvtc.rooms': { sealedAt: stored.sealedFor } },
+            }
+          throw new Error('the record did not decrypt at its version')
+        }
         return { key: payload.key, version: stored.version, status: 'active', plaintext: stored.plaintext }
       }
       case ROOMS_TASK.keysSeal02:
@@ -238,5 +252,33 @@ describe('a post left under a seal for another version', () => {
     expect(third.version).toBe(repaired.version)
     expect(s.sendCompleted.mock.calls).toHaveLength(writes + 1)
     expect(s.opens('post-1')).toBe(true)
+  })
+})
+
+describe('a post stored under a seal for another version, on an agent since vta-service 0.75.0', () => {
+  test('reads and draws as a normal post, at the version the room stores it', async () => {
+    const s = setup({ searchesEarlier: true })
+    await s.openWatched()
+    s.landsUnseen()
+    // Its second seal fails: the post stays stored under the seal for the guessed version.
+    s.fail.seals.add(2)
+    await expect(s.send('post-1', 'the words')).rejects.toThrow()
+    expect(s.opens('post-1')).toBe(false)
+
+    const key = s.service.postKeyFor('post-1')
+    const note = await s.service.readNote(ROOM, key)
+    expect(note.version).toBe(s.host.records.get(key)?.version)
+    const post = postOf(note, { did: ME })
+    expect(post).toMatchObject({ text: 'the words', retracted: false, isChatMessage: false })
+    expect(post.kind).toBe('message')
+  })
+
+  test('control: on an older agent the same post is not read', async () => {
+    const s = setup()
+    await s.openWatched()
+    s.landsUnseen()
+    s.fail.seals.add(2)
+    await expect(s.send('post-1', 'the words')).rejects.toThrow()
+    await expect(s.service.readNote(ROOM, s.service.postKeyFor('post-1'))).rejects.toThrow()
   })
 })

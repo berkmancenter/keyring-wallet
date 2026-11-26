@@ -41,7 +41,7 @@ node scripts/openvtc/setup-external.mjs                  # once, at the reposito
 
 cd tsp-reference/ref-25-agent-pairing
 npm install
-npm test                                # 60 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, one recorded case
+npm test                                # 77 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, and the recordings
 lab/mediator.sh up mailbox              # or: open, deny
 npm start                               # every case for that mode, against the recorded result
 lab/mediator.sh down
@@ -122,6 +122,18 @@ holds it to that producer's own test vector.
   (`r` memory read, `w` memory write, `p` room present, `o` room open) and purposes as names after `~`, in a
   flow member `_scope`; that costs 8 bytes plus the scope, against 81 spare.
 - A `did:peer:2` cannot be the `_from` of a link at this limit.
+
+## The plan's tables are held to the recordings
+
+`recordings.test.mjs` has one test for each row of the plan's two measured tables (section 2.4, the mediator;
+section 2.6, the VTA versions). Each test quotes its row and asserts, with no lab running, that the recordings
+under `fixtures/` hold what the row says. It fails when the plan no longer has the row, and when a recording says
+something else. A row is compared by its words, so re-aligning a table changes nothing; a changed word, number or
+code fails the test that quotes the row, and the row is re-quoted there, beside the assertions it has to match.
+A last test reads both tables whole and fails if any row of either is quoted by no test, so a row added to a
+table is not left unmeasured.
+
+It reads those rows only: not the plan's prose and not this README. CI does not run it; `npm test` here does.
 
 ## What it does not prove
 
