@@ -12,6 +12,7 @@ generate-app-package-json.js
 # drift test and make the OWFa attribution false.
 core/src/modules/trust-tasks/__tests__/fixtures/pcs-schemas/*.json
 core/src/modules/trust-tasks/__tests__/fixtures/acl-schemas/*.json
+core/src/modules/trust-tasks/__tests__/fixtures/acl-schemas-0.3/*.json
 core/src/modules/trust-tasks/__tests__/fixtures/vtc-join-schemas/*.json
 core/src/modules/trust-tasks/__tests__/fixtures/vetting-schemas/*.json
 core/src/modules/trust-tasks/__tests__/fixtures/pcs-vetter-schemas/*.json

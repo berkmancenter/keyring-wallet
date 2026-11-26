@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/acl/list/0.4",
+  "title": "ACL List 0.4 — payload",
+  "description": "Enumerate the AclEntry 0.2 records a maintainer holds, with optional conjunctive filters and paging. A hierarchical filter (`context`, `resource`) MUST state its `direction`; there is no default direction. The outer document members are owned by the framework — SPEC §6.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "dependentRequired": {
+    "context": ["direction"],
+    "resource": ["direction"]
+  },
+  "dependentSchemas": {
+    "direction": {
+      "anyOf": [
+        { "required": ["context"] },
+        { "required": ["resource"] }
+      ]
+    }
+  },
+  "properties": {
+    "role": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional filter — only entries with this role are returned."
+    },
+    "context": {
+      "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/ContextPath",
+      "description": "Optional filter on the entries' ACT scope, read in the stated `direction`. REQUIRES `direction`. Replaces 0.1's `scope` filter."
+    },
+    "capability": {
+      "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/Capability",
+      "description": "Optional filter — only entries whose EFFECTIVE capability set includes this capability (the role's full ceiling for `capabilities: {scope: ceiling}`, nothing for `none`, and for `listed` the ceiling ∩ the non-additive grants plus the additive grants). Combined with `resource`, the capability must be held at a qualifier related to that resource by `direction`."
+    },
+    "resource": {
+      "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/ResourceQualifier",
+      "description": "Optional filter on the resource qualifiers of the entries' effective capabilities (of `capability` when given, of any capability otherwise), read in the stated `direction`. REQUIRES `direction`."
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["actingIn", "subtree", "any"],
+      "description": "How to read a hierarchical filter (`context`, `resource`). REQUIRED when either is present and REFUSED when neither is: `actingIn` — entries whose scope or qualifier is an ancestor-or-self of the queried one, i.e. who may act IN it (unrestricted act scopes and unqualified capabilities match); `subtree` — entries holding a grant at or BENEATH the queried one (an unrestricted act scope or an unqualified capability does NOT match, and an entry naming contexts both inside and outside the subtree DOES); `any` — the union. Same three questions as 0.1's `acting-in` / `subtree` / `any`, re-cased to lowerCamelCase, with no default."
+    },
+    "subjectPrefix": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional filter — only entries whose subject VID starts with this prefix are returned."
+    },
+    "cursor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "description": "An opaque continuation token from a previous response's `nextCursor`; a responder MUST NOT accept a cursor it did not issue. It binds the filters and `direction` it was minted under; a follow-up request MUST repeat them unchanged."
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "description": "The most entries to return; the responder chooses a default and MAY return fewer. The maintainer MAY impose a lower ceiling."
+    },
+    "ext": {
+      "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+      "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "ACL List 0.4 — response payload",
+      "description": "The success response to an acl/list/0.4 request. Carried in a Trust Task document whose type is https://trusttasks.org/spec/acl/list/0.4#response.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entries"],
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": { "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/AclEntry" },
+          "description": "Matching AclEntry items, in maintainer-defined order. May be empty."
+        },
+        "nextCursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Opaque continuation token to fetch the next page, sent back as the request's `cursor`. Present when more matching entries exist beyond `entries`; absent on the last page, which is how a consumer knows the result is complete. Binds the request's filters and direction. Consumers MUST treat it as opaque and re-send it verbatim."
+        },
+        "redactedFields": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Names of AclEntry members the maintainer redacted from every returned entry. `act`, `keys`, `capabilities` and `purposes` are never redacted; `approve` and `approveCapabilities` SHOULD NOT be (see acl/show/0.3)."
+        },
+        "ext": {
+          "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+          "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+        }
+      }
+    }
+  }
+}
