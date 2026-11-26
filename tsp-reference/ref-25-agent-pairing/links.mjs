@@ -67,10 +67,41 @@ export function decodeScope(text) {
   };
 }
 
-/** The fallback's link: the agent's `did:key` in `_from`, and the scope it asks for in `_scope`. */
+/**
+ * The fallback's link: the agent's `did:key` in `_from`, and the scope it asks for in `_scope`.
+ *
+ * An agent that asks for nothing, no capability and no purpose, writes no `_scope` member at all: the member is
+ * never present with an empty value. A link without it says the agent stated no ask, and what the owner is offered
+ * is then the phone's choice. The link carries no duration for the grant; `_exp` is the code's own deadline.
+ */
 export function agentConnectLink({ linkHost = LINK_HOST, agentDid, requestId, deadline, scope }) {
   const base = oobLink({ linkHost, serviceDid: agentDid, requestId, deadline, flow: AGENT_CONNECT_FLOW });
-  return scope ? `${base}&_scope=${encodeScope(scope)}` : base;
+  const asked = scope ? encodeScope(scope) : "";
+  return asked ? `${base}&_scope=${asked}` : base;
+}
+
+/** The purposes an agent may be granted (the plan's section 3.3); the names Keyring's `AGENT_PURPOSES` holds. */
+export const AGENT_PURPOSES = ["personalisation", "taskExecution"];
+
+/**
+ * The scopes the plan's contract names, each as the link an agent would show: for one `did:key`, request id and
+ * deadline. Deterministic for fixed inputs, so a recorded copy can be held to the code.
+ */
+export function scopeRows({ agentDid, requestId, deadline }) {
+  const memory = ["memory-read", "memory-write"];
+  const rooms = ["room-present", "room-open"];
+  const cases = [
+    ["nothing asked", { capabilities: [], purposes: [] }],
+    ["one purpose, no capability", { capabilities: [], purposes: AGENT_PURPOSES.slice(0, 1) }],
+    ["memory, both purposes", { capabilities: memory, purposes: AGENT_PURPOSES }],
+    ["memory and rooms, no purpose", { capabilities: [...memory, ...rooms], purposes: [] }],
+    ["memory and rooms, both purposes", { capabilities: [...memory, ...rooms], purposes: AGENT_PURPOSES }],
+  ];
+  return cases.map(([name, scope]) => {
+    const link = agentConnectLink({ agentDid, requestId, deadline, scope });
+    const at = link.indexOf("&_scope=");
+    return { name, scope: at < 0 ? null : link.slice(at + "&_scope=".length), ...measureLink(link) };
+  });
 }
 
 export const byteLength = (text) => Buffer.byteLength(text, "utf8");
