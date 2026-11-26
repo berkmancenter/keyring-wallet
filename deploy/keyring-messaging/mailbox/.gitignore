@@ -1,0 +1,3 @@
+# The deployment's DID log, written by the host (or setup-identity.sh). Public,
+# but it belongs to one deployment, not to the package.
+did/

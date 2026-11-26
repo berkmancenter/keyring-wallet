@@ -1,6 +1,6 @@
 // Witness-server lifecycle for the witnessed VRC exchange e2e.
 //
-// Spawns bifold/packages/witness-server (ts-node) with a fresh temp wallet +
+// Spawns packages/witness-server (ts-node) with a fresh temp wallet +
 // invitation per run (VRC_WALLET_PATH points the wallet itself into the same
 // per-run temp dir as the invitation file, so both are wiped together by
 // stop() — no separate `yarn fresh` needed, and no run can inherit another
@@ -19,7 +19,7 @@ import { dirname } from "node:path";
 import { sleep } from "./driver.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const witnessDir = join(repoRoot, "bifold", "packages", "witness-server");
+const witnessDir = join(repoRoot, "packages", "witness-server");
 
 /**
  * Authoritative "is this port actually free" check via a real bind attempt.
@@ -114,6 +114,9 @@ export function detectHostIp() {
   );
 }
 
+// The witness leg's DIDComm version (WITNESS_LEG, v1 by default): lib/witnessLeg.js, re-exported for the runners.
+export { witnessLegFrom, witnessLegFromEnv } from "./witnessLeg.js";
+
 /**
  * Start the witness server behind an HTTPS tunnel (cloudflared). Returns
  * { invitationUrl, publicUrl, name, stop, waitForParticipants }.
@@ -176,7 +179,7 @@ export async function startWitness({
   // rejects; a harness launching the server only needs it to run.
   // bifold #402: the witness reaches @openvtc/vti-tsp-js (ESM-only) through its workspace packages, and every start
   // script of the server loads tsp-esm-preload.cjs for it; started without, it fails on that import. Loaded when the
-  // checkout has it (a bifold from before #402 does not).
+  // checkout has it (a framework from before #402 does not).
   const preload = existsSync(join(witnessDir, "tsp-esm-preload.cjs")) ? ["-r", "./tsp-esm-preload.cjs"] : [];
   const proc = spawn("yarn", ["ts-node", "--transpile-only", ...preload, "src/index.ts"], {
     cwd: witnessDir,
@@ -196,11 +199,11 @@ export async function startWitness({
       WITNESS_DIDCOMM_VERSIONS: didcommV2 ? "v1,v2" : "v1",
       WITNESS_VERBOSE: process.env.WITNESS_VERBOSE || "false",
       // Wallet lives in the per-run temp dir — see the file header. Also makes
-      // this run immune to `bifold/packages/witness-server/.env`'s own wallet
+      // this run immune to `packages/witness-server/.env`'s own wallet
       // location, if it sets one.
       VRC_WALLET_PATH: join(dir, "wallets"),
       // DIRECT mode by default, regardless of what a developer's local
-      // bifold/packages/witness-server/.env has committed to
+      // packages/witness-server/.env has committed to
       // MEDIATOR_INVITATION_URL. That file is gitignored and per-developer, and
       // dotenv (`import 'dotenv/config'` in witness-server/src/index.ts) never
       // overrides a variable already present in the environment — so without

@@ -98,14 +98,15 @@ export const bundlesFromAnnotations = (annotations) =>
     })
 
 /**
- * The screens a person would look at: the app's and bifold's .tsx screens and components, not tests. Since the fold
- * bifold/… paths are in the wallet range itself (tier.mjs's changedFiles reads no submodule for a range with the folded
- * tree at both ends, so post-release.yml needs no bifold fetch); before it they came through the pin move. A range that
- * crosses the fold has no readable bifold range: changedFiles marks it (`bifold@a..b (…crosses the fold…)`), and the
- * marker is kept in the list, so the summary says the bifold screens are not listed rather than listing none.
+ * The screens a person would look at: the app's and the framework's .tsx screens and components, not tests. The
+ * framework's paths are packages/… in the wallet range itself (tier.mjs's changedFiles reads one diff, so
+ * post-release.yml fetches nothing else). A range with an end from before the move of the framework into packages/
+ * (bifold/ a tree, or the submodule's gitlink) cannot be read file by file: changedFiles marks it (`bifold@a..b (…before
+ * the move…)`), and the marker is kept in the list, so the summary says the framework's screens are not listed rather
+ * than listing none.
  */
 export const screensOf = (files) =>
-  files.filter((f) => /^bifold@/.test(f) || (/^(app\/src|bifold\/packages\/[^/]+\/src)\/(.*\/)?(screens|components)\/[^/]+\.tsx$/.test(f) && !/__tests__|\.test\./.test(f)))
+  files.filter((f) => /^bifold@/.test(f) || (/^(app\/src|packages\/[^/]+\/src)\/(.*\/)?(screens|components)\/[^/]+\.tsx$/.test(f) && !/__tests__|\.test\./.test(f)))
 
 /**
  * Where to measure the changed screens from: the newest earlier publish whose commit is an ancestor of this one

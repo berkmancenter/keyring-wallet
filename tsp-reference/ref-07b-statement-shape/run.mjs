@@ -167,7 +167,7 @@ line(
 // ---------------------------------------------------------------- Act 2 ----
 head(2, 'type-dispatch matrix against the REAL shipped predicates')
 
-const ct = require('../../bifold/packages/core/lib/commonjs/modules/vrc/credentialTypes.js')
+const ct = require('../../packages/core/lib/commonjs/modules/vrc/credentialTypes.js')
 line(
   typeof ct.isWitnessCredential === 'function' && typeof ct.isPeerVrcCredential === 'function',
   'loaded @bifold/core credentialTypes (the module every screen and hook dispatches through)'
@@ -227,7 +227,7 @@ console.log('   One type / N profiles ends that, and a stray endorsement lands i
 // ---------------------------------------------------------------- Act 3 ----
 head(3, 'Trust Task read-site delta: what does the Trust Task layer actually notice?')
 
-const ttSrc = '../../bifold/packages/trust-tasks/src'
+const ttSrc = '../../packages/trust-tasks/src'
 const ttFiles = ['documentProof.ts', 'validator.ts', 'TrustTaskMessage.ts', 'index.ts']
 let subjectHits = 0
 for (const f of ttFiles) {
@@ -237,8 +237,8 @@ for (const f of ttFiles) {
 line(subjectHits === 0, `@bifold/trust-tasks reads credentialSubject ${subjectHits} times — the Trust Task model does not see credential shape`)
 
 const readSites = [
-  ['../../bifold/packages/core/src/modules/trust-tasks/outcomeEvidence.ts', /subject\?\.taskContext/g],
-  ['../../bifold/packages/core/src/modules/trust-tasks/witnessCeremony.ts', /taskContext\?: string \} \| undefined\)\?\.taskContext|\.taskContext/g],
+  ['../../packages/core/src/modules/trust-tasks/outcomeEvidence.ts', /subject\?\.taskContext/g],
+  ['../../packages/core/src/modules/trust-tasks/witnessCeremony.ts', /taskContext\?: string \} \| undefined\)\?\.taskContext|\.taskContext/g],
 ]
 let sites = 0
 for (const [file, re] of readSites) {

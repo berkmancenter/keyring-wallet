@@ -6,8 +6,10 @@
  * wallet-to-wallet connection.
  *
  * Same flow as run-vrc-exchange-witnessed-locality-android-only-devices.js,
- * plus: both wallets turn on Coordinate Mediation 2.0 and the witness serves
- * v1+v2, replying on whichever carriage it received — same reasoning as the
+ * plus: both wallets have the "DIDComm v2" and "wallet mailbox" settings on
+ * (the defaults), so the peer exchange routes through their mailboxes, and
+ * the witness leg is WITNESS_LEG (v1 by default; on "v2" the witness serves
+ * v1+v2, replying on whichever carriage it received) — same reasoning as the
  * plain didcomm-v2 witnessed variant. The BLE co-presence leg (locality-plan.md
  * §8.2/§8.4) is unaffected by which DIDComm version the peer-to-peer exchange
  * uses; it's a separate radio round trip between the phones and this
@@ -21,11 +23,12 @@
  * BOTH phones, and grant the Bluetooth permission prompt on each phone when
  * it appears.
  *
- * Physical phones can't reach `10.0.2.2`, so the mediator needs tunnel mode
- * with v2 (`yarn mediator --didcomm-v2`), and the Android debug APK must be
- * rebuilt (`cd app/android && ./gradlew :app:assembleDebug`) after that
- * mediator run writes app/.env's MEDIATOR_V2_URL — restarting Metro alone
- * does not pick it up (see e2e/README.md and docs/E2E_REAL_DEVICE_FLAKINESS.md).
+ * The build: app/.env must carry MAILBOX_MEDIATOR_DID (the store
+ * configuration) and a MEDIATOR_URL the phones can reach (tunnel mode,
+ * `yarn mediator` without `--endpoint`); then build the Android APK (`cd
+ * app/android && ./gradlew :app:assembleDebug`), since restarting Metro alone
+ * does not pick up app/.env (see e2e/README.md and
+ * docs/E2E_REAL_DEVICE_FLAKINESS.md). MEDIATOR_V2_URL is gone (#1166).
  *
  * Usage:
  *   node run-vrc-exchange-witnessed-locality-android-only-devices-didcomm-v2.js

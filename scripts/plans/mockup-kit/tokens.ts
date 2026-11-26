@@ -26,12 +26,12 @@ export interface Token {
 
 const KT = 'app/src/keyring-theme/theme.ts'
 const HEADER = 'app/src/keyring-theme/components/GradientHeaderBackground.tsx'
-const CARD = 'bifold/packages/core/src/modules/vrc/components/ContactCard.tsx'
-const LAYERS = 'bifold/packages/core/src/modules/vrc/components/RelationshipLayers.tsx'
-const SHEET = 'bifold/packages/core/src/components/listItems/DeleteChatSheet.tsx'
-const BT = 'bifold/packages/core/src/theme.ts'
-const INFOBOX = 'bifold/packages/core/src/components/misc/InfoBox.tsx'
-const BIFOLD_EN = 'bifold/packages/core/src/localization/en/en.json'
+const CARD = 'packages/core/src/modules/vrc/components/ContactCard.tsx'
+const LAYERS = 'packages/core/src/modules/vrc/components/RelationshipLayers.tsx'
+const SHEET = 'packages/core/src/components/listItems/DeleteChatSheet.tsx'
+const BT = 'packages/core/src/theme.ts'
+const INFOBOX = 'packages/core/src/components/misc/InfoBox.tsx'
+const BIFOLD_EN = 'packages/core/src/localization/en/en.json'
 const APP_EN = 'app/src/localization/en/index.ts'
 
 const at = (file: string, path: string[], pattern: RegExp): Anchor => ({ file, path, pattern })

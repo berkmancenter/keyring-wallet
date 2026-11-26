@@ -1,30 +1,29 @@
 /**
  * Two-wallet VRC exchange on REAL DEVICES (attended), Android-only, over
  * DIDComm v2: the same hardware-attested exchange as
- * run-vrc-exchange-devices-android-only.js, but both wallets turn on the
- * "Enable DIDComm v2" developer setting, provision Coordinate Mediation 2.0
- * with the build's MEDIATOR_V2_URL, and exchange over an out-of-band/2.0
- * invitation on did:peer:2 instead of the default DIDComm-v1 connection.
+ * run-vrc-exchange-devices-android-only.js, but with the "DIDComm v2" and
+ * "wallet mailbox" developer settings confirmed on (both on by default), so
+ * the wallets exchange over an out-of-band/2.0 invitation on did:peer:2
+ * routed through their mailboxes at Keyring's mailbox mediator, instead of
+ * the default DIDComm-v1 connection.
  *
  * What it proves beyond run-vrc-exchange-devices-android-only.js: the
- * DIDComm v2 stack (OOB 2.0, did:peer:2, ECDH-1PU envelopes, Coordinate
- * Mediation 2.0 + Pickup 4.0) carries a REAL hardware-attested signature
- * (TEE-backed key + BiometricPrompt) end to end on physical hardware, not
- * just the emulator pair run-vrc-exchange-didcomm-v2.js covers. Not an
- * ecosystem-interop claim: the mediator is Keyring's own mediator-server in
- * v2 mode.
+ * DIDComm v2 stack (OOB 2.0, did:peer:2, ECDH-1PU envelopes, one mailbox per
+ * phone) carries a REAL hardware-attested signature (TEE-backed key +
+ * BiometricPrompt) end to end on physical hardware, not just the emulator
+ * pair run-vrc-exchange-didcomm-v2.js covers. Not an ecosystem-interop
+ * claim: the Farm's VTI mediator is never asked by the phone.
  *
  * Two PHYSICAL phones are required, not emulators — same reasoning as
  * run-vrc-exchange-devices-android-only.js (see e2e/README.md).
  *
- * Physical phones can't reach `10.0.2.2`: the mediator needs tunnel mode
- * (`yarn mediator --didcomm-v2`, no `--endpoint`, requires `cloudflared`),
- * and the Android debug APK must be rebuilt (`cd app/android && ./gradlew
- * :app:assembleDebug`) after that mediator run writes app/.env — restarting
- * Metro alone does not pick up a new MEDIATOR_V2_URL, since react-native-config
- * bakes it into the native BuildConfig at Gradle build time, not at bundle
- * time (see e2e/README.md and the mediator-server README's "Which
- * --endpoint" section).
+ * The build: app/.env must carry MAILBOX_MEDIATOR_DID (the store
+ * configuration; Test and OTA-gate builds write it blank and open no mailbox)
+ * and a MEDIATOR_URL the phones can reach for the v1 fallback (tunnel mode,
+ * `yarn mediator` without `--endpoint`); then build the Android APK, since
+ * react-native-config bakes app/.env into the native BuildConfig at Gradle
+ * build time, not at bundle time (see e2e/README.md). Coordinate Mediation
+ * 2.0 and MEDIATOR_V2_URL are gone (#1166).
  *
  * ATTENDED: a human operator must satisfy the OS biometric/PIN prompts —
  * watch the console for the "OPERATOR: authenticate on ..." banners.
@@ -56,15 +55,17 @@ import {
   assertDidCommV2CarriageMarkers,
   assertSecureExchangeBadge,
   assertTrustTaskExchangeMarkers,
-  assertV2MediationMarker,
+  assertWalletMailboxOpen,
   assertVrcReceived,
   completeOnboarding,
   enableDidCommV2,
+  enableV2Mailbox,
   enableHardwareAttestation,
   showRelationshipInvitation,
 } from "./lib/flows.js";
 import { ANDROID_APK, ANDROID_UDID, ANDROID_UDID2, androidDeviceCaps } from "./lib/config.js";
-import { printSuccess, printFailure } from "./lib/banner.js";
+import { printSuccess, printFailure, printSkipped } from "./lib/banner.js";
+import { expectV2Invitation, RunSkipped, SKIPPED_EXIT_CODE } from "./lib/v2Mint.js";
 
 const IDENTITY_A = { firstName: "Alice", lastName: "Anderson" };
 const IDENTITY_B = { firstName: "Bob", lastName: "Baker" };
@@ -195,15 +196,14 @@ try {
   // invitee needs v2 to accept one (a v1-only agent rejects it outright).
   // Restarts each app — attestation's persisted preference survives that.
   await Promise.all([enableDidCommV2(android), enableDidCommV2(android2)]);
+  await Promise.all([enableV2Mailbox(android), enableV2Mailbox(android2)]);
 
-  // Mediation 2.0 must be granted before the invitation is minted, or the
+  // The mailbox must be open before the invitation is minted, or the
   // invitation routes unmediated and the mediated claim below is hollow.
-  await Promise.all([assertV2MediationMarker(android), assertV2MediationMarker(android2)]);
+  await Promise.all([assertWalletMailboxOpen(android), assertWalletMailboxOpen(android2)]);
 
-  const invitationUrl = await showRelationshipInvitation(android);
-  if (!/[?&]_oob=/.test(invitationUrl)) {
-    throw new Error(`expected an out-of-band/2.0 invitation (_oob=), got: ${invitationUrl.slice(0, 80)}…`);
-  }
+  // A 1.x invitation here is 282's kill of v2 minting (#1018), and the run is SKIPPED with that reason (lib/v2Mint.js).
+  const invitationUrl = expectV2Invitation(await showRelationshipInvitation(android));
   await acceptInvitationViaPaste(android2, invitationUrl);
 
   // v4 consent: one bottom-sheet on the non-proposer wallet, no per-credential
@@ -235,22 +235,28 @@ try {
 
   dumpAndroidAttestationLogs([udidA, udidB]);
 } catch (err) {
-  printFailure("vrc-exchange:devices:android-only:didcomm-v2", err);
-  for (const d of [android, android2].filter(Boolean)) {
-    try {
-      await screenshot(d, "failure");
-      await dumpSource(d, "failure");
-    } catch {
-      /* session may be dead */
+  if (err instanceof RunSkipped) {
+    // Not run on this build, for the reason the banner says: no screenshots or logs; exit 77, the skip code, beside a SKIPPED banner.
+    printSkipped("vrc-exchange:devices:android-only:didcomm-v2", err.message);
+    process.exitCode = SKIPPED_EXIT_CODE;
+  } else {
+    printFailure("vrc-exchange:devices:android-only:didcomm-v2", err);
+    for (const d of [android, android2].filter(Boolean)) {
+      try {
+        await screenshot(d, "failure");
+        await dumpSource(d, "failure");
+      } catch {
+        /* session may be dead */
+      }
     }
+    try {
+      const { a: udidA, b: udidB } = detectTwoAndroidUdids();
+      dumpAndroidAttestationLogs([udidA, udidB]);
+    } catch {
+      /* best-effort */
+    }
+    process.exitCode = 1;
   }
-  try {
-    const { a: udidA, b: udidB } = detectTwoAndroidUdids();
-    dumpAndroidAttestationLogs([udidA, udidB]);
-  } catch {
-    /* best-effort */
-  }
-  process.exitCode = 1;
 } finally {
   for (const d of [android, android2].filter(Boolean)) {
     try {

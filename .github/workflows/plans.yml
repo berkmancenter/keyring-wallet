@@ -15,10 +15,10 @@ on:
       # (scripts/plans/mockup-kit/tokens.ts): a change there re-runs the token test and flags mockups, and
       # contact sheets, drawn with the old values.
       - app/src/keyring-theme/**
-      - bifold/packages/core/src/theme.ts
-      - bifold/packages/core/src/localization/en/**
-      - bifold/packages/core/src/components/**
-      - bifold/packages/core/src/modules/vrc/components/**
+      - packages/core/src/theme.ts
+      - packages/core/src/localization/en/**
+      - packages/core/src/components/**
+      - packages/core/src/modules/vrc/components/**
 
 permissions:
   contents: read
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-22.04
     name: Plan structure
     steps:
-      # The token test reads framework sources under bifold/ (scripts/plans/mockup-kit/tokens.ts), which are part
+      # The token test reads framework sources under packages/ (scripts/plans/mockup-kit/tokens.ts), which are part
       # of this repository since the one-codebase fold: no submodule step.
       - uses: actions/checkout@v4
 

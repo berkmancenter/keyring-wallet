@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Can a change reach testers as an over-the-air bundle, or does it need a store build? The rules are the OTA
 // report's (10-08, "What OTA can carry"), applied to the paths a change touches:
-//   ota    screens, flows, copy, theme, JS localisation, in app/src and the bifold packages' src (one JS bundle)
+//   ota    screens, flows, copy, theme, JS localisation, in app/src and the framework packages' src (one JS bundle)
 //   store  the native projects (ios/, android/, Xcode and Gradle files, Info.plist, manifests, entitlements), native
 //          modules, build-time config (react-native-config, app.json), dependency manifests and patches (until a
 //          native fingerprint check can clear them), and, by policy, stored-data migrations: a bundle that migrates
@@ -9,9 +9,10 @@
 //   none   nothing the app ships (docs, tests, e2e, CI, tooling)
 // The tier of a change is its highest: one store file makes the whole change "store".
 //
-//   tier.mjs --files a,b,…           paths from the wallet root (bifold/packages/…, app/…)
-//   tier.mjs --range <a>..<b>        the wallet range; bifold/… paths are in it since the fold (before it, when
-//                                    `bifold` was a submodule, the pin's own range is read from a bifold clone)
+//   tier.mjs --files a,b,…           paths from the wallet root (packages/…, app/…)
+//   tier.mjs --range <a>..<b>        the wallet range; the framework's paths are packages/… in it since the move
+//                                    (Phase 2 of docs/plans/single-codebase-plan.md). A range with an end from before
+//                                    the move (bifold/ a tree, or the submodule's gitlink) grades store: see changedFiles
 //   [--json]                         prints {tier, reasons: {file: rule}, flags: [{flag, policy, files}], held,
 //                                    strict, unchecked}
 // Exit: 0 ota, 1 none, 2 store (native, or a held flag), 3 an error (reported as store, never none), 4 unchecked (ota by
@@ -40,62 +41,70 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 /** Stored-data migration code (the OTA report's "no, by policy" row). Extend when a migration moves or is added. */
 export const MIGRATION_PATHS = [
   'app/src/hooks/useBCAgentSetup.ts',
-  'bifold/packages/core/src/hooks/useBifoldAgentSetup.ts',
-  'bifold/packages/core/src/utils/migration.ts',
-  'bifold/packages/core/src/modules/trust-tasks/module/vtaKeyMigration.ts',
-  'bifold/packages/core/src/modules/vrc/services/rCardCredential.ts',
-  'bifold/packages/core/src/contexts/reducers/store.ts',
+  'packages/core/src/hooks/useBifoldAgentSetup.ts',
+  'packages/core/src/utils/migration.ts',
+  'packages/core/src/modules/trust-tasks/module/vtaKeyMigration.ts',
+  'packages/core/src/modules/vrc/services/rCardCredential.ts',
+  'packages/core/src/contexts/reducers/store.ts',
 ];
 
 // First match wins: what the app never ships, then store, then the rest of none, then ota.
 export const RULES = [
-  // Shapes the install, so store, though it sits in a tooling folder.
+  // Shaped the install, so store, though they sat in a tooling folder. Gone with the move (one yarn install at the root
+  // needs neither); the rule stays so a range that removes them still reads store, which that range is.
   ['store', 'install script (shapes node_modules)', /^scripts\/(ensure-bifold-ready|fix-portal-symlinks)\.js$/],
-  // Folders the app never ships.
-  ['none', 'e2e, CI and tooling', /^(e2e|\.github|scripts|tsp-reference|deploy|\.claude|\.husky|\.yarn\/releases|\.demo-local|docs)\//],
+  // Folders the app never ships. eslint-rules/ holds the framework's own lint rules (at the root since the move).
+  ['none', 'e2e, CI and tooling', /^(e2e|\.github|scripts|tsp-reference|deploy|\.claude|\.husky|\.yarn\/releases|\.demo-local|docs|eslint-rules)\//],
   // The app's own tooling: the OTA publisher, the ledger refresh. Nothing the bundle imports. A hot fix branch carries
   // the publisher it is published with, so a change here must never make the fix itself read store. Its script files
   // only: a manifest there (package.json) still reads store, by the rule below.
   ['none', "the app's tooling (app/scripts: the OTA publisher, the ledger refresh)", /^app\/scripts\/[^/]+\.(mjs|cjs|js)$/],
-  ['none', 'server-side package (not in the app)', /^bifold\/packages\/(witness-server|mediator-server|vrc-reference|vrc-shared)\//],
-  ['none', "bifold's sample app, tooling or CI", /^bifold\/(samples|scripts|\.github|\.githooks|docs)\//],
+  ['none', 'server-side package (not in the app)', /^packages\/(witness-server|mediator-server|vrc-reference|vrc-shared)\//],
+  // The framework's old place. Since the move (Phase 2 of the single-codebase plan) nothing lives under bifold/, so a
+  // path there is from before it, and a range reaching back that far cannot be graded file by file (the whole tree
+  // moved): store, named, never ota. The marker changedFiles adds for such a range is graded by its own rule below.
+  ['store', 'a bifold/… path (the framework lives at packages/ since the move; a range from before it cannot be graded)', /^bifold(\/|$)/],
   // Store: compiled into the binary.
-  ['store', 'native project (iOS/Android folder)', /^(app|bifold\/packages\/[^/]+)\/(ios|android)\//],
+  ['store', 'native project (iOS/Android folder)', /^(app|packages\/[^/]+)\/(ios|android)\//],
   ['store', 'native build file', /(^|\/)(Podfile(\.lock)?|[^/]+\.podspec|[^/]+\.gradle(\.kts)?|gradle\.properties|Info\.plist|AndroidManifest\.xml|[^/]+\.entitlements|CMakeLists\.txt)$/],
   ['store', 'Xcode project', /\.(xcodeproj|xcworkspace)\//],
   // Codegen TurboModule specs live in their src (codegenConfig jsSrcsDir "src"): the whole package is native. The
-  // shape here is test-builds.yml's `bifold/packages/react-native-*/**` trigger, on purpose: a named allowlist let a
+  // shape here is test-builds.yml's `packages/react-native-*/**` trigger, on purpose: a named allowlist let a
   // third react-native-* package's specs fall through to the JS-bundle rule below and grade ota (review of the fold,
   // 2026-11-21). WARNING: a native package named otherwise still needs both places, and only the workflow fails safe;
   // tier.test.mjs reads the workflow's glob and fails when the two diverge.
-  ['store', 'native module package (codegen specs included)', /^bifold\/packages\/react-native-[^/]+\/(?!__tests__\/|README)/],
+  ['store', 'native module package (codegen specs included)', /^packages\/react-native-[^/]+\/(?!__tests__\/|README)/],
   ['store', 'font (linked into the binary: react-native.config assets)', /\.(ttf|otf|woff2?)$/i],
   ['store', 'build-time config (react-native-config, app config, babel/metro)', /^app\/(\.env(?!\.sample$)(\.[^/]*)?|app\.json|app\.config\.[cm]?[jt]s|(react-native|babel|metro)\.config\.[cm]?[jt]s)$/],
   ['store', 'install config at the root', /^(\.yarnrc\.yml|\.env(\.[^/]*)?|\.npmrc)$/],
   // What the app never ships, by file type.
   ['none', 'docs', /\.(md|txt)$/],
   ['none', 'tests', /(^|\/)(__tests__|__mocks__)\/|\.(test|spec)\.[jt]sx?$/],
-  // At the wallet root and at bifold's (the submodule's own .prettierignore keeps vendored bundles byte-identical).
-  ['none', 'repository dotfile', /^(bifold\/)?\.(gitignore|gitattributes|editorconfig|nvmrc|prettierrc[^/]*|prettierignore|eslintrc[^/]*|eslintignore|commitlintrc[^/]*|lintstagedrc[^/]*)$/],
+  // At the wallet root and at packages/ (the framework's own .prettierignore, which keeps vendored bundles byte-identical,
+  // and its .gitignore and .prettierrc apply to that subtree since the move). The root eslint.config.mjs is the
+  // framework's lint config, moved to where ESLint reads it: lint never ships.
+  ['none', 'repository dotfile', /^(packages\/)?\.(gitignore|gitattributes|editorconfig|nvmrc|prettierrc[^/]*|prettierignore|eslintrc[^/]*|eslintignore|commitlintrc[^/]*|lintstagedrc[^/]*)$|^eslint\.config\.[cm]?js$/],
   ['none', 'the .env template (builds read their own .env)', /^app\/\.env\.sample$/],
   // jestSetup*.js: jest's setupFiles / setupFilesAfterEnv (named by jest.config); only tests and that config reference
   // them, nothing in src imports them, so they never reach the bundle.
-  ['none', "a package's test or type-check config", /^bifold\/packages\/[^/]+\/(jest\.config\.[jt]s|jestSetup[^/]*\.[jt]s|tsconfig[^/]*\.json|\.eslintrc[^/]*|\.prettierrc[^/]*)$/],
+  // packages/tsconfig-base.json is the framework's shared type-check base, at the root of its subtree since the move.
+  ['none', "a package's test or type-check config", /^packages\/([^/]+\/)?(jest\.config\.[jt]s|jestSetup[^/]*\.[jt]s|tsconfig[^/]*\.json|\.eslintrc[^/]*|\.prettierrc[^/]*)$/],
   // A package's dev-time generators (core: gen-testids, the emoji data). Their OUTPUT lands in src and grades there;
   // nothing the app ships imports scripts/. The two native packages match the native rule above first.
-  ['none', "a package's dev-time scripts (generators and their tests; nothing shipped imports them)", /^bifold\/packages\/[^/]+\/scripts\//],
-  ['none', "bifold's own lockfile (the app installs from the wallet's yarn.lock, which a new dependency changes)", /^bifold\/yarn\.lock$/],
-  // The e2e test-id manifest, the same artefact the wallet's own e2e/lib/testids.json is, on the other side of
-  // the submodule. Nothing the app ships reads it: testIdWithKey is `testIdPrefix + key`, no src imports the
-  // file, and its only consumers are gen-testids.mjs, e2e/ and CI. check-testids.mjs still holds it to the
-  // pinned bifold, both ways, whatever the tier says.
-  ['none', "bifold's e2e test-id manifest (generated from src; nothing the app ships reads it)", /^bifold\/packages\/core\/testids\.json$/],
+  ['none', "a package's dev-time scripts (generators and their tests; nothing shipped imports them)", /^packages\/[^/]+\/scripts\//],
+  // The e2e test-id manifest, the same artefact the wallet's own e2e/lib/testids.json is, generated from core's
+  // src. Nothing the app ships reads it: testIdWithKey is `testIdPrefix + key`, no src imports the file, and its only
+  // consumers are gen-testids.mjs, e2e/ and CI. check-testids.mjs still holds the two copies together, both ways,
+  // whatever the tier says.
+  ['none', "core's e2e test-id manifest (generated from src; nothing the app ships reads it)", /^packages\/core\/testids\.json$/],
   // Store: dependencies, policy.
   ['store', 'dependency manifest or patch (needs a native fingerprint check)', /(^|\/)(package\.json|yarn\.lock|Podfile\.lock)$|^\.yarn\/patches\/|^app\/patches\//],
   ['store', 'stored-data migration (policy: never OTA)', (f) => MIGRATION_PATHS.includes(f)],
-  ['store', 'bifold pin moved but its range was not read', /^bifold@/],
+  // changedFiles' marker for a range with an end from before the move (or, older still, before the fold): what moved
+  // cannot be told file by file, so the change is store, never silently ota or none.
+  ['store', 'the range reaches back before the move of the framework into packages/ (what moved cannot be told)', /^bifold@/],
   // OTA: the one JS bundle. At the app's root only the bundle's own entry files (an allowlist).
-  ['ota', 'app JavaScript bundle (screens, flows, copy, theme, localisation)', /^(app\/src|bifold\/packages\/[^/]+\/src)\/|^app\/(App\.tsx|index\.js|container-imp\.ts|container-compose\.ts)$/],
+  ['ota', 'app JavaScript bundle (screens, flows, copy, theme, localisation)', /^(app\/src|packages\/[^/]+\/src)\/|^app\/(App\.tsx|index\.js|container-imp\.ts|container-compose\.ts)$/],
 ];
 
 /**
@@ -114,7 +123,7 @@ export const FLAGS = [
   { flag: 'sign-in / key handling', policy: 'strict', path: /(oobSignIn|uvKey|SignIn\.tsx|hardware-signing\/|\/keys?\.ts$|KeyRotation|vtaKeyMigration|VtaClient\.ts$|keychain)/i },
   // Case-insensitive: the protocol line's files are named both ways (vtiAgent.ts, VtiMediatorTransport.ts, TspCarriage.ts),
   // and without /i the capitalised ones read plain ota (found 10-29).
-  { flag: 'VTI protocol line', policy: 'strict', path: /^bifold\/packages\/(core\/src\/modules\/trust-tasks\/module\/(vti|join|tsp|vtc|trigger)|trust-tasks\/src\/)/i },
+  { flag: 'VTI protocol line', policy: 'strict', path: /^packages\/(core\/src\/modules\/trust-tasks\/module\/(vti|join|tsp|vtc|trigger)|trust-tasks\/src\/)/i },
 ];
 
 const POLICIES = ['store', 'strict', 'advisory'];
@@ -211,7 +220,7 @@ export function classify(files) {
   return { tier, reasons };
 }
 
-/** a..b only: the base is the last store build, the tip the change; other range syntax drops the bifold pin. */
+/** a..b only: the base is the last store build, the tip the change; other range syntax has no readable base. */
 export function parseRange(range) {
   // Refs may hold dots (staging-v0.2.0-238); the form may not be "a...b" or a single rev.
   const parts = String(range).includes('...') ? [] : String(range).split('..');
@@ -219,56 +228,49 @@ export function parseRange(range) {
   return parts;
 }
 
-const bifoldDirOf = (repo) => process.env.BIFOLD_GIT || path.join(repo, 'bifold');
-const pinAt = (repo, rev) => { try { return execFileSync('git', ['-C', repo, 'rev-parse', `${rev}:bifold`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return ''; } };
-/** What `bifold` is at a revision: 'commit' (the submodule's gitlink, before the fold), 'tree' (part of this repository,
- * since the fold), or '' (absent). The two kinds need different reads; a range with one of each crosses the fold. */
-export const bifoldKindAt = (repo, rev) => {
-  // ls-tree, not cat-file: a gitlink's commit is an object of the submodule's repository, not of this one.
-  try { return execFileSync('git', ['-C', repo, 'ls-tree', rev, '--', 'bifold'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split(/\s+/)[1] || ''; } catch { return ''; }
+/** The kind of the tree entry `<rev>:<name>` ('tree', 'commit' for a submodule's gitlink, 'blob'), or '' when absent.
+ * ls-tree, not cat-file: a gitlink's commit is an object of the submodule's repository, not of this one. */
+const kindAt = (repo, rev, name) => {
+  try { return execFileSync('git', ['-C', repo, 'ls-tree', rev, '--', name], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split(/\s+/)[1] || ''; } catch { return ''; }
 };
 
-/** The paths a range changes (renames as delete + add). Since the fold the bifold/… paths are in the wallet diff; before
- * it (a gitlink at both ends) the submodule's own paths are read from its clone when the pin moved. A range that crosses
- * the fold carries an unreadable marker, which grades store: the fold is a store-build boundary by design. */
-export function changedFiles(range, { repo = repoRoot, bifold = bifoldDirOf(repo) } = {}) {
+/** Where the framework is at a revision: 'packages' (a tree at packages/, since the move), 'bifold tree' (folded in at
+ * bifold/, between the fold and the move), 'bifold submodule' (the gitlink, before the fold), or 'absent'. */
+export const layoutAt = (repo, rev) => {
+  const bifold = kindAt(repo, rev, 'bifold');
+  if (bifold === 'commit') return 'bifold submodule';
+  if (bifold === 'tree') return 'bifold tree';
+  return kindAt(repo, rev, 'packages') === 'tree' ? 'packages' : 'absent';
+};
+
+/** The paths a range changes (renames as delete + add). Since the move the framework's paths are packages/… in the wallet
+ * diff, like any other. A range with an end from before the move (bifold/ a tree, or the submodule's gitlink) cannot be
+ * graded file by file: the whole framework moved inside it, so the diff names every file twice and says nothing about
+ * what changed. Such a range carries a marker instead of its bifold paths, which grades store (never silently ota or
+ * none): the move is a store-build boundary by design, as the fold was. */
+export function changedFiles(range, { repo = repoRoot } = {}) {
   const [a, b] = parseRange(range);
   const files = execFileSync('git', ['-C', repo, 'diff', '--no-renames', '--name-only', `${a}..${b}`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-  const ka = bifoldKindAt(repo, a), kb = bifoldKindAt(repo, b);
-  if (ka === 'tree' && kb === 'tree') return files;
-  if (ka !== kb) return [...files.filter((f) => f !== 'bifold'), `bifold@${a.slice(0, 8)}..${b.slice(0, 8)} (the range crosses the fold: bifold was a submodule at one end and a tree at the other)`];
-  if (!files.includes('bifold')) return files;
-  const pa = pinAt(repo, a), pb = pinAt(repo, b);
-  const out = files.filter((f) => f !== 'bifold');
-  try {
-    if (!pa || !pb) throw new Error('pin unreadable');
-    const inner = execFileSync('git', ['-C', bifold, 'diff', '--no-renames', '--name-only', `${pa}..${pb}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim().split('\n').filter(Boolean);
-    out.push(...inner.map((f) => `bifold/${f}`));
-  } catch {
-    out.push(`bifold@${(pa || '?').slice(0, 8)}..${(pb || '?').slice(0, 8)} (range unreadable here; set BIFOLD_GIT)`);
-  }
-  return out;
+  const la = layoutAt(repo, a), lb = layoutAt(repo, b);
+  // Both ends at packages/, or a repository with no framework at either end (nothing there to have moved).
+  if (la === lb && (la === 'packages' || la === 'absent')) return files;
+  // The framework's paths are dropped from the list (every one is in it twice, as a delete and an add, saying nothing);
+  // the marker stands for all of them.
+  return [...files.filter((f) => !/^(bifold|packages)(\/|$)/.test(f)), `bifold@${a.slice(0, 8)}..${b.slice(0, 8)} (the range reaches back before the move of the framework into packages/: bifold is ${la === 'absent' ? 'absent' : la.replace('bifold ', 'a ')} at the base, ${lb === 'absent' ? 'absent' : lb.replace('bifold ', 'a ')} at the tip; what moved cannot be told)`];
 }
 
-/** The lines a range adds, per file (wallet and, when the pin moved, bifold), for the content flags. */
-export function addedLines(range, { repo = repoRoot, bifold = bifoldDirOf(repo) } = {}) {
+/** The lines a range adds, per file, for the content flags. One diff: since the move the framework's lines are in the
+ * wallet diff like any other (a range from before it grades store on its paths alone, whatever its lines say). */
+export function addedLines(range, { repo = repoRoot } = {}) {
   const [a, b] = parseRange(range);
   const out = {};
-  const read = (dir, r, prefix) => {
-    let diff = '';
-    try { diff = execFileSync('git', ['-C', dir, 'diff', '--no-renames', '-U0', r], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return; }
-    let file = null;
-    for (const l of diff.split('\n')) {
-      if (l.startsWith('+++ b/')) file = prefix + l.slice(6);
-      else if (file && l.startsWith('+') && !l.startsWith('+++')) (out[file] ||= []).push(l.slice(1));
-    }
-  };
-  read(repo, `${a}..${b}`, '');
-  // Since the fold the bifold/… files' lines are in the wallet diff above; the pin's own diff exists only while both
-  // ends carry the gitlink (a range crossing the fold reads the wallet side alone, and grades store anyway).
-  if (bifoldKindAt(repo, a) !== 'commit' || bifoldKindAt(repo, b) !== 'commit') return out;
-  const pa = pinAt(repo, a), pb = pinAt(repo, b);
-  if (pa && pb && pa !== pb) read(bifold, `${pa}..${pb}`, 'bifold/');
+  let diff = '';
+  try { diff = execFileSync('git', ['-C', repo, 'diff', '--no-renames', '-U0', `${a}..${b}`], { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return out; }
+  let file = null;
+  for (const l of diff.split('\n')) {
+    if (l.startsWith('+++ b/')) file = l.slice(6);
+    else if (file && l.startsWith('+') && !l.startsWith('+++')) (out[file] ||= []).push(l.slice(1));
+  }
   return out;
 }
 

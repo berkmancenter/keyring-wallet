@@ -1,0 +1,7 @@
+wallet-s2 PHASE=relay — affinidi-messaging-mediator v0.53.0 f6ed8159, mediator did:peer:2.Vz6Mkq9…RzcCJ9
+      HTTP 401 {"errorCode":401,"errorCodeStr":"401 Unauthorized","httpCode":401,"message":"Missing credentials","sessionId":"…"}
+  ✓ R1 UNAUTHENTICATED POST /inbound: an anoncrypt routing/2.0 forward, next = a phone's mailbox DID: expected refused
+      HTTP 401 {"errorCode":401,"errorCodeStr":"401 Unauthorized","httpCode":401,"message":"Missing credentials","sessionId":"…"}
+  ✓ R2 UNAUTHENTICATED POST /inbound: an anoncrypt message addressed straight to the mailbox DID: expected refused
+
+wallet-s2 relay: 2 passed, 0 failed

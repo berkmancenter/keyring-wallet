@@ -1,0 +1,1 @@
+rate-probe GET /mediator/v1/whoami MODE=same N=40: {"401":5,"429":35}

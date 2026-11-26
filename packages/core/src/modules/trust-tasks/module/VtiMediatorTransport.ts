@@ -1,0 +1,1795 @@
+/**
+ * VtiMediatorTransport — the VTA/VTC leg: a Credo DIDComm v2 transport for an
+ * Affinidi-style ("ATM") mediator, which is what every VTI agent advertises.
+ *
+ * Keyring's own mediator speaks Aries mediation, and `DidCommV2Carriage` rides
+ * it. A VTA or a VTC does not: it publishes a `DIDCommMessaging` service whose
+ * endpoints are an HTTPS base and a `wss://` socket, and a client reaches it by
+ *
+ *   1. `POST <auth>/challenge` with its own DID → `{ challenge, session_id }`;
+ *   2. an `https://affinidi.com/atm/1.0/authenticate` plaintext carrying that
+ *      challenge, **authcrypt-packed by Credo** to the mediator → a JWT;
+ *   3. one WebSocket per DID, opened with `["bearer.<jwt>", "didcomm"]`, and a
+ *      Pickup 3.0 `live-delivery-change` so frames arrive unprompted;
+ *   4. outbound: Credo's packed JWE wrapped in a Routing 2.0 `forward` whose
+ *      `next` is the peer, the forward itself packed by Credo to the mediator.
+ *
+ * The same socket also carries **TSP**. A TSP message goes out as a binary
+ * frame of raw qb2 bytes — the mediator sniffs the leading count code (`0xF8`
+ * short-framed, `0xFB` long-framed), binds the cleartext sender VID to the
+ * authenticated session, and stores it for the receiver VID — and comes in as
+ * a text frame of the same bytes base64url-encoded (`-E…` / `--E…`), which
+ * {@link tsp.isTspFrameText} tells apart from a DIDComm JWE before either is
+ * parsed. A TSP frame is acknowledged like any queued message, by the id the
+ * mediator gave it: SHA-256 of the text exactly as delivered. This is how the
+ * upstream client frames TSP on the same socket, and it is what
+ * `tsp_rev3_subtask.md` §3.3 measured: a classifier that knows only `-E`
+ * drops every Rev 3 message past ~12 KB.
+ *
+ * No key ever leaves Askar: every pack goes through Credo's own
+ * `DidCommV2EnvelopeService`, and inbound frames go to `DidCommMessageReceiver`,
+ * so a delivered message becomes a normal Credo message with its connection.
+ *
+ * Deliberately depends on Credo alone. The Node rung that proved this shape
+ * (`tsp-reference/ref-18`) used `@openvtc/vti-didcomm-js` for the mediator's
+ * DID document and three plaintext builders; the app already registers a
+ * `did:webvh` resolver, and the builders are the four literals below — so
+ * adding that package to the bundle would buy nothing and cost a second
+ * `didwebvh-ts` copy on Metro.
+ *
+ * @module trust-tasks/module/VtiMediatorTransport
+ */
+
+import type { Agent } from '@credo-ts/core'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
+import {
+  createPeerDidDocumentFromServices,
+  DidKey,
+  getPublicJwkFromVerificationMethod,
+  Kms,
+  NewDidCommV2Service,
+  NewDidCommV2ServiceEndpoint,
+  PeerDidNumAlgo,
+  TypedArrayEncoder,
+  utils,
+} from '@credo-ts/core'
+import type { DidCommV2EncryptedMessage, DidCommV2KeyAgreementJwk, DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { DidCommMessageReceiver, DidCommV2EnvelopeService } from '@credo-ts/didcomm'
+import { tsp, TRUST_TASK_V2_ENVELOPE_TYPE } from '@bifold/trust-tasks'
+
+import { didPrefix } from './didPrefix'
+import { isProblemReport, problemReportWords } from './problemReportWords'
+import { releaseWarn } from './releaseLog'
+import { isTspFrameUnopenable } from './tspFrameUnopenable'
+import { isPeerRouteReadOnceOn, PEER_ROUTE_TRIES_FOR_WEBS, VtiPeerRouteUnread } from './peerRouteSwitch'
+
+const LOG_PREFIX = '[TrustTasks:VtiMediatorTransport]'
+
+const ATM_AUTHENTICATE = 'https://affinidi.com/atm/1.0/authenticate'
+const FORWARD = 'https://didcomm.org/routing/2.0/forward'
+const LIVE_DELIVERY_CHANGE = 'https://didcomm.org/messagepickup/3.0/live-delivery-change'
+const MESSAGES_RECEIVED = 'https://didcomm.org/messagepickup/3.0/messages-received'
+const DELIVERY_REQUEST = 'https://didcomm.org/messagepickup/3.0/delivery-request'
+export const DELIVERY_POLL_MS = 15000
+/**
+ * Backstop polls in a row that heard nothing back before the socket is taken for dead and reopened. The mediator
+ * answers every delivery-request (a `delivery`, or a `status` for an empty queue), so silence means the socket reads
+ * open and is not: iOS suspends the app and its socket can keep reporting OPEN with no close ever arriving.
+ */
+export const SILENT_POLLS_BEFORE_REOPEN = 2
+/** How long a socket asked to prove itself (back in the foreground) has to answer before it is reopened. */
+export const ALIVE_CHECK_MS = 10_000
+const DELIVERY = 'https://didcomm.org/messagepickup/3.0/delivery'
+const PICKUP_PROTOCOL = 'https://didcomm.org/messagepickup/3.0/'
+const PICKUP_STATUS = 'https://didcomm.org/messagepickup/3.0/status'
+/** A resync never starts a second drain within this long of the last one. */
+const RESYNC_DEBOUNCE_MS = 1000
+/**
+ * How long a websocket gets to open. Without a bound, a connect that stalls
+ * (no open, error or close event: a TLS connect hanging in a tunnel) held
+ * `start()` until the caller's own deadline, and the person saw only "Something
+ * went wrong while linking" (iOS, 2026-09-25: the mediator logged the login and
+ * never an upgrade). vti-didcomm-js bounds its connect the same way
+ * (mediator-transport.js, `connectTimeoutMs`, 15 s). Two tries fit inside the
+ * 30 s connect deadline a grant check allows (vtaAgent GRANT_CONNECT_DEADLINE_MS).
+ */
+export const SOCKET_OPEN_TIMEOUT_MS = 8000
+/** How long one login step (challenge, authenticate) may take before it is aborted and tried again. */
+export const LOGIN_STEP_TIMEOUT_MS = 15000
+/**
+ * A cached access token this close to its `exp` is not presented: the mediator
+ * ends a socket at its token's expiry and closes at once a reopen that presents
+ * an expired one (affinidi-messaging-mediator handlers/websocket.rs), so a
+ * token is replaced, and a live socket renewed, this long before.
+ */
+export const TOKEN_RENEW_MARGIN_SECS = 60
+/**
+ * The longest a send waits for a socket to reopen. Every step inside has its
+ * own bound, but a send must never wait for ever on a reopen that cannot finish
+ * (229 lab gate: a vetter's attest waited on one for good).
+ */
+export const REOPEN_BOUND_MS = 45000
+
+/** How long {@link VtiMediatorSession.ask} waits for the mediator's answer before it gives up. */
+export const ASK_TIMEOUT_MS = 15_000
+
+/**
+ * A session that keeps listening (`keepOpen`, the wallet mailbox) reopens a socket that closed under it after this
+ * long, doubling on each reopen that fails up to {@link REOPEN_BACKOFF_MAX_MS}, and from the start again once the
+ * mediator is heard. Measured 2026-11-24 (281's live mailbox check): a mailbox socket closed with 1006 and, with
+ * nothing left to send on it, was never reopened; the peer's offer sat queued at the mediator for the rest of the run.
+ */
+export const REOPEN_BACKOFF_MIN_MS = 1000
+export const REOPEN_BACKOFF_MAX_MS = 60_000
+/**
+ * A socket of a `keepOpen` session that lived this long before it closed counts as a working connection: the next
+ * reopen waits the minimum again. A shorter life (opened, maybe heard, closed at once: a mediator in a crash loop,
+ * a balancer draining, a token accepted then revoked) keeps the wait doubling. Hearing the mediator is not the
+ * measure: every reopen is answered with a Pickup `status` before such a mediator drops the socket again.
+ */
+export const REOPEN_STABLE_MS = 60_000
+
+/** The `exp` (seconds) of a JWT access token, or undefined when it cannot be read. */
+export function accessTokenExpiry(token: string | undefined): number | undefined {
+  const payload = token?.split('.')[1]
+  if (!payload) return undefined
+  try {
+    const json = JSON.parse(utf8FromBase64Url(payload)) as { exp?: unknown }
+    return typeof json.exp === 'number' ? json.exp : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function utf8FromBase64Url(text: string): string {
+  const b64 = text.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4)
+  if (typeof globalThis.atob === 'function') {
+    const binary = globalThis.atob(padded)
+    return decodeURIComponent(Array.from(binary, (c) => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`).join(''))
+  }
+  return Buffer.from(padded, 'base64').toString('utf8')
+}
+const SOCKET_OPEN_TIMEOUT = 'socket did not open'
+const isOpenTimeout = (error: unknown) => error instanceof Error && error.message.includes(SOCKET_OPEN_TIMEOUT)
+const PLAIN = 'application/didcomm-plain+json'
+const WS_APP_SUBPROTOCOL = 'didcomm'
+
+const nowSec = () => Math.floor(Date.now() / 1000)
+
+/**
+ * How long the mediator may hold a forward for its recipient: 30 minutes.
+ *
+ * A community's VTC only listens. When it misses one live push it collects its
+ * inbox again at its next reconnect, about every 12 minutes, so a forward has
+ * to outlive that catch-up. At 5 minutes the mediator's expiry sweep dropped a
+ * missed message first: on the lab on 2026-09-27 a vetting Apply was stored,
+ * never collected, and dropped 300 s later, and the applicant saw no outcome.
+ */
+const FORWARD_EXPIRY_SECS = 30 * 60
+
+/**
+ * Messages to the mediator itself (authenticate, live delivery, delivery
+ * requests, acknowledgements) are answered at once; a short life keeps a stale
+ * one from being acted on later.
+ */
+const MEDIATOR_REQUEST_EXPIRY_SECS = 5 * 60
+const isPickup = (type: unknown) => typeof type === 'string' && type.startsWith(PICKUP_PROTOCOL)
+
+interface DeliveryMessage {
+  type?: string
+  attachments?: { id?: string; data?: { json?: unknown; base64?: string } }[]
+}
+// Hermes has no `crypto.randomUUID` — react-native-get-random-values polyfills
+// `getRandomValues` and nothing else — so ids come from Credo's own helper.
+const uuid = () => `urn:uuid:${utils.uuid()}`
+
+/** What the mediator's DID document tells a client, resolved through Credo. */
+export interface VtiMediatorEndpoints {
+  did: string
+  /** `https://…/mediator/v1` — `/challenge` and the authenticate POST hang off it. */
+  authEndpoint: string
+  /** `wss://…/mediator/v1/ws` — one socket per DID. */
+  wsEndpoint: string
+  /** The mediator's key-agreement key, as Credo reads it, and its kid. */
+  publicJwk: DidCommV2KeyAgreementJwk
+  kid: string
+}
+
+/**
+ * How long one resolution may take before it counts as failed and is tried
+ * again. A `did:webvh` resolves over the network, and a fetch that never
+ * answers held a persona's sign-in forever: the 227 gate's Farm run resolved
+ * the persona and then never its mediator, and the persona inbox waited on
+ * that sign-in until the app was killed. Bounded, it is retried and then
+ * fails, and the inbox's next look starts over.
+ */
+export const RESOLVE_ATTEMPT_TIMEOUT_MS = 15_000
+
+function withinTime<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} took over ${Math.round(ms / 1000)} s`)), ms)
+  })
+  return Promise.race([work, late]).finally(() => clearTimeout(timer))
+}
+
+/**
+ * Resolve a DID document, retrying on transient failure. A `did:webvh` behind a
+ * tunnel answers a burst of resolutions with 421/429 or an HTML page (VTI-19 —
+ * measured on iOS as "JSON Parse error: Unexpected character: R"); Credo caches
+ * a successful resolution, so one patient first look is all that is needed.
+ * Each attempt is bounded by `attemptTimeoutMs`.
+ */
+export async function resolveDidDocumentRetrying(
+  agent: Agent,
+  did: string,
+  attempts = 4,
+  attemptTimeoutMs = RESOLVE_ATTEMPT_TIMEOUT_MS
+) {
+  let lastError: unknown
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await withinTime(agent.dids.resolveDidDocument(did), attemptTimeoutMs, `resolving ${didPrefix(did)}`)
+    } catch (error) {
+      lastError = error
+      releaseWarn(
+        `${LOG_PREFIX} resolving ${didPrefix(did)} failed (attempt ${i + 1} of ${attempts}): ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
+      // No pause after the last attempt: there is nothing it would wait for, and it held every caller's error back
+      // by 3.2 s (the fourth pause) on a resolve that was never going to answer. The warning above is printed either
+      // way; what goes is the dead time after it.
+      if (i + 1 < attempts) await new Promise((resolve) => setTimeout(resolve, 800 * (i + 1)))
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError))
+}
+
+/**
+ * Read the mediator's endpoints and key agreement key out of its DID document.
+ * Both `DIDCommMessaging` service entries are published; which is which is
+ * decided by scheme, not by order.
+ */
+/**
+ * The mediator a DID's own document says it is reached through: the DID in its
+ * `DIDCommMessaging` service (a VTA's, a persona's). Undefined when it names
+ * none — a plain URL endpoint, or no service at all.
+ *
+ * This is what a session for that DID must authenticate to: a persona minted
+ * by a VTA on the VTA Farm names the Farm's mediator, and a session opened on
+ * any other mediator would never see what is sent to it.
+ */
+/**
+ * The mediator a DID's `TSPTransport` service names, when it names one by DID.
+ * Two parties on different mediators have not been seen to complete a TSP
+ * relationship (VTI-Q15), which is why a caller wants to know.
+ */
+export async function advertisedTspMediatorDid(agent: Agent, did: string): Promise<string | undefined> {
+  const doc = await resolveDidDocumentRetrying(agent, did)
+  const services = (doc.service ?? []) as { type?: unknown; serviceEndpoint?: unknown }[]
+  return services
+    .filter((s) => [s.type].flat().map(String).includes('TSPTransport'))
+    .flatMap((s) => (Array.isArray(s.serviceEndpoint) ? s.serviceEndpoint : [s.serviceEndpoint]))
+    .map((e) => (typeof e === 'string' ? e : (e as { uri?: string } | undefined)?.uri))
+    .find((uri): uri is string => typeof uri === 'string' && uri.startsWith('did:'))
+}
+
+export async function advertisedMediatorDid(agent: Agent, did: string): Promise<string | undefined> {
+  const doc = await resolveDidDocumentRetrying(agent, did)
+  const services = (doc.service ?? []) as { type?: unknown; serviceEndpoint?: unknown }[]
+  return services
+    .filter((s) => [s.type].flat().map(String).includes('DIDCommMessaging'))
+    .flatMap((s) => (Array.isArray(s.serviceEndpoint) ? s.serviceEndpoint : [s.serviceEndpoint]))
+    .map((e) => (typeof e === 'string' ? e : (e as { uri?: string } | undefined)?.uri))
+    .find((uri): uri is string => typeof uri === 'string' && uri.startsWith('did:'))
+}
+
+/**
+ * `peerMediatorRoute`'s `tspOnly` route. The mediator a peer that publishes NO `DIDCommMessaging` service is reached
+ * through over DIDComm: the one its
+ * `TSPTransport` service names by DID, when that is not `ownMediatorDid` and its own document publishes a usable
+ * `DIDCommMessaging` pair. Undefined for every other document — one with any `DIDCommMessaging` service (a VTA, storm's
+ * first-vtc, the lab) or whose TSP mediator is ours; those are forwarded exactly as before. Throws when the peer's
+ * document or its mediator's cannot be read (the caller then forwards as before too).
+ *
+ * Measured on the SEDI VTC (2026-11-17, a `did:webs`): its only messaging service is `TSPTransport` → storm's
+ * mediator, whose own document carries `DIDCommMessaging`. A single forward to our mediator with `next` = that
+ * community names a DID our mediator has no route to. Across two mediators a forward is two layers (upstream
+ * affinidi-messaging-helpers examples/cross_mediator_forwarding.rs): the inner one to the recipient's mediator, `next`
+ * = the recipient; the outer one to ours, `next` = the recipient's mediator.
+ */
+/**
+ * How long `peerMediatorRoute` waits for the peer's own document: a route hint, not a sign-in. A peer that does not
+ * answer in time is forwarded as before, so a slow resolver never stalls a message (ac on #1106). Credo has usually
+ * resolved the document already, for the authcrypt just before the forward.
+ */
+export const ROUTE_LOOKUP_TIMEOUT_MS = 3_000
+
+/** Why a peer is forwarded through its own mediator rather than ours alone (`peerMediatorRoute`). */
+export type PeerMediatorReason = 'tspOnly' | 'didWebs'
+
+/**
+ * The mediator, other than ours, that a peer's DIDComm must be forwarded through as a second layer, and why:
+ *
+ * - `tspOnly`: no `DIDCommMessaging` service, and a `TSPTransport` service naming another
+ *   mediator by DID.
+ * - `didWebs`: a `did:webs` peer whose `DIDCommMessaging` service names another mediator by DID. A single forward to
+ *   ours leaves our mediator to resolve the `did:webs` itself to route `next`, which an Affinidi mediator does only
+ *   when built with its resolver's opt-in `did-webs` feature; through the mediator the peer names, nothing on the way
+ *   resolves a `did:webs`. Seen on the SEDI VTC (11-17, ~19:30Z): it added `DIDCommMessaging` → storm's mediator,
+ *   which turned the `tspOnly` route off for it.
+ *
+ * Undefined for every other document, which is forwarded exactly as before: a `did:webvh` with `DIDCommMessaging`
+ * whatever mediator it names (storm's first-vtc, a VTA, the lab), a mediator that is ours, an endpoint that is a URL.
+ */
+export async function peerMediatorRoute(
+  agent: Agent,
+  peerDid: string,
+  ownMediatorDid: string
+): Promise<{ mediator: VtiMediatorEndpoints; reason: PeerMediatorReason } | undefined> {
+  const doc = await withinTime(agent.dids.resolveDidDocument(peerDid), ROUTE_LOOKUP_TIMEOUT_MS, 'a peer route')
+  const services = (doc.service ?? []) as { type?: unknown; serviceEndpoint?: unknown }[]
+  const typesOf = (s: { type?: unknown }) => [s.type].flat().map(String)
+  const mediatorNamedBy = (match: (type: string) => boolean) =>
+    services
+      .filter((s) => typesOf(s).some(match))
+      .flatMap((s) => (Array.isArray(s.serviceEndpoint) ? s.serviceEndpoint : [s.serviceEndpoint]))
+      .map((e) => (typeof e === 'string' ? e : (e as { uri?: string } | undefined)?.uri))
+      .find((uri): uri is string => typeof uri === 'string' && uri.startsWith('did:'))
+  const isDidComm = (t: string) => t === 'DIDCommMessaging' || t === 'dm'
+  let theirs: string | undefined
+  let reason: PeerMediatorReason
+  if (services.some((s) => typesOf(s).some(isDidComm))) {
+    if (!peerDid.startsWith('did:webs:')) return undefined
+    theirs = mediatorNamedBy(isDidComm)
+    reason = 'didWebs'
+  } else {
+    theirs = mediatorNamedBy((t) => t === 'TSPTransport')
+    reason = 'tspOnly'
+  }
+  if (!theirs || theirs === ownMediatorDid) return undefined
+  // Bounded too: a route hint, not a sign-in. `resolveVtiMediator` retries patiently (4 x 15 s), and a peer that could
+  // not be routed is looked at again on its next message, so unbounded this held each send for up to a minute (ac).
+  const mediator = await withinTime(resolveVtiMediator(agent, theirs), ROUTE_LOOKUP_TIMEOUT_MS, 'a peer mediator')
+  return { mediator, reason }
+}
+
+export async function resolveVtiMediator(agent: Agent, mediatorDid: string): Promise<VtiMediatorEndpoints> {
+  const doc = await resolveDidDocumentRetrying(agent, mediatorDid)
+
+  /**
+   * A `serviceEndpoint` is a string, an object with `uri`, or — for a
+   * `did:peer:2` mediator, which is the common case — an **array of objects**,
+   * one per transport. Measured on a live mediator: the `DIDCommMessaging`
+   * service carries both the HTTPS base and the `wss://` socket that way, and
+   * the ATM auth URL is a separate `Authentication` service.
+   */
+  const urisOf = (endpoint: unknown): string[] => {
+    if (typeof endpoint === 'string') return [endpoint]
+    if (Array.isArray(endpoint)) return endpoint.flatMap(urisOf)
+    if (endpoint && typeof endpoint === 'object' && typeof (endpoint as { uri?: string }).uri === 'string') {
+      return [(endpoint as { uri: string }).uri]
+    }
+    return []
+  }
+
+  const services = doc.service ?? []
+  const isDidComm = (type: string) => type === 'DIDCommMessaging' || type === 'dm'
+  const didCommUris = services.filter((s) => isDidComm(String(s.type))).flatMap((s) => urisOf(s.serviceEndpoint))
+  const authUris = services.filter((s) => String(s.type) === 'Authentication').flatMap((s) => urisOf(s.serviceEndpoint))
+
+  const httpUri = didCommUris.find((u) => u.startsWith('http://') || u.startsWith('https://'))
+  const wsUri = didCommUris.find((u) => u.startsWith('ws://') || u.startsWith('wss://'))
+  if (!httpUri || !wsUri) {
+    throw new Error(
+      `${LOG_PREFIX} ${mediatorDid} advertises no usable DIDCommMessaging pair (http: ${httpUri ?? 'none'}, ws: ${wsUri ?? 'none'})`
+    )
+  }
+  // The mediator publishes its ATM auth URL as an `Authentication` service; the
+  // challenge hangs off it. Without one, it is conventionally `<base>/authenticate`.
+  const authEndpoint = (authUris[0] ?? `${httpUri.replace(/\/$/, '')}/authenticate`).replace(/\/$/, '')
+
+  const keyAgreement = doc.keyAgreement?.[0]
+  const vm = typeof keyAgreement === 'string' ? doc.dereferenceKey(keyAgreement, ['keyAgreement']) : keyAgreement
+  if (!vm) throw new Error(`${LOG_PREFIX} ${mediatorDid} publishes no keyAgreement verification method`)
+  // A did:peer:2 key arrives as `publicKeyMultibase`, a did:webvh one as a JWK.
+  // Credo's own helper reads either, so neither shape has to be decoded here.
+  const publicJwk = getPublicJwkFromVerificationMethod(vm) as DidCommV2KeyAgreementJwk
+
+  return { did: mediatorDid, authEndpoint, wsEndpoint: wsUri, publicJwk, kid: vm.id }
+}
+
+/** The client identity this transport speaks as — a v2 DID Credo already holds. */
+export interface VtiClientIdentity {
+  did: string
+  /** The DID's own key-agreement verification method id (the `skid` we sign with). */
+  kid: string
+  senderKey: Kms.PublicJwk<Kms.X25519PublicJwk>
+}
+
+/**
+ * Mint the DID this wallet presents to a VTA's mediator.
+ *
+ * Not an OOB invitation: that path demands Coordinate Mediation 2.0 routing
+ * through *our* mediator, which has nothing to do with this leg — here the ATM
+ * socket is the routing, because the mediator delivers to whichever DID logged
+ * in. So this builds the `did:peer:2` directly: one Ed25519 key in Askar, the
+ * matching X25519 keyAgreement derived by Credo, and a `DIDCommMessaging`
+ * service naming the mediator by its DID.
+ *
+ * That service is how a VTA reaches this phone when it is not the one asking.
+ * An approver is pushed a consent request only if its DID document carries a
+ * `DIDCommMessaging` service whose endpoint is a mediator DID (vti #1579,
+ * `resolve_mediator_did_with_resolver`) — the shape the reference client mints,
+ * `{"t":"dm","s":…,"a":["didcomm/v2"]}`. Credo's helper writes a DIDComm v1
+ * `did-communication` service with the socket URL instead, which the VTA reads
+ * as "no route": the approval was never pushed, and the phone saw it only
+ * because My Agent went and fetched it (2026-09-21). A DID already minted
+ * keeps its old service; only new mints carry this one.
+ */
+export async function createVtiClientDid(agent: Agent, mediator: VtiMediatorEndpoints): Promise<string> {
+  return createPeerDidNamingUri(agent, mediator.did, mediator.wsEndpoint)
+}
+
+/**
+ * A `did:peer:2` on one fresh Ed25519 key in Askar (X25519 keyAgreement derived), with one DIDComm v2 service whose
+ * `uri` is `uri` — a mediator's DID for {@link createVtiClientDid}, a phone's mailbox DID for a wallet contact
+ * (walletMailbox.ts). `builderEndpoint` only feeds the document builder; its service is replaced before the DID is
+ * encoded, since the DID string is the document.
+ */
+export async function createPeerDidNamingUri(
+  agent: Agent,
+  uri: string,
+  builderEndpoint = 'https://example.invalid'
+): Promise<string> {
+  const key = await agent.kms.createKey({ type: { kty: 'OKP', crv: 'Ed25519' } })
+  const publicJwk = Kms.PublicJwk.fromPublicJwk(key.publicJwk) as Kms.PublicJwk<Kms.Ed25519PublicJwk>
+  const { didDocument, keys } = createPeerDidDocumentFromServices(
+    [
+      {
+        id: 'vti',
+        serviceEndpoint: builderEndpoint,
+        recipientKeys: [publicJwk],
+        routingKeys: [],
+      },
+    ],
+    true
+  )
+  // The builder above supplies the keys; the service is replaced with the v2
+  // one before the DID is encoded, since the DID string is the document.
+  didDocument.service = [
+    new NewDidCommV2Service({
+      id: '#didcomm',
+      serviceEndpoint: new NewDidCommV2ServiceEndpoint({ uri, accept: ['didcomm/v2'] }),
+    }),
+  ]
+  const created = await agent.dids.create({
+    method: 'peer',
+    didDocument,
+    options: { numAlgo: PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc, keys },
+  })
+  const did = created.didState.did
+  if (!did) throw new Error(`${LOG_PREFIX} could not create a client DID: ${created.didState.state}`)
+  return did
+}
+
+/**
+ * A temporary manager key as an Ed25519 `did:key`: what a link without a QR
+ * shows for the admin to grant. The VTA Farm's Admin DID field accepts only
+ * this form ("Paste only the did:key value (e.g. did:key:z6Mk…)", measured on
+ * the Farm portal 2026-09-25), and it is what pnm and the VTA plugin show.
+ *
+ * It names no mediator, and needs none for its one job. The VTA answers the
+ * sender it authenticated through its own mediator, and that mediator keeps a
+ * message for a DID with no service in that DID's own queue (VTI ed672fff
+ * `vta-service/src/messaging/service.rs:535-600`; affinidi-messaging mediator
+ * `routing.rs:382-405`), which this phone collects on the socket it opened as
+ * the key. The first connect swaps it onto a `did:peer:2` that names the
+ * mediator ({@link createVtiClientDid}), so pushes reach the phone after that.
+ *
+ * Both of the document's methods — the Ed25519 one and the X25519 one derived
+ * from it — are recorded against the one KMS key, as the did:peer:2 builder
+ * does, so {@link vtiClientIdentityFromDid} finds the key-agreement key.
+ */
+export async function createVtiTemporaryDidKey(agent: Agent): Promise<string> {
+  const key = await agent.kms.createKey({ type: { kty: 'OKP', crv: 'Ed25519' } })
+  const publicJwk = Kms.PublicJwk.fromPublicJwk(key.publicJwk) as Kms.PublicJwk<Kms.Ed25519PublicJwk>
+  const didKey = new DidKey(publicJwk)
+  const document = didKey.didDocument
+  const relative = (id: string) => id.slice(id.indexOf('#'))
+  const methodIds = new Set<string>(
+    [...(document.verificationMethod ?? []), ...(document.keyAgreement ?? [])].map((entry) =>
+      relative(typeof entry === 'string' ? entry : entry.id)
+    )
+  )
+  await agent.dids.import({
+    did: didKey.did,
+    didDocument: document,
+    keys: [...methodIds].map((didDocumentRelativeKeyId) => ({ didDocumentRelativeKeyId, kmsKeyId: key.keyId })),
+  })
+  return didKey.did
+}
+
+/**
+ * The identity a v2 DID Credo already holds presents to a mediator: its own
+ * keyAgreement verification method, and the Askar key behind it. Mirrors what
+ * `ref-18` assembles by hand — the key stays in the KMS; only its id travels.
+ */
+export async function vtiClientIdentityFromDid(agent: Agent, did: string): Promise<VtiClientIdentity> {
+  const { didDocument, keys } = await agent.dids.resolveCreatedDidDocumentWithKeys(did)
+  const keyAgreementRef = didDocument.keyAgreement?.[0]
+  const vm =
+    typeof keyAgreementRef === 'string'
+      ? didDocument.dereferenceKey(keyAgreementRef, ['keyAgreement'])
+      : keyAgreementRef
+  if (!vm) throw new Error(`${LOG_PREFIX} ${did} has no keyAgreement verification method`)
+  const kmsKey = (keys ?? []).find((key) => vm.id.endsWith(key.didDocumentRelativeKeyId))
+  if (!kmsKey) throw new Error(`${LOG_PREFIX} no KMS key backs ${vm.id}`)
+  const senderKey = getPublicJwkFromVerificationMethod(vm) as Kms.PublicJwk<Kms.X25519PublicJwk>
+  senderKey.keyId = kmsKey.kmsKeyId
+  return { did, kid: vm.id, senderKey }
+}
+
+/**
+ * The identity a persona presents, when its key was borrowed from a VTA rather
+ * than minted here: the persona's own keyAgreement verification method, and the
+ * KMS id of the borrowed copy. A `did:webvh` persona is resolved, not created,
+ * so Credo holds no record of it — the caller supplies the key it imported.
+ */
+export async function vtiClientIdentityFromPersona(
+  agent: Agent,
+  personaDid: string,
+  keyAgreementKmsKeyId: string
+): Promise<VtiClientIdentity> {
+  const doc = await resolveDidDocumentRetrying(agent, personaDid)
+  const keyAgreementRef = doc.keyAgreement?.[0]
+  const vm =
+    typeof keyAgreementRef === 'string' ? doc.dereferenceKey(keyAgreementRef, ['keyAgreement']) : keyAgreementRef
+  if (!vm) throw new Error(`${LOG_PREFIX} ${personaDid} has no keyAgreement verification method`)
+  const senderKey = getPublicJwkFromVerificationMethod(vm) as Kms.PublicJwk<Kms.X25519PublicJwk>
+  senderKey.keyId = keyAgreementKmsKeyId
+  return { did: personaDid, kid: vm.id, senderKey }
+}
+
+/**
+ * Authcrypt a v2 plaintext from `sender` to a peer's keyAgreement key (resolved
+ * through Credo), with Credo's own envelope service: the key never leaves the
+ * KMS. What {@link VtiMediatorSession.sendTo} forwards, and — on its own — the
+ * `didcomm-authcrypt` JWE a VTA's `vault/upsert` takes as a sealed secret
+ * (vta-service operations/vault/upsert.rs `unseal_secret`: the authenticated
+ * sender must be the caller).
+ */
+export async function authcryptTo(
+  agent: Agent,
+  sender: VtiClientIdentity,
+  peerDid: string,
+  plaintext: DidCommV2PlaintextMessage
+): Promise<unknown> {
+  const doc = await agent.dids.resolveDidDocument(peerDid)
+  const keyAgreementRef = doc.keyAgreement?.[0]
+  const vm =
+    typeof keyAgreementRef === 'string' ? doc.dereferenceKey(keyAgreementRef, ['keyAgreement']) : keyAgreementRef
+  if (!vm) throw new Error(`${LOG_PREFIX} ${peerDid} publishes no keyAgreement verification method`)
+  const recipientKey = getPublicJwkFromVerificationMethod(vm) as DidCommV2KeyAgreementJwk
+  recipientKey.keyId = vm.id
+
+  const envelopeService = agent.dependencyManager.resolve(DidCommV2EnvelopeService)
+  return envelopeService.pack(agent.context, plaintext, {
+    recipientKey,
+    senderKey: sender.senderKey,
+    senderKeySkid: sender.kid,
+  })
+}
+
+/**
+ * An endpoint's host, whatever its scheme. Not `new URL(…).host`: React Native's URL finds a host only in http(s)
+ * addresses, so a wss:// one gave '' and the log said "on  closed" (a tester's 277.4 log, 11-02).
+ */
+export const endpointHost = (endpoint: string | undefined): string | undefined =>
+  (endpoint && /^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(endpoint)?.[1]) || undefined
+
+/**
+ * One authenticated socket to one mediator, for one DID.
+ *
+ * `start()` performs the login and opens the socket; inbound frames are handed
+ * to Credo's receiver and acknowledged with Pickup 3.0 `messages-received`,
+ * **after** the receiver has taken them — the same persist-before-ack ordering
+ * the rest of the stack holds, since the mediator drops its copy on the ack.
+ * "Taken" means `onMessage`'s promise has settled: a consumer that stores
+ * what arrived returns that work, and a consumer that throws withholds the
+ * ack, so the message is delivered again rather than lost. A community sends
+ * a membership credential once; acknowledged before it was stored, a stop in
+ * between lost it for good (VTI-Q27).
+ */
+export class VtiMediatorSession {
+  private socket?: WebSocket
+  private pollTimer?: ReturnType<typeof setInterval>
+  /** Set by `stop()`, and final: a stopped session never reopens (`ensureOpen`). */
+  private stopped = false
+  private opening?: Promise<void>
+  private readonly seen = new Set<string>()
+  /**
+   * Queue ids whose consumer is running right now. A message is remembered in `seen` only once its consumer has
+   * settled, so until then a second copy of it is not caught there — and a second copy does come: the live copy
+   * and the first drain's copy of the same forward arrive 80 ms apart on every open (measured 2026-11-24, 281's
+   * live mailbox check, where a relationship-DID message was handed to the VRC module twice). A copy of a message
+   * being taken is left alone, unacknowledged: the copy that is being taken acknowledges the id when it settles,
+   * and if that consumer throws, the message is still queued for the next drain, as before.
+   */
+  private readonly taking = new Set<string>()
+  private accessToken?: string
+  private renewTimer?: ReturnType<typeof setTimeout>
+  /** The reopen a `keepOpen` session has scheduled for its closed socket, and how long the next one waits. */
+  private reopenTimer?: ReturnType<typeof setTimeout>
+  private reopenDelayMs = REOPEN_BACKOFF_MIN_MS
+  /** When the current socket opened: a close after `REOPEN_STABLE_MS` of life puts the wait back to the start. */
+  private socketOpenedAt = 0
+  /**
+   * A `start()` is running (the first one, or one inside a reopen). A socket that closes meanwhile is start's own
+   * to deal with (it retries once or throws to its caller), never a reason to arm a reopen: one armed here would
+   * close the socket start's retry just opened, or bring back a session whose open failed and that nothing holds.
+   */
+  private starting = false
+
+  constructor(
+    private readonly agent: Agent,
+    private readonly identity: VtiClientIdentity,
+    private readonly mediator: VtiMediatorEndpoints,
+    private readonly options: {
+      onError?: (error: Error) => void
+      /** Bound on each login step (challenge, authenticate), for tests; see {@link LOGIN_STEP_TIMEOUT_MS}. */
+      loginStepTimeoutMs?: number
+      /**
+       * A message addressed to this client, already decrypted. Set it to read
+       * what a VTA or a VTC answers: Credo has no handler registered for Trust
+       * Task types, so handing those to its receiver only raises "Error
+       * validating message". Without it, frames still go to Credo — which is
+       * what a v1-shaped message wants.
+       */
+      onMessage?: (plaintext: DidCommV2PlaintextMessage) => void | Promise<void>
+      /**
+       * A TSP frame addressed to this client, as raw qb2 bytes — sealed, so
+       * the consumer holds the key. Awaited before the frame is acknowledged:
+       * a consumer that throws has not taken the message, and the mediator
+       * keeps it for redelivery. Without a consumer, TSP frames are left
+       * queued rather than acknowledged blind.
+       */
+      onTspFrame?: (bytes: Uint8Array) => void | Promise<void>
+      /**
+       * A session whose job is to listen (the wallet mailbox): a socket that closes while the session is not stopped
+       * is reopened on its own, after {@link REOPEN_BACKOFF_MIN_MS} and backing off to {@link REOPEN_BACKOFF_MAX_MS},
+       * and the backstop poll reopens a closed socket instead of skipping it. Off (every VTA session): a closed
+       * socket reopens on the next send, as it always has, since those sessions are driven by what they ask.
+       */
+      keepOpen?: boolean
+    } = {}
+  ) {}
+
+  get isOpen(): boolean {
+    return this.socket?.readyState === 1
+  }
+
+  /** Authcrypt a v2 plaintext to the mediator with Credo's envelope service. */
+  private async packForMediator(plaintext: DidCommV2PlaintextMessage): Promise<unknown> {
+    const envelopeService = this.agent.dependencyManager.resolve(DidCommV2EnvelopeService)
+    const recipientKey = this.mediator.publicJwk
+    recipientKey.keyId = this.mediator.kid
+    return envelopeService.pack(this.agent.context, plaintext, {
+      recipientKey,
+      senderKey: this.identity.senderKey,
+      senderKeySkid: this.identity.kid,
+    })
+  }
+
+  /**
+   * One login step, bounded: past the deadline the request is aborted and the
+   * step fails as a stall (never "refused", so `ensureAccessToken` tries again,
+   * on a fresh connection). Measured on iOS at the 227 gate: the mediator
+   * answered a new key's authenticate in 3 ms and the phone never went on to
+   * open its socket — the POST rode a pooled keep-alive connection that never
+   * completed (the class of the 08-18 finding, where Credo's own POSTs died on
+   * stale pooled sockets). Unbounded, that sign-in waited for ever.
+   */
+  private async loginStep<T>(what: string, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const ms = this.options.loginStepTimeoutMs ?? LOGIN_STEP_TIMEOUT_MS
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort()
+        reject(new Error(`${LOG_PREFIX} ${what} did not answer within ${ms} ms`))
+      }, ms)
+    })
+    try {
+      return await Promise.race([run(controller.signal), late])
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  /** `POST /challenge` → authenticate → JWT. */
+  private async login(): Promise<string> {
+    // Read as text first: a tunnel in front of the mediator can answer with a
+    // page instead of JSON (measured on iOS as "Unexpected character: R"), and
+    // the status plus the first line say what happened where a parse error would not.
+    const { challengeResponse, challengeText } = await this.loginStep('the mediator challenge', async (signal) => {
+      const answer = await fetch(`${this.mediator.authEndpoint}/challenge`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ did: this.identity.did }),
+        signal,
+      })
+      return { challengeResponse: answer, challengeText: await answer.text() }
+    })
+    let challengeBody: { data?: { challenge?: string; session_id?: string }; sessionId?: string } = {}
+    try {
+      challengeBody = JSON.parse(challengeText)
+    } catch {
+      throw new Error(
+        `${LOG_PREFIX} challenge answered ${challengeResponse.status} with a non-JSON body: ${challengeText.slice(0, 80)}`
+      )
+    }
+    const challenge = challengeBody?.data?.challenge
+    const sessionId = challengeBody?.data?.session_id ?? challengeBody?.sessionId
+    if (!challenge || !sessionId) {
+      throw new Error(
+        `${LOG_PREFIX} challenge refused (${challengeResponse.status}): ${JSON.stringify(challengeBody).slice(0, 200)}`
+      )
+    }
+
+    const authenticate = {
+      id: uuid(),
+      typ: PLAIN,
+      type: ATM_AUTHENTICATE,
+      from: this.identity.did,
+      to: [this.mediator.did],
+      created_time: nowSec(),
+      expires_time: nowSec() + MEDIATOR_REQUEST_EXPIRY_SECS,
+      body: { challenge, session_id: sessionId },
+    }
+    const packed = JSON.stringify(await this.packForMediator(authenticate))
+    const { response, body } = await this.loginStep('the mediator authenticate', async (signal) => {
+      const answer = await fetch(this.mediator.authEndpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: packed,
+        signal,
+      })
+      return {
+        response: answer,
+        body: (await answer.json().catch(() => ({}))) as { data?: { access_token?: string } },
+      }
+    })
+    const token = body?.data?.access_token
+    if (!token) {
+      throw new Error(`${LOG_PREFIX} authenticate refused (${response.status}): ${JSON.stringify(body).slice(0, 200)}`)
+    }
+    return token
+  }
+
+  /**
+   * Mint an access token unless one is already held.
+   *
+   * The login is two round trips through a tunnel; a transient answer from the
+   * tunnel itself is not a refusal, so try a few times before giving up.
+   */
+  private async ensureAccessToken(): Promise<void> {
+    // A token that has expired, or is about to, would be accepted by the socket
+    // upgrade and then closed at once: never present one.
+    const exp = accessTokenExpiry(this.accessToken)
+    if (exp !== undefined && exp - Math.floor(Date.now() / 1000) <= TOKEN_RENEW_MARGIN_SECS)
+      this.accessToken = undefined
+    let lastError: unknown
+    for (let attempt = 0; attempt < 3 && !this.accessToken; attempt++) {
+      try {
+        this.accessToken = await this.login()
+      } catch (error) {
+        lastError = error
+        if (String((error as Error)?.message).includes('refused')) throw error
+        await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)))
+      }
+    }
+    if (!this.accessToken) throw lastError instanceof Error ? lastError : new Error(String(lastError))
+  }
+
+  async start(): Promise<void> {
+    this.starting = true
+    try {
+      await this.startOnce()
+    } finally {
+      this.starting = false
+    }
+  }
+
+  private async startOnce(): Promise<void> {
+    // A token the mediator will no longer honour is the one failure this
+    // transport could not talk its way out of. `accessToken` is cached and
+    // every reopen path goes through here, so once the mediator stopped
+    // accepting it — the persona it was minted for was dropped, the mediator
+    // restarted and forgot the session, or it simply expired — every
+    // subsequent attempt presented the same dead bearer and failed
+    // identically, for ever. Only recreating the object cleared it, which in
+    // practice meant relaunching the app.
+    //
+    // Measured on 2026-09-20: forgetting the community mid-session left the
+    // wallet reporting "socket failed to open" for the rest of the run, with
+    // the vetter's desk empty because nothing was ever sent. A fresh launch
+    // fixed it.
+    //
+    // So a handshake refused while using a CACHED token is treated as a
+    // verdict on the token: drop it, mint a new one, try once more. A
+    // freshly-minted token that is refused is a real failure and is reported.
+    const hadCachedToken = this.accessToken !== undefined
+    await this.ensureAccessToken()
+    try {
+      await this.openSocket()
+    } catch (error) {
+      if (hadCachedToken) {
+        // Refused with a cached token: the token is the suspect, mint another.
+        this.accessToken = undefined
+        await this.ensureAccessToken()
+      } else if (!isOpenTimeout(error)) {
+        throw error
+      }
+      // A stalled open gets one fresh socket: the login was good, the connect
+      // is what failed.
+      await this.openSocket()
+    }
+    try {
+      await this.startLiveDelivery()
+    } catch (error) {
+      // Upgraded and then closed — the mediator's answer to a token it no longer
+      // honours. Without a cached token there is nothing left to try.
+      if (!hadCachedToken) throw error
+      this.accessToken = undefined
+      await this.ensureAccessToken()
+      await this.openSocket()
+      await this.startLiveDelivery()
+    }
+    this.scheduleRenewal()
+    // Whether this phone is collecting its inbox, and where: a report could not say (D7FG-2Y9J).
+    releaseWarn(`${LOG_PREFIX} collecting for ${didPrefix(this.identity.did)} on ${this.where}: live delivery on`)
+  }
+
+  /**
+   * Replace the socket before the mediator ends it at the token's expiry, so a
+   * send never lands in the gap (229 lab gate, 2026-10-01: a vetter's statement
+   * did, 15 minutes after its sign-in).
+   */
+  private scheduleRenewal(): void {
+    if (this.renewTimer) clearTimeout(this.renewTimer)
+    this.renewTimer = undefined
+    const exp = accessTokenExpiry(this.accessToken)
+    if (exp === undefined || this.stopped) return
+    const inMs = Math.max(0, (exp - TOKEN_RENEW_MARGIN_SECS) * 1000 - Date.now())
+    this.renewTimer = setTimeout(() => {
+      this.renewTimer = undefined
+      if (this.stopped) return
+      this.accessToken = undefined
+      releaseWarn(
+        `${LOG_PREFIX} renewing the socket for ${didPrefix(this.identity.did)} on ${this.where} before its token expires`
+      )
+      void this.reopen().catch((error) => this.options.onError?.(error as Error))
+    }, inMs)
+  }
+
+  /** Open the websocket and attach the frame handler. */
+  private async openSocket(): Promise<void> {
+    const socket = new WebSocket(this.mediator.wsEndpoint, [`bearer.${this.accessToken}`, WS_APP_SUBPROTOCOL])
+    await new Promise<void>((resolve, reject) => {
+      const onOpen = () => {
+        cleanup()
+        resolve()
+      }
+      // React Native's error event carries the reason as `message`, and a
+      // handshake the mediator rejects arrives as a close rather than an error —
+      // so both are reported, or the failure reads as a bare "it didn't open".
+      const onError = (event: unknown) => {
+        cleanup()
+        const detail = (event as { message?: string } | undefined)?.message
+        reject(new Error(`${LOG_PREFIX} socket failed to open${detail ? `: ${detail}` : ''}`))
+      }
+      const onClose = (event: unknown) => {
+        cleanup()
+        const { code, reason } = (event ?? {}) as { code?: number; reason?: string }
+        reject(new Error(`${LOG_PREFIX} socket closed during handshake (${code ?? '?'}${reason ? ` ${reason}` : ''})`))
+      }
+      // Neither: give up on this socket, and close it so a late open cannot
+      // leave a second live socket for the DID behind.
+      const timer = setTimeout(() => {
+        cleanup()
+        try {
+          socket.close()
+        } catch {
+          /* never opened */
+        }
+        reject(new Error(`${LOG_PREFIX} ${SOCKET_OPEN_TIMEOUT} after ${SOCKET_OPEN_TIMEOUT_MS} ms`))
+      }, SOCKET_OPEN_TIMEOUT_MS)
+      const cleanup = () => {
+        clearTimeout(timer)
+        socket.removeEventListener('open', onOpen)
+        socket.removeEventListener('error', onError)
+        socket.removeEventListener('close', onClose)
+      }
+      socket.addEventListener('open', onOpen)
+      socket.addEventListener('error', onError)
+      socket.addEventListener('close', onClose)
+    })
+
+    socket.onmessage = (event: WebSocketMessageEvent) => {
+      void this.handleFrame(typeof event.data === 'string' ? event.data : String(event.data))
+    }
+    // The mediator says why it ends a socket. A token it no longer honours is
+    // not presented again: the next reopen signs in.
+    socket.addEventListener('close', (event: unknown) => {
+      const reason = String((event as { reason?: unknown } | undefined)?.reason ?? '')
+      if (/token expired|expired/i.test(reason) && this.socket === socket) this.accessToken = undefined
+      // A socket that ends while the session wants it is the receive leg gone: said, so a report shows it. A
+      // listening session gets it back on its own; any other on its next send.
+      if (!this.stopped && this.socket === socket) {
+        const code = (event as { code?: unknown } | undefined)?.code
+        const closed = `${LOG_PREFIX} socket for ${didPrefix(this.identity.did)} on ${this.where} closed (${String(code ?? '?')}${reason ? ` ${reason.slice(0, 80)}` : ''})`
+        if (!this.options.keepOpen) {
+          releaseWarn(`${closed}; it reopens on the next send`)
+        } else if (this.starting) {
+          // Closed under the start that opened it: start retries once or throws; nothing is armed here.
+          releaseWarn(`${closed}; while starting`)
+        } else {
+          if (Date.now() - this.socketOpenedAt >= REOPEN_STABLE_MS) this.reopenDelayMs = REOPEN_BACKOFF_MIN_MS
+          releaseWarn(`${closed}; reopening in ${this.reopenDelayMs} ms`)
+          this.scheduleReopen()
+        }
+      }
+    })
+    this.socket = socket
+    this.socketOpenedAt = Date.now()
+  }
+
+  /**
+   * Reopen the socket of a `keepOpen` session that closed under it: once, after the current wait; never while a
+   * start or reopen is running or one is already scheduled, never once stopped. Each reopen armed doubles the wait
+   * for the next, up to the cap, whether this one fails (the phone offline, the mediator down: reported, and the
+   * next is scheduled) or opens a socket that closes again before `REOPEN_STABLE_MS`. Only a socket that lived
+   * that long puts the wait back to the start (the close listener), so a mediator that answers and then drops every
+   * socket is not reconnected once a second for ever.
+   */
+  private scheduleReopen(): void {
+    if (this.stopped || this.starting || this.reopenTimer || this.opening) return
+    const delay = this.reopenDelayMs
+    this.reopenDelayMs = Math.min(delay * 2, REOPEN_BACKOFF_MAX_MS)
+    this.reopenTimer = setTimeout(() => {
+      this.reopenTimer = undefined
+      if (this.stopped) return
+      this.reopen().catch((error) => {
+        this.options.onError?.(error as Error)
+        this.scheduleReopen()
+      })
+    }, delay)
+  }
+
+  /** Ask for live delivery, drain what was queued, and start the backstop poll. */
+  private async startLiveDelivery(): Promise<void> {
+    // Pickup 3.0 live mode: without this the mediator queues and waits to be polled.
+    // Sent on the socket just opened, never through `ensureOpen`: this runs
+    // inside a reopen, and a reopen that waits on itself never finishes.
+    await this.sendOnSocket({
+      id: uuid(),
+      typ: PLAIN,
+      type: LIVE_DELIVERY_CHANGE,
+      from: this.identity.did,
+      to: [this.mediator.did],
+      created_time: nowSec(),
+      expires_time: nowSec() + MEDIATOR_REQUEST_EXPIRY_SECS,
+      return_route: 'all',
+      body: { live_delivery: true },
+    })
+
+    // Live delivery only carries messages that arrive from now on. Anything the
+    // mediator queued while this DID was offline — a consent request pushed to
+    // an approver before its app opened — is fetched with an explicit
+    // delivery-request; the `delivery` response is unpacked in `handleFrame`.
+    await this.requestDelivery(true, this.armFirstDrain())
+    // And a live push can be missed — measured: a vetting statement sat in the
+    // recipient's queue while its socket was open (VTI-24's shape again). A
+    // periodic delivery-request is the backstop; an empty queue answers with a
+    // `status`, which handleFrame treats as the answer it is. The mediator's own
+    // resync signal (tdk-rs #830) makes a missed push visible sooner — see
+    // `heardPickup`.
+    if (this.pollTimer) clearInterval(this.pollTimer)
+    this.unansweredPolls = 0
+    this.pollTimer = setInterval(() => {
+      if (this.socket?.readyState !== 1) {
+        // A listening session's socket found closed here (its close event never fired, or a reopen failed and
+        // nothing else was due): reopened from here too. Any other session leaves it for its next send.
+        if (this.options.keepOpen) this.scheduleReopen()
+        return
+      }
+      if (this.unansweredPolls >= SILENT_POLLS_BEFORE_REOPEN) {
+        this.silentReopen(`${this.unansweredPolls} delivery-requests in a row heard nothing back`)
+        return
+      }
+      this.unansweredPolls += 1
+      void this.requestDelivery().catch(() => undefined)
+    }, DELIVERY_POLL_MS)
+  }
+
+  /** The delivery-request a start sent, and what waits for the mediator's answer to it (`firstDrained`). */
+  private firstDrain?: { id: string; promise: Promise<void>; answered: () => void }
+
+  /** A new wait for the answer to the delivery-request this start is about to send; returns that request's id. */
+  private armFirstDrain(): string {
+    const id = uuid()
+    let answered: () => void = () => undefined
+    const promise = new Promise<void>((resolve) => {
+      answered = resolve
+    })
+    this.firstDrain = { id, promise, answered }
+    return id
+  }
+
+  /**
+   * Resolves once the mediator has answered the delivery-request the latest start sent: a `delivery`, once what it
+   * carried has been handed on, or a `status` threaded to that request (nothing was queued). Never rejects, and may
+   * never resolve (a mediator that does not thread its `status`): a caller bounds it. Before any start it resolves
+   * at once, having nothing to wait for.
+   */
+  firstDrained(): Promise<void> {
+    return this.firstDrain?.promise ?? Promise.resolve()
+  }
+
+  /** A pickup `status`: the first drain's answer when it is threaded to that request. */
+  private heardDrainStatus(frame: { type?: unknown; thid?: unknown }): void {
+    if (frame.type === PICKUP_STATUS && this.firstDrain && frame.thid === this.firstDrain.id) this.firstDrain.answered()
+  }
+
+  /** Backstop polls sent since the mediator last said anything at all on this socket. */
+  private unansweredPolls = 0
+  /** Whether anything came on the socket since the last {@link checkAlive}. */
+  private heardSinceCheck = true
+  private aliveTimer?: ReturnType<typeof setTimeout>
+
+  /**
+   * Prove the socket answers: a delivery-request now, and a reopen if nothing at all comes back within
+   * {@link ALIVE_CHECK_MS}. Called back in the foreground, where a socket iOS let die still reads open (D7FG-2Y9J).
+   */
+  checkAlive(): void {
+    if (this.stopped || !this.socket) return
+    this.heardSinceCheck = false
+    void this.requestDelivery().catch(() => undefined)
+    if (this.aliveTimer) clearTimeout(this.aliveTimer)
+    this.aliveTimer = setTimeout(() => {
+      this.aliveTimer = undefined
+      if (!this.heardSinceCheck && !this.stopped && this.socket?.readyState === 1)
+        this.silentReopen(`nothing back ${ALIVE_CHECK_MS / 1000} s after coming back to the foreground`)
+    }, ALIVE_CHECK_MS)
+  }
+
+  /** A socket that reads open and answers nothing: said, and replaced. */
+  private silentReopen(why: string): void {
+    releaseWarn(
+      `${LOG_PREFIX} socket for ${didPrefix(this.identity.did)} on ${this.where} reads open but is silent (${why}); reopening it`
+    )
+    this.unansweredPolls = 0
+    void this.reopen().catch((error) => this.options.onError?.(error as Error))
+  }
+
+  /**
+   * Pickup 3.0 delivery-request. This mediator's body is `{recipient_did,
+   * limit}` (`MessagePickupDeliveryRequest`, affinidi-messaging-sdk) — without
+   * `recipient_did` it answers a problem-report and nothing is delivered.
+   */
+  private async requestDelivery(onSocketOnly = false, id = uuid()): Promise<void> {
+    this.lastDeliveryRequestAt = Date.now()
+    await (onSocketOnly ? this.sendOnSocket.bind(this) : this.send.bind(this))({
+      id,
+      typ: PLAIN,
+      type: DELIVERY_REQUEST,
+      from: this.identity.did,
+      to: [this.mediator.did],
+      created_time: nowSec(),
+      expires_time: nowSec() + MEDIATOR_REQUEST_EXPIRY_SECS,
+      return_route: 'all',
+      body: { recipient_did: this.identity.did, limit: 20 },
+    })
+  }
+
+  /**
+   * Decrypt a JWE addressed to this client. The sender is a VTA or a VTC, so
+   * its key is resolved from its DID document the same way an outbound
+   * recipient key is.
+   */
+  private async unpack(encrypted: DidCommV2EncryptedMessage): Promise<DidCommV2PlaintextMessage> {
+    const envelopeService = this.agent.dependencyManager.resolve(DidCommV2EnvelopeService)
+    const recipientKey = this.identity.senderKey as DidCommV2KeyAgreementJwk & { keyId: string }
+    const matchedKid =
+      encrypted.recipients?.find((recipient) => recipient.header?.kid === this.identity.kid)?.header?.kid ??
+      encrypted.recipients?.[0]?.header?.kid ??
+      this.identity.kid
+    const { plaintext } = await envelopeService.unpack(this.agent.context, encrypted, {
+      recipientKey,
+      matchedKid,
+      resolveSenderKey: async (skid: string) => {
+        const doc = await this.agent.dids.resolveDidDocument(skid.split('#')[0])
+        const vm = doc.dereferenceKey(skid, ['keyAgreement'])
+        return vm ? getPublicJwkFromVerificationMethod(vm) : null
+      },
+    })
+    return plaintext
+  }
+
+  private lastDeliveryRequestAt = 0
+
+  /**
+   * A Pickup 3.0 frame from the mediator is bookkeeping, never a message for
+   * the agent, and is never acknowledged. One kind of it asks for action.
+   *
+   * After it drops a live push, the mediator raises a resync and sends a
+   * `status` carrying the inbox's live `message_count` (tdk-rs #830, rate-
+   * limited to one per five seconds). Unlike the status that answers our own
+   * live-delivery-change or delivery-request, it answers nothing — it carries
+   * no `thid` — so it is told apart by that. Ignoring it, as this transport
+   * did, leaves the missed message waiting for the backstop poll; it is the
+   * one signal that makes a longer poll interval safe
+   * (message-protection-plan M1).
+   *
+   * A solicited status keeps its meaning: an empty queue answering our poll.
+   */
+  private heardPickup(plaintext: { type?: unknown; thid?: unknown; body?: unknown }): void {
+    if (plaintext.type !== PICKUP_STATUS || plaintext.thid) return
+    const count = Number((plaintext.body as { message_count?: unknown } | undefined)?.message_count ?? 1)
+    if (!(count > 0)) return
+    if (Date.now() - this.lastDeliveryRequestAt < RESYNC_DEBOUNCE_MS) return
+    this.agent.config.logger.debug(`${LOG_PREFIX} resync: ${count} waiting after a dropped push — draining`)
+    void this.requestDelivery().catch(() => undefined)
+  }
+
+  /** Hand a delivered frame to Credo, then acknowledge it — never the other way round. */
+  private async handleFrame(raw: string): Promise<void> {
+    // Anything at all from the mediator: the socket is alive.
+    this.unansweredPolls = 0
+    this.heardSinceCheck = true
+    try {
+      // TSP demux, before any JSON is parsed: the mediator delivers a stored
+      // TSP message as base64url(qb2) text, and a JWE never starts with `-E`.
+      if (tsp.isTspFrameText(raw)) {
+        await this.handleTspFrame(raw)
+        return
+      }
+      const frame = JSON.parse(raw) as Record<string, unknown>
+      // The mediator answers `live-delivery-change` with a Pickup 3.0 `status`,
+      // which is this transport's own bookkeeping rather than a message for the
+      // agent: Credo has no handler for it and rejects it as invalid. Frames
+      // carrying a peer's message are JWEs, so a plaintext `status` is ours.
+      if (isPickup(frame.type)) {
+        this.heardDrainStatus(frame)
+        this.heardPickup(frame)
+        return
+      }
+      if (this.options.onMessage && typeof frame.protected === 'string') {
+        const plaintext = await this.unpack(frame as unknown as DidCommV2EncryptedMessage)
+        // A `delivery` answering our delivery-request wraps the queued messages
+        // as attachments; unpack and route each, then acknowledge them so the
+        // mediator drops them from the queue.
+        if (plaintext.type === DELIVERY) {
+          // Whatever it carried is handed on before the first drain counts as answered: a delivery only ever
+          // answers a delivery-request, and each one empties what was queued when it was asked.
+          try {
+            await this.handleDelivery(plaintext as unknown as DeliveryMessage)
+          } finally {
+            this.firstDrain?.answered()
+          }
+          return
+        }
+        // The mediator authcrypts its own bookkeeping too, so a frame's type is
+        // only visible once it is open: a Pickup `status` answering
+        // `live-delivery-change` looks exactly like a peer's message until then.
+        // Its own frames are never queued messages: acknowledging one provokes
+        // another status reply, forever (vti-didcomm-js, mediator-transport.js).
+        if (isPickup(plaintext.type)) {
+          this.heardDrainStatus(plaintext)
+          this.heardPickup(plaintext)
+          return
+        }
+        if (plaintext.from === this.mediator.did) {
+          // The mediator answering something this session asked it (`ask`): the frame threaded to the ask, and from
+          // the mediator (it names itself on every Trust Task answer and problem-report it sends, measured at
+          // v0.53.0). Taken by the asker, never handed on or acknowledged. One that arrives after the ask gave up
+          // is no longer waited for and falls through to the branch below: the mediator's own, dropped unsaid.
+          if (this.answeredAsk(plaintext)) return
+          // The mediator's own problem-report, about something this transport
+          // sent it: dropped unsaid, three reached a tester's report as a bare
+          // type, each just after the socket closed (IN-617). Still not handed
+          // on or acknowledged, as before; only said.
+          if (isProblemReport(plaintext))
+            releaseWarn(
+              `${LOG_PREFIX} ${this.where} sent a problem-report for ${didPrefix(this.identity.did)}: ${problemReportWords(plaintext)}`
+            )
+          return
+        }
+        // The mediator ids a stored message by sha256(packed bytes) and streams
+        // those exact bytes, so the hash of the raw frame is the queue id that
+        // acknowledges a live delivery (affinidi-messaging-sdk, websocket.rs)
+        // and the key that dedups an at-least-once redelivery. Without the ack
+        // the message stays queued until it expires, comes back on every poll,
+        // and counts against the sender's queue cap (VTI-29).
+        const queueId = bytesToHex(sha256(utf8ToBytes(raw)))
+        if (this.seen.has(queueId)) {
+          await this.acknowledge([queueId])
+          return
+        }
+        // Awaited, and remembered only once taken: a consumer that throws has
+        // not taken the message, so it is neither acknowledged nor marked seen,
+        // and the mediator's redelivery is handled afresh.
+        const onMessage = this.options.onMessage
+        if (!(await this.takeOnce(queueId, () => onMessage(plaintext)))) return
+        this.remember(queueId)
+        await this.acknowledge([queueId])
+      } else {
+        const receiver = this.agent.dependencyManager.resolve(DidCommMessageReceiver)
+        await receiver.receiveMessage(frame)
+      }
+    } catch (error) {
+      this.options.onError?.(error instanceof Error ? error : new Error(String(error)))
+    }
+  }
+
+  /**
+   * A live-delivered TSP frame: hand the bytes to the consumer, then
+   * acknowledge by the mediator's queue id for it — SHA-256 of the delivered
+   * text. Same persist-before-ack ordering as the DIDComm path.
+   */
+  private async handleTspFrame(text: string): Promise<void> {
+    if (!this.options.onTspFrame) {
+      this.agent.config.logger.debug(`${LOG_PREFIX} TSP frame left queued: no consumer on this session`)
+      return
+    }
+    const queueId = tsp.tspFrameQueueId(text)
+    // The same frame can come again — a pickup `delivery` of what was just
+    // pushed live, before the ack landed — under this same id (the attachment
+    // id is the queue id). Handed over twice, a vetting request was answered
+    // twice (2026-09-25). As the DIDComm path: a copy is acknowledged, not
+    // delivered, and a frame is remembered only once its consumer has settled.
+    if (this.seen.has(queueId)) {
+      await this.acknowledge([queueId])
+      return
+    }
+    const bytes = tsp.fromBase64Url(text)
+    const onTspFrame = this.options.onTspFrame
+    const taken = await this.takeOnce(queueId, async () => {
+      try {
+        await onTspFrame(bytes)
+      } catch (error) {
+        if (!isTspFrameUnopenable(error)) throw error
+        this.dropped(queueId, error.reason, error.message)
+      }
+    })
+    if (!taken) return
+    this.remember(queueId)
+    await this.acknowledge([queueId])
+  }
+
+  /**
+   * Runs a message's consumer unless a copy of the same message is being taken right now (`taking`), in which case
+   * nothing runs and the copy is left for that one to acknowledge. Returns whether the consumer ran.
+   */
+  private async takeOnce(queueId: string | undefined, consume: () => void | Promise<void>): Promise<boolean> {
+    if (queueId && this.taking.has(queueId)) return false
+    if (queueId) this.taking.add(queueId)
+    try {
+      await consume()
+    } finally {
+      if (queueId) this.taking.delete(queueId)
+    }
+    return true
+  }
+
+  /**
+   * A frame that can never be opened here (tspFrameUnopenable): acknowledged, so
+   * it stops coming back and filling the queue a peer's replies need, and said so.
+   * A key not usable yet is not one of these: that frame stays queued.
+   */
+  private dropped(queueId: string, reason: string, detail: string): void {
+    this.droppedCount += 1
+    releaseWarn(
+      `${LOG_PREFIX} dropped a TSP frame for ${didPrefix(this.identity.did)} that can never be opened here (${reason}); queue id ${queueId.slice(0, 12)}: ${detail.slice(0, 160)}`
+    )
+  }
+
+  /** Frames dropped as never openable, counted for a drain's line. */
+  private droppedCount = 0
+
+  /** The mediator this session collects on, by host: what a report has to show (D7FG-2Y9J). */
+  private get where(): string {
+    return endpointHost(this.mediator.wsEndpoint) ?? didPrefix(this.mediator.did)
+  }
+
+  /** Pickup 3.0 `messages-received`: the mediator drops these from the queue. */
+  private async acknowledge(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return
+    await this.send({
+      id: uuid(),
+      typ: PLAIN,
+      type: MESSAGES_RECEIVED,
+      from: this.identity.did,
+      to: [this.mediator.did],
+      created_time: nowSec(),
+      expires_time: nowSec() + MEDIATOR_REQUEST_EXPIRY_SECS,
+      return_route: 'all',
+      body: { message_id_list: messageIds },
+    })
+  }
+
+  /**
+   * A Pickup 3.0 `delivery`: each attachment is a queued JWE — or a queued
+   * TSP frame, carried as its base64url text. Unpack and route every one,
+   * then send `messages-received` with their ids so the mediator clears them.
+   */
+  private async handleDelivery(delivery: DeliveryMessage): Promise<void> {
+    const attachments = delivery.attachments ?? []
+    const acknowledged: string[] = []
+    const droppedBefore = this.droppedCount
+    let mediatorsOwn = 0
+    for (const attachment of attachments) {
+      const data = attachment.data
+      // A queued TSP frame comes as its base64url text in either slot; a JWE
+      // never starts with `-E`, so the demux is safe before any JSON parse.
+      const tspText =
+        typeof data?.base64 === 'string' && tsp.isTspFrameText(data.base64)
+          ? data.base64
+          : typeof data?.json === 'string' && tsp.isTspFrameText(data.json)
+            ? data.json
+            : undefined
+      if (tspText) {
+        try {
+          if (!this.options.onTspFrame) continue
+          if (attachment.id && this.seen.has(attachment.id)) {
+            acknowledged.push(attachment.id)
+            continue
+          }
+          // As the live path: a handler may answer synchronously, so the call is awaited inside the try, never `.catch`ed.
+          const onTspFrame = this.options.onTspFrame
+          const taken = await this.takeOnce(attachment.id, async () => {
+            try {
+              await onTspFrame(tsp.fromBase64Url(tspText))
+            } catch (error) {
+              if (!isTspFrameUnopenable(error)) throw error
+              this.dropped(attachment.id ?? '?', error.reason, error.message)
+            }
+          })
+          // A copy of a frame being taken on the other path: left queued, its taker acknowledges it.
+          if (!taken) continue
+          if (attachment.id) {
+            this.remember(attachment.id)
+            acknowledged.push(attachment.id)
+          }
+        } catch (error) {
+          this.options.onError?.(error instanceof Error ? error : new Error(String(error)))
+        }
+        continue
+      }
+      try {
+        // This mediator attaches each queued message as base64url
+        // (`Attachment::base64`, message_pickup.rs); the spec also allows json.
+        // A message we cannot read is left unacknowledged — it is what the
+        // queue is for — so an error here is reported, not swallowed.
+        const jwe =
+          data?.json ??
+          (data?.base64
+            ? JSON.parse(TypedArrayEncoder.toUtf8String(TypedArrayEncoder.fromBase64Url(data.base64)))
+            : undefined)
+        if (!jwe) continue
+        if (attachment.id && this.seen.has(attachment.id)) {
+          acknowledged.push(attachment.id)
+          continue
+        }
+        // A copy of a message being taken on the live path (the first drain's copy of a forward that was just
+        // pushed live, measured 80 ms apart): left queued and not opened; its taker acknowledges it.
+        if (attachment.id && this.taking.has(attachment.id)) continue
+        const plaintext = await this.unpack(jwe as DidCommV2EncryptedMessage)
+        if (plaintext.from === this.mediator.did) {
+          // The mediator's own, queued: its answer to an `ask` of this session, whose live copy the asker took and
+          // which handleFrame deliberately never acknowledges, so the stored copy comes back on the next drain.
+          // As on the live path: the asker takes it if still waiting, a problem-report is said, nothing is handed
+          // on. Acknowledged here, so it stops coming back. Measured 2026-11-24 (281's live mailbox check): the
+          // first poll after every open re-delivered the account/update and wake/set answers, and the mailbox
+          // logged each as an envelope dropped, which read as lost mail.
+          if (!this.answeredAsk(plaintext) && isProblemReport(plaintext))
+            releaseWarn(
+              `${LOG_PREFIX} ${this.where} sent a problem-report for ${didPrefix(this.identity.did)}: ${problemReportWords(plaintext)}`
+            )
+          mediatorsOwn += 1
+        } else if (!isPickup(plaintext.type)) {
+          const onMessage = this.options?.onMessage
+          // The live copy may have started while this one was unpacked: then this copy is left queued too.
+          if (!(await this.takeOnce(attachment.id, async () => onMessage?.(plaintext)))) continue
+        }
+        if (attachment.id) this.remember(attachment.id)
+        if (attachment.id) acknowledged.push(attachment.id)
+      } catch (error) {
+        this.options.onError?.(error instanceof Error ? error : new Error(String(error)))
+      }
+    }
+    if (acknowledged.length > 0) await this.acknowledge(acknowledged)
+    // What a drain found, as counts that add up to it: opened and taken, dropped as never openable (also
+    // acknowledged, so they stop coming back), left queued for another try, and (only when there were any) the
+    // mediator's own answers, acknowledged and not handed on.
+    if (attachments.length > 0) {
+      const dropped = this.droppedCount - droppedBefore
+      releaseWarn(
+        `${LOG_PREFIX} drained ${attachments.length} queued for ${didPrefix(this.identity.did)} on ${this.where}: ${acknowledged.length - dropped - mediatorsOwn} taken, ${dropped} dropped as never openable, ${attachments.length - acknowledged.length} left queued${mediatorsOwn > 0 ? `, ${mediatorsOwn} the mediator's own answers` : ''}`
+      )
+    }
+  }
+
+  /** Pickup 3.0 `messages-received`: the mediator drops these from the queue. */
+  /** Queue ids already handed off this session, oldest first, bounded. */
+  private remember(queueId: string): void {
+    this.seen.add(queueId)
+    if (this.seen.size > 500) {
+      const oldest = this.seen.values().next().value
+      if (oldest) this.seen.delete(oldest)
+    }
+  }
+
+  /**
+   * An idle socket does not survive indefinitely: a tunnel, a proxy or a dozing
+   * phone closes it, and the mediator can still believe it is open — so the
+   * first symptom is a send failing rather than a close arriving. Reopening is
+   * cheap and keeps the same DID, so the community still sees one applicant.
+   */
+  private async ensureOpen(): Promise<void> {
+    if (this.socket?.readyState === 1) return
+    // A stopped session stays stopped. Its owner has given up on it — a grant
+    // check past its deadline, a disconnect — but work it started can still be
+    // running, and its next send used to reopen the socket here: a second live
+    // socket for the same DID, owned by nobody, which took the answer meant for
+    // the next attempt (Android link on a slow device, 2026-09-24).
+    if (this.stopped) throw new Error(`${LOG_PREFIX} session stopped`)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      await Promise.race([
+        this.reopen(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`${LOG_PREFIX} the mediator socket did not reopen within ${REOPEN_BOUND_MS} ms`)),
+            REOPEN_BOUND_MS
+          )
+        }),
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
+  /**
+   * Close whatever socket is left and start again. One reopen at a time: an
+   * acknowledgement, the poll and a task can all find the socket closed in the
+   * same tick, and two starts racing replace the socket under the first caller
+   * ("socket is not open").
+   */
+  private reopen(): Promise<void> {
+    if (!this.opening) {
+      this.opening = (async () => {
+        try {
+          this.socket?.close()
+        } catch {
+          /* already gone */
+        }
+        this.socket = undefined
+        await this.start()
+      })().finally(() => {
+        this.opening = undefined
+      })
+    }
+    return this.opening
+  }
+
+  private async send(plaintext: DidCommV2PlaintextMessage): Promise<void> {
+    await this.ensureOpen()
+    await this.sendOnSocket(plaintext)
+  }
+
+  /** Pack and send on the socket as it is now; never reopens it. */
+  private async sendOnSocket(plaintext: DidCommV2PlaintextMessage): Promise<void> {
+    if (!this.socket || this.socket.readyState !== 1) {
+      throw new Error(`${LOG_PREFIX} socket is not open`)
+    }
+    const packed = JSON.stringify(await this.packForMediator(plaintext))
+    // Packing takes time; the mediator may have closed the socket meanwhile.
+    if (!this.socket || this.socket.readyState !== 1) {
+      throw new Error(`${LOG_PREFIX} socket closed while the message was packed`)
+    }
+    this.socket.send(packed)
+  }
+
+  /**
+   * Ship a packed TSP message as a binary frame. The mediator routes it on the
+   * cleartext receiver VID and binds the cleartext sender VID to this session,
+   * so the frame's sender has to be the DID this session logged in as. The
+   * bytes are already sealed and signed; nothing is packed to the mediator.
+   */
+  async sendTspFrame(bytes: Uint8Array): Promise<void> {
+    if (!tsp.isTspFrameBytes(bytes))
+      throw new Error(`${LOG_PREFIX} not a TSP frame (leading byte 0x${(bytes[0] ?? 0).toString(16)})`)
+    await this.ensureOpen()
+    if (!this.socket || this.socket.readyState !== 1) {
+      throw new Error(`${LOG_PREFIX} socket is not open`)
+    }
+    // A standalone ArrayBuffer: React Native's WebSocket sends the whole
+    // backing buffer of a view, so a slice of a larger buffer must be copied.
+    this.socket.send(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer)
+  }
+
+  /**
+   * Authcrypt a plaintext to a peer (its keyAgreement key, resolved through
+   * Credo) and forward it through the mediator. This is the whole outbound
+   * path for a VTA or a VTC: they are reached by DID, never dialled directly.
+   */
+  async sendTo(peerDid: string, plaintext: DidCommV2PlaintextMessage): Promise<void> {
+    const inner = await authcryptTo(this.agent, this.identity, peerDid, plaintext)
+    await this.forward(peerDid, inner)
+  }
+
+  /**
+   * Wrap an already-packed JWE for `next` in a Routing 2.0 forward, pack the
+   * forward to the mediator, and ship it over this socket.
+   */
+  async forward(next: string, innerJwe: unknown): Promise<void> {
+    let inner = typeof innerJwe === 'string' ? JSON.parse(innerJwe) : innerJwe
+    let hop = next
+    // Only a peer behind another mediator that ours may not route to (`peerMediatorRoute`: TSP-only, or a did:webs):
+    // one more layer, to that mediator. Every other peer is forwarded as it always was.
+    const theirs = await this.tspOnlyMediatorFor(next)
+    if (theirs) {
+      inner = await this.packFor(theirs, {
+        id: uuid(),
+        typ: PLAIN,
+        type: FORWARD,
+        from: this.identity.did,
+        to: [theirs.did],
+        created_time: nowSec(),
+        expires_time: nowSec() + FORWARD_EXPIRY_SECS,
+        body: { next },
+        attachments: [{ id: utils.uuid(), data: { json: inner } }],
+      })
+      hop = theirs.did
+    }
+    await this.send({
+      id: uuid(),
+      typ: PLAIN,
+      type: FORWARD,
+      from: this.identity.did,
+      to: [this.mediator.did],
+      created_time: nowSec(),
+      expires_time: nowSec() + FORWARD_EXPIRY_SECS,
+      body: { next: hop },
+      attachments: [{ id: utils.uuid(), data: { json: inner } }],
+    })
+  }
+
+  /** What waits for the mediator's answer to an `ask`, by the envelope id the answer is threaded to. */
+  private readonly asks = new Map<
+    string,
+    {
+      resolve: (answer: DidCommV2PlaintextMessage) => void
+      reject: (error: Error) => void
+      timer: ReturnType<typeof setTimeout>
+    }
+  >()
+
+  /**
+   * Ask the mediator itself something: a Trust Task document, signed by the caller for the DID this session is
+   * signed in as, carried in the DIDComm binding envelope and authcrypted to the mediator over this socket. Resolves
+   * with the mediator's answer, the frame it threads to the envelope (`thid`: a response, or a `trust-task-error`
+   * document refusing the task); rejects with the mediator's problem-report words (threaded by `thid` or `pthid`),
+   * when the socket cannot carry it, or after `timeoutMs`.
+   *
+   * The mailbox uses it for its account at the mediator (walletMailbox.ts): `messaging/account/update` to turn on
+   * its own forwarding right, `messaging/wake/set` to leave its push handle. Measured against
+   * affinidi-messaging-mediator v0.53.0 (deploy/keyring-messaging/mailbox/README.md, Evidence).
+   */
+  async ask(document: Record<string, unknown>, timeoutMs = ASK_TIMEOUT_MS): Promise<DidCommV2PlaintextMessage> {
+    const id = uuid()
+    const answer = new Promise<DidCommV2PlaintextMessage>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.asks.delete(id)
+        reject(new Error(`${LOG_PREFIX} ${this.where} did not answer within ${timeoutMs} ms`))
+      }, timeoutMs)
+      this.asks.set(id, { resolve, reject, timer })
+    })
+    try {
+      await this.send({
+        id,
+        typ: PLAIN,
+        type: TRUST_TASK_V2_ENVELOPE_TYPE,
+        from: this.identity.did,
+        to: [this.mediator.did],
+        created_time: nowSec(),
+        expires_time: nowSec() + FORWARD_EXPIRY_SECS,
+        body: document,
+      })
+    } catch (error) {
+      const waiting = this.asks.get(id)
+      if (waiting) {
+        clearTimeout(waiting.timer)
+        this.asks.delete(id)
+      }
+      throw error
+    }
+    return answer
+  }
+
+  /**
+   * If `plaintext` answers an `ask`, settle that ask and say so. An answer, and a `trust-task-error` document, are
+   * threaded to the ask's envelope by `thid`. The mediator's problem-report about that envelope is threaded to it by
+   * `pthid` (affinidi-messaging-mediator error_response.rs, every release): its refusal of a request that did not
+   * ask for the document (from v0.54.0), or an envelope it could not read as a Trust Task at all. Read by `thid`
+   * alone, such a refusal was no answer, and the ask ran to its bound (ASK_TIMEOUT_MS) for a "no" that had arrived.
+   */
+  private answeredAsk(plaintext: DidCommV2PlaintextMessage): boolean {
+    const { thid, pthid } = plaintext as { thid?: unknown; pthid?: unknown }
+    const id = [thid, pthid].find((t): t is string => typeof t === 'string' && this.asks.has(t))
+    const waiting = id === undefined ? undefined : this.asks.get(id)
+    if (!waiting || id === undefined) return false
+    clearTimeout(waiting.timer)
+    this.asks.delete(id)
+    if (isProblemReport(plaintext)) {
+      waiting.reject(new Error(`${LOG_PREFIX} ${this.where} refused: ${problemReportWords(plaintext)}`))
+    } else {
+      waiting.resolve(plaintext)
+    }
+    return true
+  }
+
+  /**
+   * A forward for the mailbox path: `innerJwe` attached as its exact bytes, base64, so the id the mediator stores
+   * the message under is known to the sender. The mediator ids a stored message by the sha256 of the bytes it
+   * stores; a `data.base64` attachment is stored as decoded, while a `data.json` one is re-serialised by the mediator
+   * first, so its id is of bytes the sender never produced (measured both ways on affinidi-messaging-mediator
+   * v0.53.0, deploy/keyring-messaging/mailbox/README.md row W4). `messaging/wake/request` names that id.
+   *
+   * Mailbox path only: `next` is a mailbox at this very mediator, so no second hop (`forward`'s TSP-only route) is
+   * read. The VTA path keeps `forward` and its `data.json` shape, since that mediator's version is not ours to assume.
+   */
+  async forwardForMailbox(next: string, innerJwe: unknown): Promise<{ id: string }> {
+    const bytes = utf8ToBytes(typeof innerJwe === 'string' ? innerJwe : JSON.stringify(innerJwe))
+    const id = bytesToHex(sha256(bytes))
+    await this.send({
+      id: uuid(),
+      typ: PLAIN,
+      type: FORWARD,
+      from: this.identity.did,
+      to: [this.mediator.did],
+      created_time: nowSec(),
+      expires_time: nowSec() + FORWARD_EXPIRY_SECS,
+      body: { next },
+      attachments: [{ id: utils.uuid(), data: { base64: TypedArrayEncoder.toBase64Url(bytes) } }],
+    })
+    return { id }
+  }
+
+  /** Each peer's `peerMediatorRoute`, read once per session; a peer that could not be read is read again next time. */
+  private readonly tspOnlyRoutes = new Map<string, VtiMediatorEndpoints | null>()
+  /** A peer's route being read now: sends that start meanwhile wait for this read (peerRouteSwitch.ts). */
+  private readonly routesBeingRead = new Map<string, Promise<VtiMediatorEndpoints | undefined>>()
+
+  private tspOnlyMediatorFor(peerDid: string): Promise<VtiMediatorEndpoints | undefined> {
+    if (this.tspOnlyRoutes.has(peerDid)) return Promise.resolve(this.tspOnlyRoutes.get(peerDid) ?? undefined)
+    // Off: each send reads for itself, once, and an unread peer is forwarded through our mediator alone, as before.
+    if (!isPeerRouteReadOnceOn()) return this.readPeerRoute(peerDid, 1, false)
+    const reading = this.routesBeingRead.get(peerDid)
+    if (reading) return reading
+    const webs = peerDid.startsWith('did:webs:')
+    const read = this.readPeerRoute(peerDid, webs ? PEER_ROUTE_TRIES_FOR_WEBS : 1, webs).finally(() => {
+      if (this.routesBeingRead.get(peerDid) === read) this.routesBeingRead.delete(peerDid)
+    })
+    this.routesBeingRead.set(peerDid, read)
+    return read
+  }
+
+  /**
+   * Read a peer's route, up to `tries` times, and keep it for the session. A route that could not be read is said in
+   * the log, by the peer's prefix and how it failed, never by anything a message carries. Then either the send fails
+   * (`failUnread`: a `did:webs` peer, which our mediator alone cannot reach) or the peer is forwarded as before this
+   * time and read again next time.
+   */
+  private async readPeerRoute(
+    peerDid: string,
+    tries: number,
+    failUnread: boolean
+  ): Promise<VtiMediatorEndpoints | undefined> {
+    for (let attempt = 1; attempt <= tries; attempt++) {
+      let route: Awaited<ReturnType<typeof peerMediatorRoute>>
+      try {
+        route = await peerMediatorRoute(this.agent, peerDid, this.mediator.did)
+      } catch (error) {
+        const how = /took over \d+ s$/.test(String((error as Error)?.message)) ? 'no answer in time' : 'the read failed'
+        const last = attempt === tries
+        this.agent.config.logger.warn(
+          `${LOG_PREFIX} the route to ${didPrefix(peerDid)} could not be read (${how}), try ${attempt} of ${tries}${
+            !last
+              ? ''
+              : failUnread
+                ? ': nothing is sent, through our mediator alone it cannot arrive'
+                : ': forwarded through our mediator alone this time'
+          }`
+        )
+        continue
+      }
+      // A miss is remembered too, so a peer forwarded as before costs one look a session, not one a message.
+      this.tspOnlyRoutes.set(peerDid, route?.mediator ?? null)
+      if (route) {
+        this.agent.config.logger.info(
+          route.reason === 'tspOnly'
+            ? `${LOG_PREFIX} ${didPrefix(peerDid)} publishes no DIDCommMessaging; forwarding through its TSP mediator ${didPrefix(route.mediator.did)}`
+            : `${LOG_PREFIX} ${didPrefix(peerDid)} is a did:webs on another mediator; forwarding through its DIDComm mediator ${didPrefix(route.mediator.did)}`
+        )
+      }
+      return route?.mediator
+    }
+    // Unread: nothing is kept, so the next send reads it again.
+    if (failUnread) throw new VtiPeerRouteUnread(didPrefix(peerDid))
+    return undefined
+  }
+
+  /** Authcrypt a v2 plaintext to another mediator than this session's (the inner layer of a two-mediator forward). */
+  private async packFor(mediator: VtiMediatorEndpoints, plaintext: DidCommV2PlaintextMessage): Promise<unknown> {
+    const envelopeService = this.agent.dependencyManager.resolve(DidCommV2EnvelopeService)
+    const recipientKey = mediator.publicJwk
+    recipientKey.keyId = mediator.kid
+    return envelopeService.pack(this.agent.context, plaintext, {
+      recipientKey,
+      senderKey: this.identity.senderKey,
+      senderKeySkid: this.identity.kid,
+    })
+  }
+
+  async stop(): Promise<void> {
+    this.stopped = true
+    if (this.renewTimer) clearTimeout(this.renewTimer)
+    this.renewTimer = undefined
+    if (this.reopenTimer) clearTimeout(this.reopenTimer)
+    this.reopenTimer = undefined
+    if (this.pollTimer) clearInterval(this.pollTimer)
+    this.pollTimer = undefined
+    if (this.aliveTimer) clearTimeout(this.aliveTimer)
+    this.aliveTimer = undefined
+    for (const [id, waiting] of this.asks) {
+      clearTimeout(waiting.timer)
+      this.asks.delete(id)
+      waiting.reject(new Error(`${LOG_PREFIX} session stopped before ${this.where} answered`))
+    }
+    this.socket?.close()
+    this.socket = undefined
+  }
+}
+
+/**
+ * Credo outbound transport backed by a `VtiMediatorSession`.
+ *
+ * Credo picks a transport by the peer endpoint's scheme, so a VTA/VTC peer DID
+ * whose service endpoint the agent cannot dial directly is routed here.
+ */
+export class VtiMediatorOutboundTransport {
+  public supportedSchemes = ['vti']
+
+  constructor(
+    private readonly session: VtiMediatorSession,
+    private readonly peerDidFor: (outboundPackage: unknown) => string
+  ) {}
+
+  async start(): Promise<void> {
+    /* the session owns its lifecycle */
+  }
+
+  async stop(): Promise<void> {
+    await this.session.stop()
+  }
+
+  async sendMessage(outboundPackage: { payload: unknown }): Promise<void> {
+    await this.session.forward(this.peerDidFor(outboundPackage), outboundPackage.payload)
+  }
+}

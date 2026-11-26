@@ -1,0 +1,25 @@
+wallet-s2 PHASE=main — affinidi-messaging-mediator v0.53.0 f6ed8159, mediator did:peer:2.Vz6Mkq9…RzcCJ9
+  ✓ A0 open sign-up: four new DIDs sign in with no admin step, one socket each
+      refusal: e.p.authorization.send_forwarded "Sender isn't allowed to send forwarded messages"
+  ✓ A1 CONTROL: before the flag, a mailbox send (a forward to bob's mailbox) is refused and nothing reaches bob
+  ✓ A2 each phone sets its own SEND_FORWARDED with a signed messaging/account/update, and the answer shows it on
+  ✓ A3 then mailbox sends work: alice↔bob and alice↔carol connect over v2 OOB and deliver both ways
+      refusal: e.p.authorization.send_forwarded "Sender isn't allowed to send forwarded messages"
+  ✓ A4 CONTROL: gw never set its flag, and its forward is still refused
+      refusal: e.p.delivery.refused "Message not accepted for delivery"
+  ✓ B external_forwarding off: a forward whose next is a DID with no account here is refused; CONTROL A3 delivered to an account
+      answer: {"wakeCapable":true}
+  ✓ W1 wake/set: bob and gw give the mediator a handle; wakeCapable true (gw's DID names a DIDComm service with key agreement)
+      answer: {}
+  ✓ W2 CONTROL: bob is online; alice sends and asks for a wake; no ring
+  ✓ W3 CONTROL: carol is offline with no handle; alice sends and asks; no ring
+      ring: issuer did:peer:2.Vz6Mkq9…RzcCJ9 recipient did:peer:2.Vz6Mkt7…ZG0ifQ payload {"handle":"wh_bob","mediator":"did:peer:2.Vz6Mkq…cCJ9","urgency":"interactive","v":1} proofPurpose authentication
+  ✓ W4 bob offline with a handle; alice sends, asks with msgIds = sha256 of the forward's inner JWE as she sent it; gw gets ONE push/wake for wh_bob
+      search: {"keys":210,"bytes":228941,"contactHits":0,"mailboxDidHits":13,"positiveHits":1,"positiveKind":"did:key:"}
+      id check: sender's sha256(inner) bcf83b3b3ac4… vs bob's sha256(frame) bcf83b3b3ac4…  MATCH
+  ✓ F the stored mail holds no contact-DID string (pause for the Redis search, then bob collects)
+      statuses: {"200":10,"429":50}  (EXPECT_LIMIT=on)
+  ✓ C per-DID limit: 60 /whoami-style authenticated requests in a burst from one DID; record 429s
+      (bob frame: Error deleting key with id '8152cf2c-a5e8-4161-a8a8-5195103db5a8')
+
+wallet-s2 main: 12 passed, 0 failed

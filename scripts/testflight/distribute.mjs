@@ -13,6 +13,7 @@
 
 import { readFileSync } from 'node:fs'
 import { createSign } from 'node:crypto'
+import { addToGroup } from './addToGroup.mjs'
 
 const env = (name, fallback) => {
   const value = process.env[name] ?? fallback
@@ -135,9 +136,7 @@ const main = async () => {
   let external = false
   for (const group of groups) {
     const name = group.attributes.name
-    await api('POST', `/v1/betaGroups/${group.id}/relationships/builds`, {
-      data: [{ type: 'builds', id: build.id }],
-    })
+    await addToGroup(api, { groupId: group.id, groupName: name, buildId: build.id, sleep })
     external ||= !group.attributes.isInternalGroup
     console.log(`Added to "${name}" (${group.attributes.isInternalGroup ? 'internal' : 'external'})`)
   }

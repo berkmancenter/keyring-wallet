@@ -358,7 +358,8 @@ corepack enable >/dev/null 2>&1 || true
 corepack prepare "yarn@${YARN_VERSION}" --activate >/dev/null 2>&1 || true
 ok "yarn $(yarn --version 2>/dev/null || echo '(unavailable)')"
 
-# bifold/ is part of this repository since the fold (no submodule to fetch): the checkout already has it.
+# The framework lives in packages/ as workspaces of this one repository (no submodule to fetch, no second install): the
+# checkout already has it, and the root `yarn install` below covers it.
 
 step "Installing dependencies (a few minutes the first time)"
 yarn install
