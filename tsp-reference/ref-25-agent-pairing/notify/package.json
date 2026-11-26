@@ -1,0 +1,9 @@
+{
+  "name": "ref-25-agent-pairing-notify",
+  "private": true,
+  "type": "module",
+  "description": "Agent-connect plan step 0.3: how a Claude Code session is told a message arrived (channel, background session, asyncRewake, the Monitor fallback, the plugin's tool gate and hold-back). Throwaway probes; no app change.",
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test" },
+  "dependencies": { "@modelcontextprotocol/sdk": "1.32.2" }
+}
