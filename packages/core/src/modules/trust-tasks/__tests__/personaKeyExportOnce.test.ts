@@ -62,14 +62,23 @@ const persona: VtiPersona = {
   },
 } as unknown as VtiPersona
 
-/** A client of the persona's agent whose exports land in `held` after a turn, as the agent's queue answers them. */
-function client(held: Set<string>, agent: object, exports: string[], fail = false) {
+/**
+ * A client of the persona's agent whose exports land in `held` after a turn, as the agent's queue answers them.
+ * `fail`: every export fails (true), or the ones named by the predicate.
+ */
+function client(
+  held: Set<string>,
+  agent: object,
+  exports: string[],
+  fail: boolean | ((vtaKeyId: string) => boolean) = false
+) {
   const c = new VtaClient(agent as never, VTA, {} as never)
   jest.spyOn(c, 'connect').mockResolvedValue(undefined)
   jest.spyOn(c, 'borrowKey').mockImplementation(async (vtaKeyId: string) => {
     exports.push(vtaKeyId)
     await new Promise((resolve) => setTimeout(resolve, 5))
-    if (fail) throw new Error('the agent did not answer keys/export-secret')
+    if (fail === true || (typeof fail === 'function' && fail(vtaKeyId)))
+      throw new Error('the agent did not answer keys/export-secret')
     held.add(inMemoryKeyId(VTA, vtaKeyId))
     return { keyId: inMemoryKeyId(VTA, vtaKeyId), curve: 'Ed25519', publicKeyMultibase: 'z' }
   })
@@ -122,15 +131,36 @@ describe("a persona's key copies, asked for twice at the same moment", () => {
     expect(exports).toHaveLength(2)
   })
 
-  it('a fetch that fails fails for both, and the next ask fetches again: nothing is kept from it', async () => {
+  // The two copies are fetched together (one export round, not signing then key-agreement): both are tried, both
+  // are waited for, and an ask with a failed fetch in it fails. Before, the loop stopped at the first failure and
+  // nothing of the ask was kept.
+  it('a fetch that fails fails the ask for both callers, and the next ask fetches whatever is still missing', async () => {
     const { held, agent } = phone()
     const exports: string[] = []
     const failing = [client(held, agent, exports, true), client(held, agent, exports, true)]
     const results = await Promise.allSettled(failing.map((c) => c.holdPersonaKeys(persona)))
     expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected'])
-    expect(exports).toEqual([`${PERSONA}#key-0`])
+    // both copies were tried in the one round, each once (the second caller joined)
+    expect(exports).toEqual([`${PERSONA}#key-0`, `${PERSONA}#key-1`])
+    expect(held.size).toBe(0)
     await expect(client(held, agent, exports).holdPersonaKeys(persona)).resolves.toBe(true)
-    expect(exports).toEqual([`${PERSONA}#key-0`, `${PERSONA}#key-0`, `${PERSONA}#key-1`])
+    expect(exports).toEqual([`${PERSONA}#key-0`, `${PERSONA}#key-1`, `${PERSONA}#key-0`, `${PERSONA}#key-1`])
+  })
+
+  it('a failed fetch can leave the other copy held: the next ask fetches only the missing one', async () => {
+    // Harmless: a copy is a copy; the next ask finds it (holdsKeyNow) and exports one key instead of two. The ask
+    // that saw the failure still failed, so nothing signs with a half-held persona by accident.
+    const { held, agent } = phone()
+    const exports: string[] = []
+    const signingFails = (vtaKeyId: string) => vtaKeyId.endsWith('#key-0')
+    await expect(client(held, agent, exports, signingFails).holdPersonaKeys(persona)).rejects.toThrow(
+      /did not answer keys\/export-secret/
+    )
+    expect(exports).toEqual([`${PERSONA}#key-0`, `${PERSONA}#key-1`])
+    expect([...held]).toEqual([inMemoryKeyId(VTA, `${PERSONA}#key-1`)])
+    await expect(client(held, agent, exports).holdPersonaKeys(persona)).resolves.toBe(true)
+    expect(exports).toEqual([`${PERSONA}#key-0`, `${PERSONA}#key-1`, `${PERSONA}#key-0`])
+    expect(held.size).toBe(2)
   })
 })
 
@@ -176,10 +206,13 @@ describe('each key copy says who asked for it and how long it took', () => {
     ])
   })
 
-  it('an export that fails says so, and still fails', async () => {
+  it('an export that fails says so, and still fails (both copies are tried in the one round)', async () => {
     const { held, agent, lines } = logged()
     await expect(client(held, agent, [], true).holdPersonaKeys(persona, 'on use')).rejects.toThrow()
-    expect(timing(lines)).toEqual(['[TrustTasks:VtaClient] key signing copy (on use): not exported, after N ms'])
+    expect(timing(lines)).toEqual([
+      '[TrustTasks:VtaClient] key signing copy (on use): not exported, after N ms',
+      '[TrustTasks:VtaClient] key keyAgreement copy (on use): not exported, after N ms',
+    ])
   })
 
   it('control: a copy already held is not fetched and says nothing', async () => {
