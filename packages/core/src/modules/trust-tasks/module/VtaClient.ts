@@ -647,9 +647,10 @@ export function parseAclEntries(raw: unknown): VtaAclEntry[] {
 
 /**
  * Agent connect (docs/plans/agent-connect-plan.md §3.3, §3.9, step 7.4): the access-list writes an AI agent's entry
- * needs, at `acl/_shared` 0.3 only. 0.1 and 0.2 cannot state listed capabilities and purposes, so stepping down
- * could write a wider entry than the owner chose: a VTA that serves no 0.3 is refused with this error, never asked
- * an older version.
+ * needs, at `acl/_shared` 0.3 only. 0.1 and 0.2 have no `purposes` member (and 0.1 no listed capabilities), so an
+ * entry written there grants every purpose but `modelTraining`: wider than the owner chose. A VTA that serves no 0.3
+ * (vta-service 0.79.0 serves acl 0.2 only; 0.84.0 and 0.87.0 serve 0.3, as step 7.1 measured) is refused with this
+ * error, never asked an older version.
  */
 export class AgentAccessUnsupportedError extends Error {
   constructor(readonly task: string) {
