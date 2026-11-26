@@ -9,6 +9,9 @@ generate-app-package-json.js
 # drift test and make the OWFa attribution false.
 packages/core/src/modules/trust-tasks/__tests__/fixtures/pcs-schemas/*.json
 packages/core/src/modules/trust-tasks/__tests__/fixtures/acl-schemas/*.json
+# Relative to this file's folder: prettier 3 reads .prettierignore paths that way, so a `packages/...` entry here
+# matches nothing when --ignore-path is packages/.prettierignore (checked with prettier 3.4.2, 2026-11-25).
+core/src/modules/trust-tasks/__tests__/fixtures/acl-schemas-0.3/*.json
 packages/core/src/modules/trust-tasks/__tests__/fixtures/vtc-join-schemas/*.json
 packages/core/src/modules/trust-tasks/__tests__/fixtures/vetting-schemas/*.json
 packages/core/src/modules/trust-tasks/__tests__/fixtures/pcs-vetter-schemas/*.json
