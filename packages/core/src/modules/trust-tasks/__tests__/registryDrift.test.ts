@@ -3,6 +3,7 @@
  * folders up from the fixtures landed one folder above the repository, so the drift tests skipped on every machine,
  * the registry present or not, and nothing said so.
  */
+import { execFileSync } from 'child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -65,6 +66,58 @@ describe('the registry clone the drift tests read', () => {
     process.env.TRUST_TASKS_REGISTRY = join(base, 'nothing-here')
     expect(registryPath(fixtures)).toBe(join(base, 'nothing-here'))
     expect(() => expectNoDrift(fixtures, {})).toThrow(/TRUST_TASKS_REGISTRY .* does not exist/)
+  })
+
+  test('another source is its own folder in external/, and TRUST_TASKS_REGISTRY names only the registry', () => {
+    const { root, fixtures } = repo({ clone: true })
+    process.env.TRUST_TASKS_REGISTRY = join(base, 'elsewhere')
+    expect(registryPath(fixtures, 'verifiable-trust-infrastructure')).toBe(
+      join(root, 'external', 'verifiable-trust-infrastructure')
+    )
+  })
+
+  test('with TRUST_TASKS_REGISTRY set and no external/, another source fails its drift test rather than skipping', () => {
+    // The variable names only the registry; a source it does not cover must not quietly drop out where it is set.
+    const { root, fixtures } = repo()
+    process.env.TRUST_TASKS_REGISTRY = join(base, 'elsewhere')
+    expect(registryPath(fixtures, 'verifiable-trust-infrastructure')).toBe(
+      join(root, 'external', 'verifiable-trust-infrastructure')
+    )
+    expect(() => expectNoDrift(fixtures, {}, { source: 'verifiable-trust-infrastructure' })).toThrow(
+      /is missing.*registry only, not verifiable-trust-infrastructure/
+    )
+  })
+
+  test('a file copied at one of several commits names it, and one PROVENANCE.sha does not list is refused', () => {
+    const { root, fixtures } = repo({ clone: true })
+    const clone = join(root, 'external', 'dtgwg-trust-tasks-tf')
+    const git = (...args: string[]) => execFileSync('git', ['-C', clone, ...args], { encoding: 'utf8' }).trim()
+    git('init', '-q')
+    const commitWith = (text: string) => {
+      writeFileSync(join(clone, 'a.json'), text)
+      git('add', 'a.json')
+      git('-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', text)
+      return git('rev-parse', 'HEAD')
+    }
+    const first = commitWith('{"v":1}\n')
+    const later = commitWith('{"v":2}\n')
+    writeFileSync(join(fixtures, 'PROVENANCE.sha'), `${first}\n${later}\n`)
+    writeFileSync(join(fixtures, 'old.json'), '{"v":1}\n')
+    writeFileSync(join(fixtures, 'new.json'), '{"v":2}\n')
+    // Each at the commit it names.
+    expectNoDrift(fixtures, {
+      'old.json': { path: 'a.json', commit: first },
+      'new.json': { path: 'a.json', commit: later },
+    })
+    // Read at the wrong one of the two, it has drifted.
+    expect(() => expectNoDrift(fixtures, { 'old.json': { path: 'a.json', commit: later } })).toThrow(/old\.json/)
+    // A path alone, with two commits listed: which one is not guessed.
+    expect(() => expectNoDrift(fixtures, { 'old.json': 'a.json' })).toThrow(/which commit/)
+    // A commit the provenance file does not list.
+    const other = 'f'.repeat(40)
+    expect(() => expectNoDrift(fixtures, { 'old.json': { path: 'a.json', commit: other } })).toThrow(
+      /not in PROVENANCE/
+    )
   })
 
   test('above any repository there is no root, and nothing to read', () => {
