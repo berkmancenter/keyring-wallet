@@ -497,6 +497,13 @@ export class AgentRoomsService implements RoomsService {
   /** Each room's newest version as a listing found it, and when: a sealed write's head while fresh (HEAD_FRESH_MS). */
   private readonly heads = new Map<string, { version: number; at: number }>()
   /**
+   * Records this phone left stored under a seal for another version, so they do not open, by room and key: the version
+   * each is stored at. Set when a put lands at a version other than the one sealed for, and taken off when one lands
+   * at its own. A retry of the post finds its record there, and must seal and put it again, not take it as sent.
+   * Kept through a lock: it says what the host holds, nothing that was read.
+   */
+  private readonly wrongSeals = new Map<string, number>()
+  /**
    * Which of this phone's identities the agent holds each room's keys as, from its last key list (`rooms/keys/list`
    * 0.2 names the member). A room held as two of them is one the agent cannot pick a member for by itself.
    */
@@ -2443,7 +2450,7 @@ export class AgentRoomsService implements RoomsService {
    * as the room's newest plus one. When another write took it, the note is stored but sealed for another version and
    * does not open: it is sealed again for the next version and written over exactly what landed, a few times.
    * `ownKey`: the key is this post's own, so a record already there at the first try is this post, sent again
-   * after its answer was lost.
+   * after its answer was lost; one this phone left under a seal for another version (`wrongSeals`) is sealed again.
    */
   /**
    * A sealed write, and on any failure the two things it may have taken on trust are forgotten: the key list's epoch
@@ -2479,6 +2486,14 @@ export class AgentRoomsService implements RoomsService {
       head && this.now() - head.at < HEAD_FRESH_MS && this.watches.watched(room.roomId) ? head.version : undefined
     let intended = (known ?? (await this.headVersion(room))) + 1
     let expected = expectedVersion
+    const sealedKey = listedKey(room.roomId, key)
+    // This post sent again, after this phone left it under a seal for another version (a race, then a failure before
+    // it was sealed again): it is not there to be taken as sent, but to be sealed again and written over where it is.
+    const wrong = ownKey ? this.wrongSeals.get(sealedKey) : undefined
+    if (wrong !== undefined) {
+      expected = wrong
+      intended = Math.max(intended, wrong + 1)
+    }
     let landed = 0
     for (let attempt = 0; attempt < SEALED_WRITE_ATTEMPTS; attempt++) {
       const unsigned = {
@@ -2514,15 +2529,18 @@ export class AgentRoomsService implements RoomsService {
         })
       } catch (e) {
         const refused = await this.hostRefusal('write', room, key, expected, e)
-        if (attempt === 0 && ownKey && refused instanceof RoomsConflict) return { key, version: refused.currentVersion }
+        if (attempt === 0 && ownKey && wrong === undefined && refused instanceof RoomsConflict)
+          return { key, version: refused.currentVersion }
         throw refused
       }
       const put = parsePut(answer)
       if (!put || put.key !== key) throw new Error(`the host answered the write of ${key} with something else`)
       if (put.version === intended) {
+        this.wrongSeals.delete(sealedKey)
         this.noteHead(room.roomId, [put])
         return put
       }
+      this.wrongSeals.set(sealedKey, put.version)
       landed = put.version
       expected = landed
       intended = landed + 1
