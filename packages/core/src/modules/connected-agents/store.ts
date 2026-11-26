@@ -23,6 +23,15 @@ const SPENT = 'spent-request'
  * The `AgentConnection` records, one per agent, keyed by `id`: the agent's FIRST key, stable for the record's life.
  * `agentDid` is its CURRENT key, which step 7.10's reconcile records after a rotation (§3.9); look a record up by `id`,
  * and address the VTA by `agentDid`.
+ *
+ * **One lock per record.** `put`, `update`, `upsert` and `remove` all queue on the same lock for a record's `id`, so a
+ * direct `put` waits for an `update` in progress rather than landing inside it. A read that decides a write (keep this
+ * record, or replace it) belongs inside `upsert`'s or `update`'s callback, where it is taken under that lock.
+ *
+ * **What the lock enforces, and what it does not:** an `update` or `upsert` cannot change `id` (it throws). Every other
+ * field is the callback's to keep: the callback's type, `(record) => AgentConnection`, accepts any record, so a caller
+ * that may change only some fields (7.10's reconcile: `agentDid` and `keyChanged`) must spread the record it is given
+ * and set only those. `handle`, `chatDid` and `chatConnectionId` in particular are not protected by the store.
  */
 export class AgentConnectionStore {
   public constructor(private readonly agent: Agent) {}
@@ -35,25 +44,38 @@ export class AgentConnectionStore {
     return getKeyed<AgentConnection>(this.agent, RECORD_TYPE, CONNECTION, id)
   }
 
+  /** Write a whole record, after any write of the same record in progress. */
   public put(record: AgentConnection): Promise<void> {
-    return putKeyed(this.agent, RECORD_TYPE, CONNECTION, record.id, record as unknown as Record<string, unknown>)
+    return this.locked(record.id, () => this.write(record))
   }
 
   /**
    * Read, change and write one record as a single step, so two writers cannot lose each other's change (the driver's
-   * VDC grant and step 7.10's reconcile both write records at app start). `put` alone queues writes per key but does
-   * not make a read-modify-write atomic. Every read-modify-write goes through here. Undefined when there is no record.
+   * VDC grant and step 7.10's reconcile both write records at app start). Undefined when there is no record. A change
+   * that returns the record it was given writes nothing.
    */
   public update(
     id: string,
     change: (record: AgentConnection) => AgentConnection
   ): Promise<AgentConnection | undefined> {
-    return withKeyLock(`${RECORD_TYPE}|update|${id}`, async () => {
-      const record = await this.get(id)
-      if (!record) return undefined
-      const next = change(record)
+    return this.upsert(id, (current) => (current ? change(current) : undefined))
+  }
+
+  /**
+   * As `update`, and also when there is no record: `decide` sees the record as it is under the lock (or undefined) and
+   * returns what to write. Returning the record it was given, or undefined, writes nothing. Resolves to the record as
+   * it stands afterwards.
+   */
+  public upsert(
+    id: string,
+    decide: (current: AgentConnection | undefined) => AgentConnection | undefined
+  ): Promise<AgentConnection | undefined> {
+    return this.locked(id, async () => {
+      const current = await this.get(id)
+      const next = decide(current)
+      if (next === undefined || next === current) return current
       if (next.id !== id) throw new Error('an update cannot change a record id')
-      await this.put(next)
+      await this.write(next)
       return next
     })
   }
@@ -64,7 +86,16 @@ export class AgentConnectionStore {
   }
 
   public remove(id: string): Promise<void> {
-    return deleteKeyed(this.agent, RECORD_TYPE, CONNECTION, id)
+    return this.locked(id, () => deleteKeyed(this.agent, RECORD_TYPE, CONNECTION, id))
+  }
+
+  // The record's own lock, distinct from `putKeyed`'s inner one, so taking both never waits on itself.
+  private locked<T>(id: string, work: () => Promise<T>): Promise<T> {
+    return withKeyLock(`${RECORD_TYPE}|record|${id}`, work)
+  }
+
+  private write(record: AgentConnection): Promise<void> {
+    return putKeyed(this.agent, RECORD_TYPE, CONNECTION, record.id, record as unknown as Record<string, unknown>)
   }
 }
 
