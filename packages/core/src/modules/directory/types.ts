@@ -106,6 +106,11 @@ export interface MemberCard {
   role?: InertText
   picture?: CardPicture
   entries: CardEntry[]
+  /**
+   * Their directory entry, on a card read by DID from a community that answers `query/0.2`: what their picture and
+   * badges are read by. Held by the screen that shows the card, never kept: it outlives a rotation of their DID.
+   */
+  entryId?: string
 }
 
 /** The member's own card in a community. */
@@ -182,8 +187,8 @@ export interface DirectoryService {
   /** Another member's card, by the entry the members list gave (`entries/show/0.1`); undefined when not shown to you. */
   showMember(communityDid: string, entryId: string): Promise<MemberCard | undefined>
   /**
-   * A room author's card, by their DID (`query/0.1`): the community answers only for a member who shows their identity
-   * to members. Undefined otherwise.
+   * A room author's card, by their DID (`query/0.2`, else `0.1` from a community before it): the community answers
+   * only for a member who shows their identity to members. Undefined otherwise. At 0.2 the card carries their entry.
    */
   memberCardByDid(communityDid: string, memberDid: string): Promise<MemberCard | undefined>
   /**

@@ -1,8 +1,10 @@
 /**
- * Another member's card in a community: their picture (opened by entry, where they show one), name and role, then
- * every other field they show to members, in the community's order. Opened from the members list (by entry) or from a room author's sheet (by their DID, for an
- * author who shows their identity to members). Everything on it is what they wrote about themselves, or what a card
- * they hold says, and the screen says whose card it is. Nothing here is kept: it is read when the screen opens.
+ * Another member's card in a community: their picture (where they show one), name and role, every other field they
+ * show to members, in the community's order, and their badges. Opened from the members list (by entry) or from a room
+ * author's sheet (by their DID, for an author who shows their identity to members). By DID, the picture and badges
+ * need the entry the community answers at `query/0.2`; a community before it answers 0.1, and the card shows neither.
+ * Everything on it is what they wrote about themselves, or what a card they hold says, and the screen says whose card
+ * it is. Nothing here is kept: it is read when the screen opens.
  *
  * A card the community does not show reads "There's no card to show"; a read that failed says so, with Try again, so
  * a lost answer never reads as "they have no card".
@@ -94,6 +96,8 @@ const CommunityMemberCard: React.FC = () => {
       return <ActivityIndicator color={ColorPalette.brand.primary} testID={testIdWithKey('MemberCardLoading')} />
 
     const { card } = view
+    // From the members list, or the community's answer about a room author (`query/0.2`); held here only.
+    const entryId = params.entryId ?? card.entryId
     const name = card.name ? String(card.name) : undefined
     const role = memberRoleText(t, card.role ? String(card.role) : undefined)
     return (
@@ -102,7 +106,7 @@ const CommunityMemberCard: React.FC = () => {
           <MemberPicture
             service={service}
             communityDid={communityDid}
-            entryId={params.entryId}
+            entryId={entryId}
             picture={card.picture}
             name={name}
             size={52}
@@ -144,8 +148,8 @@ const CommunityMemberCard: React.FC = () => {
             {t('Directory.NothingElseShown')}
           </ThemedText>
         )}
-        {/* Their badges, as the community shows them to this member: by entry only, never looked up by DID. */}
-        <MemberBadgesRow communityDid={communityDid} entryId={params.entryId} />
+        {/* Their badges, as the community shows them to this member, by their entry (`wall/show` takes no DID). */}
+        <MemberBadgesRow communityDid={communityDid} entryId={entryId} />
       </>
     )
   }

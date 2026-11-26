@@ -1,0 +1,36 @@
+{
+  "limitBytes": 251,
+  "longestServiceDidBytes": 143,
+  "oob": [
+    {
+      "did": "did:webvh:QmU3zXESFxbNW8QCH4PmKaQmR6pPqU7tGkBawocFmnxS4r:localhost%3A8161",
+      "method": "did:webvh",
+      "didBytes": 73,
+      "bytes": 183,
+      "fits": true,
+      "spare": 68,
+      "qrVersion": 9,
+      "qrModules": 53,
+      "qrDecodes": true
+    }
+  ],
+  "agentConnect": {
+    "didBytes": 56,
+    "bare": {
+      "bytes": 170,
+      "fits": true,
+      "spare": 81,
+      "qrVersion": 9,
+      "qrModules": 53,
+      "qrDecodes": true
+    },
+    "widestScope": {
+      "bytes": 182,
+      "fits": true,
+      "spare": 69,
+      "qrVersion": 9,
+      "qrModules": 53,
+      "qrDecodes": true
+    }
+  }
+}
