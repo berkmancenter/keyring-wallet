@@ -253,8 +253,8 @@ both memories.
   the rung's own `eddsa-jcs-2022` code, not a second implementation.
 - **The DIDComm and TSP path to the VTA**, for every VTA case: the lab VTA has no mediator, and the cases run over
   its HTTPS binding.
-- **For step 7.5:** the same sequence with Keyring's own client in place of the rung's administrator, a call on a
-  session opened before the widening, and the `auth/oob` `deviceEnrol` path, which no lab VTA serves.
+- **For step 7.5:** the same sequence with Keyring's own client in place of the rung's administrator, and the
+  `auth/oob` `deviceEnrol` path, which no lab VTA serves.
 - The parts that decide later tiers: (g), (i), (k), (m), (n), (r), (s), the room parts of (p) and (e).
 
 Pinned against: `affinidi-messaging-mediator` `f6ed8159a` (v0.53.0); VTI `f7b78e29d` (the link producer, and vta 0.79.0), `97fda9813` (vta 0.84.0) and `4e5861d95` (vta 0.87.0);
