@@ -641,8 +641,8 @@ function lookForPreviews(service: RoomsService): void {
 
 /**
  * A kept copy is being emptied (rooms/messageCache): those rooms' previews come down at once, and a read of one already
- * out draws nothing. Without the rooms (a copy that does not say its room), every preview comes down, and nothing more
- * is drawn from the copies this run.
+ * out draws nothing. Without the rooms (a copy that does not say its room), every preview comes down, and no read
+ * already out draws anything; rows listed later are still read from the copies.
  */
 export function dropRowPreviews(roomIds?: Iterable<string>): void {
   let next: Map<string, RowPreview>
@@ -1188,6 +1188,9 @@ export function resetRoomRows(): void {
   seenVersions = undefined
   hiddenUntil = undefined
   seenRead = undefined
+  // A write still out from before ends on its own; what this run keeps does not wait behind it.
+  writing.clear()
+  toWrite.clear()
 }
 
 const subscribe = (listener: () => void) => {
