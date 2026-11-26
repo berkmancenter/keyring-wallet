@@ -5,8 +5,8 @@ The reference program for step 7.1 of
 app change. It runs under Node with `ws`, on a lab that listens on loopback only, and it changes nothing in the
 app. A result that differs from the plan changes the plan, in the same pull request.
 
-**Two halves.** The mediator half covers items 0.1(a), (h), (j) and (q). The VTA half covers (b), (c), (d), (l),
-(o), the P0 parts of (p) and the memory part of (e), on three VTA versions. What is not measured is listed at the
+**Two halves.** The mediator half covers items 0.1(a), (h), (j) and (q). The VTA half covers (b), (c), (d), (f),
+(l), (o), the P0 parts of (p) and the memory part of (e), on three VTA versions. What is not measured is listed at the
 end.
 
 ## What runs
@@ -41,7 +41,7 @@ node scripts/openvtc/setup-external.mjs                  # once, at the reposito
 
 cd tsp-reference/ref-25-agent-pairing
 npm install
-npm test                                # 31 offline tests: packing, forward, refusal reading, the links, a VTA's answers
+npm test                                # 42 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs
 lab/mediator.sh up mailbox              # or: open, deny
 npm start                               # every case for that mode, against the recorded result
 lab/mediator.sh down
@@ -148,7 +148,7 @@ One VTA on localhost that serves its own `did:webvh`, started by `lab/vta.sh` af
 cargo build --locked -p vta-service
 lab/vta.sh up <path to target/debug/vta> "$(git -C <that checkout> rev-parse HEAD)"
 node vta-serves.mjs        # which version of each task family this VTA serves
-node vta-run.mjs           # the 13 cases, against the recorded result for this version
+node vta-run.mjs           # the 14 cases, against the recorded result for this version
 lab/vta.sh down
 ```
 
@@ -166,9 +166,10 @@ commits, so the rung ran on three builds, each a debug build from a checkout at 
 | `vta/contexts/delete` | 1.1 | 1.2 | 1.2 |
 | `rooms/keys/open` | 0.2 | 0.2, 0.3 | 0.2, 0.3 |
 | `acl/swap-key` 0.1, `device/register` 0.2, `device/list` 0.3, `device/disable` 0.1, `vta/contexts/create`, `list`, `update` 1.0, `rooms/keys/present` 0.2, `rooms/keys/seal` 0.2 and 0.3, `rooms/keys/act` 0.8 to 0.12, `task-consent/decision` 0.2, `vault/credentials/present` 0.1 | the same on all three | | |
+| `keys/sign-document` 0.1, `vta/webvh/dids/create` 1.2, `vta/credentials/issue` 0.2, `credential-exchange/issue` 0.1, `vault/sign-trust-task` 0.2 (item (f)) | the same on all three | | |
 | `auth/oob/*`, `task-consent/request` | not served (`unsupportedType`) on all three | | |
 | The seeded administrator | roles `admin`, no scopes, 27 capabilities, on all three | | |
-| The 13 cases | **none can run**: `acl/grant` 0.3 and `vta/memory/put` 0.3 are not served | 13 recorded, each repeats | 13 recorded, each repeats, **the same as 0.84.0 on every case** |
+| The 14 cases | **none can run**: `acl/grant` 0.3 and `vta/memory/put` 0.3 are not served | 14 recorded, each repeats | 14 recorded, each repeats, **the same as 0.84.0 on every case** |
 
 A VTA serves one version of each `acl` task, not two. So a client speaks `acl/grant` 0.3 to a 0.84.0 or a 0.87.0
 and 0.2 to a 0.79.0, and agent connect as the plan describes it needs 0.84.0 or later.
@@ -187,12 +188,44 @@ and 0.2 to a 0.79.0, and agent connect as the plan describes it needs 0.84.0 or 
 | (l) | After one key swap and after two, `device/list` names the newest key for the `deviceId`. Revoking the first key is refused (`acl/revoke:subjectNotPresent`); revoking the key `device/list` names removes the entry and the device, and that key cannot sign in again. `device/disable` by `deviceId` makes the next sign-in refused (`permissionDenied`); the entry stays listed |
 | (p) 5 | `acl/update` never narrows `act` (`acl/update:narrowingNotPermitted`). `acl/revoke` 0.3 with `{ kind: "act", act }` does, and the `act` it names is **what remains** |
 | (p) 6 | `vta/memory/list` 0.3 with `includeValues: false` returns the items with no values, so they can be counted. A memory that holds only items is deleted without `force`. A memory an entry names is refused `vta/contexts/delete:notEmpty` without `force`; with it, the memory goes and so does an entry that named only it |
+| (f) | **`keys/sign-document` 0.1 signs a W3C credential as the persona.** See below |
+
+### Item (f): the task that signs a credential as the persona
+
+The persona here is made with the task Keyring makes one with: a context, and a `did:webvh` the VTA mints and
+holds the keys of (`vta/webvh/dids/create` 1.2). Unlike a real persona it names no `serverId`, so nothing hosts
+its log; the VTA reads the persona's document from the log it holds, and the rung reads it from the create answer.
+
+The administrator sends `keys/sign-document` 0.1 with `{ keyId, document }`. `keyId` is the persona's signing key,
+which the create answer returns as `signingKeyId` (`<persona DID>#key-0`). `document` is the unsigned delegation
+credential of the plan's section 3.4: both contexts, the three types, `issuerScope`, `validFrom`, `validUntil` and
+the subject with its `delegation.scope`.
+
+| Question | Result |
+|---|---|
+| Does it sign? | Yes. The answer carries `signerDid` (the persona), the `proof`, and the `document` with the proof added |
+| What proof? | A `DataIntegrityProof`, cryptosuite `eddsa-jcs-2022`, purpose `assertionMethod`, by the persona's `#key-0`. The proof carries the document's own `@context` |
+| Is the credential changed? | No. Every member comes back as sent; only `proof` is added |
+| Does the proof verify? | Yes, with the key the persona's DID document lists for that method (`proof.mjs`). It fails after one scope is added to the credential, and with another persona's key |
+| What else does it sign? | The same credential with `issuer` as an object holding `id`, and with purpose `authentication` |
+| What does it refuse? | Another persona as `issuer` (`keys/sign-document:issuerMismatch`). A `did:key` as `issuer` (`keys/sign-document:failedPrecondition`: the key signs only as the DID whose log it authorizes). No `issuer` (`documentInvalid`). A document that has a proof (`proofPresent`). The persona's key-agreement key (`keyTypeUnsupported`). A key nobody holds (`keys:notFound`) |
+| Can the agent sign as the persona? | No, with any of four entries: `permissionDenied` each time. Two have the agent's memory capabilities (bound to its memory, and with the persona's context added). Two carry the signing capability in the persona's context (listed alone, and every capability an `application` has); their `keys` scope is `none`, so the persona's key is not among the keys they may use |
+| What does `vta/credentials/issue` 0.2 issue? | A credential whose issuer is **the VTA's own DID**, with the one credentials context, types `VerifiableCredential` and the type asked for, and no `issuerScope`. It is not the persona's credential and not the DTG shape |
+| Who signs the acceptance? | The agent, with its own key; the rung makes one and it verifies with the agent's key and not with the persona's |
+
+So the delegation credential is signed by the VTA, as the persona, with `keys/sign-document`, and the fallback
+(the credential inside a Trust Task envelope the VTA signs) is not needed. One credential each VTA signed is kept
+in `fixtures/vta-signed-as-persona-<version>.json`, and `proof.test.mjs` verifies it with no VTA running.
+
+`keys/sign-document` 0.1 is also served at the pinned 0.79.0. The case itself cannot run there, because its agent
+entries need `acl/grant` 0.3.
 
 ## Not measured yet
 
-- **(f)** which VTA task signs a credential with the persona as issuer. The lab VTA has no persona yet. What is
-  recorded: `keys/sign-document`, `vault/sign-trust-task` and `vta/credentials/issue` exist in the specs at
-  `4e5861d95`, and the administrator holds `sign-document`, `sign-trust-task` and `credential-write`.
+- **For (f): a hosted persona, a status entry, and a verifier outside the rung.** The lab persona's log is hosted
+  nowhere, so nobody resolves its DID over the network; the proof is checked with the document the VTA returned.
+  How a status entry for the credential would be hosted is not measured (the plan omits one in P0). The check is
+  the rung's own `eddsa-jcs-2022` code, not a second implementation.
 - **The DIDComm and TSP path to the VTA**, for every VTA case: the lab VTA has no mediator, and the cases run over
   its HTTPS binding.
 - The parts that decide later tiers: (g), (i), (k), (m), (n), (r), (s), the room parts of (p) and (e).

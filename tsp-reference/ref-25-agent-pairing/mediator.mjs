@@ -8,11 +8,10 @@
 import WebSocket from "ws";
 import { createHash, randomUUID } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { sha256 } from "@noble/hashes/sha2.js";
-import canonicalize from "canonicalize";
 import { MediatorSession, authenticateToMediator, multibase, pack, resolveMediator } from "@openvtc/vti-didcomm-js";
 import { recipientOf } from "./identity.mjs";
 import { TRUST_TASK_ENVELOPE } from "./envelope.mjs";
+import { proofInput } from "./proof.mjs";
 import { PROBLEM_REPORT, readRestAnswer } from "./refusal.mjs";
 
 /** The lab mediator listens on loopback over plain HTTP. */
@@ -159,11 +158,7 @@ export function signTask(identity, type, recipient, payload) {
     verificationMethod: identity.authVm,
     proofPurpose: "authentication",
   };
-  const hash = (value) => sha256(new TextEncoder().encode(canonicalize(value)));
-  const input = new Uint8Array(64);
-  input.set(hash(proof), 0);
-  input.set(hash(document), 32);
-  const signature = ed25519.sign(input, identity.edSecret);
+  const signature = ed25519.sign(proofInput(document, proof), identity.edSecret);
   return { ...document, proof: { ...proof, proofValue: `z${multibase.base58btcEncode(signature)}` } };
 }
 
