@@ -60,6 +60,7 @@ import { communityTarget } from './vtiCommunityLink'
 import { chooseCarriage, type Carriage } from './tspCapability'
 import { GenericRecordsTspProbeStore, runTspProbe, type TspProbeOutcome, type TspProbeStore } from './tspProbe'
 import { fetchWaitingIfBusy } from './vtcBusy'
+import { nameReadLine, type ProfileNameMiss } from './communityNamesLog'
 import { isAgentsOwnPersona } from './agentOwnIdentity'
 import { didPrefix } from './didPrefix'
 import { PROBLEM_REPORT, problemReportWords } from './problemReportWords'
@@ -2620,14 +2621,19 @@ class VtiAgentController {
   ): Promise<void> {
     if (!agent) return
     let profile: Awaited<ReturnType<typeof readPublicProfile>>
+    let missed: ProfileNameMiss | undefined
+    const began = Date.now()
     try {
       const doc = await agent.dids.resolveDidDocument(communityDid)
       const service = doc.service?.find((s) => s.type === 'VTCRest')
       const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
-      if (base) profile = await readPublicProfile(base, communityDid)
+      if (base) ({ profile, missed } = await readPublicProfileOutcome(base, communityDid))
+      else missed = 'its DID document names no VTCRest service'
     } catch {
       // Only the name and the profile's logo are lost: the community is shown as unnamed.
+      missed = 'its DID document was not resolved'
     }
+    agent.config?.logger?.info?.(nameReadLine(communityDid, missed, Date.now() - began))
     // The manifest's look, which waited for this read when it gave no logo: with the profile's logo, if it has one.
     const manifestLogo = httpsLogoUrl(branding?.logoUrl)
     if (!manifestLogo && (keepLook || profile?.logoUrl)) {
@@ -3135,9 +3141,13 @@ export function vtcRestUrl(base: string, path: string): string {
 export async function readPublicProfileName(
   base: string,
   communityDid: string,
-  doFetch: typeof fetch = fetch
+  doFetch: typeof fetch = fetch,
+  /** Told why the read gave no name, when it gave none (for the log line of `communityNamesLog`). */
+  onMissed?: (why: ProfileNameMiss) => void
 ): Promise<string | undefined> {
-  return (await readPublicProfile(base, communityDid, doFetch))?.name
+  const { profile, missed } = await readPublicProfileOutcome(base, communityDid, doFetch)
+  if (missed) onMissed?.(missed)
+  return profile?.name
 }
 
 /**
@@ -3150,22 +3160,41 @@ export async function readPublicProfile(
   communityDid: string,
   doFetch: typeof fetch = fetch
 ): Promise<{ name?: string; logoUrl?: string } | undefined> {
+  return (await readPublicProfileOutcome(base, communityDid, doFetch)).profile
+}
+
+/**
+ * The same read, with why it gave no name when it gave none: `profile` is what {@link readPublicProfile} returns,
+ * and `missed` says what stood in the way of a name. Never rejects.
+ */
+export async function readPublicProfileOutcome(
+  base: string,
+  communityDid: string,
+  doFetch: typeof fetch = fetch
+): Promise<{ profile?: { name?: string; logoUrl?: string }; missed?: ProfileNameMiss }> {
+  let response: Response
   try {
-    const response = await fetchWaitingIfBusy(
+    response = await fetchWaitingIfBusy(
       doFetch,
       vtcRestUrl(base, 'community/public-profile'),
       { method: 'GET', headers: { accept: 'application/json' } },
       undefined,
       3_000
     )
-    if (!response.ok) return undefined
-    const body = (await response.json()) as { communityDid?: unknown; name?: unknown; logo_url?: unknown } | undefined
-    if (body?.communityDid !== communityDid) return undefined
-    return {
-      name: typeof body.name === 'string' ? body.name.trim() || undefined : undefined,
-      logoUrl: httpsLogoUrl(body.logo_url),
-    }
   } catch {
-    return undefined
+    return { missed: 'the request failed' }
+  }
+  if (!response.ok) return { missed: `HTTP ${response.status}` }
+  let body: { communityDid?: unknown; name?: unknown; logo_url?: unknown } | undefined
+  try {
+    body = (await response.json()) as typeof body
+  } catch {
+    return { missed: 'the answer is not JSON' }
+  }
+  if (body?.communityDid !== communityDid) return { missed: "the profile is another community's" }
+  const name = typeof body.name === 'string' ? body.name.trim() || undefined : undefined
+  return {
+    profile: { name, logoUrl: httpsLogoUrl(body.logo_url) },
+    ...(name ? {} : { missed: 'the profile has no name' as const }),
   }
 }

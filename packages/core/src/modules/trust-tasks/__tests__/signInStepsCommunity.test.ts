@@ -117,7 +117,13 @@ describe("a sign-in's community, by name", () => {
   it('a member with no name on record: the name it publishes, and it is kept', async () => {
     const found = await agentSignInSteps(agent as never).community(VTC)
     expect(found).toEqual({ member: true, name: 'Test VTC', identities: [] })
-    expect(mockReadPublicProfileName).toHaveBeenCalledWith('https://vtc.example/v1', VTC)
+    // The read is also given a way to say why it found no name, for the log line (communityNamesLog).
+    expect(mockReadPublicProfileName).toHaveBeenCalledWith(
+      'https://vtc.example/v1',
+      VTC,
+      undefined,
+      expect.any(Function)
+    )
     expect(mockSaveName).toHaveBeenCalledWith(VTC, 'Test VTC')
   })
 
