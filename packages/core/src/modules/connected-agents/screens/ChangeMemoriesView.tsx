@@ -91,6 +91,8 @@ const ChangeMemoriesView: React.FC<ChangeMemoriesViewProps> = ({
     }
     setWorking(true)
     try {
+      // Only widening takes the face or fingerprint check (D34): it gives the agent more. Narrowing only takes access
+      // away, so one confirmation is enough, by design; do not make the two match.
       if (ask.kind === 'widen') {
         let passed = false
         try {
