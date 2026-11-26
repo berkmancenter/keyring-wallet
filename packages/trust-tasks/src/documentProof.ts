@@ -267,6 +267,16 @@ export async function signDocumentProof(
   const proofConfig: Record<string, unknown> = {
     type: 'DataIntegrityProof',
     cryptosuite: 'eddsa-jcs-2022',
+    // The phone's own wall clock, with nothing between it and the proof. A
+    // verifier built on affinidi-data-integrity refuses a `created` more than
+    // 60 s ahead of ITS clock (0.9.2 `options.rs:183` DEFAULT_CLOCK_SKEW,
+    // `lib.rs:880-892`), and a VTA refuses the document's `issuedAt` more
+    // than 60 s ahead or, without an `expiresAt`, more than 10 min + 60 s
+    // behind (trust-tasks-rs 0.37.2 `freshness.rs:44,54,255,280`; VTI
+    // `acceptance.rs:60-64`). So a phone whose clock is wrong by more than
+    // that has every signed task refused, and test devices with correct
+    // clocks never show it. Tests that sign fixed vectors must pin their
+    // times in the past, never at the hour they were made.
     created: wireTimestamp(),
     // Always absolute. A DID document may name its methods relatively
     // (`#key-0`), but a proof is read without the document at hand: vta-sdk
