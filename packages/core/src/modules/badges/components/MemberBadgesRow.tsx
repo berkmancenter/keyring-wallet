@@ -3,9 +3,10 @@
  * this viewer, pinned ones first, each opening the badge. A wall the community doesn't show this member ('hidden'), a
  * community that doesn't serve badges, an empty wall, or a release that killed badges shows no row at all.
  *
- * `wall/show` takes the member's directory entry, so the row needs one: the card opened from the members list has it.
- * A card opened by DID (a room author's sheet) passes none and gets no row; the app never looks an entry up by DID,
- * which upstream keeps to administrators and the directory refuses as a membership oracle.
+ * `wall/show` takes the member's directory entry, so the row needs one: the card opened from the members list has it,
+ * and a card opened by DID (a room author's sheet) has the one the community answered at `vtc/directory/query/0.2`,
+ * only for a member it already shows this viewer. A community before 0.2 answers none, and that card gets no row. The
+ * app never asks `entries/show` by DID, which upstream keeps to administrators as a membership oracle.
  *
  * @module badges/components/MemberBadgesRow
  */

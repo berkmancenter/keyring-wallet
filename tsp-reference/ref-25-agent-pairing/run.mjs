@@ -49,6 +49,15 @@ const mediator = await mediatorOf(MEDIATOR_DID);
 
 /** What a send looked like: the status, and the code when it was refused. */
 const sent = (answer) => (answer.refused ? { status: answer.status, code: answer.code } : { status: answer.status });
+/**
+ * `Retry-After` as the mediator sent it: the count of seconds, which is the same on every run, `absent`, or
+ * `a date` for an HTTP date, which is a clock reading and so is not recorded.
+ */
+const retryAfterAsSent = (answer) => {
+  const header = answer.raw?.headers?.["retry-after"];
+  if (header === undefined) return "absent";
+  return /^\d+$/.test(header.trim()) ? Number(header.trim()) : "a date";
+};
 
 /**
  * A sender of one of two kinds.
@@ -178,7 +187,7 @@ for (const kind of ["none", "session"]) {
     for (let i = 0; i < 60 && !refusal; i++) {
       const { answer } = await send(sender, identity.did, `queued ${i + 1}`);
       if (answer.refused) {
-        refusal = { ...sent(answer), retryAfter: answer.retryAfter === undefined ? "absent" : "present", retryAfterSeconds: answer.retryAfter };
+        refusal = { ...sent(answer), retryAfter: retryAfterAsSent(answer) };
       } else accepted++;
       // Under the mailbox's limits one DID may make 20 requests a second: stay well below it.
       await sleep(80);
@@ -253,8 +262,6 @@ add("self-grant", "a new account sends before and after it switches its own SEND
 const recordedPath = `${here}fixtures/recorded-${lab.mode}.json`;
 const recorded = existsSync(recordedPath) ? JSON.parse(readFileSync(recordedPath, "utf8")).cases : {};
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-/** `retryAfterSeconds` is a clock reading; the recorded result keeps only whether the header was there. */
-const comparable = (observed) => JSON.parse(JSON.stringify(observed, (key, value) => (key === "retryAfterSeconds" ? undefined : value)));
 
 say(`mediator ${MEDIATOR_DID.slice(0, 44)}…  mode ${lab.mode}`);
 if (lab.source) say(`built from ${lab.source.repository} ${lab.source.commit.slice(0, 9)} (v${lab.source.version}), binary sha256 ${lab.binarySha256.slice(0, 16)}…`);
@@ -269,7 +276,7 @@ for (const item of cases) {
     observed = { error: String(error?.message ?? error) };
   }
   const known = item.id in recorded;
-  const asRecorded = known && same(comparable(observed), recorded[item.id]);
+  const asRecorded = known && same(observed, recorded[item.id]);
   rows.push({ id: item.id, title: item.title, observed, asRecorded: known ? asRecorded : null });
   const mark = !known ? "new " : asRecorded ? "ok  " : "DIFF";
   console.log(`${mark} ${item.id.padEnd(15)} ${JSON.stringify(observed)}`);
@@ -291,7 +298,7 @@ writeFileSync(`${here}out/report-${lab.mode}.json`, `${JSON.stringify(report, nu
 
 if (record) {
   mkdirSync(`${here}fixtures`, { recursive: true });
-  const frozen = { ...report, cases: Object.fromEntries(rows.map((row) => [row.id, comparable(row.observed)])) };
+  const frozen = { ...report, cases: Object.fromEntries(rows.map((row) => [row.id, row.observed])) };
   writeFileSync(recordedPath, `${JSON.stringify(frozen, null, 2)}\n`);
   say(`recorded ${rows.length} cases to fixtures/recorded-${lab.mode}.json`);
 }

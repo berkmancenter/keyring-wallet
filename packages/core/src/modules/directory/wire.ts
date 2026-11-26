@@ -40,6 +40,9 @@ export const DIRECTORY_TASK = {
   cardUpdate: `${SPEC}vtc/directory/card/update/0.1`,
   fieldsList: `${SPEC}vtc/directory/fields/list/0.1`,
   query: `${SPEC}vtc/directory/query/0.1`,
+  // 0.1 and the member's directory entry (trust-tasks-tf #1383; VTI #2827, after vtc-service-v0.35.2). An older
+  // community refuses it as an unsupported type.
+  query02: `${SPEC}vtc/directory/query/0.2`,
   entriesShow: `${SPEC}vtc/directory/entries/show/0.1`,
   // vtc-service 0.13 and later; an older community refuses it as an unsupported type.
   imagesGet: `${SPEC}vtc/directory/images/get/0.1`,
@@ -270,8 +273,18 @@ export function entryFields(payload: unknown, entryId: string): Record<string, u
   return entry && str(entry.entryId) === entryId ? obj(entry.fields) : undefined
 }
 
-/** The fields of a `query/0.1` answer about `memberDid`. */
+/** The fields of a `query/0.1` or `0.2` answer about `memberDid`. */
 export function queryFields(payload: unknown, memberDid: string): Record<string, unknown> | undefined {
   const p = obj(payload)
   return p && str(p.subject) === memberDid ? obj(p.fields) : undefined
+}
+
+/**
+ * The member's directory entry in a `query/0.2` answer about `memberDid`, when it is a well-formed entry id. The
+ * community answers one only to a caller it already shows the member to (`query/0.2`, Conformance 2 and 3).
+ */
+export function queryEntryId(payload: unknown, memberDid: string): string | undefined {
+  const p = obj(payload)
+  const entryId = p && str(p.subject) === memberDid ? str(p.entryId) : undefined
+  return entryId && ENTRY_ID.test(entryId) ? entryId : undefined
 }

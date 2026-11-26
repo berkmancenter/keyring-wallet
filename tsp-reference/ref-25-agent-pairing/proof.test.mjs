@@ -7,7 +7,9 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { identityFromSeed } from "./identity.mjs";
 import { signTask } from "./mediator.mjs";
-import { CRYPTOSUITE, keyOfMethod, listedUnder, secure, verify } from "./proof.mjs";
+import { ed25519 } from "@noble/curves/ed25519.js";
+import { multibase } from "@openvtc/vti-didcomm-js";
+import { CRYPTOSUITE, keyOfMethod, listedUnder, proofInput, secure, verify } from "./proof.mjs";
 
 const party = (byte) => identityFromSeed(new Uint8Array(32).fill(byte));
 const agent = party(7);
@@ -57,10 +59,24 @@ test("any change to the document or to the proof's options fails the check", () 
   assert.equal(verify(Object.fromEntries(Object.entries(secured).reverse()), agent.edPublic), true);
 });
 
-test("a proof that names another context than the document's is refused before any signature is checked", () => {
+test("a proof that names a context the document does not have is refused, although its signature is valid", () => {
+  // Not something `secure` builds: a document with no `@context` (a Trust Task), signed with options that name
+  // one. The signature over those options is valid, so only the context rule can refuse it.
+  const { "@context": context, ...bare } = credential();
+  const options = { "@context": context, type: "DataIntegrityProof", cryptosuite: CRYPTOSUITE, created, verificationMethod: agent.authVm, proofPurpose: "assertionMethod" };
+  const signature = ed25519.sign(proofInput(bare, options), agent.edSecret);
+  const secured = { ...bare, proof: { ...options, proofValue: `z${multibase.base58btcEncode(signature)}` } };
+  assert.equal(ed25519.verify(signature, proofInput(bare, options), agent.edPublic), true, "the signature itself is good");
+  assert.equal(verify(secured, agent.edPublic), false);
+  // The same holds for a document whose context is another one than the proof names.
+  const other = { ...bare, "@context": ["https://www.w3.org/ns/credentials/v2"] };
+  const signedOther = ed25519.sign(proofInput(other, options), agent.edSecret);
+  assert.equal(verify({ ...other, proof: { ...options, proofValue: `z${multibase.base58btcEncode(signedOther)}` } }, agent.edPublic), false);
+});
+
+test("a document whose context is changed after signing fails the check", () => {
   const secured = secure(credential(), by(agent));
-  const moved = { ...secured, "@context": ["https://www.w3.org/ns/credentials/v2"] };
-  assert.equal(verify(moved, agent.edPublic), false);
+  assert.equal(verify({ ...secured, "@context": ["https://www.w3.org/ns/credentials/v2"] }, agent.edPublic), false);
 });
 
 test("what is not one eddsa-jcs-2022 proof is not verified", () => {
