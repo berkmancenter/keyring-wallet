@@ -373,6 +373,8 @@ describe('the phone never sends an offered task', () => {
     // React's createContext is imported and called bare; a VTA client's is a method. Agent connect's memories
     // (plan §3.15) are the one caller: the phone creates them about itself, so a create an approval rule holds must be
     // refused, never waited on, or the phone would wait on its own approval (approvalRules.ts, PHONE_SENDS).
+    // What this cannot see: a caller that destructures the method (`const { createContext } = client`) and calls it
+    // bare. A new caller must keep the dot, or be added here by name.
     expect(
       walk(src)
         .filter((f) => /\.createContext\(/.test(readFileSync(f, 'utf8')))
