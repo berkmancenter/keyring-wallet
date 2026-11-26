@@ -5,6 +5,7 @@
  */
 import type { AccessEntry, AgentAccessPort } from '../carriage'
 import { AgentConnectDriver, ConnectionRecords, personaSigningKeyId, unservedOob } from '../driver'
+import { isContactStatus, statusOf } from '../status'
 import { deriveHandle } from '../handle'
 import type { LockoutStore } from '../lockout'
 import { NOT_FINISHED_AFTER_MS, type AgentConnectChoice, type PairingLink, type SpentRequestStore } from '../pairing'
@@ -102,7 +103,7 @@ function fakeVta() {
     grants,
     signed,
     /** The agent registered, then swapped K_t for K_a: the entry as the VTA lists it now, with what was granted. */
-    rotate: () => {
+    rotate: (over: Partial<AccessEntry> = {}) => {
       const g = grants[grants.length - 1]
       listed = {
         entry: {
@@ -113,6 +114,7 @@ function fakeVta() {
           purposes: { scope: 'listed', purposes: [...g.purposes] },
           keys: { scope: 'none' },
           expiresAt: g.expiresAt,
+          ...over,
         },
         deviceId: 'dev-1',
         kind: 'ai-agent',
@@ -281,5 +283,79 @@ describe('auth/oob while no VTA serves it (P0)', () => {
       exp: Math.floor(T0 / 1000) + 300,
     })
     expect(end).toMatchObject({ phase: 'failed', reason: 'foreign-vta' })
+  })
+})
+
+describe('what an ended pairing leaves at the VTA is recorded as Not finished (§3.10)', () => {
+  async function toEnrolment(t: Awaited<ReturnType<typeof setup>>) {
+    await t.driver.start(choice())
+    await t.driver.scan(fallbackLink())
+    await t.driver.approve()
+    expect(t.driver.state.phase).toBe('awaitingEnrolment')
+  }
+
+  it("a cancel after the grant: K_t's entry is a Not finished row, never a contact", async () => {
+    const t = await setup()
+    await toEnrolment(t)
+    expect((await t.driver.cancel()).phase).toBe('cancelled')
+    expect(await t.driver.settled()).toEqual({ state: 'notFinished', subject: K_T })
+    const record = t.connections.records.get(K_T)
+    expect(record).toMatchObject({ id: K_T, name: 'Notes helper', vtaDid: VTA, state: 'notFinished', handle: '' })
+    expect(statusOf(record as AgentConnection, T0)).toBe('notFinished')
+    expect(isContactStatus(statusOf(record as AgentConnection, T0))).toBe(false)
+  })
+
+  it("a rotation that lost a limit: K_a's entry, with its deviceId, is recorded", async () => {
+    const t = await setup()
+    await toEnrolment(t)
+    t.vta.rotate({ expiresAt: new Date(T0 + 99 * 60 * 60 * 1000).toISOString() })
+    expect(await t.driver.poll()).toMatchObject({ phase: 'failed', reason: 'rotation-lost-limits' })
+    expect(await t.driver.settled()).toEqual({ state: 'notFinished', subject: K_A })
+    expect(t.connections.records.get(K_A)).toMatchObject({ state: 'notFinished', deviceId: 'dev-1' })
+  })
+
+  it('a pairing still not enrolled after ten minutes is recorded under K_t', async () => {
+    const t = await setup()
+    await toEnrolment(t)
+    t.advance(NOT_FINISHED_AFTER_MS)
+    expect((await t.driver.poll()).phase).toBe('notFinished')
+    expect(await t.driver.settled()).toEqual({ state: 'notFinished', subject: K_T })
+    expect(t.connections.records.get(K_T)?.state).toBe('notFinished')
+  })
+
+  it('control: a cancel before any grant leaves nothing to record', async () => {
+    const t = await setup()
+    await t.driver.start(choice())
+    await t.driver.scan(fallbackLink())
+    await t.driver.cancel()
+    expect(await t.driver.settled()).toBeUndefined()
+    expect(t.connections.records.size).toBe(0)
+  })
+
+  it("control: a leftover never writes over a connected agent's record", async () => {
+    const t = await setup()
+    await toEnrolment(t)
+    await t.connections.put({
+      id: K_T,
+      name: 'Already connected',
+      handle: 'already-k3qa',
+      agentDid: K_T,
+      deviceId: 'dev-0',
+      ownerPersonaDid: PERSONA,
+      vtaDid: VTA,
+      contexts: [],
+      memoryContexts: [],
+      pendingContexts: [],
+      capabilities: [],
+      purposes: ['personalisation'],
+      grantType: 'persistent',
+      answersOthers: false,
+      state: 'active',
+      keyChanged: false,
+      createdAt: new Date(T0).toISOString(),
+    })
+    await t.driver.cancel()
+    expect(await t.driver.settled()).toEqual({ state: 'kept', subject: K_T })
+    expect(t.connections.records.get(K_T)?.state).toBe('active')
   })
 })

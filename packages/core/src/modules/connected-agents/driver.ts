@@ -9,8 +9,9 @@
  *   grant is issued through `issueVdc` and stored; only then is it `active` (#1060 finding 19: until the chat carries
  *   the acceptance, step 7.9). A grant that cannot be issued leaves the record `pairing`, retried by
  *   {@link AgentConnectDriver.reconcilePairing}, and "Not finished" once the pairing's ten minutes are up.
- * - **What a failed pairing leaves at the VTA** (`cleanup` on the machine's state) is removed by the actions of the
- *   next step (Remove, the not-finished sweep), not here.
+ * - **What a failed, cancelled or unfinished pairing leaves at the VTA** (`cleanup` on the machine's state) is recorded
+ *   here as a "Not finished" record (§3.10: listed "Not finished", offered "Remove", removed on its own after ten
+ *   minutes), so nothing is forgotten. The removal itself is the actions' step (Remove, the not-finished sweep).
  *
  * @module connected-agents/driver
  */
@@ -25,6 +26,7 @@ import {
   type AgentConnectChoice,
   type ConfirmedAgent,
   type NumberEntry,
+  type PairingCleanup,
   type PairingLink,
   type PairingState,
   type SpentRequestStore,
@@ -65,8 +67,12 @@ export type DriverPorts = {
   signingKeyIdOf?: (personaDid: string) => string
 }
 
-/** What persisting a confirmed pairing came to. */
-export type PersistOutcome = { state: 'active' } | { state: 'pairing'; reason: 'vdc' }
+/** What persisting a pairing's end came to. */
+export type PersistOutcome =
+  | { state: 'active' }
+  | { state: 'pairing'; reason: 'vdc' }
+  | { state: 'notFinished'; subject: string }
+  | { state: 'kept'; subject: string }
 
 const iso = (ms: number) => new Date(ms).toISOString()
 
@@ -95,10 +101,42 @@ export function recordFor(agent: ConfirmedAgent, now: number): AgentConnection {
   }
 }
 
+/**
+ * The record of what an unfinished pairing left at the VTA (§3.10): "Not finished", keyed by the entry's subject, with
+ * its `deviceId` when the agent registered. Never a contact and never connected; Remove and the sweep act on it.
+ */
+export function leftoverRecordFor(
+  cleanup: PairingCleanup,
+  choice: AgentConnectChoice | undefined,
+  now: number
+): AgentConnection {
+  return {
+    id: cleanup.subject,
+    name: choice?.name ?? '',
+    handle: '',
+    agentDid: cleanup.subject,
+    deviceId: cleanup.deviceId ?? '',
+    ownerPersonaDid: choice?.ownerPersonaDid ?? '',
+    vtaDid: cleanup.vtaDid,
+    contexts: [],
+    memoryContexts: choice ? [...choice.memoryContexts] : [],
+    pendingContexts: [],
+    capabilities: [],
+    purposes: choice ? [...choice.purposes] : [],
+    grantType: 'temporary',
+    answersOthers: false,
+    state: 'notFinished',
+    keyChanged: false,
+    createdAt: iso(now),
+    lastReconciledAt: iso(now),
+  }
+}
+
 /** The machine, wired to the owner's VTA, and the store a confirmed pairing lands in. */
 export class AgentConnectDriver {
   private readonly machine: PairingMachine
   private handles: string[] = []
+  private choice: AgentConnectChoice | undefined
   private persisting: Promise<PersistOutcome | undefined> = Promise.resolve(undefined)
 
   private constructor(
@@ -135,6 +173,7 @@ export class AgentConnectDriver {
   }
 
   public start(choice: AgentConnectChoice): Promise<PairingState> {
+    this.choice = choice
     return this.machine.start(choice)
   }
 
@@ -170,6 +209,10 @@ export class AgentConnectDriver {
     if (state.phase === 'confirmed') {
       const agent = state.agent
       this.persisting = this.persisting.then(() => this.persist(agent))
+    } else if ('cleanup' in state && state.cleanup) {
+      const cleanup = state.cleanup
+      const choice = this.choice
+      this.persisting = this.persisting.then(() => this.recordLeftover(cleanup, choice))
     }
     this.onState?.(state)
   }
@@ -185,6 +228,22 @@ export class AgentConnectDriver {
       await connections.put(record)
     }
     return this.issueGrant(record)
+  }
+
+  /**
+   * Record what an ended pairing left at the VTA as "Not finished". A record already there for that subject that is
+   * neither pairing nor unfinished (a connected agent's) is kept as it is: the leftover is never written over it.
+   */
+  private async recordLeftover(
+    cleanup: PairingCleanup,
+    choice: AgentConnectChoice | undefined
+  ): Promise<PersistOutcome> {
+    const existing = await this.ports.connections.get(cleanup.subject)
+    if (existing && existing.state !== 'pairing' && existing.state !== 'notFinished') {
+      return { state: 'kept', subject: cleanup.subject }
+    }
+    await this.ports.connections.put(leftoverRecordFor(cleanup, choice, this.ports.clock()))
+    return { state: 'notFinished', subject: cleanup.subject }
   }
 
   /** Issue and store the VDC grant (step 7.3, §3.4); `active` only once it is stored (#1060 finding 19). */
