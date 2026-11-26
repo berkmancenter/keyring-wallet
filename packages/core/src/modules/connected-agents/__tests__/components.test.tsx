@@ -21,7 +21,7 @@ import AgentContactCard from '../components/AgentContactCard'
 import { AGENT_STATUSES, AgentStatusChip } from '../components/AgentStatusChip'
 import MemoryAccessNotice from '../components/MemoryAccessNotice'
 import MemoryPicker, { CreateMemoryResult, PickerMemory } from '../components/MemoryPicker'
-import { NO_ROOM_FORMS, PROPOSED_COPY } from '../proposedCopy'
+import { NO_ROOM_FORMS, PROPOSED_COPY, SETTLED_ELSEWHERE } from '../proposedCopy'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -72,13 +72,28 @@ describe('ConnectedAgents words', () => {
 
   it('carries no words that are neither in the plan nor listed as a proposal', () => {
     const unlisted = Object.keys(EN).filter(
-      (key) => !settled(key) && !(key in PROPOSED_COPY) && !(key in NO_ROOM_FORMS)
+      (key) => !settled(key) && !(key in PROPOSED_COPY) && !(key in NO_ROOM_FORMS) && !(key in SETTLED_ELSEWHERE)
     )
     expect(unlisted).toEqual([])
   })
 
   it('lists no proposal the plan has since settled, and none it does not carry', () => {
     for (const key of Object.keys(PROPOSED_COPY)) expect([key, key in EN, settled(key)]).toEqual([key, true, false])
+  })
+
+  it('finds each string settled elsewhere quoted in the section it names, and not in §6', () => {
+    // A section runs from its "### 3.15" heading to the next heading.
+    const section = (number: string) => {
+      const start = PLAN.indexOf(`\n### ${number.replace('§', '')} `)
+      return start < 0 ? '' : PLAN.slice(start, PLAN.indexOf('\n#', start + 1))
+    }
+    for (const [key, where] of Object.entries(SETTLED_ELSEWHERE)) {
+      const quoted = new RegExp(`"${asPlan(EN[key])}"`).test(section(where))
+      expect([key, where, quoted, settled(key), key in PROPOSED_COPY]).toEqual([key, where, true, false, false])
+    }
+    // Control: the section reader finds §3.15 and not a string it lacks.
+    expect(section('§3.15')).toContain('Memories: a fixed set per agent')
+    expect(new RegExp(`"${asPlan(EN.SeeDetails)}"`).test(section('§3.15'))).toBe(false)
   })
 
   it('keeps each no-room form a cut of a §6 string', () => {

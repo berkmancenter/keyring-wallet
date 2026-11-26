@@ -33,7 +33,6 @@ export const PROPOSED_COPY: Readonly<Record<string, string>> = {
   MemoryCountWarning: 'P-c',
   MemoryCountFailed: 'P-c',
   PendingMemory: 'seam gap: finding 7 of #1048, a memory not reached yet',
-  MemoryCreateFailed: "C4: the words are §3.15's; §6 gains them",
   NumberDigitEmpty: 'accessibility: §6 says each digit is announced, not in which words',
   NumberDigitFilled: 'accessibility: as above',
 }
@@ -41,7 +40,19 @@ export const PROPOSED_COPY: Readonly<Record<string, string>> = {
 /**
  * Strings that are a §6 string with its room sentence left out, by the plan's own rule for P0 ("The no-room form":
  * "20 omits "This also applies in <rooms>.""). Settled, but not quoted on their own. Each must be part of a §6 string.
+ *
+ * What qualifies: a cut, by that rule, of a string §6 quotes, and nothing else. A string that is merely close to §6
+ * words is a proposal (PROPOSED_COPY), not a no-room form.
  */
 export const NO_ROOM_FORMS: Readonly<Record<string, string>> = {
   WidenBody: 'change memories, widening: §6 body without "This also applies in <rooms>."',
+}
+
+/**
+ * Strings the plan settles outside §6, the section the copy is otherwise kept in: quoted verbatim in the section named
+ * (a test checks it there). Settled, so not waiting on a ruling; listed so §6 stays the strict rule and each exception
+ * is a decision someone made, with its source beside it.
+ */
+export const SETTLED_ELSEWHERE: Readonly<Record<string, string>> = {
+  MemoryCreateFailed: '§3.15',
 }
