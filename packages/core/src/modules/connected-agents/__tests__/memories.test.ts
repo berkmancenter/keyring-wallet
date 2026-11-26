@@ -193,6 +193,23 @@ describe('createMemory (§3.15, D35)', () => {
     expect(refused).toEqual({ ok: false, code: 'failed' })
   })
 
+  it('a create an approval rule held is heldForApproval, tried once, never redrawn or re-listed', async () => {
+    const held = Object.assign(new Error('held'), { details: { reason: 'auth:consent_required' } })
+    const create = jest.fn(async () => {
+      throw held
+    })
+    const list = jest.fn(async () => [])
+    const result = await createMemory(
+      { listContexts: list, createContext: create },
+      'Travel',
+      bytes(3),
+      (e) => e === held
+    )
+    expect(result).toEqual({ ok: false, code: 'heldForApproval' })
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(list).toHaveBeenCalledTimes(1)
+  })
+
   it('an empty or over-long name fails without a call', async () => {
     const list = jest.fn(async () => [])
     expect(await createMemory({ listContexts: list, createContext: jest.fn() }, '   ', bytes(1))).toEqual({
