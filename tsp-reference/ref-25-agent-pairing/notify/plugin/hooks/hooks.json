@@ -1,0 +1,4 @@
+{"hooks":{
+ "PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"${CLAUDE_PLUGIN_ROOT}/gate.sh"}]}],
+ "Stop":[{"hooks":[{"type":"command","command":"${CLAUDE_PLUGIN_ROOT}/stop.sh"}]}]
+}}
