@@ -101,6 +101,17 @@ describe('ApproveView', () => {
     expect(tree.getByTestId(id('ConnectApproveButton')).props.accessibilityState.disabled).toBe(false)
   })
 
+  it('approves once: after a passed check, Approve is spent', async () => {
+    const { props, tree } = approve()
+    press(tree)
+    await waitFor(() => expect(props.onApproved).toHaveBeenCalledTimes(1))
+    expect(tree.getByTestId(id('ConnectApproveButton')).props.accessibilityState.disabled).toBe(true)
+    press(tree)
+    await act(async () => undefined)
+    expect(props.confirm).toHaveBeenCalledTimes(1)
+    expect(props.onApproved).toHaveBeenCalledTimes(1)
+  })
+
   it('asks once while a check is open', async () => {
     let answer: (value: boolean) => void = () => undefined
     const confirm = jest.fn(() => new Promise<boolean>((resolve) => (answer = resolve)))

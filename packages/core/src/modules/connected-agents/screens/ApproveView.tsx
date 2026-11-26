@@ -83,9 +83,13 @@ const ApproveView: React.FC<ApproveViewProps> = ({
 }) => {
   const { t } = useTranslation()
   const [asking, setAsking] = useState(false)
+  // Once approved, Approve stays spent: a second press must not ask, or approve, again. Two layers: the button
+  // disables (its own test fails without it, measured), and approve() returns early, a backstop no press reaches while
+  // the button is disabled but the one that holds if it ever is not (both removed, the test fails, measured).
+  const [done, setDone] = useState(false)
 
   const approve = async () => {
-    if (asking) return
+    if (asking || done) return
     setAsking(true)
     let passed = false
     try {
@@ -95,7 +99,10 @@ const ApproveView: React.FC<ApproveViewProps> = ({
     } finally {
       setAsking(false)
     }
-    if (passed) onApproved()
+    if (passed) {
+      setDone(true)
+      onApproved()
+    }
   }
 
   const names = memoryNames.join(', ')
@@ -165,7 +172,7 @@ const ApproveView: React.FC<ApproveViewProps> = ({
           title={t('ConnectedAgents.Approve')}
           buttonType={ButtonType.Primary}
           onPress={approve}
-          disabled={asking}
+          disabled={asking || done}
           testID={testIdWithKey('ConnectApproveButton')}
           accessibilityLabel={t('ConnectedAgents.Approve')}
         />
