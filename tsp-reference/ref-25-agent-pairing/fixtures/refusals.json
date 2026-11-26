@@ -1,0 +1,123 @@
+{
+  "about": "REST answers of the lab mediator (affinidi-messaging-mediator v0.53.0, f6ed8159a), captured 2026-11-26 by sending to POST /mediator/v1/inbound. Session and request ids are blanked; only the two headers a client reads are kept.",
+  "sendDenied": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "sessionId": "session",
+      "httpCode": 403,
+      "errorCode": 44,
+      "errorCodeStr": "DIDCommProblemReport",
+      "message": "{\"code\":\"e.p.authorization.send\",\"comment\":\"DID isn't allowed to send messages through this mediator\"}"
+    }
+  },
+  "noSession": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "errorCode": 401,
+      "errorCodeStr": "401 Unauthorized",
+      "httpCode": 401,
+      "message": "Missing credentials",
+      "sessionId": "session"
+    }
+  },
+  "sendForwardedDenied": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "sessionId": "session",
+      "httpCode": 403,
+      "errorCode": 60,
+      "errorCodeStr": "DIDCommProblemReport",
+      "message": "{\"code\":\"e.p.authorization.send_forwarded\",\"comment\":\"Sender isn't allowed to send forwarded messages\"}"
+    }
+  },
+  "accepted": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "sessionId": "session",
+      "httpCode": 200,
+      "errorCode": 0,
+      "errorCodeStr": "NA",
+      "message": "Success",
+      "data": "Forwarded"
+    }
+  },
+  "anonymous": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "sessionId": "session",
+      "httpCode": 400,
+      "errorCode": 50,
+      "errorCodeStr": "DIDCommProblemReport",
+      "message": "{\"code\":\"w.m.message.anonymous\",\"comment\":\"Mediator is not allowing anonymous messages (no authcrypt or JWS signature)\"}"
+    }
+  },
+  "noAccount": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "sessionId": "session",
+      "httpCode": 403,
+      "errorCode": 73,
+      "errorCodeStr": "DIDCommProblemReport",
+      "message": "{\"code\":\"e.p.delivery.refused\",\"comment\":\"Message not accepted for delivery\"}"
+    }
+  },
+  "queueFull": {
+    "status": 503,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "sessionId": "session",
+      "httpCode": 503,
+      "errorCode": 95,
+      "errorCodeStr": "DIDCommProblemReport",
+      "message": "{\"code\":\"e.p.limits.queue.peer\",\"comment\":\"Too many messages already waiting for this recipient\"}"
+    }
+  },
+  "expected": {
+    "sendDenied": {
+      "status": 403,
+      "errorCode": 44,
+      "code": "e.p.authorization.send"
+    },
+    "sendForwardedDenied": {
+      "status": 403,
+      "errorCode": 60,
+      "code": "e.p.authorization.send_forwarded"
+    },
+    "anonymous": {
+      "status": 400,
+      "errorCode": 50,
+      "code": "w.m.message.anonymous"
+    },
+    "noAccount": {
+      "status": 403,
+      "errorCode": 73,
+      "code": "e.p.delivery.refused"
+    },
+    "queueFull": {
+      "status": 503,
+      "errorCode": 95,
+      "code": "e.p.limits.queue.peer"
+    }
+  }
+}
