@@ -1,0 +1,24 @@
+{
+  "name": "ref-21-hcp-over-trust-tasks",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 21: the proposed hcp/* Trust Tasks (trustoverip/dtgwg-trust-tasks-tf #1380, #1382) run end to end as Keyring would run them: a toy HCP provider, an agent, and Keyring's side signing with Keyring's own document-proof code, over TSP through a mediator. Mock data, throwaway keys.",
+  "engines": { "node": ">=22.6" },
+  "scripts": {
+    "setup": "./setup.sh",
+    "start": "node --experimental-strip-types --no-warnings src/run.ts",
+    "check": "node --experimental-strip-types --no-warnings src/run.ts --quiet --loopback",
+    "probe:tsp-version": "node probes/tsp-version.mjs"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.0.0",
+    "@noble/hashes": "^2.0.0",
+    "@openvtc/trust-tasks": "file:.upstream/tt/trust-tasks-ts",
+    "@openvtc/trust-tasks-proof": "file:.upstream/tt/trust-tasks-ts-proof",
+    "@openvtc/trust-tasks-tsp": "file:.upstream/tt/trust-tasks-ts-tsp",
+    "@openvtc/vti-didcomm-js": "0.6.2",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "ws": "^8.18.0"
+  }
+}

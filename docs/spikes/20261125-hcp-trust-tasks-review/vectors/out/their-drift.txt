@@ -1,0 +1,5 @@
+check-hcp-drift: specs/hcp (27 carried specs, HCP 2.0-draft-3) against <review>/hcp-spec at b790561 (b79056183070)
+  44 objects compared, 11 covered by another mapped object, 25 sides with no HCP schema
+
+check-hcp-drift: 38 difference(s), 38 allowlisted, 0 not allowlisted; 0 stale allowlist entries; 0 mapping coverage problem(s) (--verbose lists the allowlisted ones)
+exit=0

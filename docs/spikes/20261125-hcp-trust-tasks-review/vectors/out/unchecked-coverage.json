@@ -1,0 +1,639 @@
+[
+ {
+  "slug": "hcp/export",
+  "topic": "operators or requires",
+  "member": "/$defs/Response/properties/export/properties/rules/items",
+  "def": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/export",
+  "topic": "evidence when method evidence",
+  "member": "/$defs/Response/properties/export/properties/delegations/items/properties/basis/properties/evidence",
+  "def": "_shared/0.1/delegation.schema.json#/$defs/DelegationBasis",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/export",
+  "topic": "parent iff delegated",
+  "member": "/$defs/Response/properties/export/properties/delegations/items/properties/basis/properties/parent",
+  "def": "_shared/0.1/delegation.schema.json#/$defs/DelegationBasis",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/export",
+  "topic": "vc credential",
+  "member": "/$defs/Response/properties/export/properties/delegations/items/properties/basis/properties/evidence/items/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/import",
+  "topic": "operators or requires",
+  "member": "/properties/export/properties/rules/items",
+  "def": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/import",
+  "topic": "evidence when method evidence",
+  "member": "/properties/export/properties/delegations/items/properties/basis/properties/evidence",
+  "def": "_shared/0.1/delegation.schema.json#/$defs/DelegationBasis",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/import",
+  "topic": "parent iff delegated",
+  "member": "/properties/export/properties/delegations/items/properties/basis/properties/parent",
+  "def": "_shared/0.1/delegation.schema.json#/$defs/DelegationBasis",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/import",
+  "topic": "vc credential",
+  "member": "/properties/export/properties/delegations/items/properties/basis/properties/evidence/items/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/import",
+  "topic": "rejected has reason",
+  "member": "/$defs/Response/properties/outcomes/items/properties/reason",
+  "def": "import/0.1/payload.schema.json#/$defs/Outcome",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/delegations/list",
+  "topic": "evidence when method evidence",
+  "member": "/$defs/Response/properties/delegations/items/properties/basis/properties/evidence",
+  "def": "_shared/0.1/delegation.schema.json#/$defs/DelegationBasis",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/delegations/list",
+  "topic": "parent iff delegated",
+  "member": "/$defs/Response/properties/delegations/items/properties/basis/properties/parent",
+  "def": "_shared/0.1/delegation.schema.json#/$defs/DelegationBasis",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/delegations/list",
+  "topic": "vc credential",
+  "member": "/$defs/Response/properties/delegations/items/properties/basis/properties/evidence/items/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "topic": "type has ContextEntry",
+  "member": "/$defs/Response/properties/entry/properties/type",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "topic": "one content evidence",
+  "member": "/$defs/Response/properties/entry/properties/evidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "topic": "general-context value",
+  "member": "/$defs/Response/properties/entry/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "topic": "vc-evidence no value",
+  "member": "/$defs/Response/properties/entry/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "topic": "model-inferred confidence",
+  "member": "/$defs/Response/properties/entry/properties/assertion/properties/confidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "topic": "vc credential",
+  "member": "/$defs/Response/properties/entry/properties/evidence/items/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "topic": "proposal only on contradicts",
+  "member": "/$defs/Response/properties/entry/properties/record/properties/relationships/items/properties/proposal",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Relationship",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "general-context value",
+  "member": "/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "vc-evidence no value",
+  "member": "/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "one content evidence (request)",
+  "member": "/properties/evidence",
+  "def": "entries/create/0.1/payload.schema.json#/properties/evidence",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "vc credential",
+  "member": "/properties/evidence/items/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "model-inferred confidence",
+  "member": "/properties/assertion/properties/confidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "general-context value",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "vc-evidence no value",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "vc credential",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/evidence/items/allOf/0/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "model-inferred confidence",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/assertion/properties/confidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "type has ContextEntry",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/type",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "one content evidence",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/evidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "general-context value",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "vc-evidence no value",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "model-inferred confidence",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/assertion/properties/confidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "vc credential",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/evidence/items/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "topic": "proposal only on contradicts",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/record/properties/relationships/items/properties/proposal",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Relationship",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "topic": "general-context value",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "topic": "vc-evidence no value",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "topic": "vc credential",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/evidence/items/allOf/0/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "topic": "model-inferred confidence",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/assertion/properties/confidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "topic": "type has ContextEntry",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/type",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "topic": "one content evidence",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/evidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "topic": "general-context value",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "topic": "vc-evidence no value",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "topic": "model-inferred confidence",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/assertion/properties/confidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "topic": "vc credential",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/evidence/items/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "topic": "proposal only on contradicts",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/record/properties/relationships/items/properties/proposal",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Relationship",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "topic": "general-context value",
+  "member": "/$defs/Response/properties/entries/items/anyOf/0/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "topic": "vc-evidence no value",
+  "member": "/$defs/Response/properties/entries/items/anyOf/0/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "topic": "vc credential",
+  "member": "/$defs/Response/properties/entries/items/anyOf/0/properties/evidence/items/allOf/0/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "MISSING"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "topic": "model-inferred confidence",
+  "member": "/$defs/Response/properties/entries/items/anyOf/0/properties/assertion/properties/confidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "topic": "type has ContextEntry",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/type",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "topic": "one content evidence",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/evidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "topic": "general-context value",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "topic": "vc-evidence no value",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "topic": "model-inferred confidence",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/assertion/properties/confidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "topic": "vc credential",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/evidence/items/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "topic": "proposal only on contradicts",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/record/properties/relationships/items/properties/proposal",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Relationship",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "topic": "type has ContextEntry",
+  "member": "/$defs/Response/properties/entry/properties/type",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "topic": "one content evidence",
+  "member": "/$defs/Response/properties/entry/properties/evidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "topic": "general-context value",
+  "member": "/$defs/Response/properties/entry/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "topic": "vc-evidence no value",
+  "member": "/$defs/Response/properties/entry/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "topic": "model-inferred confidence",
+  "member": "/$defs/Response/properties/entry/properties/assertion/properties/confidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "topic": "vc credential",
+  "member": "/$defs/Response/properties/entry/properties/evidence/items/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "topic": "proposal only on contradicts",
+  "member": "/$defs/Response/properties/entry/properties/record/properties/relationships/items/properties/proposal",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Relationship",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "general-context value",
+  "member": "/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "vc-evidence no value",
+  "member": "/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "one content evidence (request)",
+  "member": "/properties/evidence",
+  "def": "entries/revise/0.1/payload.schema.json#/properties/evidence",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "vc credential",
+  "member": "/properties/evidence/items/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "general-context value",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "vc-evidence no value",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "vc credential",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/evidence/items/allOf/0/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "model-inferred confidence",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/assertion/properties/confidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "type has ContextEntry",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/type",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "one content evidence",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/evidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "general-context value",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "vc-evidence no value",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "model-inferred confidence",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/assertion/properties/confidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "vc credential",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/evidence/items/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "topic": "proposal only on contradicts",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/record/properties/relationships/items/properties/proposal",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Relationship",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "topic": "type has ContextEntry",
+  "member": "/$defs/Response/properties/entry/properties/type",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "topic": "one content evidence",
+  "member": "/$defs/Response/properties/entry/properties/evidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "topic": "general-context value",
+  "member": "/$defs/Response/properties/entry/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "topic": "vc-evidence no value",
+  "member": "/$defs/Response/properties/entry/properties/content",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "topic": "model-inferred confidence",
+  "member": "/$defs/Response/properties/entry/properties/assertion/properties/confidence",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "topic": "vc credential",
+  "member": "/$defs/Response/properties/entry/properties/evidence/items/properties/credential",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "topic": "proposal only on contradicts",
+  "member": "/$defs/Response/properties/entry/properties/record/properties/relationships/items/properties/proposal",
+  "def": "_shared/0.1/context-entry.schema.json#/$defs/Relationship",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/grants/list",
+  "topic": "expiresAt by grantType",
+  "member": "/$defs/Response/properties/grants/items/properties/expiresAt",
+  "def": "_shared/0.1/grant.schema.json#/$defs/Grant",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/grants/read-own",
+  "topic": "expiresAt by grantType",
+  "member": "/$defs/Response/properties/grant/properties/expiresAt",
+  "def": "_shared/0.1/grant.schema.json#/$defs/Grant",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/grants/request",
+  "topic": "expiresAt by grantType",
+  "member": "/$defs/Response/properties/grant/properties/expiresAt",
+  "def": "_shared/0.1/grant.schema.json#/$defs/Grant",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/rules/list",
+  "topic": "operators or requires",
+  "member": "/$defs/Response/properties/rules/items",
+  "def": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule",
+  "covered": "exact"
+ },
+ {
+  "slug": "hcp/rules/set",
+  "topic": "operators or requires",
+  "member": "/$defs/Response/properties/rule",
+  "def": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule",
+  "covered": "exact"
+ }
+]

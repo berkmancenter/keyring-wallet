@@ -1,0 +1,124 @@
+Edge vectors: 66
+
+   HCP REJECTS TT REJECTS | temporary grant without expiresAt | #1381: listed (1)
+      HCP: / must have required property 'expiresAt'
+      TT:  / must have required property 'expiresAt'
+!= HCP REJECTS TT accepts | temporary grant with expiresAt null | #1381: listed (1)
+      HCP: /expiresAt must be string; / must match "then" schema
+!= HCP REJECTS TT accepts | persistent grant with an expiresAt instant | #1381: listed (1)
+      HCP: /expiresAt must be null; / must match "then" schema
+   HCP accepts TT accepts | get request naming both ref and entryId | #1381: listed (1)
+   HCP accepts TT accepts | get request naming neither ref nor entryId | #1381: listed (1)
+   HCP accepts TT accepts | withdraw request naming both ref and entryId | #1381: listed (2)
+!= HCP REJECTS TT accepts | withdraw result naming both ref and entryId | #1381: listed (2)
+      HCP: / must match exactly one schema in oneOf
+!= HCP accepts TT REJECTS | withdraw result with hardDeleted true | Q10: TT closes hardDeleted to false on withdraw; HCP 9.4.5 answers DELETE with the same shape
+      TT:  /hardDeleted must be equal to constant
+!= HCP accepts TT REJECTS | get result, directives absent | Q42 presence
+      TT:  / must have required property 'directives'
+!= HCP REJECTS TT accepts | get result, directives null | Q5: null for a Management Client
+      HCP: /directives must be array
+!= HCP REJECTS TT accepts | query result, directives null | Q5
+      HCP: /directives must be array
+!= HCP accepts TT REJECTS | audit event, entryId absent | Q42: TT requires the member (null when none)
+      TT:  / must have required property 'entryId'
+   HCP accepts TT accepts | audit event, entryId null
+   HCP accepts TT accepts | audit event, purpose null
+   HCP n/a     TT accepts | restrict-purposes request, permittedPurposes null (removes the narrowing) | no HCP schema: HCP 9.4.10 prose says null removes the narrowing
+   HCP n/a     TT REJECTS | restrict-purposes request, permittedPurposes absent
+      TT:  / must have required property 'permittedPurposes'
+   HCP accepts TT accepts | grant, expiresAt null on a persistent grant (control)
+!= HCP REJECTS TT accepts | entry whose type lacks ContextEntry | #1381: listed (1)
+      HCP: /type/0 must be equal to constant; /type must contain at least 1 valid item(s)
+!= HCP REJECTS TT accepts | entry, model-inferred with confidence null | #1381: listed (2)
+      HCP: /assertion/confidence must be equal to one of the allowed values; /assertion must match "then" schema
+!= HCP REJECTS TT accepts | entry, General Context content without value | #1381: listed (2)
+      HCP: /content must have required property 'value'; /content must match "then" schema
+   HCP accepts TT accepts | entry with a member HCP does not define (HCP 4.2, A.3: preserved)
+!= HCP accepts TT REJECTS | create request with a member HCP does not define (HCP 4.2, A.3) | TT payload root is additionalProperties:false
+      TT:  / must NOT have additional properties (https://ext.example/note)
+   HCP accepts TT accepts | create request with record.metadata (nested, open on both sides)
+   HCP accepts TT accepts | create request with classification.permittedPurposes | #1381: listed (1) | Q7 (allowlisted hcp-only)
+   HCP REJECTS TT REJECTS | revise request carrying subject | HCP `not` rule vs TT closed root
+      HCP: / must NOT be valid
+      TT:  / must NOT have additional properties (subject)
+!= HCP REJECTS TT accepts | standing rule with neither operators nor requires | #1381: listed (1)
+      HCP: / must have required property 'operators'; / must have required property 'requires'; / must match a schema in anyOf
+   HCP n/a     TT REJECTS | rules/set request with neither operators nor requires | request side: the TT schema has the anyOf
+      TT:  / must have required property 'operators'; / must have required property 'requires'; / must match a schema in anyOf
+!= HCP REJECTS TT accepts | import whose export holds a rule with neither | #1381: listed (1)
+      HCP: /export/rules/0 must have required property 'operators'; /export/rules/0 must have required property 'requires'; /export/rules/0 must match a schema in anyOf
+   HCP accepts TT accepts | import of a realistic export (control)
+!= HCP accepts TT REJECTS | query with empty categories | Q42: documented
+      TT:  /categories must NOT have fewer than 1 items
+!= HCP accepts TT REJECTS | query with 257 categories | framework bound 256
+      TT:  /categories must NOT have more than 256 items
+   HCP accepts TT accepts | query with maxEntries 1000 | neither side caps it; the provider returns at most 20
+   HCP REJECTS TT REJECTS | query result with 21 entries | HCP 7.2 cap on both sides
+      HCP: /entries must NOT have more than 20 items
+      TT:  /entries must NOT have more than 20 items
+!= HCP accepts TT REJECTS | query with a 2049-character purpose | framework bound 2048 on every URI
+      TT:  /purpose must NOT have more than 2048 characters
+!= HCP accepts TT REJECTS | entry content.language of 65 characters | undocumented bound 64
+      TT:  /content/language must NOT have more than 64 characters
+!= HCP accepts TT REJECTS | create request with 65 evidence items | framework bound 64
+      TT:  /evidence must NOT have more than 64 items
+   HCP n/a     TT REJECTS | accessToken of 8193 characters | carriage member; framework bound 8192
+      TT:  /accessToken must NOT have more than 8192 characters
+!= HCP REJECTS TT accepts | query result: disclosed VC evidence item without credential | #1381: NOT listed | #1381 lists this rule for get (anyOf/0) but not for query
+      HCP: /entries/0/evidence/0 must have required property 'credential'; /entries/0/evidence/0 must match "then" schema; /entries/0 must have required property 'schema'; /entries/0 must have required property 
+   HCP accepts TT accepts | query result: disclosed VC evidence item WITH a credential (control)
+   HCP accepts TT accepts | disclosed evidence item with revealed (allOf over an open EvidenceItem)
+   HCP accepts TT accepts | category "health_context"
+   HCP REJECTS TT REJECTS | category "Health"
+      HCP: / must match pattern "^[a-z][a-z0-9_]*$"; / must match pattern "^[A-Za-z][A-Za-z0-9+.-]*:"; / must match format "uri"; / must match a schema in anyOf
+      TT:  / must match pattern "^([a-z][a-z0-9_]*|[a-zA-Z][a-zA-Z0-9+.-]*:\S+)$"
+   HCP REJECTS TT REJECTS | category "foo:"
+      HCP: / must match pattern "^[a-z][a-z0-9_]*$"; / must match format "uri"; / must match a schema in anyOf
+      TT:  / must match pattern "^([a-z][a-z0-9_]*|[a-zA-Z][a-zA-Z0-9+.-]*:\S+)$"
+   HCP accepts TT accepts | category "foo:bar"
+   HCP REJECTS TT REJECTS | category "a:b c"
+      HCP: / must match pattern "^[a-z][a-z0-9_]*$"; / must match format "uri"; / must match a schema in anyOf
+      TT:  / must match pattern "^([a-z][a-z0-9_]*|[a-zA-Z][a-zA-Z0-9+.-]*:\S+)$"
+!= HCP REJECTS TT accepts | category "x:<y>"
+      HCP: / must match pattern "^[a-z][a-z0-9_]*$"; / must match format "uri"; / must match a schema in anyOf
+!= HCP REJECTS TT accepts | category "a:%zz"
+      HCP: / must match pattern "^[a-z][a-z0-9_]*$"; / must match format "uri"; / must match a schema in anyOf
+   HCP accepts TT accepts | category "https://cat.example/x"
+   HCP accepts TT accepts | category "urn:x:y"
+   HCP accepts TT accepts | directive action "share"
+   HCP REJECTS TT REJECTS | directive action "Share"
+      HCP: / must be equal to one of the allowed values; / must match pattern "^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$"; / must match format "uri"; / must match a schema in anyOf
+      TT:  / must match pattern "^(share|sign|transact|[a-zA-Z][a-zA-Z0-9+.-]*:\S+)$"
+   HCP REJECTS TT REJECTS | directive action "foo:"
+      HCP: / must be equal to one of the allowed values; / must match pattern "^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$"; / must match format "uri"; / must match a schema in anyOf
+      TT:  / must match pattern "^(share|sign|transact|[a-zA-Z][a-zA-Z0-9+.-]*:\S+)$"
+!= HCP REJECTS TT accepts | directive action "x:<y>"
+      HCP: / must be equal to one of the allowed values; / must match format "uri"; / must match a schema in anyOf
+!= HCP REJECTS TT accepts | directive action "a:%zz"
+      HCP: / must be equal to one of the allowed values; / must match format "uri"; / must match a schema in anyOf
+   HCP accepts TT accepts | directive action "https://act.example/x"
+   HCP accepts TT accepts | delegation relationship "caregiver"
+   HCP REJECTS TT REJECTS | delegation relationship "Caregiver"
+      HCP: / must be equal to one of the allowed values; / must match pattern "^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$"; / must match format "uri"; / must match a schema in anyOf
+      TT:  / must match pattern "^(parent-or-guardian|legal-guardian|attorney-in-fact|caregiver|[a-zA-Z][a-zA-Z0-9+.-]*:\S+)$"
+   HCP REJECTS TT REJECTS | delegation relationship "foo:"
+      HCP: / must be equal to one of the allowed values; / must match pattern "^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$"; / must match format "uri"; / must match a schema in anyOf
+      TT:  / must match pattern "^(parent-or-guardian|legal-guardian|attorney-in-fact|caregiver|[a-zA-Z][a-zA-Z0-9+.-]*:\S+)$"
+!= HCP REJECTS TT accepts | delegation relationship "x:<y>"
+      HCP: / must be equal to one of the allowed values; / must match format "uri"; / must match a schema in anyOf
+   HCP accepts TT accepts | delegation relationship "https://rel.example/x"
+   HCP accepts TT accepts | audit purpose "https://purposes.example/x"
+!= HCP REJECTS TT accepts | audit purpose "x:<y>"
+      HCP: / must match format "uri"; / must be null; / must match a schema in anyOf
+!= HCP REJECTS TT accepts | audit purpose "a:%zz"
+      HCP: / must match format "uri"; / must be null; / must match a schema in anyOf
+   HCP REJECTS TT REJECTS | audit purpose "foo:"
+      HCP: / must match pattern "^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$"; / must match format "uri"; / must be null; / must match a schema in anyOf
+      TT:  / must match pattern "^[a-zA-Z][a-zA-Z0-9+.-]*:\S+$"
+   HCP REJECTS TT REJECTS | purpose code "x:<y>" (control: both have format uri)
+      HCP: / must match format "uri"
+      TT:  / must match format "uri"
+   HCP REJECTS TT REJECTS | purpose code "a:%zz" (control: both have format uri)
+      HCP: / must match format "uri"
+      TT:  / must match format "uri"

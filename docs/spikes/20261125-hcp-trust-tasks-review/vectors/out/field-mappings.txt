@@ -1,0 +1,498 @@
+##### ./audit/read/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Read audit log
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| filter by HCP Client (HCP 8.3) | `client` | Named as in HCP 9.4.12, *pending HCP confirmation* ([question 29](#pending-hcp-confirmation)). |
+| filter by category (HCP 8.3) | `category` | As above. |
+| filter by event type (HCP 8.3) | `eventType` | Named after the audit event's own member (HCP 8.2), *pending HCP confirmation* ([question 29](#pending-hcp-confirmation)). |
+| filter by date range (HCP 8.3) | `from`, `to` | Named as in HCP 9.4.12; both inclusive, *pending HCP confirmation* ([questions 29 and 30](#pending-hcp-confirmation)). |
+| query parameter `cursor` (HCP 9.5) | `cursor` | Unchanged. |
+| query parameter `limit` (HCP 9.5) | `limit` | Unchanged; at most 1000, a framework bound ([question 3](#pending-hcp-confirmation)). |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| the audit log returned (HCP 9.4.7) | `events` | HCP names no member; *pending HCP confirmation* ([question 30](#pending-hcp-confirmation)). |
+| result `nextCursor` (HCP 9.5) | `nextCursor` | **Absent**, not null, on the last page, *pending HCP confirmation* ([question 3](#pending-hcp-confirmation)). |
+
+##### ./delegations/end/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Relinquish or end delegation
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| path parameter `{delegationId}` (`DELETE /v2/delegations/{delegationId}`, HCP 9.2) | `delegationId` | Moved from the path into the payload, unchanged. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `204 No Content` | the empty `#response` payload | No body in HCP, so none here. |
+
+##### ./delegations/list/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: List delegations
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| query parameter `status` (HCP 9.4.13) | `status` | Unchanged; its one value is `ended`, which adds ended delegations to those that hold, *pending HCP confirmation* ([question 31](#pending-hcp-confirmation)). |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `delegations` (HCP 9.4.13) | `delegations` | Unchanged. Not paginated (HCP 9.4.13). |
+
+##### ./directives/list/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: List directives
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| `GET /v2/directives` (HCP 9.2, 9.4.15) | the Type URI | No query parameters in HCP, so no request member beyond the token. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `200`: a `directives` array (HCP 9.4.15) | `directives` in the `#response` payload | Unchanged. Not paginated: HCP gives this operation no cursor ([question 3](#pending-hcp-confirmation)). |
+
+##### ./directives/remove/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Remove directive
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| path parameter `{directiveId}` (`DELETE /v2/directives/{directiveId}`, HCP 9.2) | `directiveId` | Moved from the path into the payload, unchanged. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `204 No Content` | the empty `#response` payload | No body in HCP, so none here. |
+
+##### ./directives/set/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Set directive
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| request body `action`, `effect`, `text`, `categories`, `operators` (`POST /v2/directives`, HCP 9.4.15) | `action`, `effect`, `text`, `categories`, `operators` | Unchanged. The constraints are the directive's own (HCP 6.4); the array and `text` bounds are framework bounds. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `201`: the directive (HCP 9.4.15) | `directive` in the `#response` payload | HCP's body is the directive itself; this task wraps it in one member, `directive`, so the response payload stays a closed object. The directive's members are unchanged. |
+| `directiveId`, `setBy`, `createdAt` | set by the provider, in `directive` | Never taken from the request (HCP 6.4, 9.4.15); the request schema has no such member. |
+
+##### ./disclosures/summary/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Disclosure summary
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| query parameters `client`, `category`, `from`, `to` (HCP 9.4.12) | `client`, `category`, `from`, `to` | Unchanged. `from` and `to` are both inclusive, *pending HCP confirmation* ([question 30](#pending-hcp-confirmation)). |
+| query parameters `cursor`, `limit` (HCP 9.5, 9.4.12: "MAY be paginated") | `cursor`, `limit` | Unchanged; `limit` at most 1000, a framework bound ([question 3](#pending-hcp-confirmation)). |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `clients` (HCP 9.4.12) | `clients` | Unchanged; each member carries the members of HCP 8.6, unchanged. |
+| result `nextCursor` (HCP 9.5) | `nextCursor` | **Absent**, not null, on the last page, *pending HCP confirmation* ([question 3](#pending-hcp-confirmation)). |
+
+##### ./entries/confirm/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Confirm or reject
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| path parameter `{entryId}` (`POST /v2/entries/{entryId}/confirmation`, HCP 9.2) | `entryId` | Moved from the path into the payload, unchanged. A Management Client names the entry by its `id` (HCP 9.4.2). |
+| request `disposition` | `disposition` | Unchanged. |
+| request `expectedVersion` | `expectedVersion` | Unchanged. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result: the entry (`200`, HCP 9.4.9) | `entry` | **Wrapped**: HCP's result body is the entry itself; the carriage puts it in the member `entry`, unchanged, so the payload stays an object the carriage can extend. |
+
+##### ./entries/create/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Create
+### HCP field mapping
+
+| HCP Create field | Member | Notes |
+|---|---|---|
+| request `schema`, `subject.id`, `content`, `evidence` | `schema`, `subject`, `content`, `evidence` | Unchanged. |
+| request `classification.categories`, `classification.dimension` | `classification` | Unchanged. |
+| request `assertion.*` | `assertion` | Unchanged. |
+| request `record.provenance.*`, `record.relationships` | `record` | Unchanged. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `Idempotency-Key` header (HCP 9.6) | the document `id` | See [Repeated requests](#repeated-requests). |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result: the created entry (`201`, HCP 9.4.3) | `entry` | **Wrapped**: HCP returns the entry or disclosure itself; this task puts it in `entry`, as HCP's own Get entry result does (HCP 5.2.2). |
+
+##### ./entries/get/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Get entry
+### HCP field mapping
+
+| HCP Get entry field | Member | Notes |
+|---|---|---|
+| request `ref` or `entryId` (the `{entryId}` path segment, HCP 9.4.2) | `ref` or `entryId` | Moved from the path into the payload. Exactly one is present. |
+| request `purpose` | `purpose` | Unchanged. |
+| request `purposeDescription` | `purposeDescription` | Unchanged. |
+| request `version` | `version` | Unchanged. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `entry` | `entry` | Unchanged. |
+| result `retrievalId` | `retrievalId` | Unchanged. |
+| result `minimization` | `minimization` | Unchanged. |
+| result `directives` | `directives` | Unchanged. |
+| result `timestamp` | `respondedAt` | **Renamed**, as in `hcp/entries/query`. Same type and meaning. |
+
+##### ./entries/hard-delete/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Hard delete
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| path parameter `{entryId}` (`DELETE /v2/entries/{entryId}`, HCP 9.2) | `entryId` | Moved from the path into the payload, unchanged. A Management Client names the entry by its `id` (HCP 9.4.5). |
+| query parameter `hardDelete=true` (HCP 9.4.5) | the Type URI | This task is the hard deletion; there is no member for it. |
+| `Idempotency-Key` header (HCP 9.6) | the document `id` | See [Repeated requests](#repeated-requests). |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `entryId` | `entryId` | Unchanged. |
+| result `hardDeleted` | `hardDeleted` | Always `true`. |
+| result `status` | none | Absent: the entry is no longer held, so it has no status, *pending HCP confirmation* ([question 11](#pending-hcp-confirmation)). |
+| result `timestamp` | `respondedAt` | **Renamed**, as in [`hcp/entries/query`](../../query/0.1/spec.md#hcp-field-mapping). Same type and meaning. |
+
+##### ./entries/query/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Query
+### HCP field mapping
+
+| HCP Query field | Member | Notes |
+|---|---|---|
+| request `query` | `query` | Unchanged. |
+| request `categories` | `categories` | Unchanged. At most 256 items, a framework bound HCP does not set. |
+| request `purpose` | `purpose` | Unchanged: a purpose-code absolute URI. |
+| request `purposeDescription` | `purposeDescription` | Unchanged. |
+| request `maxEntries` | `maxEntries` | Unchanged. Absent means HCP's default of 5. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `entries` | `entries` | Unchanged. |
+| result `retrievalId` | `retrievalId` | Unchanged. |
+| result `minimization` | `minimization` | Unchanged. |
+| result `categoriesSearched` | `categoriesSearched` | Unchanged. |
+| result `directives` | `directives` | Unchanged. |
+| result `timestamp` | `respondedAt` | **Renamed**, following the registry's `<event>At` convention for instants. Same type and meaning. |
+
+##### ./entries/restrict-purposes/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Restrict purposes
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| path parameter `{entryId}` (`PUT /v2/entries/{entryId}/purposes`, HCP 9.2) | `entryId` | Moved from the path into the payload, unchanged. A Management Client names the entry by its `id` (HCP 9.4.2). |
+| request `permittedPurposes` | `permittedPurposes` | Unchanged, null included: null removes the narrowing (HCP 9.4.10). At least 1 and at most 256 items, framework bounds HCP does not set. |
+| request `expectedVersion` | `expectedVersion` | Unchanged. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result: the entry (`200`, HCP 9.4.10) | `entry` | **Wrapped**: HCP's result body is the entry itself; the carriage puts it in the member `entry`, unchanged, so the payload stays an object the carriage can extend. |
+
+##### ./entries/revise/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Revise
+### HCP field mapping
+
+| HCP Revise field | Member | Notes |
+|---|---|---|
+| request `ref` or `entryId` (the `{entryId}` path segment, HCP 9.4.4) | `ref` or `entryId` | Moved from the path into the payload. Exactly one is present. |
+| request `expectedVersion`, `content`, `evidence`, `reason` | the same | Unchanged. |
+| request `assertion.*` | `assertion` | Unchanged. Includes `basis` and `permittedPurposes`, which HCP's text gives a revision ("as for create") but its published request schema omits (HCP 5.2.4); see [question 8](#pending-hcp-confirmation). |
+| request `record.provenance.*`, `record.relationships` | `record` | Unchanged. A relationship may carry a `proposal`, as for create (HCP 4.7.4, 5.2.4). |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `Idempotency-Key` header (HCP 9.6) | the document `id` | See [Repeated requests](#repeated-requests). |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result: the revised entry (`201`, HCP 9.4.4) | `entry` | **Wrapped**, as in `hcp/entries/create`. |
+
+##### ./entries/set-categories/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Change categories
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| path parameter `{entryId}` (`PUT /v2/entries/{entryId}/categories`, HCP 9.2) | `entryId` | Moved from the path into the payload, unchanged. A Management Client names the entry by its `id` (HCP 9.4.2). |
+| request `categories` | `categories` | Unchanged. At most 256 items, a framework bound HCP does not set. |
+| request `expectedVersion` | `expectedVersion` | Unchanged. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result: the entry (`200`, HCP 9.4.10) | `entry` | **Wrapped**: HCP's result body is the entry itself; the carriage puts it in the member `entry`, unchanged, so the payload stays an object the carriage can extend. |
+
+##### ./entries/withdraw/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Withdraw
+### HCP field mapping
+
+| HCP Withdraw field | Member | Notes |
+|---|---|---|
+| request `ref` or `entryId` (the `{entryId}` path segment, HCP 9.4.5) | `ref` or `entryId` | Moved from the path into the payload. Exactly one is present. |
+| request `reason` | `reason` | Unchanged. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `Idempotency-Key` header (HCP 9.6) | the document `id` | See [Repeated requests](#repeated-requests). |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `ref` or `entryId` | `ref` or `entryId` | Unchanged: the one the request used. |
+| result `status` | `status` | Unchanged: always `deleted`. |
+| result `hardDeleted` (HCP 9.4.5) | `hardDeleted` | OPTIONAL, and always `false` here. HCP's HTTP binding returns it; its Core text does not list it (HCP 5.2.5); see [question 10](#pending-hcp-confirmation). |
+| result `timestamp` | `respondedAt` | **Renamed**, as in `hcp/entries/query`. |
+
+##### ./export/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Export
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| query parameter `exclude=deleted` (HCP 9.4.8) | `excludeDeleted: true` | The "excluding deleted entries" option of HCP 5.4.1, under the name HCP's export `options` member gives it. |
+| query parameter `include=versions` (HCP 9.4.8) | `includeVersions: true` | The "including versions" option of HCP 5.4.1. |
+| query parameter `include=audit` (HCP 9.4.8) | `includeAudit: true` | The "including the audit log" option of HCP 5.4.1. `include=audit,versions` sets both. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| response body, the export (HCP 5.4.1) | `export` | **Wrapped**: HCP's body is the export itself; here it is the value of the one member `export`, unchanged. |
+
+##### ./grants/list/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: List grants
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| query parameter `status` (HCP 9.4.6) | `status` | Unchanged. Absent means `active`, HCP's default. |
+| query parameter `cursor` (HCP 9.5) | `cursor` | Unchanged. |
+| query parameter `limit` (HCP 9.5) | `limit` | Unchanged. At most 1000, a framework bound HCP does not set, *pending HCP confirmation* ([question 3](#pending-hcp-confirmation)). |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| response body, the grant objects (HCP 9.4.6) | `grants` | HCP's binding names no member for the list; here it is `grants`. |
+| response `nextCursor` (HCP 9.5) | `nextCursor` | **Absent, not null,** when the set is exhausted, *pending HCP confirmation* ([question 3](#pending-hcp-confirmation)). |
+
+##### ./grants/read-own/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Read own grant
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result: the grant (HCP 5.2.6, 6.1.5) | `grant` | **Wrapped**: HCP's published result schema is the grant object itself. |
+| "with the directives that apply to it" (HCP 5.2.6) | `directives` | HCP's text gives the result directives but names no member for them, and its published result schema has none; see [question 18](#pending-hcp-confirmation). |
+
+##### ./grants/relinquish/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Relinquish own grant
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| path parameter `{grantId}` (`DELETE /v2/grants/{grantId}`, HCP 9.2) | `grantId` | Moved from the path into the payload, unchanged. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `204 No Content` (HCP 9.4.6) | the empty `#response` payload | HCP defines no result, so none here. |
+
+##### ./grants/request/0.1/spec.md
+### HCP field mapping
+
+HCP has no request schema for this task. The request members follow an OAuth authorization request with RFC 9396 authorization details, as HCP 13.3 names it. The response carries the members of the OAuth token response (HCP 13.3, 13.4) beside HCP's grant object, whole and unrenamed (HCP 6.1.5, `schemas/2.0-draft-3/grant.json`), as [`hcp/grants/read-own`](../../read-own/0.1/spec.md) returns it.
+
+| HCP / OAuth field | Member | Notes |
+|---|---|---|
+| `authorization_details` of type `https://hcp.example/spec/authorization/context-access` (HCP 13.3; RFC 9396) | `access` | Each detail carries `type`, `actions`, `categories`, and optionally `purposes`, `narrowedTo` and `onwardSharing`, as HCP 6.1.5 defines them. |
+| `scope` (HCP 6.1.1, 13.3) | not carried | Scope strings are a compact view of `access`; a client names details. |
+| `resource` (RFC 8707, HCP 13.3) | `recipient` | The provider the grant is for. |
+| `client_id` | `issuer` | See [Authorization](#authorization). |
+| `login_hint` (OpenID Connect) | `subjectHint` | Not in HCP. See [Finding the person](#finding-the-person). |
+| grant `grantType` (HCP 6.1.4) | `grantType` (request), `grant.grantType` (response) | As asked in the request; as elected in the response. |
+| grant `expiresAt`, temporary default and maximum (HCP 6.1.3) | `expiresIn` (request), `grant.expiresAt` (response) | `grant.expiresAt` is `null` for a persistent grant, as HCP writes it. |
+| grant `requestingParty` (HCP 6.1.5) | `requestingParty` (request), `grant.requestingParty` (response) | Unchanged. |
+| token response `access_token`, `expires_in` (HCP 13.3, 13.4) | `accessToken`, `tokenExpiresAt` | The token is opaque. `expires_in` is carried as the instant it ends. |
+| token response `authorization_details` (HCP 13.3) | `grant.access` | What the person approved. |
+| the grant object (HCP 6.1.5) | `grant` | HCP's grant object with its own members, `grantId`, `issuedAt`, `expiresAt` and `status` among them, unrenamed: being inside `grant`, its `issuedAt` is not read as the document's. `authorizingPrincipal.delegation` is withheld from the client (HCP 17.4). |
+| refresh token (HCP 13.4) | not carried | Version 0.1 issues no refresh token; a client asks again, or the person makes the grant persistent. |
+
+##### ./grants/revoke/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Revoke grant
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| path parameter `{grantId}` (`DELETE /v2/grants/{grantId}`, HCP 9.2) | `grantId` | Moved from the path into the payload, unchanged. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `204 No Content` | the empty `#response` payload | No body in HCP, so none here. |
+
+##### ./grants/revoked/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Revocation notification
+### HCP field mapping
+
+The Security Event Token's claims map to the Trust Task envelope, and the event's members to the payload. The SET's `events` wrapper is replaced by the Type URI, which names the one event this task carries.
+
+| HCP / SET field | Member | Notes |
+|---|---|---|
+| `iss` | `issuer` | The provider's VID. |
+| `aud` | `recipient` | The client's VID. |
+| `jti` | `noticeId` | **Identical on every delivery attempt**, as HCP 9.9 requires of `jti`; the client deduplicates on it. *Pending HCP confirmation* ([question 16](#pending-hcp-confirmation)). |
+| none | `id` | **Fresh on every delivery attempt**, as for any new document ([SPEC §8.4](/SPEC.md#84-retry-semantics)). It identifies the attempt, not the notice. |
+| `iat` | `issuedAt` | Whole seconds, as SET instants already are. **Fresh on every delivery attempt**: the time that attempt is sent. *Pending HCP confirmation* ([question 16](#pending-hcp-confirmation)). |
+| The same token on every attempt (HCP 9.9) | a fresh document on every attempt, with a stable `noticeId` | The `id`, `issuedAt` and `proof` are new on every attempt; the `threadId` and payload are the same. A declared departure from HCP 9.9, *pending HCP confirmation* ([question 16](#pending-hcp-confirmation)). |
+| `events` key `https://hcp.example/spec/events/grant-revoked` | the Type URI | |
+| event `grantId` | `grantId` | Unchanged. |
+| event `revokedAt` | `revokedAt` | Unchanged for a revocation. For a grant ended with its delegation, when the delegation ended (HCP 17.6). |
+| `grant.expired` audit `reason` `delegation-ended` (HCP 8.2, 17.6) | `reason` | OPTIONAL. `revoked` or `delegation-ended`; absent means `revoked`. HCP's event has no such member; it is added, *pending HCP confirmation* ([question 17](#pending-hcp-confirmation)). |
+| JWS signature | `proof` | See [Authorization](#authorization) for the key. Made afresh on every delivery attempt. |
+| RFC 8935 `202 Accepted` | the empty `#response` payload | |
+| RFC 8935 `400` error codes | `trust-task-error` codes | See [Errors](#errors). |
+
+##### ./import/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Import
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| request `export` | `export` | Unchanged. |
+| request `dryRun` | `dryRun` | Unchanged. |
+| request `categoryMap` | `categoryMap` | Unchanged. At most 256 replacements, a framework bound HCP does not set. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `outcomes` | `outcomes` | Unchanged: each with `id`, `outcome` and, for a rejection, `reason`. |
+| result `dryRun` | `dryRun` | Unchanged. |
+| (none) | `ext["vnd.trusttasks.hcp-carriage"].rulesNotApplied` | **Added** by this family, not HCP, for a delegate's import: the standing rules it did not apply, carried in the framework's `ext` so that the result stays HCP's, *pending HCP confirmation* ([question 40](#pending-hcp-confirmation)). |
+
+##### ./rules/list/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: List standing rules
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| `GET /v2/rules` (HCP 9.2, 9.4.14) | the Type URI | No query parameters in HCP, so no request member beyond the token. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `200`: a `rules` array (HCP 9.4.14) | `rules` in the `#response` payload | Unchanged. Not paginated: HCP gives this operation no cursor ([question 3](#pending-hcp-confirmation)). |
+
+##### ./rules/remove/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Remove standing rule
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| path parameter `{ruleId}` (`DELETE /v2/rules/{ruleId}`, HCP 9.2) | `ruleId` | Moved from the path into the payload, unchanged. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `204 No Content` | the empty `#response` payload | No body in HCP, so none here. |
+
+##### ./rules/set/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Set standing rule
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| request body `operators`, `requires`, `categories` (`POST /v2/rules`, HCP 9.4.14) | `operators`, `requires`, `categories` | Unchanged. HCP requires `operators`, `requires`, or both; the schema checks it. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `201`: the rule (HCP 9.4.14) | `rule` in the `#response` payload | HCP's body is the rule itself; this task wraps it in one member, `rule`, so the response payload stays a closed object. The rule's members are unchanged. |
+| `ruleId`, `effect`, `setBy`, `createdAt` | set by the provider, in `rule` | Never taken from the request (HCP 6.3, 9.4.14); the request schema has no such member. `effect` is always `deny`. |
+
+##### ./shares/report/0.1/spec.md
+carries:
+  protocol: HCP
+  version: "2.0-draft-3"
+  reference: https://github.com/loyalagents/hcp-spec/blob/b790561/spec/2.0-draft-3/specification.md
+  operation: Report onward sharing
+### HCP field mapping
+
+| HCP field | Member | Notes |
+|---|---|---|
+| request `recipient` (`domain`, `name`) | `recipient` | Unchanged. It is the organization told, not the document's own `recipient`, which is the provider. |
+| request `refs` | `refs` | Unchanged. |
+| request `purpose` | `purpose` | Unchanged. |
+| request `sharedAt` | `sharedAt` | Unchanged. |
+| `Authorization: Bearer` header (HCP 9.3) | `accessToken` | Moved from the transport into the payload, unchanged. |
+| `HCP-Version` header | the Type URI and `carries.version` | Version 0.1 of this task carries HCP 2.0-draft-3 only. |
+| result `204 No Content` (HCP 9.4.16); MCP `hcp_reportSharing` (HCP 10.3.6) | the empty `#response` payload | HCP defines no result, so none here. |
+

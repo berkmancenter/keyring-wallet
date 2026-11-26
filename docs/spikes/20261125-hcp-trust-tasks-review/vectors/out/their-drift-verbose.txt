@@ -1,0 +1,115 @@
+check-hcp-drift: specs/hcp (27 carried specs, HCP 2.0-draft-3) against <review>/hcp-spec at b790561 (b79056183070)
+  44 objects compared, 11 covered by another mapped object, 25 sides with no HCP schema
+
+hcp/_shared:StandingRule
+  ours specs/hcp/_shared/0.1/standing-rule.schema.json#/$defs/StandingRule
+  HCP  schemas/2.0-draft-3/standing-rule.json
+    alternatives (root): members present: ours no rule; HCP at least one of (operators | requires)  [allowlisted: specs/hcp/rules/set/0.1/spec.md#hcp-field-mapping (the request body `operators`, `requires`, `categories` row); specs/hcp/import/0.1/spec.md#request]
+
+hcp/_shared:AuditEvent
+  ours specs/hcp/_shared/0.1/audit-event.schema.json#/$defs/AuditEvent
+  HCP  schemas/2.0-draft-3/audit-event.json
+    required     entryId: required in ours, optional in HCP  [allowlisted: Q42]
+    required     grantId: required in ours, optional in HCP  [allowlisted: Q42]
+    required     purpose: required in ours, optional in HCP  [allowlisted: Q42]
+    required     purposeDescription: required in ours, optional in HCP  [allowlisted: Q42]
+    required     relatedEntryId: required in ours, optional in HCP  [allowlisted: Q42]
+
+hcp/_shared:Export
+  ours specs/hcp/_shared/0.1/export.schema.json#/$defs/Export
+  HCP  schemas/2.0-draft-3/export.json
+    required     options: required in ours, optional in HCP  [allowlisted: Q42]
+    required     options.includeAudit: required in ours, optional in HCP  [allowlisted: Q42]
+    required     options.includeVersions: required in ours, optional in HCP  [allowlisted: Q42]
+
+hcp/entries/create:request
+  ours specs/hcp/entries/create/0.1/payload.schema.json#
+  HCP  schemas/2.0-draft-3/operations/create-request.json
+    ours-only    accessToken: required in ours; HCP does not declare it  [allowlisted: specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)]
+    hcp-only     classification.permittedPurposes: optional in HCP; ours does not declare it  [allowlisted: Q7]
+
+hcp/entries/get:request
+  ours specs/hcp/entries/get/0.1/payload.schema.json#
+  HCP  schemas/2.0-draft-3/operations/get-entry-request.json
+    ours-only    accessToken: required in ours; HCP does not declare it  [allowlisted: specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)]
+
+hcp/entries/get:response
+  ours specs/hcp/entries/get/0.1/payload.schema.json#/$defs/Response
+  HCP  schemas/2.0-draft-3/operations/get-entry-result.json
+    nullable     directives: null allowed in ours only  [allowlisted: Q5]
+    required     directives: required in ours, optional in HCP  [allowlisted: Q42]
+
+hcp/entries/query:request
+  ours specs/hcp/entries/query/0.1/payload.schema.json#
+  HCP  schemas/2.0-draft-3/operations/query-request.json
+    ours-only    accessToken: required in ours; HCP does not declare it  [allowlisted: specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)]
+
+hcp/entries/query:response
+  ours specs/hcp/entries/query/0.1/payload.schema.json#/$defs/Response
+  HCP  schemas/2.0-draft-3/operations/query-result.json
+    nullable     directives: null allowed in ours only  [allowlisted: Q5]
+    required     directives: required in ours, optional in HCP  [allowlisted: Q42]
+
+hcp/entries/revise:request
+  ours specs/hcp/entries/revise/0.1/payload.schema.json#
+  HCP  schemas/2.0-draft-3/operations/revise-request.json
+    ours-only    accessToken: required in ours; HCP does not declare it  [allowlisted: specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)]
+    ours-only    assertion.basis: optional in ours; HCP does not declare it  [allowlisted: Q8]
+    ours-only    assertion.permittedPurposes: optional in ours; HCP does not declare it  [allowlisted: Q8]
+    ours-only    record.relationships[].proposal: optional in ours; HCP does not declare it  [allowlisted: Q8]
+
+hcp/entries/withdraw:request
+  ours specs/hcp/entries/withdraw/0.1/payload.schema.json#
+  HCP  schemas/2.0-draft-3/operations/withdraw-request.json
+    ours-only    accessToken: required in ours; HCP does not declare it  [allowlisted: specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)]
+
+hcp/entries/withdraw:response
+  ours specs/hcp/entries/withdraw/0.1/payload.schema.json#/$defs/Response
+  HCP  schemas/2.0-draft-3/operations/withdraw-result.json
+    alternatives (root): members present: ours no rule; HCP exactly one of (entryId | ref)  [allowlisted: specs/hcp/entries/withdraw/0.1/spec.md#hcp-field-mapping]
+    enum         hardDeleted: closed in ours only (false)  [allowlisted: Q10]
+
+hcp/import:request
+  ours specs/hcp/import/0.1/payload.schema.json#
+  HCP  schemas/2.0-draft-3/operations/import-request.json
+    ours-only    accessToken: required in ours; HCP does not declare it  [allowlisted: specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)]
+
+hcp/import:response
+  ours specs/hcp/import/0.1/payload.schema.json#/$defs/Response
+  HCP  schemas/2.0-draft-3/operations/import-result.json
+    ours-only    ext: optional in ours; HCP does not declare it  [allowlisted: Q40]
+
+hcp/export:request
+  ours specs/hcp/export/0.1/payload.schema.json#
+  HCP  schemas/2.0-draft-3/export.json#/properties/options
+    ours-only    accessToken: required in ours; HCP does not declare it  [allowlisted: specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)]
+
+hcp/shares/report:request
+  ours specs/hcp/shares/report/0.1/payload.schema.json#
+  HCP  schemas/2.0-draft-3/operations/report-sharing-request.json
+    ours-only    accessToken: required in ours; HCP does not declare it  [allowlisted: specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)]
+
+hcp/rules/set:request
+  ours specs/hcp/rules/set/0.1/payload.schema.json#
+  HCP  schemas/2.0-draft-3/standing-rule.json
+    ours-only    accessToken: required in ours; HCP does not declare it  [allowlisted: specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)]
+    hcp-only     createdAt: required in HCP; ours does not declare it  [allowlisted: specs/hcp/rules/set/0.1/spec.md#hcp-field-mapping]
+    hcp-only     effect: required in HCP; ours does not declare it  [allowlisted: specs/hcp/rules/set/0.1/spec.md#hcp-field-mapping]
+    hcp-only     ruleId: required in HCP; ours does not declare it  [allowlisted: specs/hcp/rules/set/0.1/spec.md#hcp-field-mapping]
+    hcp-only     setBy: required in HCP; ours does not declare it  [allowlisted: specs/hcp/rules/set/0.1/spec.md#hcp-field-mapping]
+
+hcp/directives/set:request
+  ours specs/hcp/directives/set/0.1/payload.schema.json#
+  HCP  schemas/2.0-draft-3/directive.json
+    ours-only    accessToken: required in ours; HCP does not declare it  [allowlisted: specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)]
+    hcp-only     createdAt: required in HCP; ours does not declare it  [allowlisted: specs/hcp/directives/set/0.1/spec.md#hcp-field-mapping]
+    hcp-only     directiveId: required in HCP; ours does not declare it  [allowlisted: specs/hcp/directives/set/0.1/spec.md#hcp-field-mapping]
+    hcp-only     setBy: required in HCP; ours does not declare it  [allowlisted: specs/hcp/directives/set/0.1/spec.md#hcp-field-mapping]
+
+hcp/disclosures/summary:response
+  ours specs/hcp/disclosures/summary/0.1/payload.schema.json#/$defs/Response
+  HCP  schemas/2.0-draft-3/operations/disclosure-summary-result.json
+    ours-only    nextCursor: optional in ours; HCP does not declare it  [allowlisted: Q3]
+
+check-hcp-drift: 38 difference(s), 38 allowlisted, 0 not allowlisted; 0 stale allowlist entries; 0 mapping coverage problem(s)
+exit=0

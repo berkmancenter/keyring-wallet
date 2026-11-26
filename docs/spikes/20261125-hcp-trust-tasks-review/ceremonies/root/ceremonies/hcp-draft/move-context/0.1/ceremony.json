@@ -1,0 +1,24 @@
+{
+  "slug": "hcp-draft/move-context",
+  "version": "0.1",
+  "title": "HCP move context between providers (review draft, not for publication)",
+  "summary": "The person's Management Client exports from one provider, dry-runs and then imports into another.",
+  "status": "draft",
+  "targetFrameworkVersion": "0.6.0",
+  "authors": ["review draft"],
+  "roles": {
+    "management-client": { "description": "The person's app.", "cardinality": "one" },
+    "source": { "description": "The exporting provider.", "cardinality": "one" },
+    "destination": { "description": "The importing provider.", "cardinality": "one" }
+  },
+  "steps": {
+    "export":  { "kind": "task", "type": "https://trusttasks.org/spec/hcp/export/0.1", "issuer": "management-client", "recipient": "source", "prev": [] },
+    "preview": { "kind": "task", "type": "https://trusttasks.org/spec/hcp/import/0.1", "issuer": "management-client", "recipient": "destination", "prev": ["export"], "optional": true },
+    "load":    { "kind": "task", "type": "https://trusttasks.org/spec/hcp/import/0.1", "issuer": "management-client", "recipient": "destination", "prev": ["export"], "terminal": true, "compensatable": false }
+  },
+  "completion": { "allOf": ["export", "load"] },
+  "evidence": { "level": "chained" },
+  "enactmentPrivacy": "shared",
+  "sideEffects": { "level": "mutating", "rationale": "Loads entries; nothing held is overwritten (HCP 5.4.3)." },
+  "exposure": { "discloses": "secret", "actsAsSubject": true, "rationale": "The export is the person's whole context." }
+}

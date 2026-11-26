@@ -1,0 +1,48 @@
+HCP -> TT vectors: 22 concrete cases from 15 HCP examples
+
+TT PASS | HCP PASS | 9.4.1 query request [specification:2107]
+TT PASS | HCP PASS | 9.4.1 query result [specification:2126]
+TT FAIL | HCP PASS | 9.4.2 get-entry result [specification:2156]
+      TT errors:  / must have required property 'directives'
+TT PASS | HCP PASS | 9.4.2 get-entry result, directives:[] added (Q42 presence) [specification:2156]
+TT PASS | HCP PASS | 9.4.2 disclosed entry [specification:2156#entry]
+TT PASS | HCP PASS | 9.4.4 revise request (ref from the path) [specification:2190]
+TT PASS | HCP PASS | 9.4.5 withdraw result (hardDeleted false) [specification:2223]
+TT FAIL | HCP PASS | 9.4.5 result with hardDeleted true, as HCP writes it, -> hcp/entries/hard-delete response [specification:2223]
+      TT errors:  / must NOT have additional properties (status)
+TT PASS | HCP PASS | 9.4.5 result with hardDeleted true, HCP `status` dropped (Q11 shape) -> hcp/entries/hard-delete response [specification:2223]
+TT PASS | HCP n/a (prose only) | 9.4.9 confirm request (entryId from the path) [specification:2265]
+TT PASS | HCP n/a (prose only) | 9.4.10 change categories request [specification:2280]
+TT PASS | HCP n/a (prose only) | 9.4.10 restrict purposes request [specification:2293]
+TT FAIL | HCP FAIL | 9.4.11 import request (export: {}) [specification:2308]
+      HCP errors: /export must have required property '@context'; /export must have required property 'type'; /export must have required property 'schema'; /export must have required property 'subject'
+      TT errors:  /export must have required property '@context'; /export must have required property 'type'; /export must have required property 'schema'; /export must have required property 'subject'
+TT PASS | HCP PASS | 9.4.11 import result [specification:2323]
+TT PASS | HCP PASS | 9.4.16 report onward sharing request [specification:2371]
+TT PASS | HCP n/a (prose only) | 9.9 revocation SET -> hcp/grants/revoked (jti as noticeId) [specification:2463]
+TT PASS | HCP PASS | 11.4 General Context entry [specification:2817]
+TT PASS | HCP PASS | 11.4 entry as a Management Client get-entry response [specification:2817]
+TT PASS | HCP PASS | 11.4 entry turned into a create request (provider-assigned members dropped) [specification:2817]
+TT PASS | HCP PASS | G2.2 tutoring entry [guides:78]
+TT PASS | HCP PASS | G2.2 entry turned into a create request [guides:78]
+TT PASS | HCP PASS | 14.2 VC Evidence content [specification:2969]
+
+Templates (member names looked up in the TT schema):
+4.2 entry (specification:657) vs _shared/0.1/context-entry.schema.json#/$defs/Entry: every member declared
+4.2 record (specification:694) vs _shared/0.1/context-entry.schema.json#/$defs/Entry: every member declared
+4.2.2 evidence (specification:803) vs _shared/0.1/context-entry.schema.json#/$defs/Entry: every member declared
+4.2.5 basis (specification:876) vs _shared/0.1/context-entry.schema.json#/$defs/Assertion: every member declared
+4.7.4 proposal (specification:1066) vs _shared/0.1/context-entry.schema.json#/$defs/Relationship: every member declared
+5.4.1 export (specification:1321) vs _shared/0.1/export.schema.json#/$defs/Export: every member declared
+6.1.5 grant (specification:1490) vs _shared/0.1/grant.schema.json#/$defs/Grant: every member declared
+6.1.5.1 narrowed detail (specification:1557) vs _shared/0.1/grant.schema.json#/$defs/AccessDetail: .narrowedTo.entryIds [open: accepted, not interpreted]
+6.3 standing rule (specification:1681) vs _shared/0.1/standing-rule.schema.json#/$defs/StandingRule: every member declared
+6.4 directive (specification:1719) vs _shared/0.1/directive.schema.json#/$defs/Directive: every member declared
+7.4 disclosure (specification:1795) vs _shared/0.1/disclosure.schema.json#/$defs/Disclosure: every member declared
+7.4.1 provenance (specification:1833) vs _shared/0.1/disclosure.schema.json#/$defs/Disclosure: every member declared
+7.5 minimization (specification:1853) vs entries/query/0.1/payload.schema.json#/$defs/Response: every member declared
+8.2 audit event (specification:1914) vs _shared/0.1/audit-event.schema.json#/$defs/AuditEvent: every member declared
+14.4 VC Evidence entry (specification:2998) vs _shared/0.1/context-entry.schema.json#/$defs/Entry: .evidence[].credential.@context [open: accepted, not interpreted]; .evidence[].credential.id [open: accepted, not interpreted]; .evidence[].credential.type [open: accepted, not interpreted]; .evidence[].credential.name [open: accepted, not interpreted]; .evidence[].credential.issuer [open: accepted, not interpreted]; .evidence[].credential.validFrom [open: accepted, not interpreted]; .evidence[].credential.validUntil [open: accepted, not interpreted]; .evidence[].credential.credentialSubject [open: accepted, not interpreted]; .evidence[].credential.credentialStatus [open: accepted, not interpreted]; .evidence[].credential.proof [open: accepted, not interpreted]
+17.2 delegation (specification:3297) vs _shared/0.1/delegation.schema.json#/$defs/Delegation: every member declared
+17.4 authorizingPrincipal (specification:3363) vs _shared/0.1/grant.schema.json#/$defs/Grant: every member declared
+4.3 conversion (specification:920) vs _shared/0.1/context-entry.schema.json#/$defs/Entry: .record.conversion.unmapped.userVerified [open: accepted, not interpreted]

@@ -1,0 +1,14 @@
+{
+  "name": "hcp-schema-vectors",
+  "private": true,
+  "type": "module",
+  "description": "JSON-to-JSON comparison and vector tests: HCP 2.0-draft-3's own schemas against the proposed hcp/* Trust Task schemas. See ../README.md.",
+  "scripts": {
+    "all": "./run-all.sh"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "yaml": "^2.9.1"
+  }
+}

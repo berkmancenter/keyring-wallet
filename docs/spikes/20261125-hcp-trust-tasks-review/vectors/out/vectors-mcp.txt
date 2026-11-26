@@ -1,0 +1,16 @@
+HCP MCP tools found: hcp_queryContext, hcp_getEntry, hcp_createEntry, hcp_reviseEntry, hcp_withdrawEntry, hcp_reportSharing
+
+hcp_queryContext (required ["query","purpose"]; members query, categories, purpose, purposeDescription, maxEntries; additionalProperties undefined)
+   PASS hcp/entries/query request [transcript.golden.txt:224]
+   PASS hcp/entries/query request [transcript.golden.txt:367]
+   PASS hcp/entries/query request [specs/hcp/entries/query/0.1/spec.md:150]
+hcp_getEntry (required ["ref","purpose"]; members ref, purpose, purposeDescription, version; additionalProperties undefined)
+   PASS hcp/entries/get request [specs/hcp/entries/get/0.1/spec.md:140]
+hcp_createEntry (required ["categories","content","declarationType","sourceContext"]; members categories, dimension, content, declarationType, confidence, assertedBy, sourceContext, basis, permittedPurposes, relationships; additionalProperties undefined)
+   FAIL hcp/entries/create request [specs/hcp/entries/create/0.1/spec.md:145]: / must have required property 'categories'; / must have required property 'declarationType'; / must have required property 'sourceContext'
+hcp_reviseEntry (required ["ref","expectedVersion","content","reason"]; members ref, expectedVersion, content, reason, declarationType, confidence, assertedBy, sourceContext; additionalProperties undefined)
+   FAIL hcp/entries/revise request [specs/hcp/entries/revise/0.1/spec.md:155]: /content must be string
+hcp_withdrawEntry (required ["ref","reason"]; members ref, reason; additionalProperties undefined)
+   PASS hcp/entries/withdraw request [specs/hcp/entries/withdraw/0.1/spec.md:127]
+hcp_reportSharing (required ["recipient","refs","purpose","sharedAt"]; members recipient, refs, purpose, sharedAt; additionalProperties undefined)
+   PASS hcp/shares/report request [specs/hcp/shares/report/0.1/spec.md:123]

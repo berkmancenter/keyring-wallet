@@ -1,0 +1,800 @@
+[
+ {
+  "slug": "hcp/delegations/list",
+  "spec": "specs/hcp/delegations/list/0.1/spec.md",
+  "member": "/$defs/Response/properties/delegations/items/properties/basis/properties/evidence",
+  "rule": "Where `method` is `evidence`, `evidence` is present with at least one item.",
+  "source": "HCP 17.3"
+ },
+ {
+  "slug": "hcp/delegations/list",
+  "spec": "specs/hcp/delegations/list/0.1/spec.md",
+  "member": "/$defs/Response/properties/delegations/items/properties/basis/properties/parent",
+  "rule": "`parent` is present exactly where `method` is `delegated`.",
+  "source": "HCP 17.3, 17.10"
+ },
+ {
+  "slug": "hcp/delegations/list",
+  "spec": "specs/hcp/delegations/list/0.1/spec.md",
+  "member": "/$defs/Response/properties/delegations/items/properties/basis/properties/evidence/items/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "spec": "specs/hcp/entries/confirm/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/type",
+  "rule": "An entry's `type` array includes `ContextEntry`.",
+  "source": "HCP 4.2"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "spec": "specs/hcp/entries/confirm/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/content",
+  "rule": "Under the General Context profile, `content` carries `value`.",
+  "source": "HCP 4.2, 11.2"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "spec": "specs/hcp/entries/confirm/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/content",
+  "rule": "Under the VC Evidence profile, `content` carries `evidence` and no `value`.",
+  "source": "HCP 4.2.2, 14"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "spec": "specs/hcp/entries/confirm/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/assertion/properties/confidence",
+  "rule": "`confidence` is non-null when `declarationType` is `model-inferred`, and null or absent otherwise.",
+  "source": "HCP 4.2, 4.4"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "spec": "specs/hcp/entries/confirm/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/evidence",
+  "rule": "At most one evidence item has `role` `content`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "spec": "specs/hcp/entries/confirm/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/evidence/items/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/confirm",
+  "spec": "specs/hcp/entries/confirm/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/record/properties/relationships/items/properties/proposal",
+  "rule": "Only a `contradicts` relationship carries a `proposal`.",
+  "source": "HCP 4.7.4"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/properties/content",
+  "rule": "Under the General Context profile, `content` carries `value`.",
+  "source": "HCP 4.2, 11.2"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/properties/content",
+  "rule": "Under the VC Evidence profile, `content` carries `evidence` and no `value`.",
+  "source": "HCP 4.2.2, 14"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/properties/evidence",
+  "rule": "At most one evidence item has `role` `content`.",
+  "source": "HCP 4.2.2, 5.2.3"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/properties/evidence/items/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/properties/classification",
+  "rule": "A create's `classification` carries no `permittedPurposes`; one that does is refused with `malformedRequest` (pending HCP confirmation, question 7).",
+  "source": "HCP 4.2.1, 4.2.6"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/properties/assertion/properties/confidence",
+  "rule": "`confidence` is non-null when `declarationType` is `model-inferred`, and null or absent otherwise.",
+  "source": "HCP 4.2, 4.4"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/properties/record/properties/provenance/properties/assertedBy",
+  "rule": "`assertedBy.id` is present unless the declaration type is `person-declared` or the content is a credential.",
+  "source": "HCP 5.2.3"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/properties/record/properties/relationships/items/properties/proposal",
+  "rule": "Only a `contradicts` relationship carries a `proposal`.",
+  "source": "HCP 4.7.4"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/content",
+  "rule": "Under the General Context profile, `content` carries `value`.",
+  "source": "HCP 4.2, 11.2"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/content",
+  "rule": "Under the VC Evidence profile, `content` carries `evidence` and no `value`.",
+  "source": "HCP 4.2.2, 14"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/evidence",
+  "rule": "At most one disclosed evidence item has `role` `content`.",
+  "source": "HCP 4.2.2, 7.4"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/evidence/items/allOf/0/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/assertion/properties/confidence",
+  "rule": "`confidence` is non-null when `declarationType` is `model-inferred`, and null or absent otherwise.",
+  "source": "HCP 4.2, 4.4"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/type",
+  "rule": "An entry's `type` array includes `ContextEntry`.",
+  "source": "HCP 4.2"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/content",
+  "rule": "Under the General Context profile, `content` carries `value`.",
+  "source": "HCP 4.2, 11.2"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/content",
+  "rule": "Under the VC Evidence profile, `content` carries `evidence` and no `value`.",
+  "source": "HCP 4.2.2, 14"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/assertion/properties/confidence",
+  "rule": "`confidence` is non-null when `declarationType` is `model-inferred`, and null or absent otherwise.",
+  "source": "HCP 4.2, 4.4"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/evidence",
+  "rule": "At most one evidence item has `role` `content`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/evidence/items/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/create",
+  "spec": "specs/hcp/entries/create/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/record/properties/relationships/items/properties/proposal",
+  "rule": "Only a `contradicts` relationship carries a `proposal`.",
+  "source": "HCP 4.7.4"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "spec": "specs/hcp/entries/get/0.1/spec.md",
+  "member": "/properties/ref",
+  "rule": "Exactly one of `ref` and `entryId` is present. A request with both or neither is refused with `malformedRequest` (pending HCP confirmation, question 6).",
+  "source": "HCP 5.2.2"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "spec": "specs/hcp/entries/get/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/content",
+  "rule": "Under the General Context profile, `content` carries `value`.",
+  "source": "HCP 4.2, 11.2"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "spec": "specs/hcp/entries/get/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/content",
+  "rule": "Under the VC Evidence profile, `content` carries `evidence` and no `value`.",
+  "source": "HCP 4.2.2, 14"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "spec": "specs/hcp/entries/get/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/evidence",
+  "rule": "At most one disclosed evidence item has `role` `content`.",
+  "source": "HCP 4.2.2, 7.4"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "spec": "specs/hcp/entries/get/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/evidence/items/allOf/0/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "spec": "specs/hcp/entries/get/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/assertion/properties/confidence",
+  "rule": "`confidence` is non-null when `declarationType` is `model-inferred`, and null or absent otherwise.",
+  "source": "HCP 4.2, 4.4"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "spec": "specs/hcp/entries/get/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/type",
+  "rule": "An entry's `type` array includes `ContextEntry`.",
+  "source": "HCP 4.2"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "spec": "specs/hcp/entries/get/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/content",
+  "rule": "Under the General Context profile, `content` carries `value`.",
+  "source": "HCP 4.2, 11.2"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "spec": "specs/hcp/entries/get/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/content",
+  "rule": "Under the VC Evidence profile, `content` carries `evidence` and no `value`.",
+  "source": "HCP 4.2.2, 14"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "spec": "specs/hcp/entries/get/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/assertion/properties/confidence",
+  "rule": "`confidence` is non-null when `declarationType` is `model-inferred`, and null or absent otherwise.",
+  "source": "HCP 4.2, 4.4"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "spec": "specs/hcp/entries/get/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/evidence",
+  "rule": "At most one evidence item has `role` `content`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "spec": "specs/hcp/entries/get/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/evidence/items/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/get",
+  "spec": "specs/hcp/entries/get/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/record/properties/relationships/items/properties/proposal",
+  "rule": "Only a `contradicts` relationship carries a `proposal`.",
+  "source": "HCP 4.7.4"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "spec": "specs/hcp/entries/query/0.1/spec.md",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/type",
+  "rule": "An entry's `type` array includes `ContextEntry`.",
+  "source": "HCP 4.2"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "spec": "specs/hcp/entries/query/0.1/spec.md",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/content",
+  "rule": "Under the General Context profile, `content` carries `value`.",
+  "source": "HCP 4.2, 11.2"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "spec": "specs/hcp/entries/query/0.1/spec.md",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/content",
+  "rule": "Under the VC Evidence profile, `content` carries `evidence` and no `value`.",
+  "source": "HCP 4.2.2, 14"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "spec": "specs/hcp/entries/query/0.1/spec.md",
+  "member": "/$defs/Response/properties/entries/items/anyOf/0/properties/content",
+  "rule": "Under the General Context profile, `content` carries `value`.",
+  "source": "HCP 4.2, 11.2"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "spec": "specs/hcp/entries/query/0.1/spec.md",
+  "member": "/$defs/Response/properties/entries/items/anyOf/0/properties/content",
+  "rule": "Under the VC Evidence profile, `content` carries `evidence` and no `value`.",
+  "source": "HCP 4.2.2, 14"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "spec": "specs/hcp/entries/query/0.1/spec.md",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/assertion/properties/confidence",
+  "rule": "`confidence` is non-null when `declarationType` is `model-inferred`, and null or absent otherwise.",
+  "source": "HCP 4.2, 4.4"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "spec": "specs/hcp/entries/query/0.1/spec.md",
+  "member": "/$defs/Response/properties/entries/items/anyOf/0/properties/assertion/properties/confidence",
+  "rule": "`confidence` is non-null when `declarationType` is `model-inferred`, and null or absent otherwise.",
+  "source": "HCP 4.2, 4.4"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "spec": "specs/hcp/entries/query/0.1/spec.md",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/record/properties/relationships/items/properties/proposal",
+  "rule": "Only a `contradicts` relationship carries a `proposal`.",
+  "source": "HCP 4.7.4"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "spec": "specs/hcp/entries/query/0.1/spec.md",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/evidence/items/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "spec": "specs/hcp/entries/query/0.1/spec.md",
+  "member": "/$defs/Response/properties/entries/items/anyOf/1/properties/evidence",
+  "rule": "At most one evidence item has `role` `content`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/query",
+  "spec": "specs/hcp/entries/query/0.1/spec.md",
+  "member": "/$defs/Response/properties/entries/items/anyOf/0/properties/evidence",
+  "rule": "At most one disclosed evidence item has `role` `content`.",
+  "source": "HCP 4.2.2, 7.4"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "spec": "specs/hcp/entries/restrict-purposes/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/type",
+  "rule": "An entry's `type` array includes `ContextEntry`.",
+  "source": "HCP 4.2"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "spec": "specs/hcp/entries/restrict-purposes/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/content",
+  "rule": "Under the General Context profile, `content` carries `value`.",
+  "source": "HCP 4.2, 11.2"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "spec": "specs/hcp/entries/restrict-purposes/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/content",
+  "rule": "Under the VC Evidence profile, `content` carries `evidence` and no `value`.",
+  "source": "HCP 4.2.2, 14"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "spec": "specs/hcp/entries/restrict-purposes/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/assertion/properties/confidence",
+  "rule": "`confidence` is non-null when `declarationType` is `model-inferred`, and null or absent otherwise.",
+  "source": "HCP 4.2, 4.4"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "spec": "specs/hcp/entries/restrict-purposes/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/evidence",
+  "rule": "At most one evidence item has `role` `content`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "spec": "specs/hcp/entries/restrict-purposes/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/evidence/items/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/restrict-purposes",
+  "spec": "specs/hcp/entries/restrict-purposes/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/record/properties/relationships/items/properties/proposal",
+  "rule": "Only a `contradicts` relationship carries a `proposal`.",
+  "source": "HCP 4.7.4"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/properties/ref",
+  "rule": "Exactly one of `ref` and `entryId` is present. A request with both or neither is refused with `malformedRequest` (pending HCP confirmation, question 6).",
+  "source": "HCP 5.2.4"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/properties/content",
+  "rule": "Under the General Context profile, `content` carries `value`.",
+  "source": "HCP 4.2, 11.2"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/properties/content",
+  "rule": "Under the VC Evidence profile, `content` carries `evidence` and no `value`.",
+  "source": "HCP 4.2.2, 14"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/properties/evidence",
+  "rule": "At most one evidence item has `role` `content`.",
+  "source": "HCP 4.2.2, 5.2.4"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/properties/evidence/items/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/properties/assertion/properties/confidence",
+  "rule": "`confidence` is non-null when the revised `declarationType` is `model-inferred`, and null or absent otherwise.",
+  "source": "HCP 4.2, 5.2.3, 5.2.4"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/properties/record/properties/provenance/properties/assertedBy",
+  "rule": "`assertedBy.id` is present unless the revised declaration type is `person-declared` or the content is a credential, as for a create.",
+  "source": "HCP 5.2.3, 5.2.4"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/properties/record/properties/relationships/items/properties/proposal",
+  "rule": "Only a `contradicts` relationship carries a `proposal`.",
+  "source": "HCP 4.7.4"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/content",
+  "rule": "Under the General Context profile, `content` carries `value`.",
+  "source": "HCP 4.2, 11.2"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/content",
+  "rule": "Under the VC Evidence profile, `content` carries `evidence` and no `value`.",
+  "source": "HCP 4.2.2, 14"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/evidence",
+  "rule": "At most one disclosed evidence item has `role` `content`.",
+  "source": "HCP 4.2.2, 7.4"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/evidence/items/allOf/0/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/0/properties/assertion/properties/confidence",
+  "rule": "`confidence` is non-null when `declarationType` is `model-inferred`, and null or absent otherwise.",
+  "source": "HCP 4.2, 4.4"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/type",
+  "rule": "An entry's `type` array includes `ContextEntry`.",
+  "source": "HCP 4.2"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/content",
+  "rule": "Under the General Context profile, `content` carries `value`.",
+  "source": "HCP 4.2, 11.2"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/content",
+  "rule": "Under the VC Evidence profile, `content` carries `evidence` and no `value`.",
+  "source": "HCP 4.2.2, 14"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/assertion/properties/confidence",
+  "rule": "`confidence` is non-null when `declarationType` is `model-inferred`, and null or absent otherwise.",
+  "source": "HCP 4.2, 4.4"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/evidence",
+  "rule": "At most one evidence item has `role` `content`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/evidence/items/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/revise",
+  "spec": "specs/hcp/entries/revise/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/anyOf/1/properties/record/properties/relationships/items/properties/proposal",
+  "rule": "Only a `contradicts` relationship carries a `proposal`.",
+  "source": "HCP 4.7.4"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "spec": "specs/hcp/entries/set-categories/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/type",
+  "rule": "An entry's `type` array includes `ContextEntry`.",
+  "source": "HCP 4.2"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "spec": "specs/hcp/entries/set-categories/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/content",
+  "rule": "Under the General Context profile, `content` carries `value`.",
+  "source": "HCP 4.2, 11.2"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "spec": "specs/hcp/entries/set-categories/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/content",
+  "rule": "Under the VC Evidence profile, `content` carries `evidence` and no `value`.",
+  "source": "HCP 4.2.2, 14"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "spec": "specs/hcp/entries/set-categories/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/assertion/properties/confidence",
+  "rule": "`confidence` is non-null when `declarationType` is `model-inferred`, and null or absent otherwise.",
+  "source": "HCP 4.2, 4.4"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "spec": "specs/hcp/entries/set-categories/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/evidence",
+  "rule": "At most one evidence item has `role` `content`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "spec": "specs/hcp/entries/set-categories/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/evidence/items/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/entries/set-categories",
+  "spec": "specs/hcp/entries/set-categories/0.1/spec.md",
+  "member": "/$defs/Response/properties/entry/properties/record/properties/relationships/items/properties/proposal",
+  "rule": "Only a `contradicts` relationship carries a `proposal`.",
+  "source": "HCP 4.7.4"
+ },
+ {
+  "slug": "hcp/entries/withdraw",
+  "spec": "specs/hcp/entries/withdraw/0.1/spec.md",
+  "member": "/properties/ref",
+  "rule": "Exactly one of `ref` and `entryId` is present. A request with both or neither is refused with `malformedRequest` (pending HCP confirmation, question 6).",
+  "source": "HCP 5.2.5"
+ },
+ {
+  "slug": "hcp/entries/withdraw",
+  "spec": "specs/hcp/entries/withdraw/0.1/spec.md",
+  "member": "/$defs/Response",
+  "rule": "Exactly one of `ref` and `entryId` is present. It is the one the request used.",
+  "source": "HCP 5.2.5, 9.4.5"
+ },
+ {
+  "slug": "hcp/export",
+  "spec": "specs/hcp/export/0.1/spec.md",
+  "member": "/$defs/Response/properties/export/properties/delegations/items/properties/basis/properties/evidence",
+  "rule": "Where `method` is `evidence`, `evidence` is present with at least one item.",
+  "source": "HCP 17.3"
+ },
+ {
+  "slug": "hcp/export",
+  "spec": "specs/hcp/export/0.1/spec.md",
+  "member": "/$defs/Response/properties/export/properties/delegations/items/properties/basis/properties/parent",
+  "rule": "`parent` is present exactly where `method` is `delegated`.",
+  "source": "HCP 17.3, 17.10"
+ },
+ {
+  "slug": "hcp/export",
+  "spec": "specs/hcp/export/0.1/spec.md",
+  "member": "/$defs/Response/properties/export/properties/delegations/items/properties/basis/properties/evidence/items/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/export",
+  "spec": "specs/hcp/export/0.1/spec.md",
+  "member": "/$defs/Response/properties/export/properties/rules/items",
+  "rule": "A standing rule carries `operators`, `requires`, or both.",
+  "source": "HCP 6.3, 5.4.1"
+ },
+ {
+  "slug": "hcp/grants/list",
+  "spec": "specs/hcp/grants/list/0.1/spec.md",
+  "member": "/$defs/Response/properties/grants/items/properties/expiresAt",
+  "rule": "`expiresAt` is an instant for a `temporary` grant and null for a `persistent` one.",
+  "source": "HCP 6.1.4, 6.1.5"
+ },
+ {
+  "slug": "hcp/grants/list",
+  "spec": "specs/hcp/grants/list/0.1/spec.md",
+  "member": "/$defs/Response/properties/grants/items/properties/access/items/properties/onwardSharing",
+  "rule": "`onwardSharing` appears only in a detail that includes `read` and all of whose categories have a default sensitivity of Low.",
+  "source": "HCP 6.1.5"
+ },
+ {
+  "slug": "hcp/grants/list",
+  "spec": "specs/hcp/grants/list/0.1/spec.md",
+  "member": "/$defs/Response/properties/grants/items/properties/access/items/properties/actions",
+  "rule": "`provenance` is an action only alongside `read`.",
+  "source": "HCP 6.1.5, 7.4.1"
+ },
+ {
+  "slug": "hcp/grants/read-own",
+  "spec": "specs/hcp/grants/read-own/0.1/spec.md",
+  "member": "/$defs/Response/properties/grant/properties/expiresAt",
+  "rule": "`expiresAt` is an instant for a `temporary` grant and null for a `persistent` one.",
+  "source": "HCP 6.1.4, 6.1.5"
+ },
+ {
+  "slug": "hcp/grants/read-own",
+  "spec": "specs/hcp/grants/read-own/0.1/spec.md",
+  "member": "/$defs/Response/properties/grant/properties/access/items/properties/onwardSharing",
+  "rule": "`onwardSharing` appears only in a detail that includes `read` and all of whose categories have a default sensitivity of Low.",
+  "source": "HCP 6.1.5"
+ },
+ {
+  "slug": "hcp/grants/read-own",
+  "spec": "specs/hcp/grants/read-own/0.1/spec.md",
+  "member": "/$defs/Response/properties/grant/properties/access/items/properties/actions",
+  "rule": "`provenance` is an action only alongside `read`.",
+  "source": "HCP 6.1.5, 7.4.1"
+ },
+ {
+  "slug": "hcp/grants/request",
+  "spec": "specs/hcp/grants/request/0.1/spec.md",
+  "member": "/properties/access/items/properties/actions",
+  "rule": "`provenance` is an action only alongside `read`.",
+  "source": "HCP 6.1.5, 7.4.1"
+ },
+ {
+  "slug": "hcp/grants/request",
+  "spec": "specs/hcp/grants/request/0.1/spec.md",
+  "member": "/properties/access/items/properties/onwardSharing",
+  "rule": "`onwardSharing` appears only in a detail that includes `read` and all of whose categories have a default sensitivity of Low; a request that breaks this is refused with `malformedRequest`.",
+  "source": "HCP 6.1.5"
+ },
+ {
+  "slug": "hcp/grants/request",
+  "spec": "specs/hcp/grants/request/0.1/spec.md",
+  "member": "/$defs/Response/properties/grant/properties/expiresAt",
+  "rule": "`expiresAt` is an instant for a `temporary` grant and null for a `persistent` one.",
+  "source": "HCP 6.1.4, 6.1.5"
+ },
+ {
+  "slug": "hcp/grants/request",
+  "spec": "specs/hcp/grants/request/0.1/spec.md",
+  "member": "/$defs/Response/properties/grant/properties/access/items/properties/onwardSharing",
+  "rule": "`onwardSharing` appears only in a detail that includes `read` and all of whose categories have a default sensitivity of Low.",
+  "source": "HCP 6.1.5"
+ },
+ {
+  "slug": "hcp/grants/request",
+  "spec": "specs/hcp/grants/request/0.1/spec.md",
+  "member": "/$defs/Response/properties/grant/properties/access/items/properties/actions",
+  "rule": "`provenance` is an action only alongside `read`.",
+  "source": "HCP 6.1.5, 7.4.1"
+ },
+ {
+  "slug": "hcp/import",
+  "spec": "specs/hcp/import/0.1/spec.md",
+  "member": "/properties/export/properties/delegations/items/properties/basis/properties/evidence",
+  "rule": "Where `method` is `evidence`, `evidence` is present with at least one item.",
+  "source": "HCP 17.3"
+ },
+ {
+  "slug": "hcp/import",
+  "spec": "specs/hcp/import/0.1/spec.md",
+  "member": "/properties/export/properties/delegations/items/properties/basis/properties/parent",
+  "rule": "`parent` is present exactly where `method` is `delegated`.",
+  "source": "HCP 17.3, 17.10"
+ },
+ {
+  "slug": "hcp/import",
+  "spec": "specs/hcp/import/0.1/spec.md",
+  "member": "/properties/export/properties/delegations/items/properties/basis/properties/evidence/items/properties/credential",
+  "rule": "An evidence item whose `type` is `verifiable-credential` carries `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`.",
+  "source": "HCP 4.2.2"
+ },
+ {
+  "slug": "hcp/import",
+  "spec": "specs/hcp/import/0.1/spec.md",
+  "member": "/properties/categoryMap",
+  "rule": "Each key of `categoryMap` is a category used by entries in the export that the provider does not hold.",
+  "source": "HCP 5.4.3"
+ },
+ {
+  "slug": "hcp/import",
+  "spec": "specs/hcp/import/0.1/spec.md",
+  "member": "/$defs/Response/properties/outcomes/items/properties/reason",
+  "rule": "A `rejected` outcome carries `reason`.",
+  "source": "HCP 5.4.3"
+ },
+ {
+  "slug": "hcp/import",
+  "spec": "specs/hcp/import/0.1/spec.md",
+  "member": "/properties/export/properties/rules/items",
+  "rule": "A standing rule carries `operators`, `requires`, or both. An export holding one with neither is refused with `malformedRequest`.",
+  "source": "HCP 6.3, 5.4.3"
+ },
+ {
+  "slug": "hcp/import",
+  "spec": "specs/hcp/import/0.1/spec.md",
+  "member": "/$defs/Response/properties/ext",
+  "rule": "Where present, `ext[\"vnd.trusttasks.hcp-carriage\"]` validates against the `HcpCarriageImportExtension` definition in this schema (pending HCP confirmation, question 40).",
+  "source": "This specification (Response); SPEC.md §4.5.1"
+ },
+ {
+  "slug": "hcp/rules/list",
+  "spec": "specs/hcp/rules/list/0.1/spec.md",
+  "member": "/$defs/Response/properties/rules/items",
+  "rule": "A standing rule carries `operators`, `requires`, or both.",
+  "source": "HCP 6.3"
+ },
+ {
+  "slug": "hcp/rules/set",
+  "spec": "specs/hcp/rules/set/0.1/spec.md",
+  "member": "/$defs/Response/properties/rule",
+  "rule": "A standing rule carries `operators`, `requires`, or both.",
+  "source": "HCP 6.3"
+ }
+]

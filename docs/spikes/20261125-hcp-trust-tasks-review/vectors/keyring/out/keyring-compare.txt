@@ -1,0 +1,64 @@
+Gap 3: Keyring's validator vs the harness and the PR demo
+K = Keyring (ajv 8.20.0 from <keyring>/node_modules, strict:false, no formats); D = demo (ajv 8.20.0 + ajv-formats 3.0.1); H = harness (../validators.mjs, files)
+modules loaded: 28 (x2 constants). Ajv warnings while running: unknown format "uri" ignored in schema at path "#/$defs/PurposeCode" | unknown format "date-time" ignored in schema at path "#/$defs/Instant" | unknown format "uri" ignored in schema at path "#/$defs/Uri" | unknown format "date-time" ignored in schema at path "#/properties/expiresAt" | unknown format "date-time" ignored in schema at path "#/properties/validUntil" | unknown format "date-time" ignored in schema at path "#/$defs/DelegationTerm/properties/endsAt" | unknown format "date-time" ignored in schema at path "#/properties/usableUntil"
+
+tt-to-hcp: 72 vectors; H accepts 72, K accepts 72, D accepts 72; differing 0; exceptions 0
+hcp-to-tt: 22 vectors; H accepts 19, K accepts 19, D accepts 19; differing 0; exceptions 0
+edge: 40 vectors; H accepts 25, K accepts 25, D accepts 25; differing 0; exceptions 0
+string:union: 20 vectors; H accepts 13, K accepts 13, D accepts 13; differing 0; exceptions 0
+string:format: 6 vectors; H accepts 3, K accepts 5, D accepts 3; differing 2; exceptions 0
+
+Every differing vector:
+  [string:format] purpose code "x:<y>" (control: both have format uri)
+     H REJECT  K accept  D REJECT | embedded in entries/query request: K accept D REJECT
+     H: / must match format "uri"
+     D: payload must match format "uri"
+     D(embed): payload/purpose must match format "uri"
+  [string:format] purpose code "a:%zz" (control: both have format uri)
+     H REJECT  K accept  D REJECT | embedded in entries/query request: K accept D REJECT
+     H: / must match format "uri"
+     D: payload must match format "uri"
+     D(embed): payload/purpose must match format "uri"
+
+_shared targets validated embedded in a module payload: 43; embed K != def K: 0; embed D != def D: 0
+
+Inlined $defs copies used by the wrappers (distinctCopies > 1 means modules inline different shapes under one name):
+  Disclosure: in 4 module constants, 1 distinct
+  Entry: in 7 module constants, 1 distinct
+  Content: in 9 module constants, 1 distinct
+  Grant: in 3 module constants, 1 distinct
+  AuditEvent: in 2 module constants, 1 distinct
+  Category: in 27 module constants, 1 distinct
+  Directive: in 7 module constants, 1 distinct
+  Delegation: in 3 module constants, 1 distinct
+  AuditEvent: in 2 module constants, 1 distinct
+  PurposeCode: in 18 module constants, 1 distinct
+
+Extra probes (K in memory, K after a JSON round trip, D in memory):
+     K accept Kwire accept D accept | grants/revoked revokedAt "2026-11-25T10:00:10Z" | Instant: format date-time, no pattern
+     K accept Kwire accept D accept | grants/revoked revokedAt "2026-11-25T10:00:00Z" | Instant: format date-time, no pattern
+  != K accept Kwire accept D REJECT | grants/revoked revokedAt "yesterday" | Instant: format date-time, no pattern | D: payload/revokedAt must match format "date-time"
+  != K accept Kwire accept D REJECT | grants/revoked revokedAt "" | Instant: format date-time, no pattern | D: payload/revokedAt must match format "date-time"
+  != K accept Kwire accept D REJECT | grants/revoked revokedAt "2026-13-45T99:99:99Z" | Instant: format date-time, no pattern | D: payload/revokedAt must match format "date-time"
+     K accept Kwire accept D accept | grants/revoked revokedAt "2026-11-25 10:00:00Z" | Instant: format date-time, no pattern
+  != K accept Kwire accept D REJECT | grants/revoked revokedAt "2026-11-25T10:00:00" | Instant: format date-time, no pattern | D: payload/revokedAt must match format "date-time"
+  != K accept Kwire accept D REJECT | grants/revoked revokedAt "2026-11-25" | Instant: format date-time, no pattern | D: payload/revokedAt must match format "date-time"
+  != K accept Kwire accept D REJECT | query result respondedAt "not a time" | D: payload/respondedAt must match format "date-time"
+  != K accept Kwire accept D REJECT | query result respondedAt "2026-02-30T00:00:00Z" | D: payload/respondedAt must match format "date-time"
+     K accept Kwire accept D accept | query purpose "urn:x:y" | PurposeCode: format uri + pattern
+     K accept Kwire accept D accept | query purpose "https://p.example/a%20b" | PurposeCode: format uri + pattern
+  != K accept Kwire accept D REJECT | query purpose "https://p.example/%" | PurposeCode: format uri + pattern | D: payload/purpose must match format "uri"
+     K REJECT Kwire REJECT D REJECT | query purpose "https://p.example/a b" | PurposeCode: format uri + pattern | K: /purpose must match pattern "^[a-zA-Z][a-zA-Z0-9+.-]*:\S+$" | D: payload/purpose must match pattern "^[a-zA-Z][a-zA-Z0-9+.-]*:\S+$"; payload/purpose must match format "uri"
+     K accept Kwire accept D accept | query purpose "mailto:a@b" | PurposeCode: format uri + pattern
+  != K accept Kwire accept D REJECT | query purpose "x:é" | PurposeCode: format uri + pattern | D: payload/purpose must match format "uri"
+     K REJECT Kwire REJECT D REJECT | restrict-purposes, permittedPurposes: undefined (in memory) | required-nullable | K: / must have required property 'permittedPurposes' | D: payload must have required property 'permittedPurposes'
+     K accept Kwire accept D accept | restrict-purposes, permittedPurposes: null | required-nullable
+     K REJECT Kwire REJECT D REJECT | get result, directives: undefined (in memory) | required-nullable | K: / must have required property 'directives' | D: payload must have required property 'directives'
+     K REJECT Kwire REJECT D REJECT | read-own grant, expiresAt: undefined (in memory) | required-nullable | K: /grant must have required property 'expiresAt' | D: payload/grant must have required property 'expiresAt'
+     K accept Kwire accept D accept | query request, optional categories: undefined (in memory) | optional member, closed root
+     K REJECT Kwire accept D REJECT | query request, unknown key with value undefined (in memory) | closed root: for..in sees the key | K: / must NOT have additional properties | D: payload must NOT have additional properties
+
+$id: 56/56 module constants compiled in one shared Keyring instance; errors: none
+  a deep COPY of entries/query PAYLOAD_SCHEMA (same $id, new object) through Keyring's validate: THROWS: schema with key or id "https://trusttasks.org/spec/hcp/entries/query/0.1" already exists
+  a deep COPY of entries/query RESPONSE_PAYLOAD_SCHEMA (no $id): validated
+  the same copy through the demo's validator: THROWS: schema with key or id "https://trusttasks.org/spec/hcp/entries/query/0.1" already exists

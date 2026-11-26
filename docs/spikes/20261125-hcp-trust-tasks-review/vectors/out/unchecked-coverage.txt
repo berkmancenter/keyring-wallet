@@ -1,0 +1,27 @@
+91 sites where a TT payload embeds a shared object carrying an HCP schema rule; covered exactly 90, near 0, missing 1
+  MISSING hcp/entries/query              vc credential                    /$defs/Response/properties/entries/items/anyOf/0/properties/evidence/items/allOf/0/properties/credential
+#1381 entries this walk does not pair with an HCP schema rule (HCP prose rules, carriage rules, ref/entryId one-of): 24
+  extra   hcp/entries/create             /properties/classification :: A create's `classification` carries no `permittedPurposes`; one that does is refused with `malformedRequest` (
+  extra   hcp/entries/create             /properties/record/properties/provenance/properties/assertedBy :: `assertedBy.id` is present unless the declaration type is `person-declared` or the content is a credential.
+  extra   hcp/entries/create             /properties/record/properties/relationships/items/properties/proposal :: Only a `contradicts` relationship carries a `proposal`.
+  extra   hcp/entries/create             /$defs/Response/properties/entry/anyOf/0/properties/evidence :: At most one disclosed evidence item has `role` `content`.
+  extra   hcp/entries/get                /properties/ref :: Exactly one of `ref` and `entryId` is present. A request with both or neither is refused with `malformedReques
+  extra   hcp/entries/get                /$defs/Response/properties/entry/anyOf/0/properties/evidence :: At most one disclosed evidence item has `role` `content`.
+  extra   hcp/entries/query              /$defs/Response/properties/entries/items/anyOf/0/properties/evidence :: At most one disclosed evidence item has `role` `content`.
+  extra   hcp/entries/revise             /properties/ref :: Exactly one of `ref` and `entryId` is present. A request with both or neither is refused with `malformedReques
+  extra   hcp/entries/revise             /properties/assertion/properties/confidence :: `confidence` is non-null when the revised `declarationType` is `model-inferred`, and null or absent otherwise.
+  extra   hcp/entries/revise             /properties/record/properties/provenance/properties/assertedBy :: `assertedBy.id` is present unless the revised declaration type is `person-declared` or the content is a creden
+  extra   hcp/entries/revise             /properties/record/properties/relationships/items/properties/proposal :: Only a `contradicts` relationship carries a `proposal`.
+  extra   hcp/entries/revise             /$defs/Response/properties/entry/anyOf/0/properties/evidence :: At most one disclosed evidence item has `role` `content`.
+  extra   hcp/entries/withdraw           /properties/ref :: Exactly one of `ref` and `entryId` is present. A request with both or neither is refused with `malformedReques
+  extra   hcp/entries/withdraw           /$defs/Response :: Exactly one of `ref` and `entryId` is present. It is the one the request used.
+  extra   hcp/grants/list                /$defs/Response/properties/grants/items/properties/access/items/properties/onwardSharing :: `onwardSharing` appears only in a detail that includes `read` and all of whose categories have a default sensi
+  extra   hcp/grants/list                /$defs/Response/properties/grants/items/properties/access/items/properties/actions :: `provenance` is an action only alongside `read`.
+  extra   hcp/grants/read-own            /$defs/Response/properties/grant/properties/access/items/properties/onwardSharing :: `onwardSharing` appears only in a detail that includes `read` and all of whose categories have a default sensi
+  extra   hcp/grants/read-own            /$defs/Response/properties/grant/properties/access/items/properties/actions :: `provenance` is an action only alongside `read`.
+  extra   hcp/grants/request             /properties/access/items/properties/actions :: `provenance` is an action only alongside `read`.
+  extra   hcp/grants/request             /properties/access/items/properties/onwardSharing :: `onwardSharing` appears only in a detail that includes `read` and all of whose categories have a default sensi
+  extra   hcp/grants/request             /$defs/Response/properties/grant/properties/access/items/properties/onwardSharing :: `onwardSharing` appears only in a detail that includes `read` and all of whose categories have a default sensi
+  extra   hcp/grants/request             /$defs/Response/properties/grant/properties/access/items/properties/actions :: `provenance` is an action only alongside `read`.
+  extra   hcp/import                     /properties/categoryMap :: Each key of `categoryMap` is a category used by entries in the export that the provider does not hold.
+  extra   hcp/import                     /$defs/Response/properties/ext :: Where present, `ext["vnd.trusttasks.hcp-carriage"]` validates against the `HcpCarriageImportExtension` definit

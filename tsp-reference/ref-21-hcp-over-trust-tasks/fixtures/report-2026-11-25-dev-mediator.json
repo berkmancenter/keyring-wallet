@@ -1,0 +1,381 @@
+{
+  "transport": "mediator did:webvh:QmR5xGk8pkd3ymu7xpfkjr7XZmwDALA5ZJmgG7qcrD2mKA:webvh.storm.ws:mediator",
+  "keyringRoot": "<this repository at main c65701c91>",
+  "checks": [
+    {
+      "id": "connect-held",
+      "title": "the first grant request is held with a next step, not an error",
+      "ok": true,
+      "expected": "https://trusttasks.org/spec/trust-task-next-step/0.1",
+      "observed": "https://trusttasks.org/spec/trust-task-next-step/0.1",
+      "meaning": ""
+    },
+    {
+      "id": "connect-granted",
+      "title": "after Keyring's approval, the resubmission on the same thread gets the grant",
+      "ok": true,
+      "expected": "https://trusttasks.org/spec/hcp/grants/request/0.1#response",
+      "observed": "https://trusttasks.org/spec/hcp/grants/request/0.1#response after 2 replies",
+      "meaning": ""
+    },
+    {
+      "id": "consent-keyring-check",
+      "title": "Keyring's own consent check accepts the VTA's task-consent/request",
+      "ok": true,
+      "expected": "ok",
+      "observed": "ok",
+      "meaning": ""
+    },
+    {
+      "id": "consent-match-code",
+      "title": "Keyring can show the six-digit match code from the request's payloadDigest",
+      "ok": true,
+      "expected": "a code",
+      "observed": "91935e",
+      "meaning": ""
+    },
+    {
+      "id": "consent-decision-accepted",
+      "title": "the VTA's pipeline accepts Keyring's decision (Keyring signs it assertionMethod)",
+      "ok": true,
+      "expected": "https://trusttasks.org/spec/task-consent/decision/0.2#response",
+      "observed": "https://trusttasks.org/spec/task-consent/decision/0.2#response",
+      "meaning": ""
+    },
+    {
+      "id": "hcp-schema:grant",
+      "title": "grant also validates against HCP's own grant.json",
+      "ok": true,
+      "expected": "valid",
+      "observed": "valid",
+      "meaning": "Same object, judged by HCP's schema rather than the proposal's."
+    },
+    {
+      "id": "query-ok",
+      "title": "a query under the grant returns entries",
+      "ok": true,
+      "expected": "https://trusttasks.org/spec/hcp/entries/query/0.1#response",
+      "observed": "https://trusttasks.org/spec/hcp/entries/query/0.1#response {\"entries\":[{\"ref\":\"hcp-ref-2d41c68f\",\"version\":1,\"content\":{\"profile\":\"https://hcp.example/spec/profiles/general-context/2.0\",\"value\":\"Prefers aisle seats and ",
+      "meaning": ""
+    },
+    {
+      "id": "hcp-schema:query-result",
+      "title": "query-result also validates against HCP's own operations/query-result.json",
+      "ok": true,
+      "expected": "valid",
+      "observed": "valid",
+      "meaning": "Same object, judged by HCP's schema rather than the proposal's."
+    },
+    {
+      "id": "v0-no-token",
+      "title": "a governance task with NO accessToken (the VTI V0 design, #2823 \u00a74.4) passes the proposed schema",
+      "ok": false,
+      "expected": "https://trusttasks.org/spec/hcp/entries/create/0.1#response",
+      "observed": "https://trusttasks.org/spec/trust-task-error/0.6 {\"code\":\"malformedRequest\",\"message\":\"payload does not conform to its schema (SPEC \u00a77.2 item 2): payload must have required property 'accessToken'\",\"retryable\":false,\"inResponseTo\":{\"typeUri\":\"https:/",
+      "meaning": "The proposed governance schemas make accessToken REQUIRED; the VTI design has Keyring send none until V1."
+    },
+    {
+      "id": "create-ok",
+      "title": "with a (mock) management token, the VTA stores the memory",
+      "ok": true,
+      "expected": "https://trusttasks.org/spec/hcp/entries/create/0.1#response",
+      "observed": "https://trusttasks.org/spec/hcp/entries/create/0.1#response {\"result\":{\"entry\":{\"schema\":\"https://hcp.example/spec/entry/2.0\",\"id\":\"urn:uuid:95a16262-48b7-45e0-ac10-3cb434ed994e\",\"type\":[\"ContextEntry\"],\"subject\":{\"id\":\"hcp-sub-keyring-demo\"},\"content\":{\"profi",
+      "meaning": ""
+    },
+    {
+      "id": "hcp-schema:create-request",
+      "title": "create-request also validates against HCP's own operations/create-request.json",
+      "ok": true,
+      "expected": "valid",
+      "observed": "valid",
+      "meaning": "Same object, judged by HCP's schema rather than the proposal's."
+    },
+    {
+      "id": "hcp-schema:entry",
+      "title": "entry also validates against HCP's own entry.json",
+      "ok": true,
+      "expected": "valid",
+      "observed": "valid",
+      "meaning": "Same object, judged by HCP's schema rather than the proposal's."
+    },
+    {
+      "id": "memory-used",
+      "title": "the agent's next query sees the new memory",
+      "ok": true,
+      "expected": "2 entries",
+      "observed": "2 entries",
+      "meaning": ""
+    },
+    {
+      "id": "list-ok",
+      "title": "grants/list returns the grant",
+      "ok": true,
+      "expected": "1 grant",
+      "observed": "{\"result\":{\"grants\":[{\"grantId\":\"urn:uuid:5bab3288-fd84-4b92-8a6a-d823ec75baa5\",\"subject\":{\"id\":\"hcp-sub-keyring-demo\"},\"authorizingPrincipal\":{\"id\":\"hcp-sub-ke",
+      "meaning": ""
+    },
+    {
+      "id": "audit-ok",
+      "title": "audit/read returns events",
+      "ok": true,
+      "expected": "events",
+      "observed": "{\"result\":{\"events\":[{\"eventId\":\"urn:uuid:efabfd4e-8ba4-49bd-869e-0015df95bf18\",\"eventType\":\"grant.issued\",\"timestamp\":\"2026-11-26T00:56:12Z\",\"participants\":{\"initiator\":{\"role\":\"hcp-provider\",\"id\":\"d",
+      "meaning": ""
+    },
+    {
+      "id": "hcp-schema:audit-event-0",
+      "title": "audit-event-0 also validates against HCP's own audit-event.json",
+      "ok": true,
+      "expected": "valid",
+      "observed": "valid",
+      "meaning": "Same object, judged by HCP's schema rather than the proposal's."
+    },
+    {
+      "id": "hcp-schema:audit-event-1",
+      "title": "audit-event-1 also validates against HCP's own audit-event.json",
+      "ok": true,
+      "expected": "valid",
+      "observed": "valid",
+      "meaning": "Same object, judged by HCP's schema rather than the proposal's."
+    },
+    {
+      "id": "hcp-schema:audit-event-2",
+      "title": "audit-event-2 also validates against HCP's own audit-event.json",
+      "ok": true,
+      "expected": "valid",
+      "observed": "valid",
+      "meaning": "Same object, judged by HCP's schema rather than the proposal's."
+    },
+    {
+      "id": "summary-ok",
+      "title": "disclosures/summary returns the client",
+      "ok": true,
+      "expected": "1 client",
+      "observed": "{\"result\":{\"clients\":[{\"client\":{\"id\":\"did:key:z6MkufakTYz8jtZA5koYT31vYbAqUXeys2YWWZZHzQpWd8Ex\",\"name\":\"Notes helper\",\"operator\":{\"id\":\"self\",\"name\":\"You, from your own terminal\"}},\"grants\":[{\"grantI",
+      "meaning": ""
+    },
+    {
+      "id": "hcp-schema:disclosure-summary",
+      "title": "disclosure-summary also validates against HCP's own operations/disclosure-summary-result.json",
+      "ok": true,
+      "expected": "valid",
+      "observed": "valid",
+      "meaning": "Same object, judged by HCP's schema rather than the proposal's."
+    },
+    {
+      "id": "probe-unsigned",
+      "title": "a token-carrying request with no proof is refused proofRequired",
+      "ok": true,
+      "expected": "proofRequired",
+      "observed": "https://trusttasks.org/spec/trust-task-error/0.6 proofRequired",
+      "meaning": ""
+    },
+    {
+      "id": "probe-unsigned-error-unsigned",
+      "title": "that refusal comes back unsigned (the library builds it)",
+      "ok": true,
+      "expected": "no proof",
+      "observed": "no proof",
+      "meaning": "Keyring's checkVtaReply exempts trust-task-error replies from the proof check (vtaReplyProof.ts:33), so this is fine."
+    },
+    {
+      "id": "probe-token-other-vid",
+      "title": "the agent's token presented from Keyring's DID is refused permissionDenied",
+      "ok": true,
+      "expected": "permissionDenied",
+      "observed": "https://trusttasks.org/spec/trust-task-error/0.6 permissionDenied",
+      "meaning": ""
+    },
+    {
+      "id": "probe-keyring-assertion-purpose",
+      "title": "a Keyring request signed assertionMethod (signDocumentProof's default) is accepted",
+      "ok": true,
+      "expected": "https://trusttasks.org/spec/hcp/grants/list/0.1#response",
+      "observed": "https://trusttasks.org/spec/hcp/grants/list/0.1#response",
+      "meaning": "The PR verifier accepts authentication or assertionMethod."
+    },
+    {
+      "id": "probe-keyring-verifies-reply",
+      "title": "Keyring's vta-sdk-mirror verifier accepts the VTA's reply",
+      "ok": true,
+      "expected": "ok",
+      "observed": "{\"ok\":true,\"signer\":\"did:key:z6Mkm1DuuSymAazFGmNQWgKY8caQgZFhpxXr9Z2SzycenKrz\"}",
+      "meaning": ""
+    },
+    {
+      "id": "info-keyring-strict-verifier",
+      "title": "(information) Keyring's stricter verifyDocumentProof, at its default purpose, refuses the VTA's reply; Keyring's reply path uses the lenient verifier instead",
+      "ok": true,
+      "expected": "false (and not on the reply path)",
+      "observed": "false",
+      "meaning": "The PR signs replies proofPurpose authentication; verifyDocumentProof defaults to assertionMethod. checkVtaReply uses verifyTrustTaskProof (vtaReplyProof.ts:35), which accepts any purpose. Only matters if new HCP code reaches for verifyDocumentProof."
+    },
+    {
+      "id": "info-access-token-digest",
+      "title": "(information) Keyring's digestMultibase is not the spec's accessTokenDigest, and need not be: that digest is a record the provider keeps and never goes on the wire",
+      "ok": true,
+      "expected": "different, and unused by Keyring",
+      "observed": "zQmRQLCDuYJRzZQQjLeJ6X5YkDu7eqnuYDYpocwmtysApF5 vs uEiBmq0tq9_3xrqHdNhREvpES16ZEeF_MsbsOBq4o7GT1Rg",
+      "meaning": "Spec: SHA-256 multihash of the token's UTF-8 bytes, base64url (u). Keyring: the JSON form, base58btc (z)."
+    },
+    {
+      "id": "revoke-ok",
+      "title": "grants/revoke succeeds",
+      "ok": true,
+      "expected": "https://trusttasks.org/spec/hcp/grants/revoke/0.1#response",
+      "observed": "https://trusttasks.org/spec/hcp/grants/revoke/0.1#response",
+      "meaning": ""
+    },
+    {
+      "id": "notice-acked",
+      "title": "the revocation notice reaches the agent and is acknowledged",
+      "ok": true,
+      "expected": "https://trusttasks.org/spec/hcp/grants/revoked/0.1#response",
+      "observed": "https://trusttasks.org/spec/hcp/grants/revoked/0.1#response",
+      "meaning": ""
+    },
+    {
+      "id": "notice-dedupe",
+      "title": "a second delivery of the same noticeId is acknowledged and not acted on again",
+      "ok": true,
+      "expected": "ack, 1 notice recorded",
+      "observed": "https://trusttasks.org/spec/hcp/grants/revoked/0.1#response, 1 recorded",
+      "meaning": ""
+    },
+    {
+      "id": "after-revoke",
+      "title": "the old token is refused hcp:invalidToken",
+      "ok": true,
+      "expected": "hcp:invalidToken",
+      "observed": "https://trusttasks.org/spec/trust-task-error/0.6 hcp:invalidToken",
+      "meaning": ""
+    },
+    {
+      "id": "keyring-reads-hcp-error",
+      "title": "Keyring's reply reading turns the hcp error into a refusal with its code intact",
+      "ok": true,
+      "expected": "VtiRefusal code hcp:invalidToken",
+      "observed": "{\"refusal\":{\"code\":\"hcp:invalidToken\",\"message\":\"The access token is not valid.\"}}",
+      "meaning": ""
+    },
+    {
+      "id": "probe-next-step-as-result",
+      "title": "Keyring's sendTask would treat a held reply (next step) as a refusal or a hold, not as the result",
+      "ok": false,
+      "expected": "a hold, not a result",
+      "observed": "returned as result: {\"expects\":[{\"typeUri\":\"https://trusttasks.org/spec/hcp/grants/request/0.1#request\",\"reason\":\"The request is with the pe",
+      "meaning": "Matters if any governance task Keyring sends can be held (task consent on governance)."
+    },
+    {
+      "id": "probe-consent-fragment",
+      "title": "Keyring accepts a task-consent/request typed with a #request fragment, as the PR's demo types every request",
+      "ok": false,
+      "expected": "ok",
+      "observed": "malformed",
+      "meaning": "consentCheck.ts compares doc.type to the bare Type URI exactly."
+    },
+    {
+      "id": "probe-declined",
+      "title": "a declined grant request ends in a typed outcome the agent can tell from other refusals",
+      "ok": false,
+      "expected": "a distinct code",
+      "observed": "https://trusttasks.org/spec/trust-task-error/0.6 permissionDenied",
+      "meaning": "The specs define no declined outcome; the neutral permissionDenied is all an agent can see."
+    },
+    {
+      "id": "mcp-vta-call-thread",
+      "title": "an agent going through vta-mcp's vta_call can resubmit on the same threadId",
+      "ok": false,
+      "expected": "a threadId parameter",
+      "observed": "vta_call takes {operation, payload}; vta-sdk build_task_document mints a fresh id and sets no threadId (client/mod.rs:4203-4213)",
+      "meaning": "Not run: read from source. Each resubmission through vta_call would be a new held request, and a new prompt on the phone."
+    },
+    {
+      "id": "mcp-vta-call-next-step",
+      "title": "vta_call surfaces a held reply as a hold",
+      "ok": false,
+      "expected": "a hold",
+      "observed": "extract_trust_task_payload treats any payload without code+message as success (client/mod.rs:2492-2510): a next step is returned as a result",
+      "meaning": "Not run: read from source."
+    }
+  ],
+  "notes": [
+    "schema: https://trusttasks.org/spec/hcp/entries/create/0.1#request from Keyring (Management Client) fails the proposed schema: payload must have required property 'accessToken'"
+  ],
+  "frames": {
+    "count": 48,
+    "maxBytes": 3171,
+    "largest": [
+      {
+        "from": "VTA (toy HCP provider)",
+        "to": "Keyring (Management Client)",
+        "type": "reply to https://trusttasks.org/spec/hcp/audit/read/0.1#request",
+        "bytes": 3171
+      },
+      {
+        "from": "VTA (toy HCP provider)",
+        "to": "Keyring (Management Client)",
+        "type": "https://trusttasks.org/spec/task-consent/request/0.1#request",
+        "bytes": 2271
+      },
+      {
+        "from": "VTA (toy HCP provider)",
+        "to": "Keyring (Management Client)",
+        "type": "https://trusttasks.org/spec/task-consent/request/0.1",
+        "bytes": 2265
+      },
+      {
+        "from": "VTA (toy HCP provider)",
+        "to": "Keyring (Management Client)",
+        "type": "https://trusttasks.org/spec/task-consent/request/0.1",
+        "bytes": 2262
+      },
+      {
+        "from": "VTA (toy HCP provider)",
+        "to": "Agent (Context Client)",
+        "type": "reply to https://trusttasks.org/spec/hcp/entries/query/0.1#request",
+        "bytes": 2046
+      }
+    ]
+  },
+  "keyringShowed": [
+    {
+      "lines": [
+        "Run by you, from your own terminal.",
+        "It will be able to chat with you.",
+        "It will be able to read and change the memories travel_preferences, dietary_preferences, and no others.",
+        "It can use them for: Personalise its answers for you; Do the tasks you ask of it",
+        "For 4 hours, until 2026-11-26T04:56:16Z.",
+        "Approving gives access. It is not signing in.",
+        "The connection you scanned."
+      ],
+      "matchCode": "91935e",
+      "verdict": "ok"
+    }
+  ],
+  "lastPipelineRefusal": {
+    "id": "urn:uuid:efb53f4f-6175-4438-8905-eee89c9c79a1",
+    "threadId": "urn:uuid:98215912-cfb7-4207-be45-cacd3847bfc0",
+    "type": "https://trusttasks.org/spec/trust-task-error/0.6",
+    "issuer": "did:key:z6Mkm1DuuSymAazFGmNQWgKY8caQgZFhpxXr9Z2SzycenKrz",
+    "recipient": "did:key:z6MkufakTYz8jtZA5koYT31vYbAqUXeys2YWWZZHzQpWd8Ex",
+    "issuedAt": "2026-11-26T00:56:17Z",
+    "payload": {
+      "code": "permissionDenied",
+      "message": "The request is not authorized.",
+      "retryable": false,
+      "inResponseTo": {
+        "typeUri": "https://trusttasks.org/spec/hcp/grants/request/0.1#request",
+        "id": "urn:uuid:8983ee5f-d4db-4418-a683-952c7e3e4935"
+      }
+    },
+    "proof": {
+      "type": "DataIntegrityProof",
+      "cryptosuite": "eddsa-jcs-2022",
+      "created": "2026-11-26T00:56:17.518Z",
+      "verificationMethod": "did:key:z6Mkm1DuuSymAazFGmNQWgKY8caQgZFhpxXr9Z2SzycenKrz#z6Mkm1DuuSymAazFGmNQWgKY8caQgZFhpxXr9Z2SzycenKrz",
+      "proofPurpose": "authentication",
+      "proofValue": "zAMrke8uebpfntf9GCsu2EXeK8pebVVC4aJsxLowJELeR1WBjkXRumyKzZxuPL9RANzUyVzpoAhEsXz7vosiCyfA"
+    }
+  }
+}

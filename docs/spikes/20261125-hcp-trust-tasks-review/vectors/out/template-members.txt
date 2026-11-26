@@ -1,0 +1,18 @@
+4.2 entry (specification:657) vs _shared/0.1/context-entry.schema.json#/$defs/Entry: every member declared
+4.2 record (specification:694) vs _shared/0.1/context-entry.schema.json#/$defs/Entry: every member declared
+4.2.2 evidence (specification:803) vs _shared/0.1/context-entry.schema.json#/$defs/Entry: every member declared
+4.2.5 basis (specification:876) vs _shared/0.1/context-entry.schema.json#/$defs/Assertion: every member declared
+4.7.4 proposal (specification:1066) vs _shared/0.1/context-entry.schema.json#/$defs/Relationship: every member declared
+5.4.1 export (specification:1321) vs _shared/0.1/export.schema.json#/$defs/Export: every member declared
+6.1.5 grant (specification:1490) vs _shared/0.1/grant.schema.json#/$defs/Grant: every member declared
+6.1.5.1 narrowed detail (specification:1557) vs _shared/0.1/grant.schema.json#/$defs/AccessDetail: .narrowedTo.entryIds [open: accepted, not interpreted]
+6.3 standing rule (specification:1681) vs _shared/0.1/standing-rule.schema.json#/$defs/StandingRule: every member declared
+6.4 directive (specification:1719) vs _shared/0.1/directive.schema.json#/$defs/Directive: every member declared
+7.4 disclosure (specification:1795) vs _shared/0.1/disclosure.schema.json#/$defs/Disclosure: every member declared
+7.4.1 provenance (specification:1833) vs _shared/0.1/disclosure.schema.json#/$defs/Disclosure: every member declared
+7.5 minimization (specification:1853) vs entries/query/0.1/payload.schema.json#/$defs/Response: every member declared
+8.2 audit event (specification:1914) vs _shared/0.1/audit-event.schema.json#/$defs/AuditEvent: every member declared
+14.4 VC Evidence entry (specification:2998) vs _shared/0.1/context-entry.schema.json#/$defs/Entry: .evidence[].credential.@context [open: accepted, not interpreted]; .evidence[].credential.id [open: accepted, not interpreted]; .evidence[].credential.type [open: accepted, not interpreted]; .evidence[].credential.name [open: accepted, not interpreted]; .evidence[].credential.issuer [open: accepted, not interpreted]; .evidence[].credential.validFrom [open: accepted, not interpreted]; .evidence[].credential.validUntil [open: accepted, not interpreted]; .evidence[].credential.credentialSubject [open: accepted, not interpreted]; .evidence[].credential.credentialStatus [open: accepted, not interpreted]; .evidence[].credential.proof [open: accepted, not interpreted]
+17.2 delegation (specification:3297) vs _shared/0.1/delegation.schema.json#/$defs/Delegation: every member declared
+17.4 authorizingPrincipal (specification:3363) vs _shared/0.1/grant.schema.json#/$defs/Grant: every member declared
+4.3 conversion (specification:920) vs _shared/0.1/context-entry.schema.json#/$defs/Entry: .record.conversion.unmapped.userVerified [open: accepted, not interpreted]

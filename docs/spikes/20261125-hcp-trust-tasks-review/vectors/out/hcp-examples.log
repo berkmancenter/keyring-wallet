@@ -1,0 +1,47 @@
+specification:657      object   TEMPLATE  [4.2 Entry]   keys: @context,schema,id,type,subject,content,assertion,classification
+specification:694      fragment TEMPLATE  [record]   keys: record
+specification:803      fragment TEMPLATE  [4.2.2 Evidence]   keys: evidence
+specification:876      fragment TEMPLATE  [4.2.5 Basis]   keys: basis
+specification:920      fragment TEMPLATE  [4.3 One Form, and Conversion from v1]   keys: conversion
+specification:1066     fragment TEMPLATE  [4.7.4 Proposals]   keys: proposal
+specification:1321     object   TEMPLATE  [5.4.1 Export]   keys: @context,type,schema,subject,exportedBy,exportedAt,options,entries
+specification:1490     object   TEMPLATE  [6.1.5 Grant Representation]   keys: grantId,subject,authorizingPrincipal,client,requestingParty,access,scopes,grantType
+specification:1557     object   TEMPLATE  [6.1.5.1 Narrowed Grants]   keys: type,actions,categories,purposes,narrowedTo
+specification:1681     object   TEMPLATE  [6.3 Standing Rules]   keys: ruleId,effect,operators,requires,categories,setBy,createdAt
+specification:1719     object   TEMPLATE  [6.4 Directives]   keys: directiveId,action,effect,text,categories,operators,setBy,createdAt
+specification:1795     object   TEMPLATE  [7.4 Disclosures to Context Clients]   keys: ref,version,content,evidence,assertion,classification,standing,useUntil
+specification:1833     fragment TEMPLATE  [7.4.1 Provenance on Request]   keys: provenance
+specification:1853     fragment TEMPLATE  [7.5 Reporting]   keys: minimization
+specification:1914     object   TEMPLATE  [8.2 Log Entry Structure]   keys: eventId,eventType,timestamp,participants,entryId,relatedEntryId,categories,purpose
+specification:2107     object   concrete  [9.4.1 Query] POST /v2/entries/query HTTP/1.1  keys: query,categories,purpose,purposeDescription,maxEntries
+specification:2126     object   concrete  [9.4.1 Query] HTTP/1.1 200 OK  keys: entries,retrievalId,minimization,categoriesSearched,directives,timestamp
+specification:2156     object   concrete  [9.4.2 Get Entry] HTTP/1.1 200 OK  keys: entry,retrievalId,minimization,timestamp
+specification:2190     object   concrete  [9.4.4 Revise] POST /v2/entries/r_8Jq2vNw4TzL0/revisions HTTP/1.1  keys: expectedVersion,content,reason
+specification:2223     object   concrete  [9.4.5 Withdraw and Hard Delete] HTTP/1.1 200 OK  keys: entryId,status,hardDeleted,timestamp
+specification:2265     object   concrete  [9.4.9 Confirm or Reject] POST /v2/entries/urn:uuid:7d1e4b2a-0c9f-4a61-8e3d-5b6a7c8d9e0f/confirmation HTTP/1.1  keys: disposition,expectedVersion
+specification:2280     object   concrete  [9.4.10 Change Categories and Restrict Purposes] PUT /v2/entries/urn:uuid:7d1e4b2a-0c9f-4a61-8e3d-5b6a7c8d9e0f/categories HTTP/1.1  keys: categories,expectedVersion
+specification:2293     object   concrete  [9.4.10 Change Categories and Restrict Purposes] PUT /v2/entries/urn:uuid:7d1e4b2a-0c9f-4a61-8e3d-5b6a7c8d9e0f/purposes HTTP/1.1  keys: permittedPurposes,expectedVersion
+specification:2308     object   concrete  [9.4.11 Import] POST /v2/import HTTP/1.1  keys: export,dryRun,categoryMap
+specification:2323     object   concrete  [9.4.11 Import] HTTP/1.1 200 OK  keys: outcomes,dryRun
+specification:2371     object   concrete  [9.4.16 Onward Sharing] POST /v2/shares HTTP/1.1  keys: recipient,refs,purpose,sharedAt
+specification:2463     object   concrete  [9.9 Revocation Notification Delivery]   keys: iss,aud,jti,iat,events
+specification:2506     fragment concrete  [10.2 Identifying an HCP Server]   keys: capabilities
+specification:2547     object   concrete  [10.3.1 hcp_queryContext]   keys: name,description,inputSchema
+specification:2574     object   concrete  [10.3.2 hcp_getEntry]   keys: name,description,inputSchema
+specification:2598     object   concrete  [10.3.3 hcp_createEntry]   keys: name,description,inputSchema
+specification:2665     object   concrete  [10.3.4 hcp_reviseEntry]   keys: name,description,inputSchema
+specification:2690     object   concrete  [10.3.5 hcp_withdrawEntry]   keys: name,description,inputSchema
+specification:2709     object   concrete  [10.3.6 hcp_reportSharing]   keys: name,description,inputSchema
+specification:2740     object   concrete  [10.4 Errors]   keys: isError,structuredContent,content
+specification:2788     fragment TEMPLATE  [11.2 Content]   keys: content
+specification:2817     object   concrete  [11.4 Example]   keys: @context,schema,id,type,subject,content,assertion,classification
+specification:2969     fragment concrete  [14.2 Credential and Signature Boundary]   keys: content
+specification:2998     object   TEMPLATE  [14.4 Example]   keys: @context,schema,id,type,subject,content,assertion,classification
+specification:3183     object   TEMPLATE  [14.10 Attestation Authorizations]   keys: @context,id,type,issuer,validFrom,validUntil,credentialSubject,credentialStatus
+specification:3297     object   TEMPLATE  [17.2 Delegations]   keys: delegationId,subject,delegate,relationship,basis,scope,term,mayDelegate
+specification:3363     fragment TEMPLATE  [17.4 Scope and Grants Under a Delegation]   keys: authorizingPrincipal
+specification:3548     object   TEMPLATE  [19.2 Example]   keys: hcp_version,provider,provider_operator,conformsTo,bindings,protected_resource_metadata,jwks_uri,entries_endpoint
+specification:3875     object   concrete  [A.2 Published Artifacts]   keys: @context
+guides:78              object   concrete  [G2.2 Example: Pacing Stated in a Tutoring Applic]   keys: @context,schema,id,type,subject,content,assertion,classification
+
+45 JSON examples; 0 code blocks that start like JSON but do not parse:

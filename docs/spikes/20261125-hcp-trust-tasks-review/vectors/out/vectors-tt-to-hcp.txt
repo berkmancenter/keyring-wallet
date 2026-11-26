@@ -1,0 +1,77 @@
+TT -> HCP vectors: 72 hcp/* documents (10 from the demo transcript, 62 from spec.md examples)
+TT control: 72 pass, 0 fail
+HCP: 38 pass, 1 fail, 33 n/a (no HCP schema for that side, or an empty list)
+
+TT PASS | HCP PASS (1)         | hcp/grants/request request [transcript.golden.txt:53] (2. Grant request (hcp/grants/request 0.1), held with trust-task-next-step)
+TT PASS | HCP PASS (1)         | hcp/grants/request request [transcript.golden.txt:125] (2. Grant request (hcp/grants/request 0.1), held with trust-task-next-step)
+TT PASS | HCP PASS (1)         | hcp/grants/request response [transcript.golden.txt:163] (2. Grant request (hcp/grants/request 0.1), held with trust-task-next-step)
+TT PASS | HCP PASS (1)         | hcp/entries/query request [transcript.golden.txt:224] (3. Query (hcp/entries/query 0.1))
+TT PASS | HCP PASS (1)         | hcp/entries/query response [transcript.golden.txt:250] (3. Query (hcp/entries/query 0.1))
+TT PASS | HCP n/a              | hcp/grants/revoke request [transcript.golden.txt:326] (4. Revoke (hcp/grants/revoke 0.1) from the Management Client)
+TT PASS | HCP n/a              | hcp/grants/revoke response [transcript.golden.txt:347] (4. Revoke (hcp/grants/revoke 0.1) from the Management Client)
+TT PASS | HCP PASS (1)         | hcp/entries/query request [transcript.golden.txt:367] (5. Query after revoke (hcp/entries/query 0.1) fails with hcp:invalidToken)
+TT PASS | HCP n/a              | hcp/grants/revoked request [transcript.golden.txt:421] (6. Revocation notice (hcp/grants/revoked 0.1))
+TT PASS | HCP n/a              | hcp/grants/revoked response [transcript.golden.txt:443] (6. Revocation notice (hcp/grants/revoked 0.1))
+TT PASS | HCP PASS (1)         | hcp/export request [specs/hcp/export/0.1/spec.md:164] 
+TT PASS | HCP PASS (1)         | hcp/export response [specs/hcp/export/0.1/spec.md:202] 
+TT PASS | HCP PASS (1)         | hcp/import request [specs/hcp/import/0.1/spec.md:144] 
+TT PASS | HCP PASS (1)         | hcp/import request [specs/hcp/import/0.1/spec.md:255] 
+TT PASS | HCP PASS (1)         | hcp/import response [specs/hcp/import/0.1/spec.md:353] 
+TT PASS | HCP PASS (1)         | hcp/import response [specs/hcp/import/0.1/spec.md:379] 
+TT PASS | HCP n/a              | hcp/audit/read request [specs/hcp/audit/read/0.1/spec.md:152] 
+TT PASS | HCP PASS (1)         | hcp/audit/read response [specs/hcp/audit/read/0.1/spec.md:191] 
+TT PASS | HCP PASS (1)         | hcp/audit/read response [specs/hcp/audit/read/0.1/spec.md:241] 
+TT PASS | HCP n/a              | hcp/delegations/end request [specs/hcp/delegations/end/0.1/spec.md:136] 
+TT PASS | HCP n/a              | hcp/delegations/end response [specs/hcp/delegations/end/0.1/spec.md:165] 
+TT PASS | HCP n/a              | hcp/delegations/list request [specs/hcp/delegations/list/0.1/spec.md:138] 
+TT PASS | HCP PASS (1)         | hcp/delegations/list response [specs/hcp/delegations/list/0.1/spec.md:172] 
+TT PASS | HCP n/a              | hcp/directives/list request [specs/hcp/directives/list/0.1/spec.md:128] 
+TT PASS | HCP PASS (2)         | hcp/directives/list response [specs/hcp/directives/list/0.1/spec.md:156] 
+TT PASS | HCP n/a              | hcp/directives/remove request [specs/hcp/directives/remove/0.1/spec.md:120] 
+TT PASS | HCP n/a              | hcp/directives/remove response [specs/hcp/directives/remove/0.1/spec.md:149] 
+TT PASS | HCP n/a              | hcp/directives/set request [specs/hcp/directives/set/0.1/spec.md:125] 
+TT PASS | HCP PASS (1)         | hcp/directives/set response [specs/hcp/directives/set/0.1/spec.md:157] 
+TT PASS | HCP n/a              | hcp/disclosures/summary request [specs/hcp/disclosures/summary/0.1/spec.md:138] 
+TT PASS | HCP PASS (1)         | hcp/disclosures/summary response [specs/hcp/disclosures/summary/0.1/spec.md:181] 
+TT PASS | HCP n/a              | hcp/entries/confirm request [specs/hcp/entries/confirm/0.1/spec.md:150] 
+TT PASS | HCP PASS (1)         | hcp/entries/confirm response [specs/hcp/entries/confirm/0.1/spec.md:183] 
+TT PASS | HCP PASS (1)         | hcp/entries/create request [specs/hcp/entries/create/0.1/spec.md:145] 
+TT PASS | HCP PASS (1)         | hcp/entries/create response [specs/hcp/entries/create/0.1/spec.md:192] 
+TT PASS | HCP PASS (1)         | hcp/entries/get request [specs/hcp/entries/get/0.1/spec.md:140] 
+TT PASS | HCP PASS (1)         | hcp/entries/get response [specs/hcp/entries/get/0.1/spec.md:179] 
+TT PASS | HCP n/a              | hcp/entries/hard-delete request [specs/hcp/entries/hard-delete/0.1/spec.md:131] 
+TT PASS | HCP FAIL             | hcp/entries/hard-delete response [specs/hcp/entries/hard-delete/0.1/spec.md:166] 
+      HCP errors: / must have required property 'status'
+TT PASS | HCP PASS (1)         | hcp/entries/query request [specs/hcp/entries/query/0.1/spec.md:150] 
+TT PASS | HCP PASS (1)         | hcp/entries/query response [specs/hcp/entries/query/0.1/spec.md:192] 
+TT PASS | HCP n/a              | hcp/entries/restrict-purposes request [specs/hcp/entries/restrict-purposes/0.1/spec.md:144] 
+TT PASS | HCP n/a              | hcp/entries/restrict-purposes request [specs/hcp/entries/restrict-purposes/0.1/spec.md:173] 
+TT PASS | HCP PASS (1)         | hcp/entries/restrict-purposes response [specs/hcp/entries/restrict-purposes/0.1/spec.md:204] 
+TT PASS | HCP PASS (1)         | hcp/entries/revise request [specs/hcp/entries/revise/0.1/spec.md:155] 
+TT PASS | HCP PASS (1)         | hcp/entries/revise response [specs/hcp/entries/revise/0.1/spec.md:193] 
+TT PASS | HCP n/a              | hcp/entries/set-categories request [specs/hcp/entries/set-categories/0.1/spec.md:147] 
+TT PASS | HCP PASS (1)         | hcp/entries/set-categories response [specs/hcp/entries/set-categories/0.1/spec.md:178] 
+TT PASS | HCP PASS (1)         | hcp/entries/withdraw request [specs/hcp/entries/withdraw/0.1/spec.md:127] 
+TT PASS | HCP PASS (1)         | hcp/entries/withdraw response [specs/hcp/entries/withdraw/0.1/spec.md:157] 
+TT PASS | HCP n/a              | hcp/grants/list request [specs/hcp/grants/list/0.1/spec.md:142] 
+TT PASS | HCP PASS (1)         | hcp/grants/list response [specs/hcp/grants/list/0.1/spec.md:177] 
+TT PASS | HCP n/a              | hcp/grants/read-own request [specs/hcp/grants/read-own/0.1/spec.md:133] 
+TT PASS | HCP PASS (1)         | hcp/grants/read-own response [specs/hcp/grants/read-own/0.1/spec.md:166] 
+TT PASS | HCP n/a              | hcp/grants/relinquish request [specs/hcp/grants/relinquish/0.1/spec.md:121] 
+TT PASS | HCP n/a              | hcp/grants/relinquish response [specs/hcp/grants/relinquish/0.1/spec.md:150] 
+TT PASS | HCP PASS (1)         | hcp/grants/request request [specs/hcp/grants/request/0.1/spec.md:133] 
+TT PASS | HCP PASS (1)         | hcp/grants/request response [specs/hcp/grants/request/0.1/spec.md:228] 
+TT PASS | HCP n/a              | hcp/grants/revoke request [specs/hcp/grants/revoke/0.1/spec.md:122] 
+TT PASS | HCP n/a              | hcp/grants/revoke response [specs/hcp/grants/revoke/0.1/spec.md:151] 
+TT PASS | HCP n/a              | hcp/grants/revoked request [specs/hcp/grants/revoked/0.1/spec.md:128] 
+TT PASS | HCP n/a              | hcp/grants/revoked request [specs/hcp/grants/revoked/0.1/spec.md:156] 
+TT PASS | HCP n/a              | hcp/grants/revoked request [specs/hcp/grants/revoked/0.1/spec.md:184] 
+TT PASS | HCP n/a              | hcp/grants/revoked response [specs/hcp/grants/revoked/0.1/spec.md:215] 
+TT PASS | HCP n/a              | hcp/rules/list request [specs/hcp/rules/list/0.1/spec.md:128] 
+TT PASS | HCP PASS (2)         | hcp/rules/list response [specs/hcp/rules/list/0.1/spec.md:156] 
+TT PASS | HCP n/a              | hcp/rules/remove request [specs/hcp/rules/remove/0.1/spec.md:119] 
+TT PASS | HCP n/a              | hcp/rules/remove response [specs/hcp/rules/remove/0.1/spec.md:148] 
+TT PASS | HCP n/a              | hcp/rules/set request [specs/hcp/rules/set/0.1/spec.md:126] 
+TT PASS | HCP PASS (1)         | hcp/rules/set response [specs/hcp/rules/set/0.1/spec.md:156] 
+TT PASS | HCP PASS (1)         | hcp/shares/report request [specs/hcp/shares/report/0.1/spec.md:123] 
+TT PASS | HCP n/a              | hcp/shares/report response [specs/hcp/shares/report/0.1/spec.md:155] 

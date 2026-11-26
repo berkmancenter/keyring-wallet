@@ -1,0 +1,71 @@
+objects mapped: 59; distinct node pairs compared: 422; objects that are the same pair as an earlier one: 13
+findings: 339 {
+  bound: 249,
+  union: 4,
+  rule: 19,
+  required: 14,
+  format: 2,
+  'only-tt': 15,
+  'only-hcp': 11,
+  additionalProperties: 21,
+  nullable: 2,
+  enum: 2
+}
+matching the PR's 38: 38; PR findings I did not reproduce: 0
+not in the PR's list: 301 {
+  bound: 249,
+  union: 4,
+  rule: 17,
+  format: 2,
+  additionalProperties: 21,
+  required: 4,
+  enum: 1,
+  'only-hcp': 3
+}
+HCP units (files + common $defs): 55; never reached: 5
+   HCP not reached: common.json#/$defs/credential
+   HCP not reached: discovery.json#
+   HCP not reached: error.json#
+   HCP not reached: minimization-report.json#
+   HCP not reached: problem.json#
+TT units (payload roots + $defs): 127; never reached: 40
+   TT not reached: audit/read/0.1/payload.schema.json#
+   TT not reached: audit/read/0.1/payload.schema.json#/$defs/Response
+   TT not reached: delegations/end/0.1/payload.schema.json#
+   TT not reached: delegations/end/0.1/payload.schema.json#/$defs/Response
+   TT not reached: delegations/list/0.1/payload.schema.json#
+   TT not reached: directives/list/0.1/payload.schema.json#
+   TT not reached: directives/list/0.1/payload.schema.json#/$defs/Response
+   TT not reached: directives/remove/0.1/payload.schema.json#
+   TT not reached: directives/remove/0.1/payload.schema.json#/$defs/Response
+   TT not reached: directives/set/0.1/payload.schema.json#/$defs/Response
+   TT not reached: disclosures/summary/0.1/payload.schema.json#
+   TT not reached: entries/confirm/0.1/payload.schema.json#
+   TT not reached: entries/confirm/0.1/payload.schema.json#/$defs/Response
+   TT not reached: entries/create/0.1/payload.schema.json#/$defs/Response
+   TT not reached: entries/hard-delete/0.1/payload.schema.json#
+   TT not reached: entries/restrict-purposes/0.1/payload.schema.json#
+   TT not reached: entries/restrict-purposes/0.1/payload.schema.json#/$defs/Response
+   TT not reached: entries/revise/0.1/payload.schema.json#/$defs/Response
+   TT not reached: entries/set-categories/0.1/payload.schema.json#
+   TT not reached: entries/set-categories/0.1/payload.schema.json#/$defs/Response
+   TT not reached: export/0.1/payload.schema.json#/$defs/Response
+   TT not reached: grants/list/0.1/payload.schema.json#
+   TT not reached: grants/list/0.1/payload.schema.json#/$defs/Response
+   TT not reached: grants/read-own/0.1/payload.schema.json#
+   TT not reached: grants/read-own/0.1/payload.schema.json#/$defs/Response
+   TT not reached: grants/relinquish/0.1/payload.schema.json#
+   TT not reached: grants/relinquish/0.1/payload.schema.json#/$defs/Response
+   TT not reached: grants/request/0.1/payload.schema.json#
+   TT not reached: grants/request/0.1/payload.schema.json#/$defs/Response
+   TT not reached: grants/revoke/0.1/payload.schema.json#
+   TT not reached: grants/revoke/0.1/payload.schema.json#/$defs/Response
+   TT not reached: grants/revoked/0.1/payload.schema.json#
+   TT not reached: grants/revoked/0.1/payload.schema.json#/$defs/Response
+   TT not reached: import/0.1/payload.schema.json#/$defs/HcpCarriageImportExtension
+   TT not reached: rules/list/0.1/payload.schema.json#
+   TT not reached: rules/list/0.1/payload.schema.json#/$defs/Response
+   TT not reached: rules/remove/0.1/payload.schema.json#
+   TT not reached: rules/remove/0.1/payload.schema.json#/$defs/Response
+   TT not reached: rules/set/0.1/payload.schema.json#/$defs/Response
+   TT not reached: shares/report/0.1/payload.schema.json#/$defs/Response

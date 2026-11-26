@@ -1,0 +1,845 @@
+{
+ "results": [
+  {
+   "id": "specification:2107",
+   "label": "9.4.1 query request",
+   "hcpSchema": "operations/query-request.json",
+   "ttSchema": "entries/query/0.1/payload.schema.json",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "query": "footwear constraints for hiking",
+    "categories": [
+     "health_context"
+    ],
+    "purpose": "https://purposes.example/product-recommendation",
+    "purposeDescription": "Choosing hiking boots",
+    "maxEntries": 5,
+    "accessToken": "eyJhbGciOiJFUzI1NiJ9.e30.sig"
+   }
+  },
+  {
+   "id": "specification:2126",
+   "label": "9.4.1 query result",
+   "hcpSchema": "operations/query-result.json",
+   "ttSchema": "entries/query/0.1/payload.schema.json#/$defs/Response",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "entries": [],
+    "retrievalId": "urn:uuid:3f2c8a1e-6b0d-4e7a-9c55-1d2e3f4a5b6c",
+    "minimization": {
+     "method": "lexical"
+    },
+    "categoriesSearched": [
+     "health_context"
+    ],
+    "directives": [],
+    "respondedAt": "2026-10-27T13:02:12Z"
+   }
+  },
+  {
+   "id": "specification:2156",
+   "label": "9.4.2 get-entry result",
+   "hcpSchema": "operations/get-entry-result.json",
+   "ttSchema": "entries/get/0.1/payload.schema.json#/$defs/Response",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": false,
+   "ttErrors": "/ must have required property 'directives'",
+   "payload": {
+    "entry": {
+     "ref": "r_8Jq2vNw4TzL0",
+     "version": 2,
+     "content": {
+      "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+      "value": "I need wide-toe-box shoes with arch support."
+     },
+     "evidence": [],
+     "assertion": {
+      "declarationType": "person-declared",
+      "confidence": null,
+      "validUntil": null
+     },
+     "classification": {
+      "categories": [
+       "health_context"
+      ],
+      "dimension": "footwear_support"
+     },
+     "standing": {
+      "assurance": "authenticated",
+      "confirmed": false
+     },
+     "useUntil": "2026-10-27T14:02:12Z"
+    },
+    "retrievalId": "urn:uuid:9a4b6c8d-2e1f-4b3a-8c7d-6e5f4a3b2c1d",
+    "minimization": {
+     "method": "none"
+    },
+    "respondedAt": "2026-10-27T13:02:12Z"
+   }
+  },
+  {
+   "id": "specification:2156",
+   "label": "9.4.2 get-entry result, directives:[] added (Q42 presence)",
+   "hcpSchema": "operations/get-entry-result.json",
+   "ttSchema": "entries/get/0.1/payload.schema.json#/$defs/Response",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "entry": {
+     "ref": "r_8Jq2vNw4TzL0",
+     "version": 2,
+     "content": {
+      "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+      "value": "I need wide-toe-box shoes with arch support."
+     },
+     "evidence": [],
+     "assertion": {
+      "declarationType": "person-declared",
+      "confidence": null,
+      "validUntil": null
+     },
+     "classification": {
+      "categories": [
+       "health_context"
+      ],
+      "dimension": "footwear_support"
+     },
+     "standing": {
+      "assurance": "authenticated",
+      "confirmed": false
+     },
+     "useUntil": "2026-10-27T14:02:12Z"
+    },
+    "retrievalId": "urn:uuid:9a4b6c8d-2e1f-4b3a-8c7d-6e5f4a3b2c1d",
+    "minimization": {
+     "method": "none"
+    },
+    "respondedAt": "2026-10-27T13:02:12Z",
+    "directives": []
+   }
+  },
+  {
+   "id": "specification:2156#entry",
+   "label": "9.4.2 disclosed entry",
+   "hcpSchema": "disclosure.json",
+   "ttSchema": "_shared/0.1/disclosure.schema.json#/$defs/Disclosure",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "ref": "r_8Jq2vNw4TzL0",
+    "version": 2,
+    "content": {
+     "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+     "value": "I need wide-toe-box shoes with arch support."
+    },
+    "evidence": [],
+    "assertion": {
+     "declarationType": "person-declared",
+     "confidence": null,
+     "validUntil": null
+    },
+    "classification": {
+     "categories": [
+      "health_context"
+     ],
+     "dimension": "footwear_support"
+    },
+    "standing": {
+     "assurance": "authenticated",
+     "confirmed": false
+    },
+    "useUntil": "2026-10-27T14:02:12Z"
+   }
+  },
+  {
+   "id": "specification:2190",
+   "label": "9.4.4 revise request (ref from the path)",
+   "hcpSchema": "operations/revise-request.json",
+   "ttSchema": "entries/revise/0.1/payload.schema.json",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "ref": "r_8Jq2vNw4TzL0",
+    "expectedVersion": 2,
+    "content": {
+     "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+     "value": "I require high arch support and wide toe box in footwear.",
+     "language": "en"
+    },
+    "reason": "Correction by the Context Subject during conversation",
+    "accessToken": "eyJhbGciOiJFUzI1NiJ9.e30.sig"
+   }
+  },
+  {
+   "id": "specification:2223",
+   "label": "9.4.5 withdraw result (hardDeleted false)",
+   "hcpSchema": "operations/withdraw-result.json",
+   "ttSchema": "entries/withdraw/0.1/payload.schema.json#/$defs/Response",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "entryId": "urn:uuid:7d1e4b2a-0c9f-4a61-8e3d-5b6a7c8d9e0f",
+    "status": "deleted",
+    "hardDeleted": false,
+    "respondedAt": "2026-10-27T15:40:00Z"
+   }
+  },
+  {
+   "id": "specification:2223",
+   "label": "9.4.5 result with hardDeleted true, as HCP writes it, -> hcp/entries/hard-delete response",
+   "hcpSchema": "operations/withdraw-result.json",
+   "ttSchema": "entries/hard-delete/0.1/payload.schema.json#/$defs/Response",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": false,
+   "ttErrors": "/ must NOT have additional properties (status)",
+   "payload": {
+    "entryId": "urn:uuid:7d1e4b2a-0c9f-4a61-8e3d-5b6a7c8d9e0f",
+    "status": "deleted",
+    "hardDeleted": true,
+    "respondedAt": "2026-10-27T15:40:00Z"
+   }
+  },
+  {
+   "id": "specification:2223",
+   "label": "9.4.5 result with hardDeleted true, HCP `status` dropped (Q11 shape) -> hcp/entries/hard-delete response",
+   "hcpSchema": "operations/withdraw-result.json",
+   "ttSchema": "entries/hard-delete/0.1/payload.schema.json#/$defs/Response",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "entryId": "urn:uuid:7d1e4b2a-0c9f-4a61-8e3d-5b6a7c8d9e0f",
+    "hardDeleted": true,
+    "respondedAt": "2026-10-27T15:40:00Z"
+   }
+  },
+  {
+   "id": "specification:2265",
+   "label": "9.4.9 confirm request (entryId from the path)",
+   "hcpSchema": null,
+   "ttSchema": "entries/confirm/0.1/payload.schema.json",
+   "hcpPass": null,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "entryId": "urn:uuid:7d1e4b2a-0c9f-4a61-8e3d-5b6a7c8d9e0f",
+    "disposition": "confirmed",
+    "expectedVersion": 2,
+    "accessToken": "eyJhbGciOiJFUzI1NiJ9.e30.sig"
+   }
+  },
+  {
+   "id": "specification:2280",
+   "label": "9.4.10 change categories request",
+   "hcpSchema": null,
+   "ttSchema": "entries/set-categories/0.1/payload.schema.json",
+   "hcpPass": null,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "entryId": "urn:uuid:7d1e4b2a-0c9f-4a61-8e3d-5b6a7c8d9e0f",
+    "categories": [
+     "work_context",
+     "health_context"
+    ],
+    "expectedVersion": 2,
+    "accessToken": "eyJhbGciOiJFUzI1NiJ9.e30.sig"
+   }
+  },
+  {
+   "id": "specification:2293",
+   "label": "9.4.10 restrict purposes request",
+   "hcpSchema": null,
+   "ttSchema": "entries/restrict-purposes/0.1/payload.schema.json",
+   "hcpPass": null,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "entryId": "urn:uuid:7d1e4b2a-0c9f-4a61-8e3d-5b6a7c8d9e0f",
+    "permittedPurposes": [
+     "https://purposes.example/care-coordination"
+    ],
+    "expectedVersion": 3,
+    "accessToken": "eyJhbGciOiJFUzI1NiJ9.e30.sig"
+   }
+  },
+  {
+   "id": "specification:2308",
+   "label": "9.4.11 import request (export: {})",
+   "hcpSchema": "operations/import-request.json",
+   "ttSchema": "import/0.1/payload.schema.json",
+   "hcpPass": false,
+   "hcpErrors": "/export must have required property '@context'; /export must have required property 'type'; /export must have required property 'schema'; /export must have required property 'subject'",
+   "ttPass": false,
+   "ttErrors": "/export must have required property '@context'; /export must have required property 'type'; /export must have required property 'schema'; /export must have required property 'subject'",
+   "payload": {
+    "export": {},
+    "dryRun": true,
+    "categoryMap": {
+     "https://categories.example/fitness": "general_preferences"
+    },
+    "accessToken": "eyJhbGciOiJFUzI1NiJ9.e30.sig"
+   }
+  },
+  {
+   "id": "specification:2323",
+   "label": "9.4.11 import result",
+   "hcpSchema": "operations/import-result.json",
+   "ttSchema": "import/0.1/payload.schema.json#/$defs/Response",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "outcomes": [
+     {
+      "id": "urn:uuid:0b6f3a2e-9d4c-4e18-a7b5-c2d1e0f9a8b7",
+      "outcome": "converted"
+     },
+     {
+      "id": "urn:uuid:5c8e1d7a-4f2b-4c90-b3a6-e9d8c7b6a5f4",
+      "outcome": "rejected",
+      "reason": "id held with different content"
+     }
+    ],
+    "dryRun": true
+   }
+  },
+  {
+   "id": "specification:2371",
+   "label": "9.4.16 report onward sharing request",
+   "hcpSchema": "operations/report-sharing-request.json",
+   "ttSchema": "shares/report/0.1/payload.schema.json",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "recipient": {
+     "domain": "outfitters.example",
+     "name": "Example Outfitters"
+    },
+    "refs": [
+     "r_Q4mx7Lp2Wd9s"
+    ],
+    "purpose": "https://purposes.example/product-recommendation",
+    "sharedAt": "2026-10-27T13:10:00Z",
+    "accessToken": "eyJhbGciOiJFUzI1NiJ9.e30.sig"
+   }
+  },
+  {
+   "id": "specification:2463",
+   "label": "9.9 revocation SET -> hcp/grants/revoked (jti as noticeId)",
+   "hcpSchema": null,
+   "ttSchema": "grants/revoked/0.1/payload.schema.json",
+   "hcpPass": null,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "noticeId": "urn:uuid:c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+    "grantId": "urn:uuid:1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+    "revokedAt": "2026-10-27T13:05:00Z"
+   }
+  },
+  {
+   "id": "specification:2817",
+   "label": "11.4 General Context entry",
+   "hcpSchema": "entry.json",
+   "ttSchema": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "@context": [
+     "https://hcp.example/contexts/v2"
+    ],
+    "schema": "https://hcp.example/spec/entry/2.0",
+    "id": "urn:uuid:7f3a1b2c-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+    "type": [
+     "ContextEntry"
+    ],
+    "subject": {
+     "id": "did:example:subject-a3f9",
+     "relationship": null
+    },
+    "content": {
+     "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+     "value": "I require high arch support in footwear due to a diagnosed condition.",
+     "language": "en"
+    },
+    "assertion": {
+     "declarationType": "person-declared",
+     "confidence": null,
+     "validUntil": null
+    },
+    "classification": {
+     "categories": [
+      "health_context"
+     ],
+     "dimension": "footwear_support"
+    },
+    "evidence": [],
+    "record": {
+     "status": "active",
+     "version": 1,
+     "provenance": {
+      "assertedBy": {
+       "id": "did:example:subject-a3f9",
+       "assurance": "unverified"
+      },
+      "assertedAt": "2026-06-15T10:30:00Z",
+      "source": "conversation-id:abc123",
+      "submittedByClient": {
+       "id": "https://assistant.example/clients/hcp",
+       "name": "Example Assistant",
+       "operator": {
+        "id": "https://assistant.example",
+        "name": "Example Assistant Co."
+       }
+      },
+      "authorizedUnder": "urn:uuid:5b1d9e3a-2c47-4f80-9a61-0e8c7d2b4f13",
+      "recordedByProvider": "https://provider.example",
+      "recordedAt": "2026-06-15T10:30:02Z",
+      "confirmations": [
+       {
+        "disposition": "confirmed",
+        "confirmedBy": {
+         "id": "did:example:subject-a3f9"
+        },
+        "confirmedAt": "2026-06-16T08:12:40Z"
+       }
+      ]
+     },
+     "relationships": []
+    }
+   }
+  },
+  {
+   "id": "specification:2817",
+   "label": "11.4 entry as a Management Client get-entry response",
+   "hcpSchema": "operations/get-entry-result.json",
+   "ttSchema": "entries/get/0.1/payload.schema.json#/$defs/Response",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "entry": {
+     "@context": [
+      "https://hcp.example/contexts/v2"
+     ],
+     "schema": "https://hcp.example/spec/entry/2.0",
+     "id": "urn:uuid:7f3a1b2c-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+     "type": [
+      "ContextEntry"
+     ],
+     "subject": {
+      "id": "did:example:subject-a3f9",
+      "relationship": null
+     },
+     "content": {
+      "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+      "value": "I require high arch support in footwear due to a diagnosed condition.",
+      "language": "en"
+     },
+     "assertion": {
+      "declarationType": "person-declared",
+      "confidence": null,
+      "validUntil": null
+     },
+     "classification": {
+      "categories": [
+       "health_context"
+      ],
+      "dimension": "footwear_support"
+     },
+     "evidence": [],
+     "record": {
+      "status": "active",
+      "version": 1,
+      "provenance": {
+       "assertedBy": {
+        "id": "did:example:subject-a3f9",
+        "assurance": "unverified"
+       },
+       "assertedAt": "2026-06-15T10:30:00Z",
+       "source": "conversation-id:abc123",
+       "submittedByClient": {
+        "id": "https://assistant.example/clients/hcp",
+        "name": "Example Assistant",
+        "operator": {
+         "id": "https://assistant.example",
+         "name": "Example Assistant Co."
+        }
+       },
+       "authorizedUnder": "urn:uuid:5b1d9e3a-2c47-4f80-9a61-0e8c7d2b4f13",
+       "recordedByProvider": "https://provider.example",
+       "recordedAt": "2026-06-15T10:30:02Z",
+       "confirmations": [
+        {
+         "disposition": "confirmed",
+         "confirmedBy": {
+          "id": "did:example:subject-a3f9"
+         },
+         "confirmedAt": "2026-06-16T08:12:40Z"
+        }
+       ]
+      },
+      "relationships": []
+     }
+    },
+    "retrievalId": "urn:uuid:9a4b6c8d-2e1f-4b3a-8c7d-6e5f4a3b2c1d",
+    "minimization": {
+     "method": "none"
+    },
+    "directives": null,
+    "respondedAt": "2026-10-27T13:02:12Z"
+   }
+  },
+  {
+   "id": "specification:2817",
+   "label": "11.4 entry turned into a create request (provider-assigned members dropped)",
+   "hcpSchema": "operations/create-request.json",
+   "ttSchema": "entries/create/0.1/payload.schema.json",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "schema": "https://hcp.example/spec/entry/2.0",
+    "subject": {
+     "id": "did:example:subject-a3f9"
+    },
+    "content": {
+     "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+     "value": "I require high arch support in footwear due to a diagnosed condition.",
+     "language": "en"
+    },
+    "classification": {
+     "categories": [
+      "health_context"
+     ],
+     "dimension": "footwear_support"
+    },
+    "assertion": {
+     "declarationType": "person-declared",
+     "confidence": null,
+     "validUntil": null
+    },
+    "record": {
+     "provenance": {
+      "assertedBy": {
+       "id": "did:example:subject-a3f9"
+      },
+      "assertedAt": "2026-06-15T10:30:00Z",
+      "source": "conversation-id:abc123"
+     }
+    },
+    "accessToken": "eyJhbGciOiJFUzI1NiJ9.e30.sig"
+   }
+  },
+  {
+   "id": "guides:78",
+   "label": "G2.2 tutoring entry",
+   "hcpSchema": "entry.json",
+   "ttSchema": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "@context": [
+     "https://hcp.example/contexts/v2"
+    ],
+    "schema": "https://hcp.example/spec/entry/2.0",
+    "id": "urn:uuid:3e8d2f61-0a4b-4c7e-9d15-6b2a8f0c4e97",
+    "type": [
+     "ContextEntry"
+    ],
+    "subject": {
+     "id": "did:example:subject-b7e2",
+     "relationship": null
+    },
+    "content": {
+     "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+     "value": "On weekdays I can study for 25 to 30 minutes; on weekends, about an hour.",
+     "language": "en"
+    },
+    "assertion": {
+     "declarationType": "person-declared",
+     "confidence": null,
+     "validUntil": null
+    },
+    "classification": {
+     "categories": [
+      "education_learner_profile"
+     ],
+     "dimension": "study_time"
+    },
+    "evidence": [],
+    "record": {
+     "status": "active",
+     "version": 1,
+     "provenance": {
+      "assertedBy": {
+       "id": "did:example:subject-b7e2",
+       "assurance": "unverified"
+      },
+      "assertedAt": "2026-02-03T17:20:00Z",
+      "source": "conversation-id:tutor-5521",
+      "submittedByClient": {
+       "id": "https://mathkingdom.example.edu/clients/tutor",
+       "name": "Math Kingdom Tutor",
+       "operator": {
+        "id": "https://mathkingdom.example.edu",
+        "name": "Math Kingdom"
+       }
+      },
+      "authorizedUnder": "urn:uuid:8a6c4e21-7f3d-4b90-a2e8-1c5d9b7f3a06",
+      "recordedByProvider": "https://provider.example",
+      "recordedAt": "2026-02-03T17:20:04Z"
+     }
+    }
+   }
+  },
+  {
+   "id": "guides:78",
+   "label": "G2.2 entry turned into a create request",
+   "hcpSchema": "operations/create-request.json",
+   "ttSchema": "entries/create/0.1/payload.schema.json",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "schema": "https://hcp.example/spec/entry/2.0",
+    "subject": {
+     "id": "did:example:subject-b7e2"
+    },
+    "content": {
+     "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+     "value": "On weekdays I can study for 25 to 30 minutes; on weekends, about an hour.",
+     "language": "en"
+    },
+    "classification": {
+     "categories": [
+      "education_learner_profile"
+     ],
+     "dimension": "study_time"
+    },
+    "assertion": {
+     "declarationType": "person-declared",
+     "confidence": null,
+     "validUntil": null
+    },
+    "record": {
+     "provenance": {
+      "assertedBy": {
+       "id": "did:example:subject-b7e2"
+      },
+      "assertedAt": "2026-02-03T17:20:00Z",
+      "source": "conversation-id:tutor-5521"
+     }
+    },
+    "accessToken": "eyJhbGciOiJFUzI1NiJ9.e30.sig"
+   }
+  },
+  {
+   "id": "specification:2969",
+   "label": "14.2 VC Evidence content",
+   "hcpSchema": "common.json#/$defs/content",
+   "ttSchema": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+   "hcpPass": true,
+   "hcpErrors": "",
+   "ttPass": true,
+   "ttErrors": "",
+   "payload": {
+    "profile": "https://hcp.example/spec/profiles/vc-evidence/2.0",
+    "evidence": 0
+   }
+  }
+ ],
+ "templates": [
+  {
+   "id": "specification:657",
+   "label": "4.2 entry",
+   "ttSpec": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+   "unknown": []
+  },
+  {
+   "id": "specification:694",
+   "label": "4.2 record",
+   "ttSpec": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+   "unknown": []
+  },
+  {
+   "id": "specification:803",
+   "label": "4.2.2 evidence",
+   "ttSpec": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+   "unknown": []
+  },
+  {
+   "id": "specification:876",
+   "label": "4.2.5 basis",
+   "ttSpec": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+   "unknown": []
+  },
+  {
+   "id": "specification:1066",
+   "label": "4.7.4 proposal",
+   "ttSpec": "_shared/0.1/context-entry.schema.json#/$defs/Relationship",
+   "unknown": []
+  },
+  {
+   "id": "specification:1321",
+   "label": "5.4.1 export",
+   "ttSpec": "_shared/0.1/export.schema.json#/$defs/Export",
+   "unknown": []
+  },
+  {
+   "id": "specification:1490",
+   "label": "6.1.5 grant",
+   "ttSpec": "_shared/0.1/grant.schema.json#/$defs/Grant",
+   "unknown": []
+  },
+  {
+   "id": "specification:1557",
+   "label": "6.1.5.1 narrowed detail",
+   "ttSpec": "_shared/0.1/grant.schema.json#/$defs/AccessDetail",
+   "unknown": [
+    {
+     "path": ".narrowedTo.entryIds",
+     "closed": false
+    }
+   ]
+  },
+  {
+   "id": "specification:1681",
+   "label": "6.3 standing rule",
+   "ttSpec": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule",
+   "unknown": []
+  },
+  {
+   "id": "specification:1719",
+   "label": "6.4 directive",
+   "ttSpec": "_shared/0.1/directive.schema.json#/$defs/Directive",
+   "unknown": []
+  },
+  {
+   "id": "specification:1795",
+   "label": "7.4 disclosure",
+   "ttSpec": "_shared/0.1/disclosure.schema.json#/$defs/Disclosure",
+   "unknown": []
+  },
+  {
+   "id": "specification:1833",
+   "label": "7.4.1 provenance",
+   "ttSpec": "_shared/0.1/disclosure.schema.json#/$defs/Disclosure",
+   "unknown": []
+  },
+  {
+   "id": "specification:1853",
+   "label": "7.5 minimization",
+   "ttSpec": "entries/query/0.1/payload.schema.json#/$defs/Response",
+   "unknown": []
+  },
+  {
+   "id": "specification:1914",
+   "label": "8.2 audit event",
+   "ttSpec": "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent",
+   "unknown": []
+  },
+  {
+   "id": "specification:2998",
+   "label": "14.4 VC Evidence entry",
+   "ttSpec": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+   "unknown": [
+    {
+     "path": ".evidence[].credential.@context",
+     "closed": false
+    },
+    {
+     "path": ".evidence[].credential.id",
+     "closed": false
+    },
+    {
+     "path": ".evidence[].credential.type",
+     "closed": false
+    },
+    {
+     "path": ".evidence[].credential.name",
+     "closed": false
+    },
+    {
+     "path": ".evidence[].credential.issuer",
+     "closed": false
+    },
+    {
+     "path": ".evidence[].credential.validFrom",
+     "closed": false
+    },
+    {
+     "path": ".evidence[].credential.validUntil",
+     "closed": false
+    },
+    {
+     "path": ".evidence[].credential.credentialSubject",
+     "closed": false
+    },
+    {
+     "path": ".evidence[].credential.credentialStatus",
+     "closed": false
+    },
+    {
+     "path": ".evidence[].credential.proof",
+     "closed": false
+    }
+   ]
+  },
+  {
+   "id": "specification:3297",
+   "label": "17.2 delegation",
+   "ttSpec": "_shared/0.1/delegation.schema.json#/$defs/Delegation",
+   "unknown": []
+  },
+  {
+   "id": "specification:3363",
+   "label": "17.4 authorizingPrincipal",
+   "ttSpec": "_shared/0.1/grant.schema.json#/$defs/Grant",
+   "unknown": []
+  },
+  {
+   "id": "specification:920",
+   "label": "4.3 conversion",
+   "ttSpec": "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+   "unknown": [
+    {
+     "path": ".record.conversion.unmapped.userVerified",
+     "closed": false
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,1753 @@
+[
+ {
+  "id": "specification:657",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 657,
+  "heading": "4.2 Entry",
+  "http": null,
+  "kind": "object",
+  "template": true,
+  "json": {
+   "@context": [
+    "https://hcp.example/contexts/v2"
+   ],
+   "schema": "https://hcp.example/spec/entry/2.0",
+   "id": "urn:uuid:{entry-uuid}",
+   "type": [
+    "ContextEntry"
+   ],
+   "subject": {
+    "id": "{subject-identifier}",
+    "relationship": null
+   },
+   "content": {},
+   "assertion": {
+    "declarationType": "person-declared | model-inferred | issuer-attested",
+    "confidence": "{high | medium | low | null}",
+    "validUntil": "{date-time | null}",
+    "basis": {},
+    "permittedPurposes": [
+     "{purpose URI}"
+    ]
+   },
+   "classification": {
+    "categories": [
+     "{category}"
+    ],
+    "dimension": "{dimension-string | null}",
+    "permittedPurposes": [
+     "{purpose URI}"
+    ]
+   },
+   "evidence": [],
+   "record": {}
+  }
+ },
+ {
+  "id": "specification:694",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 694,
+  "heading": "record",
+  "http": null,
+  "kind": "fragment",
+  "template": true,
+  "json": {
+   "record": {
+    "status": "active | deprecated | conflicted | expired | revoked | suspended | deleted",
+    "version": 1,
+    "provenance": {
+     "assertedBy": {
+      "id": "{identifier}",
+      "assurance": "unverified | authenticated | cryptographically-verified",
+      "via": {
+       "kind": "authorization-credential | arrangement",
+       "id": "{identifier}"
+      }
+     },
+     "assertedAt": "{date-time}",
+     "source": "{conversation-id | document-id | person-input | integration}",
+     "submittedByClient": {
+      "id": "{client-identifier}",
+      "name": "{client name}",
+      "operator": {
+       "id": "{operator-identifier}",
+       "name": "{organization name}"
+      }
+     },
+     "authorizedUnder": "{grant-id}",
+     "recordedByProvider": "{provider-identifier}",
+     "recordedAt": "{date-time}",
+     "confirmations": [
+      {
+       "disposition": "confirmed | rejected",
+       "confirmedBy": {
+        "id": "{identifier}"
+       },
+       "confirmedAt": "{date-time}"
+      }
+     ]
+    },
+    "relationships": [
+     {
+      "type": "derivedFrom | supersedes | contradicts | duplicates",
+      "target": "{entry-id}",
+      "assertedBy": {
+       "role": "{role}",
+       "id": "{identifier}"
+      },
+      "recordedAt": "{date-time}",
+      "proposal": {}
+     }
+    ]
+   }
+  }
+ },
+ {
+  "id": "specification:803",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 803,
+  "heading": "4.2.2 Evidence",
+  "http": null,
+  "kind": "fragment",
+  "template": true,
+  "json": {
+   "evidence": [
+    {
+     "role": "content | supports",
+     "type": "verifiable-credential",
+     "credential": {},
+     "verification": {
+      "result": "verified | failed",
+      "at": "{date-time}",
+      "by": "provider | trust-domain"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "specification:876",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 876,
+  "heading": "4.2.5 Basis",
+  "http": null,
+  "kind": "fragment",
+  "template": true,
+  "json": {
+   "basis": {
+    "drawnFrom": [
+     "conversation | document | observation | assessment | entries"
+    ],
+    "task": "{the task during which the assertion was made}",
+    "setting": "{where it was made, such as a classroom or a clinic visit}",
+    "rationale": "{why, in words the Context Subject can read}"
+   }
+  }
+ },
+ {
+  "id": "specification:920",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 920,
+  "heading": "4.3 One Form, and Conversion from v1",
+  "http": null,
+  "kind": "fragment",
+  "template": true,
+  "json": {
+   "conversion": {
+    "from": "{v1 entry schema}",
+    "convertedAt": "{date-time}",
+    "convertedBy": "{provider-identifier}",
+    "unmapped": {
+     "userVerified": true
+    }
+   }
+  }
+ },
+ {
+  "id": "specification:1066",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 1066,
+  "heading": "4.7.4 Proposals",
+  "http": null,
+  "kind": "fragment",
+  "template": true,
+  "json": {
+   "proposal": {
+    "act": "reject | accept | supersede",
+    "entry": "{entry-id}",
+    "rationale": "{why, in words the Context Subject can read}",
+    "weighed": [
+     "basis | declarationType | standing | permittedPurposes | recency | confidence"
+    ],
+    "proposedBy": {
+     "role": "{role}",
+     "id": "{identifier}"
+    },
+    "proposedAt": "{date-time}"
+   }
+  }
+ },
+ {
+  "id": "specification:1321",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 1321,
+  "heading": "5.4.1 Export",
+  "http": null,
+  "kind": "object",
+  "template": true,
+  "json": {
+   "@context": [
+    "https://hcp.example/contexts/v2"
+   ],
+   "type": "ContextExport",
+   "schema": "https://hcp.example/spec/export/2.0",
+   "subject": {
+    "id": "{subject identifier}"
+   },
+   "exportedBy": "{provider-identifier}",
+   "exportedAt": "{date-time}",
+   "options": {
+    "excludeDeleted": false,
+    "includeVersions": false,
+    "includeAudit": false
+   },
+   "entries": [],
+   "versions": [],
+   "rules": [],
+   "directives": [],
+   "delegations": [],
+   "audit": []
+  }
+ },
+ {
+  "id": "specification:1490",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 1490,
+  "heading": "6.1.5 Grant Representation",
+  "http": null,
+  "kind": "object",
+  "template": true,
+  "json": {
+   "grantId": "urn:uuid:{grant-uuid}",
+   "subject": {
+    "id": "{per-client pseudonym}"
+   },
+   "authorizingPrincipal": {
+    "id": "{per-client pseudonym}",
+    "delegation": "{delegation id | omitted}"
+   },
+   "client": {
+    "id": "{client-identifier}",
+    "name": "{name the person can recognize}",
+    "operator": {
+     "id": "{operator-identifier}",
+     "name": "{organization name}"
+    },
+    "legalRetention": {
+     "record": "{the record kept}",
+     "obligation": "{the law or rule}",
+     "period": "{how long}"
+    },
+    "claims": [
+     "{client conformance identifier}"
+    ]
+   },
+   "requestingParty": {
+    "type": "person | organization",
+    "id": "{identifier}",
+    "name": "{name}"
+   },
+   "access": [
+    {
+     "type": "https://hcp.example/spec/authorization/context-access",
+     "actions": [
+      "read | write | provenance"
+     ],
+     "categories": [
+      "{category}"
+     ],
+     "purposes": [
+      {
+       "code": "{purpose URI}",
+       "description": "{shown to the person}"
+      }
+     ],
+     "narrowedTo": {},
+     "onwardSharing": {
+      "domains": [
+       "{DNS domain}"
+      ],
+      "notTo": [
+       "{DNS domain | operator identifier}"
+      ]
+     }
+    }
+   ],
+   "scopes": [
+    "hcp:{category}:{action}"
+   ],
+   "grantType": "temporary | persistent",
+   "issuedAt": "{date-time}",
+   "expiresAt": "{date-time | null}",
+   "status": "active | revoked | expired"
+  }
+ },
+ {
+  "id": "specification:1557",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 1557,
+  "heading": "6.1.5.1 Narrowed Grants",
+  "http": null,
+  "kind": "object",
+  "template": true,
+  "json": {
+   "type": "https://hcp.example/spec/authorization/context-access",
+   "actions": [
+    "read"
+   ],
+   "categories": [
+    "health_context"
+   ],
+   "purposes": [
+    {
+     "code": "https://purposes.example/medication-reminders",
+     "description": "Medication reminders"
+    }
+   ],
+   "narrowedTo": {
+    "entryIds": [
+     "urn:uuid:...",
+     "urn:uuid:..."
+    ]
+   }
+  }
+ },
+ {
+  "id": "specification:1681",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 1681,
+  "heading": "6.3 Standing Rules",
+  "http": null,
+  "kind": "object",
+  "template": true,
+  "json": {
+   "ruleId": "urn:uuid:{rule-uuid}",
+   "effect": "deny",
+   "operators": [
+    "{DNS domain | operator identifier}"
+   ],
+   "requires": [
+    "{client conformance identifier}"
+   ],
+   "categories": [
+    "{category}"
+   ],
+   "setBy": "{context-subject | delegation id}",
+   "createdAt": "{date-time}"
+  }
+ },
+ {
+  "id": "specification:1719",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 1719,
+  "heading": "6.4 Directives",
+  "http": null,
+  "kind": "object",
+  "template": true,
+  "json": {
+   "directiveId": "urn:uuid:{directive-uuid}",
+   "action": "share | sign | transact | {URI}",
+   "effect": "deny | ask-first | permit",
+   "text": "{the directive, in the person's words}",
+   "categories": [
+    "{category}"
+   ],
+   "operators": [
+    "{DNS domain | operator identifier}"
+   ],
+   "setBy": "{context-subject | delegation id}",
+   "createdAt": "{date-time}"
+  }
+ },
+ {
+  "id": "specification:1795",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 1795,
+  "heading": "7.4 Disclosures to Context Clients",
+  "http": null,
+  "kind": "object",
+  "template": true,
+  "json": {
+   "ref": "{grant-scoped reference}",
+   "version": 2,
+   "content": {},
+   "evidence": [],
+   "assertion": {
+    "declarationType": "...",
+    "confidence": null,
+    "validUntil": null
+   },
+   "classification": {
+    "categories": [
+     "{category}"
+    ],
+    "dimension": "{dimension | null}",
+    "permittedPurposes": [
+     "{purpose URI}"
+    ]
+   },
+   "standing": {
+    "assurance": "unverified | authenticated | cryptographically-verified",
+    "confirmed": true
+   },
+   "useUntil": "{date-time}",
+   "onwardSharing": true,
+   "relationships": [
+    {
+     "type": "{type}",
+     "target": "{ref}"
+    }
+   ]
+  }
+ },
+ {
+  "id": "specification:1833",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 1833,
+  "heading": "7.4.1 Provenance on Request",
+  "http": null,
+  "kind": "fragment",
+  "template": true,
+  "json": {
+   "provenance": {
+    "submittedBy": {
+     "name": "{client name}",
+     "operator": "{organization name}"
+    },
+    "source": "conversation | document | person-input | integration",
+    "assertedAt": "{date-time}",
+    "recordedAt": "{date-time}"
+   }
+  }
+ },
+ {
+  "id": "specification:1853",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 1853,
+  "heading": "7.5 Reporting",
+  "http": null,
+  "kind": "fragment",
+  "template": true,
+  "json": {
+   "minimization": {
+    "method": "{declared method, or none}"
+   }
+  }
+ },
+ {
+  "id": "specification:1914",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 1914,
+  "heading": "8.2 Log Entry Structure",
+  "http": null,
+  "kind": "object",
+  "template": true,
+  "json": {
+   "eventId": "urn:uuid:{uuid}",
+   "eventType": "{event-type}",
+   "timestamp": "{date-time}",
+   "participants": {
+    "initiator": {
+     "role": "{role}",
+     "id": "{identifier}"
+    },
+    "clientOperator": {
+     "id": "{operator-identifier}"
+    },
+    "requestingParty": {
+     "id": "{identifier}"
+    },
+    "authorizingPrincipal": {
+     "id": "{identifier}"
+    },
+    "provider": {
+     "id": "{provider-identifier}"
+    },
+    "retrievalId": "urn:uuid:{retrieval-uuid}",
+    "model": {
+     "id": "{model-identifier}"
+    }
+   },
+   "entryId": "{urn:uuid or null}",
+   "relatedEntryId": "{urn:uuid or null}",
+   "categories": [
+    "{category}"
+   ],
+   "purpose": "{purpose code or null}",
+   "purposeDescription": "{stated task or null}",
+   "grantId": "{urn:uuid or null}",
+   "disclosed": [
+    {
+     "entryId": "{urn:uuid}",
+     "version": 2,
+     "useUntil": "{date-time}",
+     "provenance": true,
+     "revealed": [
+      {
+       "evidence": 0,
+       "claims": [
+        "{JSON Pointer}"
+       ]
+      }
+     ]
+    }
+   ],
+   "data": {}
+  }
+ },
+ {
+  "id": "specification:2107",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2107,
+  "heading": "9.4.1 Query",
+  "http": "POST /v2/entries/query HTTP/1.1",
+  "kind": "object",
+  "template": false,
+  "json": {
+   "query": "footwear constraints for hiking",
+   "categories": [
+    "health_context"
+   ],
+   "purpose": "https://purposes.example/product-recommendation",
+   "purposeDescription": "Choosing hiking boots",
+   "maxEntries": 5
+  }
+ },
+ {
+  "id": "specification:2126",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2126,
+  "heading": "9.4.1 Query",
+  "http": "HTTP/1.1 200 OK",
+  "kind": "object",
+  "template": false,
+  "json": {
+   "entries": [],
+   "retrievalId": "urn:uuid:3f2c8a1e-6b0d-4e7a-9c55-1d2e3f4a5b6c",
+   "minimization": {
+    "method": "lexical"
+   },
+   "categoriesSearched": [
+    "health_context"
+   ],
+   "directives": [],
+   "timestamp": "2026-10-27T13:02:12Z"
+  }
+ },
+ {
+  "id": "specification:2156",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2156,
+  "heading": "9.4.2 Get Entry",
+  "http": "HTTP/1.1 200 OK",
+  "kind": "object",
+  "template": false,
+  "json": {
+   "entry": {
+    "ref": "r_8Jq2vNw4TzL0",
+    "version": 2,
+    "content": {
+     "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+     "value": "I need wide-toe-box shoes with arch support."
+    },
+    "evidence": [],
+    "assertion": {
+     "declarationType": "person-declared",
+     "confidence": null,
+     "validUntil": null
+    },
+    "classification": {
+     "categories": [
+      "health_context"
+     ],
+     "dimension": "footwear_support"
+    },
+    "standing": {
+     "assurance": "authenticated",
+     "confirmed": false
+    },
+    "useUntil": "2026-10-27T14:02:12Z"
+   },
+   "retrievalId": "urn:uuid:9a4b6c8d-2e1f-4b3a-8c7d-6e5f4a3b2c1d",
+   "minimization": {
+    "method": "none"
+   },
+   "timestamp": "2026-10-27T13:02:12Z"
+  }
+ },
+ {
+  "id": "specification:2190",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2190,
+  "heading": "9.4.4 Revise",
+  "http": "POST /v2/entries/r_8Jq2vNw4TzL0/revisions HTTP/1.1",
+  "kind": "object",
+  "template": false,
+  "json": {
+   "expectedVersion": 2,
+   "content": {
+    "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+    "value": "I require high arch support and wide toe box in footwear.",
+    "language": "en"
+   },
+   "reason": "Correction by the Context Subject during conversation"
+  }
+ },
+ {
+  "id": "specification:2223",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2223,
+  "heading": "9.4.5 Withdraw and Hard Delete",
+  "http": "HTTP/1.1 200 OK",
+  "kind": "object",
+  "template": false,
+  "json": {
+   "entryId": "urn:uuid:7d1e4b2a-0c9f-4a61-8e3d-5b6a7c8d9e0f",
+   "status": "deleted",
+   "hardDeleted": false,
+   "timestamp": "2026-10-27T15:40:00Z"
+  }
+ },
+ {
+  "id": "specification:2265",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2265,
+  "heading": "9.4.9 Confirm or Reject",
+  "http": "POST /v2/entries/urn:uuid:7d1e4b2a-0c9f-4a61-8e3d-5b6a7c8d9e0f/confirmation HTTP/1.1",
+  "kind": "object",
+  "template": false,
+  "json": {
+   "disposition": "confirmed",
+   "expectedVersion": 2
+  }
+ },
+ {
+  "id": "specification:2280",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2280,
+  "heading": "9.4.10 Change Categories and Restrict Purposes",
+  "http": "PUT /v2/entries/urn:uuid:7d1e4b2a-0c9f-4a61-8e3d-5b6a7c8d9e0f/categories HTTP/1.1",
+  "kind": "object",
+  "template": false,
+  "json": {
+   "categories": [
+    "work_context",
+    "health_context"
+   ],
+   "expectedVersion": 2
+  }
+ },
+ {
+  "id": "specification:2293",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2293,
+  "heading": "9.4.10 Change Categories and Restrict Purposes",
+  "http": "PUT /v2/entries/urn:uuid:7d1e4b2a-0c9f-4a61-8e3d-5b6a7c8d9e0f/purposes HTTP/1.1",
+  "kind": "object",
+  "template": false,
+  "json": {
+   "permittedPurposes": [
+    "https://purposes.example/care-coordination"
+   ],
+   "expectedVersion": 3
+  }
+ },
+ {
+  "id": "specification:2308",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2308,
+  "heading": "9.4.11 Import",
+  "http": "POST /v2/import HTTP/1.1",
+  "kind": "object",
+  "template": false,
+  "json": {
+   "export": {},
+   "dryRun": true,
+   "categoryMap": {
+    "https://categories.example/fitness": "general_preferences"
+   }
+  }
+ },
+ {
+  "id": "specification:2323",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2323,
+  "heading": "9.4.11 Import",
+  "http": "HTTP/1.1 200 OK",
+  "kind": "object",
+  "template": false,
+  "json": {
+   "outcomes": [
+    {
+     "id": "urn:uuid:0b6f3a2e-9d4c-4e18-a7b5-c2d1e0f9a8b7",
+     "outcome": "converted"
+    },
+    {
+     "id": "urn:uuid:5c8e1d7a-4f2b-4c90-b3a6-e9d8c7b6a5f4",
+     "outcome": "rejected",
+     "reason": "id held with different content"
+    }
+   ],
+   "dryRun": true
+  }
+ },
+ {
+  "id": "specification:2371",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2371,
+  "heading": "9.4.16 Onward Sharing",
+  "http": "POST /v2/shares HTTP/1.1",
+  "kind": "object",
+  "template": false,
+  "json": {
+   "recipient": {
+    "domain": "outfitters.example",
+    "name": "Example Outfitters"
+   },
+   "refs": [
+    "r_Q4mx7Lp2Wd9s"
+   ],
+   "purpose": "https://purposes.example/product-recommendation",
+   "sharedAt": "2026-10-27T13:10:00Z"
+  }
+ },
+ {
+  "id": "specification:2463",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2463,
+  "heading": "9.9 Revocation Notification Delivery",
+  "http": null,
+  "kind": "object",
+  "template": false,
+  "json": {
+   "iss": "https://provider.example",
+   "aud": "https://client.example",
+   "jti": "urn:uuid:c4d5e6f7-a8b9-4c0d-9e1f-2a3b4c5d6e7f",
+   "iat": 1793106300,
+   "events": {
+    "https://hcp.example/spec/events/grant-revoked": {
+     "grantId": "urn:uuid:1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+     "revokedAt": "2026-10-27T13:05:00Z"
+    }
+   }
+  }
+ },
+ {
+  "id": "specification:2506",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2506,
+  "heading": "10.2 Identifying an HCP Server",
+  "http": null,
+  "kind": "fragment",
+  "template": false,
+  "json": {
+   "capabilities": {
+    "tools": {},
+    "extensions": {
+     "example.hcp/hcp": {
+      "discovery": "https://provider.example/.well-known/hcp-configuration",
+      "conformsTo": [
+       "https://hcp.example/spec/core/2.0",
+       "https://hcp.example/spec/bindings/mcp/2.0"
+      ]
+     }
+    }
+   }
+  }
+ },
+ {
+  "id": "specification:2547",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2547,
+  "heading": "10.3.1 hcp_queryContext",
+  "http": null,
+  "kind": "object",
+  "template": false,
+  "json": {
+   "name": "hcp_queryContext",
+   "description": "Retrieve minimal, relevant entries from the person's HCP instance for a stated purpose.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "description": "Natural language query describing the context or task."
+     },
+     "categories": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Optional. Categories to search. Omitted means every category the grant can read for the purpose."
+     },
+     "purpose": {
+      "type": "string",
+      "format": "uri",
+      "description": "Purpose code: one of the purposes the person approved in the grant."
+     },
+     "purposeDescription": {
+      "type": "string",
+      "description": "Optional. Plain language statement of the task. Logged to audit trail."
+     },
+     "maxEntries": {
+      "type": "integer",
+      "default": 5,
+      "description": "Maximum entries to return. Default: 5. Maximum: 20."
+     }
+    },
+    "required": [
+     "query",
+     "purpose"
+    ]
+   }
+  }
+ },
+ {
+  "id": "specification:2574",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2574,
+  "heading": "10.3.2 hcp_getEntry",
+  "http": null,
+  "kind": "object",
+  "template": false,
+  "json": {
+   "name": "hcp_getEntry",
+   "description": "Retrieve one entry from the person's HCP instance by identifier, for a stated purpose.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "ref": {
+      "type": "string",
+      "description": "The entry's ref, as disclosed under this grant."
+     },
+     "purpose": {
+      "type": "string",
+      "format": "uri",
+      "description": "Purpose code: one of the purposes the person approved in the grant."
+     },
+     "purposeDescription": {
+      "type": "string",
+      "description": "Optional. Plain language statement of the task. Logged to audit trail."
+     },
+     "version": {
+      "type": "integer",
+      "description": "Optional. Returns the specified version rather than the current one."
+     }
+    },
+    "required": [
+     "ref",
+     "purpose"
+    ]
+   }
+  }
+ },
+ {
+  "id": "specification:2598",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2598,
+  "heading": "10.3.3 hcp_createEntry",
+  "http": null,
+  "kind": "object",
+  "template": false,
+  "json": {
+   "name": "hcp_createEntry",
+   "description": "Add a new entry to the person's HCP instance.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "categories": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "One or more category slugs or custom category URIs, each one the grant lets this client write."
+     },
+     "dimension": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "Optional. Dimension addressed by this entry, scoped within its categories."
+     },
+     "content": {
+      "type": "string",
+      "description": "Natural language statement."
+     },
+     "declarationType": {
+      "type": "string",
+      "enum": [
+       "person-declared",
+       "model-inferred"
+      ]
+     },
+     "confidence": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "enum": [
+       "high",
+       "medium",
+       "low",
+       null
+      ],
+      "description": "Required and non-null when declarationType is model-inferred; null or omitted otherwise."
+     },
+     "assertedBy": {
+      "type": "string",
+      "description": "The Context Asserter. Required when declarationType is model-inferred: identify the model, at a granularity that distinguishes versions."
+     },
+     "sourceContext": {
+      "type": "string",
+      "description": "Conversation or document ID from which this entry was derived."
+     },
+     "basis": {
+      "type": "object",
+      "properties": {
+       "drawnFrom": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "task": {
+        "type": "string"
+       },
+       "setting": {
+        "type": "string"
+       },
+       "rationale": {
+        "type": "string"
+       }
+      },
+      "description": "Optional; recommended when declarationType is model-inferred. What this entry was drawn from. Must not identify anyone but the person, or carry any client, conversation or document identifier."
+     },
+     "permittedPurposes": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "format": "uri"
+      },
+      "description": "Optional. Purpose codes this entry may be used for."
+     },
+     "relationships": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "type": {
+         "type": "string",
+         "enum": [
+          "derivedFrom",
+          "supersedes",
+          "contradicts",
+          "duplicates"
+         ]
+        },
+        "target": {
+         "type": "string",
+         "description": "The related entry's ref."
+        }
+       },
+       "required": [
+        "type",
+        "target"
+       ]
+      },
+      "description": "Optional. Relationships this entry has to other entries."
+     }
+    },
+    "required": [
+     "categories",
+     "content",
+     "declarationType",
+     "sourceContext"
+    ],
+    "allOf": [
+     {
+      "if": {
+       "properties": {
+        "declarationType": {
+         "const": "model-inferred"
+        }
+       },
+       "required": [
+        "declarationType"
+       ]
+      },
+      "then": {
+       "required": [
+        "confidence",
+        "assertedBy"
+       ],
+       "properties": {
+        "confidence": {
+         "type": "string",
+         "enum": [
+          "high",
+          "medium",
+          "low"
+         ]
+        }
+       }
+      },
+      "else": {
+       "properties": {
+        "confidence": {
+         "type": "null"
+        }
+       }
+      }
+     }
+    ]
+   }
+  }
+ },
+ {
+  "id": "specification:2665",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2665,
+  "heading": "10.3.4 hcp_reviseEntry",
+  "http": null,
+  "kind": "object",
+  "template": false,
+  "json": {
+   "name": "hcp_reviseEntry",
+   "description": "Revise an existing entry, creating a new version and preserving version history.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "ref": {
+      "type": "string",
+      "description": "The ref of the entry to revise."
+     },
+     "expectedVersion": {
+      "type": "integer",
+      "description": "The version this revision replaces. If the entry has since been revised, the call fails with version-conflict."
+     },
+     "content": {
+      "type": "string",
+      "description": "The revised statement, whole."
+     },
+     "reason": {
+      "type": "string",
+      "description": "Reason for the revision. Logged to audit trail."
+     },
+     "declarationType": {
+      "type": "string",
+      "enum": [
+       "person-declared",
+       "model-inferred"
+      ],
+      "description": "Optional. Declaration type of the revised statement. Omitted means unchanged."
+     },
+     "confidence": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "enum": [
+       "high",
+       "medium",
+       "low",
+       null
+      ]
+     },
+     "assertedBy": {
+      "type": "string",
+      "description": "Optional. The Context Asserter of the revised statement."
+     },
+     "sourceContext": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "ref",
+     "expectedVersion",
+     "content",
+     "reason"
+    ]
+   }
+  }
+ },
+ {
+  "id": "specification:2690",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2690,
+  "heading": "10.3.5 hcp_withdrawEntry",
+  "http": null,
+  "kind": "object",
+  "template": false,
+  "json": {
+   "name": "hcp_withdrawEntry",
+   "description": "Withdraw an entry. Withdrawn entries are hidden from agents immediately.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "ref": {
+      "type": "string",
+      "description": "The ref of the entry to withdraw."
+     },
+     "reason": {
+      "type": "string",
+      "description": "Reason for withdrawal. Logged to audit trail."
+     }
+    },
+    "required": [
+     "ref",
+     "reason"
+    ]
+   }
+  }
+ },
+ {
+  "id": "specification:2709",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2709,
+  "heading": "10.3.6 hcp_reportSharing",
+  "http": null,
+  "kind": "object",
+  "template": false,
+  "json": {
+   "name": "hcp_reportSharing",
+   "description": "Report that you told another organization something from the person's context, as their grant allows. Every share must be reported.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "recipient": {
+      "type": "object",
+      "properties": {
+       "domain": {
+        "type": "string"
+       },
+       "name": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "domain",
+       "name"
+      ]
+     },
+     "refs": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "minItems": 1,
+      "description": "The ref of each entry you drew on."
+     },
+     "purpose": {
+      "type": "string",
+      "description": "The purpose code under which you shared."
+     },
+     "sharedAt": {
+      "type": "string",
+      "format": "date-time"
+     }
+    },
+    "required": [
+     "recipient",
+     "refs",
+     "purpose",
+     "sharedAt"
+    ]
+   }
+  }
+ },
+ {
+  "id": "specification:2740",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2740,
+  "heading": "10.4 Errors",
+  "http": null,
+  "kind": "object",
+  "template": false,
+  "json": {
+   "isError": true,
+   "structuredContent": {
+    "type": "scope-denied",
+    "detail": "Entry not available under this grant."
+   },
+   "content": [
+    {
+     "type": "text",
+     "text": "scope-denied: Entry not available under this grant."
+    }
+   ]
+  }
+ },
+ {
+  "id": "specification:2788",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2788,
+  "heading": "11.2 Content",
+  "http": null,
+  "kind": "fragment",
+  "template": true,
+  "json": {
+   "content": {
+    "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+    "value": "{natural language statement or structured object}",
+    "language": "{BCP 47 language tag | null}"
+   }
+  }
+ },
+ {
+  "id": "specification:2817",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2817,
+  "heading": "11.4 Example",
+  "http": null,
+  "kind": "object",
+  "template": false,
+  "json": {
+   "@context": [
+    "https://hcp.example/contexts/v2"
+   ],
+   "schema": "https://hcp.example/spec/entry/2.0",
+   "id": "urn:uuid:7f3a1b2c-4d5e-6f7a-8b9c-0d1e2f3a4b5c",
+   "type": [
+    "ContextEntry"
+   ],
+   "subject": {
+    "id": "did:example:subject-a3f9",
+    "relationship": null
+   },
+   "content": {
+    "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+    "value": "I require high arch support in footwear due to a diagnosed condition.",
+    "language": "en"
+   },
+   "assertion": {
+    "declarationType": "person-declared",
+    "confidence": null,
+    "validUntil": null
+   },
+   "classification": {
+    "categories": [
+     "health_context"
+    ],
+    "dimension": "footwear_support"
+   },
+   "evidence": [],
+   "record": {
+    "status": "active",
+    "version": 1,
+    "provenance": {
+     "assertedBy": {
+      "id": "did:example:subject-a3f9",
+      "assurance": "unverified"
+     },
+     "assertedAt": "2026-06-15T10:30:00Z",
+     "source": "conversation-id:abc123",
+     "submittedByClient": {
+      "id": "https://assistant.example/clients/hcp",
+      "name": "Example Assistant",
+      "operator": {
+       "id": "https://assistant.example",
+       "name": "Example Assistant Co."
+      }
+     },
+     "authorizedUnder": "urn:uuid:5b1d9e3a-2c47-4f80-9a61-0e8c7d2b4f13",
+     "recordedByProvider": "https://provider.example",
+     "recordedAt": "2026-06-15T10:30:02Z",
+     "confirmations": [
+      {
+       "disposition": "confirmed",
+       "confirmedBy": {
+        "id": "did:example:subject-a3f9"
+       },
+       "confirmedAt": "2026-06-16T08:12:40Z"
+      }
+     ]
+    },
+    "relationships": []
+   }
+  }
+ },
+ {
+  "id": "specification:2969",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2969,
+  "heading": "14.2 Credential and Signature Boundary",
+  "http": null,
+  "kind": "fragment",
+  "template": false,
+  "json": {
+   "content": {
+    "profile": "https://hcp.example/spec/profiles/vc-evidence/2.0",
+    "evidence": 0
+   }
+  }
+ },
+ {
+  "id": "specification:2998",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 2998,
+  "heading": "14.4 Example",
+  "http": null,
+  "kind": "object",
+  "template": true,
+  "json": {
+   "@context": [
+    "https://hcp.example/contexts/v2"
+   ],
+   "schema": "https://hcp.example/spec/entry/2.0",
+   "id": "urn:uuid:2a3b4c5d-6e7f-8a9b-0c1d-2e3f4a5b6c7d",
+   "type": [
+    "ContextEntry"
+   ],
+   "subject": {
+    "id": "did:example:subject-b7e2",
+    "relationship": null
+   },
+   "content": {
+    "profile": "https://hcp.example/spec/profiles/vc-evidence/2.0",
+    "evidence": 0
+   },
+   "assertion": {
+    "declarationType": "issuer-attested",
+    "confidence": null,
+    "validUntil": null
+   },
+   "classification": {
+    "categories": [
+     "education_learner_profile"
+    ],
+    "dimension": null
+   },
+   "evidence": [
+    {
+     "role": "content",
+     "type": "verifiable-credential",
+     "credential": {
+      "@context": [
+       "https://www.w3.org/ns/credentials/v2",
+       "https://purl.imsglobal.org/spec/ob/v3p0/context-3.0.3.json"
+      ],
+      "id": "urn:uuid:9c8b7a6d-5e4f-3a2b-1c0d-9e8f7a6b5c4d",
+      "type": [
+       "VerifiableCredential",
+       "OpenBadgeCredential"
+      ],
+      "name": "Linear Equations: Mastery",
+      "issuer": {
+       "id": "did:web:mathkingdom.example.edu",
+       "type": [
+        "Profile"
+       ],
+       "name": "Math Kingdom"
+      },
+      "validFrom": "2026-02-02T00:00:00Z",
+      "validUntil": "2027-02-02T00:00:00Z",
+      "credentialSubject": {
+       "id": "did:example:subject-b7e2",
+       "type": [
+        "AchievementSubject"
+       ],
+       "achievement": {
+        "id": "https://mathkingdom.example.edu/achievements/linear-equations",
+        "type": [
+         "Achievement"
+        ],
+        "name": "Linear Equations",
+        "description": "Solves linear equations in one and two variables.",
+        "criteria": {
+         "narrative": "80 percent or higher on the linear equations assessment."
+        },
+        "resultDescription": [
+         {
+          "id": "https://mathkingdom.example.edu/results/linear-equations",
+          "type": [
+           "ResultDescription"
+          ],
+          "name": "Assessment score",
+          "resultType": "Percent",
+          "valueMin": "0",
+          "valueMax": "100"
+         }
+        ]
+       },
+       "result": [
+        {
+         "type": [
+          "Result"
+         ],
+         "resultDescription": "https://mathkingdom.example.edu/results/linear-equations",
+         "value": "92"
+        }
+       ]
+      },
+      "credentialStatus": {
+       "id": "https://mathkingdom.example.edu/status/3#94567",
+       "type": "BitstringStatusListEntry",
+       "statusPurpose": "revocation",
+       "statusListIndex": "94567",
+       "statusListCredential": "https://mathkingdom.example.edu/status/3"
+      },
+      "proof": {
+       "type": "DataIntegrityProof",
+       "cryptosuite": "eddsa-rdfc-2022",
+       "created": "2026-02-02T00:00:00Z",
+       "verificationMethod": "did:web:mathkingdom.example.edu#key-1",
+       "proofPurpose": "assertionMethod",
+       "proofValue": "{base64url-encoded-signature}"
+      }
+     },
+     "verification": {
+      "result": "verified",
+      "at": "2026-02-02T00:05:12Z"
+     }
+    }
+   ],
+   "record": {
+    "status": "active",
+    "version": 1,
+    "provenance": {
+     "assertedBy": {
+      "id": "did:web:mathkingdom.example.edu",
+      "assurance": "cryptographically-verified"
+     },
+     "assertedAt": "2026-02-02T00:00:00Z",
+     "source": "integration",
+     "submittedByClient": {
+      "id": "https://mathkingdom.example.edu/clients/hcp",
+      "name": "Math Kingdom Assessments",
+      "operator": {
+       "id": "https://mathkingdom.example.edu",
+       "name": "Math Kingdom"
+      }
+     },
+     "authorizedUnder": "urn:uuid:c41e7a90-3b2d-4e6f-8a15-7d9c0b2e5f48",
+     "recordedByProvider": "https://provider.example",
+     "recordedAt": "2026-02-02T00:05:12Z"
+    }
+   }
+  }
+ },
+ {
+  "id": "specification:3183",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 3183,
+  "heading": "14.10 Attestation Authorizations",
+  "http": null,
+  "kind": "object",
+  "template": true,
+  "json": {
+   "@context": [
+    "https://www.w3.org/ns/credentials/v2"
+   ],
+   "id": "urn:uuid:{authorization-uuid}",
+   "type": [
+    "VerifiableCredential",
+    "HCPAttestationAuthorization"
+   ],
+   "issuer": "{issuer identifier}",
+   "validFrom": "{date-time}",
+   "validUntil": "{date-time}",
+   "credentialSubject": {
+    "id": "{client identifier}",
+    "attests": {
+     "categories": [
+      "{category}"
+     ],
+     "credentialTypes": [
+      "{credential type}"
+     ]
+    }
+   },
+   "credentialStatus": {},
+   "proof": {}
+  }
+ },
+ {
+  "id": "specification:3297",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 3297,
+  "heading": "17.2 Delegations",
+  "http": null,
+  "kind": "object",
+  "template": true,
+  "json": {
+   "delegationId": "urn:uuid:{delegation-uuid}",
+   "subject": {
+    "id": "{subject identifier}"
+   },
+   "delegate": {
+    "id": "{identifier}",
+    "name": "{name the person can recognize}"
+   },
+   "relationship": "parent-or-guardian | legal-guardian | attorney-in-fact | caregiver | {URI}",
+   "basis": {
+    "method": "appointed | attested | evidence | delegated | unspecified",
+    "description": "{what the authority rests on, shown to the person}",
+    "parent": "{delegation id, for a sub-delegation}",
+    "evidence": [],
+    "covers": [
+     "{high-sensitivity category}"
+    ],
+    "establishedBy": "{authorization-service-identifier}",
+    "establishedAt": "{date-time}"
+   },
+   "scope": {
+    "categories": [
+     "{category}"
+    ],
+    "actions": [
+     "read | write"
+    ]
+   },
+   "term": {
+    "endsAt": "{date-time | null}",
+    "atMajority": true
+   },
+   "mayDelegate": false,
+   "ended": {
+    "at": "{date-time}",
+    "reason": "majority | expiry | basis-ended | relinquished | ended-by-subject | parent-ended | ended-by-delegate"
+   }
+  }
+ },
+ {
+  "id": "specification:3363",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 3363,
+  "heading": "17.4 Scope and Grants Under a Delegation",
+  "http": null,
+  "kind": "fragment",
+  "template": true,
+  "json": {
+   "authorizingPrincipal": {
+    "id": "{identifier of the delegate, specific to the HCP Client}",
+    "delegation": "urn:uuid:{delegation-uuid}"
+   }
+  }
+ },
+ {
+  "id": "specification:3548",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 3548,
+  "heading": "19.2 Example",
+  "http": null,
+  "kind": "object",
+  "template": true,
+  "json": {
+   "hcp_version": "2.0",
+   "provider": "{base-url}",
+   "provider_operator": {
+    "id": "{operator-identifier}",
+    "name": "{organization name}"
+   },
+   "conformsTo": [
+    "https://hcp.example/spec/core/2.0",
+    "https://hcp.example/spec/bindings/http/2.0",
+    "https://hcp.example/spec/bindings/mcp/2.0",
+    "https://hcp.example/spec/profiles/general-context/2.0",
+    "https://hcp.example/spec/profiles/oauth-interop/2.0",
+    "https://hcp.example/spec/profiles/memory-manager/2.0",
+    "https://hcp.example/spec/profiles/vc-evidence/2.0",
+    "https://hcp.example/spec/profiles/delegated-authorization/2.0"
+   ],
+   "bindings": [
+    "http",
+    "mcp"
+   ],
+   "protected_resource_metadata": "{base-url}/.well-known/oauth-protected-resource",
+   "jwks_uri": "{base-url}/.well-known/jwks.json",
+   "entries_endpoint": "{base-url}/v2/entries",
+   "grants_endpoint": "{base-url}/v2/grants",
+   "audit_endpoint": "{base-url}/v2/audit",
+   "export_endpoint": "{base-url}/v2/export",
+   "delegations_endpoint": "{base-url}/v2/delegations",
+   "rules_endpoint": "{base-url}/v2/rules",
+   "directives_endpoint": "{base-url}/v2/directives",
+   "shares_endpoint": "{base-url}/v2/shares",
+   "mcp_endpoint": "{base-url}/mcp",
+   "supported_categories": [
+    {
+     "id": "general_preferences",
+     "name": "General preferences",
+     "description": "Communication style, formatting, language preferences",
+     "sensitivity": "low",
+     "registry": "1"
+    },
+    {
+     "id": "https://clinic.example/categories/maternal-care",
+     "name": "Maternal care",
+     "description": "Antenatal and postnatal care plans and appointments",
+     "sensitivity": "high",
+     "definer": "https://clinic.example"
+    }
+   ],
+   "category_registry": "1",
+   "accepts_entry_schemas": [
+    "https://hcp.example/spec/entry/2.0"
+   ],
+   "minimization_method": "semantic",
+   "conflict_detection": "semantic",
+   "audit_durability": {
+    "default": "synchronous",
+    "bounded": {
+     "context.read": 5000
+    }
+   },
+   "audit_integrity": "hash-chained",
+   "storage_encryption": "server",
+   "pagination": {
+    "audit": "cursor"
+   },
+   "problem_type_base": "https://hcp.example/problems/",
+   "rate_limits": {
+    "documentation_url": "{url}"
+   },
+   "vc_securing": {
+    "issues": [
+     "eddsa-rdfc-2022"
+    ],
+    "verifies": [
+     "eddsa-rdfc-2022",
+     "ecdsa-sd-2023",
+     "vc-jose-cose"
+    ]
+   },
+   "credential_status_interval": 3600
+  }
+ },
+ {
+  "id": "specification:3875",
+  "file": "spec/2.0-draft-3/specification.md",
+  "line": 3875,
+  "heading": "A.2 Published Artifacts",
+  "http": null,
+  "kind": "object",
+  "template": false,
+  "json": {
+   "@context": {
+    "hcp": "https://hcp.example/vocab/v2#",
+    "ContextEntry": "hcp:ContextEntry",
+    "schema": "hcp:schema",
+    "subject": "hcp:subject",
+    "content": "hcp:content",
+    "profile": "hcp:profile",
+    "value": "hcp:value",
+    "assertion": "hcp:assertion",
+    "classification": "hcp:classification",
+    "evidence": "hcp:evidence",
+    "role": "hcp:role",
+    "credential": "hcp:credential",
+    "verification": "hcp:verification",
+    "record": "hcp:record",
+    "declarationType": "hcp:declarationType",
+    "categories": "hcp:categories",
+    "basis": "hcp:basis",
+    "permittedPurposes": "hcp:permittedPurposes",
+    "dimension": "hcp:dimension",
+    "confidence": "hcp:confidence",
+    "validUntil": "hcp:validUntil",
+    "relationship": "hcp:relationship",
+    "provenance": "hcp:provenance",
+    "assertedBy": "hcp:assertedBy",
+    "assurance": "hcp:assurance",
+    "via": "hcp:via",
+    "kind": "hcp:kind",
+    "assertedAt": "hcp:assertedAt",
+    "source": "hcp:source",
+    "submittedByClient": "hcp:submittedByClient",
+    "authorizedUnder": "hcp:authorizedUnder",
+    "recordedByProvider": "hcp:recordedByProvider",
+    "recordedAt": "hcp:recordedAt",
+    "confirmations": "hcp:confirmations",
+    "relationships": "hcp:relationships",
+    "proposal": "hcp:proposal",
+    "conversion": "hcp:conversion",
+    "minimization": "hcp:minimization",
+    "retrievalId": "hcp:retrievalId",
+    "status": "hcp:status",
+    "conflicted": "hcp:conflicted",
+    "ContextExport": "hcp:ContextExport",
+    "exportedBy": "hcp:exportedBy",
+    "exportedAt": "hcp:exportedAt",
+    "entries": "hcp:entries",
+    "versions": "hcp:versions",
+    "rules": "hcp:rules",
+    "audit": "hcp:audit"
+   }
+  }
+ },
+ {
+  "id": "guides:78",
+  "file": "spec/2.0-draft-3/guides.md",
+  "line": 78,
+  "heading": "G2.2 Example: Pacing Stated in a Tutoring Application",
+  "http": null,
+  "kind": "object",
+  "template": false,
+  "json": {
+   "@context": [
+    "https://hcp.example/contexts/v2"
+   ],
+   "schema": "https://hcp.example/spec/entry/2.0",
+   "id": "urn:uuid:3e8d2f61-0a4b-4c7e-9d15-6b2a8f0c4e97",
+   "type": [
+    "ContextEntry"
+   ],
+   "subject": {
+    "id": "did:example:subject-b7e2",
+    "relationship": null
+   },
+   "content": {
+    "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+    "value": "On weekdays I can study for 25 to 30 minutes; on weekends, about an hour.",
+    "language": "en"
+   },
+   "assertion": {
+    "declarationType": "person-declared",
+    "confidence": null,
+    "validUntil": null
+   },
+   "classification": {
+    "categories": [
+     "education_learner_profile"
+    ],
+    "dimension": "study_time"
+   },
+   "evidence": [],
+   "record": {
+    "status": "active",
+    "version": 1,
+    "provenance": {
+     "assertedBy": {
+      "id": "did:example:subject-b7e2",
+      "assurance": "unverified"
+     },
+     "assertedAt": "2026-02-03T17:20:00Z",
+     "source": "conversation-id:tutor-5521",
+     "submittedByClient": {
+      "id": "https://mathkingdom.example.edu/clients/tutor",
+      "name": "Math Kingdom Tutor",
+      "operator": {
+       "id": "https://mathkingdom.example.edu",
+       "name": "Math Kingdom"
+      }
+     },
+     "authorizedUnder": "urn:uuid:8a6c4e21-7f3d-4b90-a2e8-1c5d9b7f3a06",
+     "recordedByProvider": "https://provider.example",
+     "recordedAt": "2026-02-03T17:20:04Z"
+    }
+   }
+  }
+ }
+]

@@ -1,0 +1,3954 @@
+{
+ "objects": 59,
+ "comparedPairs": 422,
+ "coveredObjects": [
+  {
+   "object": "hcp/_shared:Basis",
+   "by": "hcp/_shared:Assertion"
+  },
+  {
+   "object": "hcp/entries/confirm:response",
+   "by": "hcp/_shared:Entry"
+  },
+  {
+   "object": "hcp/entries/set-categories:response",
+   "by": "hcp/_shared:Entry"
+  },
+  {
+   "object": "hcp/entries/restrict-purposes:response",
+   "by": "hcp/_shared:Entry"
+  },
+  {
+   "object": "hcp/export:response",
+   "by": "hcp/_shared:Export"
+  },
+  {
+   "object": "hcp/rules/set:response",
+   "by": "hcp/_shared:StandingRule"
+  },
+  {
+   "object": "hcp/rules/list:response",
+   "by": "hcp/_shared:StandingRule"
+  },
+  {
+   "object": "hcp/directives/set:response",
+   "by": "hcp/_shared:Directive"
+  },
+  {
+   "object": "hcp/directives/list:response",
+   "by": "hcp/_shared:Directive"
+  },
+  {
+   "object": "hcp/grants/read-own:response",
+   "by": "hcp/_shared:Grant"
+  },
+  {
+   "object": "hcp/grants/list:response",
+   "by": "hcp/_shared:Grant"
+  },
+  {
+   "object": "hcp/audit/read:response",
+   "by": "hcp/_shared:AuditEvent"
+  },
+  {
+   "object": "hcp/grants/request:response.grant",
+   "by": "hcp/_shared:Grant"
+  }
+ ],
+ "findings": [
+  {
+   "object": "hcp/_shared:Uri",
+   "path": "(root)",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/common.schema.json#/$defs/Uri",
+   "hcpLoc": "common.json#/$defs/uri",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Uri",
+   "path": "(root)",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/common.schema.json#/$defs/Uri",
+   "hcpLoc": "common.json#/$defs/uri",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Category",
+   "path": "(root)",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/common.schema.json#/$defs/Category",
+   "hcpLoc": "common.json#/$defs/category",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Category",
+   "path": "(root)",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/common.schema.json#/$defs/Category",
+   "hcpLoc": "common.json#/$defs/category",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Category",
+   "path": "(root)",
+   "kind": "union",
+   "detail": "HCP is a choice of [pattern ^[a-z][a-z0-9_]*$ | format uri pattern ^[A-Za-z][A-Za-z0-9+.-]*:]; TT is a single shape [type string pattern ^([a-z][a-z0-9_]*|[a-zA-Z][a-zA-Z0-9+.-]*:\\S+)$]",
+   "dir": "",
+   "ttLoc": "_shared/0.1/common.schema.json#/$defs/Category",
+   "hcpLoc": "common.json#/$defs/category",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:PurposeCode",
+   "path": "(root)",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/common.schema.json#/$defs/PurposeCode",
+   "hcpLoc": "common.json#/$defs/purposeCode",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:PurposeCode",
+   "path": "(root)",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/common.schema.json#/$defs/PurposeCode",
+   "hcpLoc": "common.json#/$defs/purposeCode",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:MinimizationReport",
+   "path": "method",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/common.schema.json#/$defs/MinimizationReport/properties/method",
+   "hcpLoc": "common.json#/$defs/minimization/properties/method",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:MinimizationReport",
+   "path": "method",
+   "kind": "bound",
+   "detail": "maxLength: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/common.schema.json#/$defs/MinimizationReport/properties/method",
+   "hcpLoc": "common.json#/$defs/minimization/properties/method",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Content",
+   "path": "(root)",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: if {\"properties\":{\"profile\":{\"const\":\"https://hcp.example/spec/profiles/general-context/2.0\"}}} then {\"properties\":{\"language\":{\"anyOf\":[{\"type\":\"string\"},{\"type\":\"null\"}]},\"value\":{\"type\":[\"string\",\"object\"]}},\"required\":[\"value\"]}",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+   "hcpLoc": "common.json#/$defs/content",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Content",
+   "path": "(root)",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: if {\"properties\":{\"profile\":{\"const\":\"https://hcp.example/spec/profiles/vc-evidence/2.0\"}}} then {\"not\":{\"required\":[\"value\"]},\"properties\":{\"evidence\":{\"minimum\":0,\"type\":\"integer\"}},\"required\":[\"evidence\"]}",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Content",
+   "hcpLoc": "common.json#/$defs/content",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Content",
+   "path": "language",
+   "kind": "bound",
+   "detail": "maxLength: TT 64, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Content/properties/language",
+   "hcpLoc": "common.json#/$defs/content/allOf/0/then/properties/language",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Content",
+   "path": "profile",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Content/properties/profile",
+   "hcpLoc": "common.json#/$defs/content/properties/profile",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Content",
+   "path": "profile",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Content/properties/profile",
+   "hcpLoc": "common.json#/$defs/content/properties/profile",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Assertion",
+   "path": "(root)",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: if {\"properties\":{\"declarationType\":{\"const\":\"model-inferred\"}}} then {\"properties\":{\"confidence\":{\"enum\":[\"high\",\"medium\",\"low\"]}},\"required\":[\"confidence\"]} else {\"properties\":{\"confidence\":{\"type\":\"null\"}}}",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+   "hcpLoc": "common.json#/$defs/assertion",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Assertion",
+   "path": "basis.drawnFrom",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Basis/properties/drawnFrom",
+   "hcpLoc": "common.json#/$defs/basis/properties/drawnFrom",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Assertion",
+   "path": "basis.drawnFrom[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Basis/properties/drawnFrom/items",
+   "hcpLoc": "common.json#/$defs/basis/properties/drawnFrom/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Assertion",
+   "path": "basis.rationale",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Basis/properties/rationale",
+   "hcpLoc": "common.json#/$defs/basis/properties/rationale",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Assertion",
+   "path": "basis.setting",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Basis/properties/setting",
+   "hcpLoc": "common.json#/$defs/basis/properties/setting",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Assertion",
+   "path": "basis.task",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Basis/properties/task",
+   "hcpLoc": "common.json#/$defs/basis/properties/task",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Assertion",
+   "path": "permittedPurposes",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Assertion/properties/permittedPurposes",
+   "hcpLoc": "common.json#/$defs/assertion/properties/permittedPurposes",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Classification",
+   "path": "dimension",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Classification/properties/dimension",
+   "hcpLoc": "common.json#/$defs/classification/properties/dimension",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:EvidenceItem",
+   "path": "(root)",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: if {\"properties\":{\"type\":{\"const\":\"verifiable-credential\"}},\"required\":[\"type\"]} then {\"properties\":{\"credential\":{\"$ref\":\"common.json#/$defs/credential\"}},\"required\":[\"credential\"]}",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+   "hcpLoc": "common.json#/$defs/evidenceItem",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:EvidenceItem",
+   "path": "type",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem/properties/type",
+   "hcpLoc": "common.json#/$defs/evidenceItem/properties/type",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:EvidenceItem",
+   "path": "type",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem/properties/type",
+   "hcpLoc": "common.json#/$defs/evidenceItem/properties/type",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:ClientDescription",
+   "path": "id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/ClientDescription/properties/id",
+   "hcpLoc": "common.json#/$defs/clientDescription/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:ClientDescription",
+   "path": "id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/ClientDescription/properties/id",
+   "hcpLoc": "common.json#/$defs/clientDescription/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:ClientDescription",
+   "path": "name",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/ClientDescription/properties/name",
+   "hcpLoc": "common.json#/$defs/clientDescription/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:ClientDescription",
+   "path": "name",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/ClientDescription/properties/name",
+   "hcpLoc": "common.json#/$defs/clientDescription/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:ClientDescription",
+   "path": "operator.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/ClientDescription/properties/operator/properties/id",
+   "hcpLoc": "common.json#/$defs/named/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:ClientDescription",
+   "path": "operator.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/ClientDescription/properties/operator/properties/id",
+   "hcpLoc": "common.json#/$defs/named/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:ClientDescription",
+   "path": "operator.name",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/ClientDescription/properties/operator/properties/name",
+   "hcpLoc": "common.json#/$defs/named/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:ClientDescription",
+   "path": "operator.name",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/ClientDescription/properties/operator/properties/name",
+   "hcpLoc": "common.json#/$defs/named/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "evidence",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: contains {\"properties\":{\"role\":{\"const\":\"content\"}},\"required\":[\"role\"]} minContains 0 maxContains 1",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Entry/properties/evidence",
+   "hcpLoc": "entry.json#/properties/evidence",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.conversion.convertedBy",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Record/properties/conversion/properties/convertedBy",
+   "hcpLoc": "entry.json#/properties/record/properties/conversion/properties/convertedBy",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.conversion.from",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Record/properties/conversion/properties/from",
+   "hcpLoc": "entry.json#/properties/record/properties/conversion/properties/from",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.provenance.assertedBy.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Provenance/properties/assertedBy/properties/id",
+   "hcpLoc": "entry.json#/properties/record/properties/provenance/properties/assertedBy/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.provenance.assertedBy.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Provenance/properties/assertedBy/properties/id",
+   "hcpLoc": "entry.json#/properties/record/properties/provenance/properties/assertedBy/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.provenance.assertedBy.via.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Provenance/properties/assertedBy/properties/via/properties/id",
+   "hcpLoc": "entry.json#/properties/record/properties/provenance/properties/assertedBy/properties/via/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.provenance.assertedBy.via.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Provenance/properties/assertedBy/properties/via/properties/id",
+   "hcpLoc": "entry.json#/properties/record/properties/provenance/properties/assertedBy/properties/via/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.provenance.authorizedUnder",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Provenance/properties/authorizedUnder",
+   "hcpLoc": "entry.json#/properties/record/properties/provenance/properties/authorizedUnder",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.provenance.authorizedUnder",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Provenance/properties/authorizedUnder",
+   "hcpLoc": "entry.json#/properties/record/properties/provenance/properties/authorizedUnder",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.provenance.confirmations[].confirmedBy.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Provenance/properties/confirmations/items/properties/confirmedBy/properties/id",
+   "hcpLoc": "entry.json#/properties/record/properties/provenance/properties/confirmations/items/properties/confirmedBy/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.provenance.confirmations[].confirmedBy.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Provenance/properties/confirmations/items/properties/confirmedBy/properties/id",
+   "hcpLoc": "entry.json#/properties/record/properties/provenance/properties/confirmations/items/properties/confirmedBy/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.provenance.recordedByProvider",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Provenance/properties/recordedByProvider",
+   "hcpLoc": "entry.json#/properties/record/properties/provenance/properties/recordedByProvider",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.provenance.recordedByProvider",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Provenance/properties/recordedByProvider",
+   "hcpLoc": "entry.json#/properties/record/properties/provenance/properties/recordedByProvider",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.provenance.source",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Provenance/properties/source",
+   "hcpLoc": "entry.json#/properties/record/properties/provenance/properties/source",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.provenance.source",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Provenance/properties/source",
+   "hcpLoc": "entry.json#/properties/record/properties/provenance/properties/source",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.relationships[]",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: if {\"not\":{\"properties\":{\"type\":{\"const\":\"contradicts\"}}}} then {\"not\":{\"required\":[\"proposal\"]}}",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Record/properties/relationships/items",
+   "hcpLoc": "entry.json#/properties/record/properties/relationships/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.relationships[].assertedBy.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Relationship/properties/assertedBy/properties/id",
+   "hcpLoc": "entry.json#/properties/record/properties/relationships/items/properties/assertedBy/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.relationships[].assertedBy.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Relationship/properties/assertedBy/properties/id",
+   "hcpLoc": "entry.json#/properties/record/properties/relationships/items/properties/assertedBy/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.relationships[].proposal.entry",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/RecordedProposal/properties/entry",
+   "hcpLoc": "entry.json#/properties/record/properties/relationships/items/properties/proposal/properties/entry",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.relationships[].proposal.entry",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/RecordedProposal/properties/entry",
+   "hcpLoc": "entry.json#/properties/record/properties/relationships/items/properties/proposal/properties/entry",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.relationships[].proposal.proposedBy.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/RecordedProposal/properties/proposedBy/properties/id",
+   "hcpLoc": "entry.json#/properties/record/properties/relationships/items/properties/proposal/properties/proposedBy/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.relationships[].proposal.proposedBy.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/RecordedProposal/properties/proposedBy/properties/id",
+   "hcpLoc": "entry.json#/properties/record/properties/relationships/items/properties/proposal/properties/proposedBy/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.relationships[].proposal.rationale",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/RecordedProposal/properties/rationale",
+   "hcpLoc": "entry.json#/properties/record/properties/relationships/items/properties/proposal/properties/rationale",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.relationships[].proposal.weighed",
+   "kind": "bound",
+   "detail": "maxItems: TT 64, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/RecordedProposal/properties/weighed",
+   "hcpLoc": "entry.json#/properties/record/properties/relationships/items/properties/proposal/properties/weighed",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.relationships[].proposal.weighed[]",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/RecordedProposal/properties/weighed/items",
+   "hcpLoc": "entry.json#/properties/record/properties/relationships/items/properties/proposal/properties/weighed/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.relationships[].proposal.weighed[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/RecordedProposal/properties/weighed/items",
+   "hcpLoc": "entry.json#/properties/record/properties/relationships/items/properties/proposal/properties/weighed/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.relationships[].target",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Relationship/properties/target",
+   "hcpLoc": "entry.json#/properties/record/properties/relationships/items/properties/target",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "record.relationships[].target",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Relationship/properties/target",
+   "hcpLoc": "entry.json#/properties/record/properties/relationships/items/properties/target",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "subject.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/EntrySubject/properties/id",
+   "hcpLoc": "entry.json#/properties/subject/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "subject.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/EntrySubject/properties/id",
+   "hcpLoc": "entry.json#/properties/subject/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "type",
+   "kind": "bound",
+   "detail": "minItems: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Entry/properties/type",
+   "hcpLoc": "entry.json#/properties/type",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "type",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: contains {\"const\":\"ContextEntry\"}",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Entry/properties/type",
+   "hcpLoc": "entry.json#/properties/type",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "type[]",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Entry/properties/type/items",
+   "hcpLoc": "entry.json#/properties/type/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Entry",
+   "path": "type[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/context-entry.schema.json#/$defs/Entry/properties/type/items",
+   "hcpLoc": "entry.json#/properties/type/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Disclosure",
+   "path": "evidence[]",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: if {\"properties\":{\"type\":{\"const\":\"verifiable-credential\"}},\"required\":[\"type\"]} then {\"properties\":{\"credential\":{\"$ref\":\"common.json#/$defs/credential\"}},\"required\":[\"credential\"]}",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/disclosure.schema.json#/$defs/Disclosure/properties/evidence/items",
+   "hcpLoc": "disclosure.json#/properties/evidence/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Disclosure",
+   "path": "evidence[].revealed[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/disclosure.schema.json#/$defs/DisclosedEvidenceItem/properties/revealed/items",
+   "hcpLoc": "disclosure.json#/properties/evidence/items/properties/revealed/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Disclosure",
+   "path": "provenance.submittedBy.name",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/disclosure.schema.json#/$defs/DisclosedProvenance/properties/submittedBy/properties/name",
+   "hcpLoc": "disclosure.json#/properties/provenance/properties/submittedBy/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Disclosure",
+   "path": "provenance.submittedBy.name",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/disclosure.schema.json#/$defs/DisclosedProvenance/properties/submittedBy/properties/name",
+   "hcpLoc": "disclosure.json#/properties/provenance/properties/submittedBy/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Disclosure",
+   "path": "provenance.submittedBy.operator",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/disclosure.schema.json#/$defs/DisclosedProvenance/properties/submittedBy/properties/operator",
+   "hcpLoc": "disclosure.json#/properties/provenance/properties/submittedBy/properties/operator",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Disclosure",
+   "path": "provenance.submittedBy.operator",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/disclosure.schema.json#/$defs/DisclosedProvenance/properties/submittedBy/properties/operator",
+   "hcpLoc": "disclosure.json#/properties/provenance/properties/submittedBy/properties/operator",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Disclosure",
+   "path": "ref",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/disclosure.schema.json#/$defs/Disclosure/properties/ref",
+   "hcpLoc": "disclosure.json#/properties/ref",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Disclosure",
+   "path": "relationships[].target",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/disclosure.schema.json#/$defs/DisclosedRelationship/properties/target",
+   "hcpLoc": "disclosure.json#/properties/relationships/items/properties/target",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Disclosure",
+   "path": "relationships[].target",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/disclosure.schema.json#/$defs/DisclosedRelationship/properties/target",
+   "hcpLoc": "disclosure.json#/properties/relationships/items/properties/target",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Named",
+   "path": "id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/Named/properties/id",
+   "hcpLoc": "common.json#/$defs/named/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Named",
+   "path": "id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/Named/properties/id",
+   "hcpLoc": "common.json#/$defs/named/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Named",
+   "path": "name",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/Named/properties/name",
+   "hcpLoc": "common.json#/$defs/named/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Named",
+   "path": "name",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/Named/properties/name",
+   "hcpLoc": "common.json#/$defs/named/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:LegalRetention",
+   "path": "obligation",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/LegalRetention/properties/obligation",
+   "hcpLoc": "common.json#/$defs/legalRetention/properties/obligation",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:LegalRetention",
+   "path": "period",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/LegalRetention/properties/period",
+   "hcpLoc": "common.json#/$defs/legalRetention/properties/period",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:LegalRetention",
+   "path": "record",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/LegalRetention/properties/record",
+   "hcpLoc": "common.json#/$defs/legalRetention/properties/record",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Purpose",
+   "path": "description",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/Purpose/properties/description",
+   "hcpLoc": "common.json#/$defs/purpose/properties/description",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AccessDetail",
+   "path": "onwardSharing.domains[]",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/OnwardSharing/properties/domains/items",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/onwardSharing/properties/domains/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AccessDetail",
+   "path": "onwardSharing.domains[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 253, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/OnwardSharing/properties/domains/items",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/onwardSharing/properties/domains/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AccessDetail",
+   "path": "onwardSharing.notTo[]",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/OnwardSharing/properties/notTo/items",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/onwardSharing/properties/notTo/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AccessDetail",
+   "path": "onwardSharing.notTo[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/OnwardSharing/properties/notTo/items",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/onwardSharing/properties/notTo/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "(root)",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: if {\"properties\":{\"grantType\":{\"const\":\"temporary\"}}} then {\"properties\":{\"expiresAt\":{\"format\":\"date-time\",\"type\":\"string\"}}}",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/Grant",
+   "hcpLoc": "grant.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "(root)",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: if {\"properties\":{\"grantType\":{\"const\":\"persistent\"}}} then {\"properties\":{\"expiresAt\":{\"type\":\"null\"}}}",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/Grant",
+   "hcpLoc": "grant.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "authorizingPrincipal.delegation",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/AuthorizingPrincipal/properties/delegation",
+   "hcpLoc": "grant.json#/properties/authorizingPrincipal/properties/delegation",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "authorizingPrincipal.delegation",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/AuthorizingPrincipal/properties/delegation",
+   "hcpLoc": "grant.json#/properties/authorizingPrincipal/properties/delegation",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "authorizingPrincipal.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/AuthorizingPrincipal/properties/id",
+   "hcpLoc": "grant.json#/properties/authorizingPrincipal/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "authorizingPrincipal.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/AuthorizingPrincipal/properties/id",
+   "hcpLoc": "grant.json#/properties/authorizingPrincipal/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "client.claims[]",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/GrantClient/properties/claims/items",
+   "hcpLoc": "grant.json#/properties/client/properties/claims/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "client.claims[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/GrantClient/properties/claims/items",
+   "hcpLoc": "grant.json#/properties/client/properties/claims/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "client.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/GrantClient/properties/id",
+   "hcpLoc": "grant.json#/properties/client/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "client.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/GrantClient/properties/id",
+   "hcpLoc": "grant.json#/properties/client/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "client.name",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/GrantClient/properties/name",
+   "hcpLoc": "grant.json#/properties/client/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "requestingParty.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/RequestingParty/properties/id",
+   "hcpLoc": "grant.json#/properties/requestingParty/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "requestingParty.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/RequestingParty/properties/id",
+   "hcpLoc": "grant.json#/properties/requestingParty/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "requestingParty.name",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/RequestingParty/properties/name",
+   "hcpLoc": "grant.json#/properties/requestingParty/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "scopes[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/Grant/properties/scopes/items",
+   "hcpLoc": "grant.json#/properties/scopes/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "subject.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/GrantParty/properties/id",
+   "hcpLoc": "grant.json#/properties/subject/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Grant",
+   "path": "subject.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/grant.schema.json#/$defs/GrantParty/properties/id",
+   "hcpLoc": "grant.json#/properties/subject/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:StandingRule",
+   "path": "(root)",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: at least one of (operators | requires) present",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule",
+   "hcpLoc": "standing-rule.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/_shared:StandingRule",
+   "path": "categories",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule/properties/categories",
+   "hcpLoc": "standing-rule.json#/properties/categories",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:StandingRule",
+   "path": "operators",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule/properties/operators",
+   "hcpLoc": "standing-rule.json#/properties/operators",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:StandingRule",
+   "path": "operators[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule/properties/operators/items",
+   "hcpLoc": "standing-rule.json#/properties/operators/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:StandingRule",
+   "path": "requires",
+   "kind": "bound",
+   "detail": "maxItems: TT 64, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule/properties/requires",
+   "hcpLoc": "standing-rule.json#/properties/requires",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:StandingRule",
+   "path": "requires[]",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule/properties/requires/items",
+   "hcpLoc": "standing-rule.json#/properties/requires/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:StandingRule",
+   "path": "requires[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule/properties/requires/items",
+   "hcpLoc": "standing-rule.json#/properties/requires/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:StandingRule",
+   "path": "setBy",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule/properties/setBy",
+   "hcpLoc": "standing-rule.json#/properties/setBy",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:StandingRule",
+   "path": "setBy",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule/properties/setBy",
+   "hcpLoc": "standing-rule.json#/properties/setBy",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Directive",
+   "path": "action",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/directive.schema.json#/$defs/Directive/properties/action",
+   "hcpLoc": "directive.json#/properties/action",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Directive",
+   "path": "action",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/directive.schema.json#/$defs/Directive/properties/action",
+   "hcpLoc": "directive.json#/properties/action",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Directive",
+   "path": "action",
+   "kind": "union",
+   "detail": "HCP is a choice of [type string enum \"share\", \"sign\", \"transact\" | type string format uri pattern ^[A-Za-z][A-Za-z0-9+.-]*:[^\\s]+$]; TT is a single shape [type string pattern ^(share|sign|transact|[a-zA-Z][a-zA-Z0-9+.-]*:\\S+)$]",
+   "dir": "",
+   "ttLoc": "_shared/0.1/directive.schema.json#/$defs/Directive/properties/action",
+   "hcpLoc": "directive.json#/properties/action",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Directive",
+   "path": "categories",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/directive.schema.json#/$defs/Directive/properties/categories",
+   "hcpLoc": "directive.json#/properties/categories",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Directive",
+   "path": "operators",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/directive.schema.json#/$defs/Directive/properties/operators",
+   "hcpLoc": "directive.json#/properties/operators",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Directive",
+   "path": "operators[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/directive.schema.json#/$defs/Directive/properties/operators/items",
+   "hcpLoc": "directive.json#/properties/operators/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Directive",
+   "path": "setBy",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/directive.schema.json#/$defs/Directive/properties/setBy",
+   "hcpLoc": "directive.json#/properties/setBy",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Directive",
+   "path": "setBy",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/directive.schema.json#/$defs/Directive/properties/setBy",
+   "hcpLoc": "directive.json#/properties/setBy",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Directive",
+   "path": "text",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/directive.schema.json#/$defs/Directive/properties/text",
+   "hcpLoc": "directive.json#/properties/text",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "basis",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: if {\"properties\":{\"method\":{\"const\":\"evidence\"}}} then {\"properties\":{\"evidence\":{\"minItems\":1}},\"required\":[\"evidence\"]}",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/Delegation/properties/basis",
+   "hcpLoc": "delegation.json#/properties/basis",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "basis",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: if {\"properties\":{\"method\":{\"const\":\"delegated\"}}} then {\"required\":[\"parent\"]} else {\"not\":{\"required\":[\"parent\"]}}",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/Delegation/properties/basis",
+   "hcpLoc": "delegation.json#/properties/basis",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "basis.covers",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/DelegationBasis/properties/covers",
+   "hcpLoc": "delegation.json#/properties/basis/properties/covers",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "basis.description",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/DelegationBasis/properties/description",
+   "hcpLoc": "delegation.json#/properties/basis/properties/description",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "basis.description",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/DelegationBasis/properties/description",
+   "hcpLoc": "delegation.json#/properties/basis/properties/description",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "basis.establishedBy",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/DelegationBasis/properties/establishedBy",
+   "hcpLoc": "delegation.json#/properties/basis/properties/establishedBy",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "basis.establishedBy",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/DelegationBasis/properties/establishedBy",
+   "hcpLoc": "delegation.json#/properties/basis/properties/establishedBy",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "basis.evidence",
+   "kind": "bound",
+   "detail": "maxItems: TT 16, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/DelegationBasis/properties/evidence",
+   "hcpLoc": "delegation.json#/properties/basis/properties/evidence",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "delegate.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/Delegation/properties/delegate/properties/id",
+   "hcpLoc": "delegation.json#/properties/delegate/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "delegate.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/Delegation/properties/delegate/properties/id",
+   "hcpLoc": "delegation.json#/properties/delegate/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "delegate.name",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/Delegation/properties/delegate/properties/name",
+   "hcpLoc": "delegation.json#/properties/delegate/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "relationship",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/Delegation/properties/relationship",
+   "hcpLoc": "delegation.json#/properties/relationship",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "relationship",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/Delegation/properties/relationship",
+   "hcpLoc": "delegation.json#/properties/relationship",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "relationship",
+   "kind": "union",
+   "detail": "HCP is a choice of [type string enum \"attorney-in-fact\", \"caregiver\", \"legal-guardian\", \"parent-or-guardian\" | type string format uri pattern ^[A-Za-z][A-Za-z0-9+.-]*:[^\\s]+$]; TT is a single shape [type string pattern ^(parent-or-guardian|legal-guardian|attorney-in-fact|caregiver|[a-zA-Z][a-zA-Z0-9+.-]*:\\S+)$]",
+   "dir": "",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/Delegation/properties/relationship",
+   "hcpLoc": "delegation.json#/properties/relationship",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "scope.actions",
+   "kind": "bound",
+   "detail": "maxItems: TT 2, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/DelegationScope/properties/actions",
+   "hcpLoc": "delegation.json#/properties/scope/properties/actions",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "scope.categories",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/DelegationScope/properties/categories",
+   "hcpLoc": "delegation.json#/properties/scope/properties/categories",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "subject.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/Delegation/properties/subject/properties/id",
+   "hcpLoc": "delegation.json#/properties/subject/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Delegation",
+   "path": "subject.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/delegation.schema.json#/$defs/Delegation/properties/subject/properties/id",
+   "hcpLoc": "delegation.json#/properties/subject/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "categories",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent/properties/categories",
+   "hcpLoc": "audit-event.json#/properties/categories",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "disclosed",
+   "kind": "bound",
+   "detail": "maxItems: TT 20, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent/properties/disclosed",
+   "hcpLoc": "audit-event.json#/properties/disclosed",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "disclosed[].revealed",
+   "kind": "bound",
+   "detail": "maxItems: TT 16, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditDisclosed/properties/revealed",
+   "hcpLoc": "audit-event.json#/properties/disclosed/items/properties/revealed",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "disclosed[].revealed[].claims",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditDisclosed/properties/revealed/items/properties/claims",
+   "hcpLoc": "audit-event.json#/properties/disclosed/items/properties/revealed/items/properties/claims",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "disclosed[].revealed[].claims[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditDisclosed/properties/revealed/items/properties/claims/items",
+   "hcpLoc": "audit-event.json#/properties/disclosed/items/properties/revealed/items/properties/claims/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "entryId",
+   "kind": "required",
+   "detail": "required in TT, optional in HCP",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent",
+   "hcpLoc": "audit-event.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "eventType",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent/properties/eventType",
+   "hcpLoc": "audit-event.json#/properties/eventType",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "eventType",
+   "kind": "bound",
+   "detail": "maxLength: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent/properties/eventType",
+   "hcpLoc": "audit-event.json#/properties/eventType",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "grantId",
+   "kind": "required",
+   "detail": "required in TT, optional in HCP",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent",
+   "hcpLoc": "audit-event.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "participants.authorizingPrincipal.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditParty/properties/id",
+   "hcpLoc": "audit-event.json#/properties/participants/properties/authorizingPrincipal/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "participants.authorizingPrincipal.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditParty/properties/id",
+   "hcpLoc": "audit-event.json#/properties/participants/properties/authorizingPrincipal/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "participants.clientOperator.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditParty/properties/id",
+   "hcpLoc": "audit-event.json#/properties/participants/properties/clientOperator/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "participants.clientOperator.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditParty/properties/id",
+   "hcpLoc": "audit-event.json#/properties/participants/properties/clientOperator/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "participants.initiator.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditParticipants/properties/initiator/properties/id",
+   "hcpLoc": "audit-event.json#/properties/participants/properties/initiator/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "participants.initiator.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditParticipants/properties/initiator/properties/id",
+   "hcpLoc": "audit-event.json#/properties/participants/properties/initiator/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "participants.model.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditParty/properties/id",
+   "hcpLoc": "audit-event.json#/properties/participants/properties/model/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "participants.model.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditParty/properties/id",
+   "hcpLoc": "audit-event.json#/properties/participants/properties/model/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "participants.provider.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditParty/properties/id",
+   "hcpLoc": "audit-event.json#/properties/participants/properties/provider/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "participants.provider.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditParty/properties/id",
+   "hcpLoc": "audit-event.json#/properties/participants/properties/provider/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "participants.requestingParty.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditParty/properties/id",
+   "hcpLoc": "audit-event.json#/properties/participants/properties/requestingParty/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "participants.requestingParty.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditParty/properties/id",
+   "hcpLoc": "audit-event.json#/properties/participants/properties/requestingParty/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "purpose",
+   "kind": "required",
+   "detail": "required in TT, optional in HCP",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent",
+   "hcpLoc": "audit-event.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "purpose",
+   "kind": "format",
+   "detail": "TT (none), HCP uri",
+   "dir": "tt-looser",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent/properties/purpose",
+   "hcpLoc": "audit-event.json#/properties/purpose",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "purpose",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent/properties/purpose",
+   "hcpLoc": "audit-event.json#/properties/purpose",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "purposeDescription",
+   "kind": "required",
+   "detail": "required in TT, optional in HCP",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent",
+   "hcpLoc": "audit-event.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "purposeDescription",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent/properties/purposeDescription",
+   "hcpLoc": "audit-event.json#/properties/purposeDescription",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "path": "relatedEntryId",
+   "kind": "required",
+   "detail": "required in TT, optional in HCP",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent",
+   "hcpLoc": "audit-event.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "@context",
+   "kind": "bound",
+   "detail": "maxItems: TT 16, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export/properties/@context",
+   "hcpLoc": "export.json#/properties/@context",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "audit",
+   "kind": "bound",
+   "detail": "maxItems: TT 1000000, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export/properties/audit",
+   "hcpLoc": "export.json#/properties/audit",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "delegations",
+   "kind": "bound",
+   "detail": "maxItems: TT 1000000, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export/properties/delegations",
+   "hcpLoc": "export.json#/properties/delegations",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "directives",
+   "kind": "bound",
+   "detail": "maxItems: TT 1000000, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export/properties/directives",
+   "hcpLoc": "export.json#/properties/directives",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "entries",
+   "kind": "bound",
+   "detail": "maxItems: TT 100000, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export/properties/entries",
+   "hcpLoc": "export.json#/properties/entries",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "exportedBy",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export/properties/exportedBy",
+   "hcpLoc": "export.json#/properties/exportedBy",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "exportedBy",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export/properties/exportedBy",
+   "hcpLoc": "export.json#/properties/exportedBy",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "options",
+   "kind": "required",
+   "detail": "required in TT, optional in HCP",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export",
+   "hcpLoc": "export.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "options.includeAudit",
+   "kind": "required",
+   "detail": "required in TT, optional in HCP",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export/properties/options",
+   "hcpLoc": "export.json#/properties/options",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "options.includeVersions",
+   "kind": "required",
+   "detail": "required in TT, optional in HCP",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export/properties/options",
+   "hcpLoc": "export.json#/properties/options",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "rules",
+   "kind": "bound",
+   "detail": "maxItems: TT 1000000, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export/properties/rules",
+   "hcpLoc": "export.json#/properties/rules",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "subject.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export/properties/subject/properties/id",
+   "hcpLoc": "export.json#/properties/subject/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "subject.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export/properties/subject/properties/id",
+   "hcpLoc": "export.json#/properties/subject/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "path": "versions",
+   "kind": "bound",
+   "detail": "maxItems: TT 1000000, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/export.schema.json#/$defs/Export/properties/versions",
+   "hcpLoc": "export.json#/properties/versions",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "accessToken",
+   "kind": "only-tt",
+   "detail": "required in TT; HCP does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/create/0.1/payload.schema.json#",
+   "hcpLoc": "operations/create-request.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "classification.categories",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/WriteClassification/properties/categories",
+   "hcpLoc": "common.json#/$defs/classification/properties/categories",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "classification.dimension",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/WriteClassification/properties/dimension",
+   "hcpLoc": "common.json#/$defs/classification/properties/dimension",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "classification.permittedPurposes",
+   "kind": "only-hcp",
+   "detail": "optional in HCP; TT does not declare it",
+   "dir": "",
+   "ttLoc": "entries/create/0.1/payload.schema.json#/properties/classification",
+   "hcpLoc": "operations/create-request.json#/properties/classification",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "evidence",
+   "kind": "bound",
+   "detail": "maxItems: TT 64, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/create/0.1/payload.schema.json#/properties/evidence",
+   "hcpLoc": "operations/create-request.json#/properties/evidence",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "evidence",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: contains {\"properties\":{\"role\":{\"const\":\"content\"}},\"required\":[\"role\"]} minContains 0 maxContains 1",
+   "dir": "tt-looser",
+   "ttLoc": "entries/create/0.1/payload.schema.json#/properties/evidence",
+   "hcpLoc": "operations/create-request.json#/properties/evidence",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.provenance.assertedBy.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/AssertedBy/properties/id",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/provenance/properties/assertedBy/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.provenance.assertedBy.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/AssertedBy/properties/id",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/provenance/properties/assertedBy/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.provenance.source",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/CreateProvenance/properties/source",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/provenance/properties/source",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.provenance.source",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/CreateProvenance/properties/source",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/provenance/properties/source",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.relationships",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/CreateRecord/properties/relationships",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/relationships",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.relationships[].proposal.entry",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/Proposal/properties/entry",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/relationships/items/properties/proposal/properties/entry",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.relationships[].proposal.entry",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/Proposal/properties/entry",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/relationships/items/properties/proposal/properties/entry",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.relationships[].proposal.rationale",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/Proposal/properties/rationale",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/relationships/items/properties/proposal/properties/rationale",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.relationships[].proposal.rationale",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/Proposal/properties/rationale",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/relationships/items/properties/proposal/properties/rationale",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.relationships[].proposal.weighed",
+   "kind": "bound",
+   "detail": "maxItems: TT 64, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/Proposal/properties/weighed",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/relationships/items/properties/proposal/properties/weighed",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.relationships[].proposal.weighed[]",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/Proposal/properties/weighed/items",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/relationships/items/properties/proposal/properties/weighed/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.relationships[].proposal.weighed[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/Proposal/properties/weighed/items",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/relationships/items/properties/proposal/properties/weighed/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.relationships[].target",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/WriteRelationship/properties/target",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/relationships/items/properties/target",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "record.relationships[].target",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/WriteRelationship/properties/target",
+   "hcpLoc": "operations/create-request.json#/properties/record/properties/relationships/items/properties/target",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "subject.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/WriteSubject/properties/id",
+   "hcpLoc": "operations/create-request.json#/properties/subject/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "subject.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/WriteSubject/properties/id",
+   "hcpLoc": "operations/create-request.json#/properties/subject/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/create/0.1/payload.schema.json#",
+   "hcpLoc": "operations/create-request.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/get:request",
+   "path": "accessToken",
+   "kind": "only-tt",
+   "detail": "required in TT; HCP does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/get/0.1/payload.schema.json#",
+   "hcpLoc": "operations/get-entry-request.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/get:request",
+   "path": "purposeDescription",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/get/0.1/payload.schema.json#/properties/purposeDescription",
+   "hcpLoc": "operations/get-entry-request.json#/properties/purposeDescription",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/get:request",
+   "path": "ref",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/get/0.1/payload.schema.json#/properties/ref",
+   "hcpLoc": "operations/get-entry-request.json#/properties/ref",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/get:request",
+   "path": "ref",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/get/0.1/payload.schema.json#/properties/ref",
+   "hcpLoc": "operations/get-entry-request.json#/properties/ref",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/get:request",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/get/0.1/payload.schema.json#",
+   "hcpLoc": "operations/get-entry-request.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/get:response",
+   "path": "directives",
+   "kind": "required",
+   "detail": "required in TT, optional in HCP",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/get/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/get-entry-result.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/get:response",
+   "path": "directives",
+   "kind": "nullable",
+   "detail": "null allowed in TT only",
+   "dir": "tt-looser",
+   "ttLoc": "entries/get/0.1/payload.schema.json#/$defs/Response/properties/directives",
+   "hcpLoc": "operations/get-entry-result.json#/properties/directives",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/get:response",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/get/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/get-entry-result.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/query:request",
+   "path": "accessToken",
+   "kind": "only-tt",
+   "detail": "required in TT; HCP does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/query/0.1/payload.schema.json#",
+   "hcpLoc": "operations/query-request.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/query:request",
+   "path": "categories",
+   "kind": "bound",
+   "detail": "minItems: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/query/0.1/payload.schema.json#/properties/categories",
+   "hcpLoc": "operations/query-request.json#/properties/categories",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/query:request",
+   "path": "categories",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/query/0.1/payload.schema.json#/properties/categories",
+   "hcpLoc": "operations/query-request.json#/properties/categories",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/query:request",
+   "path": "purposeDescription",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/query/0.1/payload.schema.json#/properties/purposeDescription",
+   "hcpLoc": "operations/query-request.json#/properties/purposeDescription",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/query:request",
+   "path": "query",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/query/0.1/payload.schema.json#/properties/query",
+   "hcpLoc": "operations/query-request.json#/properties/query",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/query:request",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/query/0.1/payload.schema.json#",
+   "hcpLoc": "operations/query-request.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/query:response",
+   "path": "directives",
+   "kind": "required",
+   "detail": "required in TT, optional in HCP",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/query/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/query-result.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/query:response",
+   "path": "directives",
+   "kind": "nullable",
+   "detail": "null allowed in TT only",
+   "dir": "tt-looser",
+   "ttLoc": "entries/query/0.1/payload.schema.json#/$defs/Response/properties/directives",
+   "hcpLoc": "operations/query-result.json#/properties/directives",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/query:response",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/query/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/query-result.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "(root)",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: not {\"anyOf\":[{\"required\":[\"subject\"]},{\"required\":[\"classification\"]}]}",
+   "dir": "tt-looser",
+   "ttLoc": "entries/revise/0.1/payload.schema.json#",
+   "hcpLoc": "operations/revise-request.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "accessToken",
+   "kind": "only-tt",
+   "detail": "required in TT; HCP does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/revise/0.1/payload.schema.json#",
+   "hcpLoc": "operations/revise-request.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "assertion.basis",
+   "kind": "only-tt",
+   "detail": "optional in TT; HCP does not declare it",
+   "dir": "",
+   "ttLoc": "entries/revise/0.1/payload.schema.json#/properties/assertion",
+   "hcpLoc": "operations/revise-request.json#/properties/assertion",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "assertion.permittedPurposes",
+   "kind": "only-tt",
+   "detail": "optional in TT; HCP does not declare it",
+   "dir": "",
+   "ttLoc": "entries/revise/0.1/payload.schema.json#/properties/assertion",
+   "hcpLoc": "operations/revise-request.json#/properties/assertion",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "evidence",
+   "kind": "bound",
+   "detail": "maxItems: TT 64, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/revise/0.1/payload.schema.json#/properties/evidence",
+   "hcpLoc": "operations/revise-request.json#/properties/evidence",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "evidence",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: contains {\"properties\":{\"role\":{\"const\":\"content\"}},\"required\":[\"role\"]} minContains 0 maxContains 1",
+   "dir": "tt-looser",
+   "ttLoc": "entries/revise/0.1/payload.schema.json#/properties/evidence",
+   "hcpLoc": "operations/revise-request.json#/properties/evidence",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "reason",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/revise/0.1/payload.schema.json#/properties/reason",
+   "hcpLoc": "operations/revise-request.json#/properties/reason",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "record.provenance.assertedBy.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/AssertedBy/properties/id",
+   "hcpLoc": "operations/revise-request.json#/properties/record/properties/provenance/properties/assertedBy/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "record.provenance.assertedBy.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/AssertedBy/properties/id",
+   "hcpLoc": "operations/revise-request.json#/properties/record/properties/provenance/properties/assertedBy/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "record.provenance.source",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/WriteProvenance/properties/source",
+   "hcpLoc": "operations/revise-request.json#/properties/record/properties/provenance/properties/source",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "record.provenance.source",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/WriteProvenance/properties/source",
+   "hcpLoc": "operations/revise-request.json#/properties/record/properties/provenance/properties/source",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "record.relationships",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/WriteRecord/properties/relationships",
+   "hcpLoc": "operations/revise-request.json#/properties/record/properties/relationships",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "record.relationships[].proposal",
+   "kind": "only-tt",
+   "detail": "optional in TT; HCP does not declare it",
+   "dir": "",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/WriteRecord/properties/relationships/items",
+   "hcpLoc": "operations/revise-request.json#/properties/record/properties/relationships/items",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "record.relationships[].target",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/WriteRelationship/properties/target",
+   "hcpLoc": "operations/revise-request.json#/properties/record/properties/relationships/items/properties/target",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "record.relationships[].target",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "_shared/0.1/entry-write.schema.json#/$defs/WriteRelationship/properties/target",
+   "hcpLoc": "operations/revise-request.json#/properties/record/properties/relationships/items/properties/target",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "ref",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/revise/0.1/payload.schema.json#/properties/ref",
+   "hcpLoc": "operations/revise-request.json#/properties/ref",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "ref",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/revise/0.1/payload.schema.json#/properties/ref",
+   "hcpLoc": "operations/revise-request.json#/properties/ref",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/revise/0.1/payload.schema.json#",
+   "hcpLoc": "operations/revise-request.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/withdraw:request",
+   "path": "accessToken",
+   "kind": "only-tt",
+   "detail": "required in TT; HCP does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/withdraw/0.1/payload.schema.json#",
+   "hcpLoc": "operations/withdraw-request.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/withdraw:request",
+   "path": "reason",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/withdraw/0.1/payload.schema.json#/properties/reason",
+   "hcpLoc": "operations/withdraw-request.json#/properties/reason",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/withdraw:request",
+   "path": "ref",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/withdraw/0.1/payload.schema.json#/properties/ref",
+   "hcpLoc": "operations/withdraw-request.json#/properties/ref",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/withdraw:request",
+   "path": "ref",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/withdraw/0.1/payload.schema.json#/properties/ref",
+   "hcpLoc": "operations/withdraw-request.json#/properties/ref",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/withdraw:request",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/withdraw/0.1/payload.schema.json#",
+   "hcpLoc": "operations/withdraw-request.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/withdraw:response",
+   "path": "(root)",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: exactly one of (entryId | ref) present",
+   "dir": "tt-looser",
+   "ttLoc": "entries/withdraw/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/withdraw-result.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/withdraw:response",
+   "path": "hardDeleted",
+   "kind": "enum",
+   "detail": "closed in TT only (false)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/withdraw/0.1/payload.schema.json#/$defs/Response/properties/hardDeleted",
+   "hcpLoc": "operations/withdraw-result.json#/properties/hardDeleted",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/entries/withdraw:response",
+   "path": "ref",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/withdraw/0.1/payload.schema.json#/$defs/Response/properties/ref",
+   "hcpLoc": "operations/withdraw-result.json#/properties/ref",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/withdraw:response",
+   "path": "ref",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/withdraw/0.1/payload.schema.json#/$defs/Response/properties/ref",
+   "hcpLoc": "operations/withdraw-result.json#/properties/ref",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/withdraw:response",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/withdraw/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/withdraw-result.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/hard-delete:response",
+   "path": "(root)",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: exactly one of (entryId | ref) present",
+   "dir": "tt-looser",
+   "ttLoc": "entries/hard-delete/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/withdraw-result.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/hard-delete:response",
+   "path": "entryId",
+   "kind": "required",
+   "detail": "required in TT, optional in HCP",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/hard-delete/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/withdraw-result.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/hard-delete:response",
+   "path": "hardDeleted",
+   "kind": "required",
+   "detail": "required in TT, optional in HCP",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/hard-delete/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/withdraw-result.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/hard-delete:response",
+   "path": "hardDeleted",
+   "kind": "enum",
+   "detail": "closed in TT only (true)",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/hard-delete/0.1/payload.schema.json#/$defs/Response/properties/hardDeleted",
+   "hcpLoc": "operations/withdraw-result.json#/properties/hardDeleted",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/hard-delete:response",
+   "path": "ref",
+   "kind": "only-hcp",
+   "detail": "optional in HCP; TT does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/hard-delete/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/withdraw-result.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/hard-delete:response",
+   "path": "status",
+   "kind": "only-hcp",
+   "detail": "required in HCP; TT does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/hard-delete/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/withdraw-result.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/entries/hard-delete:response",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "entries/hard-delete/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/withdraw-result.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "accessToken",
+   "kind": "only-tt",
+   "detail": "required in TT; HCP does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#",
+   "hcpLoc": "operations/import-request.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "categoryMap",
+   "kind": "bound",
+   "detail": "maxProperties: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/properties/categoryMap",
+   "hcpLoc": "operations/import-request.json#/properties/categoryMap",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.@context",
+   "kind": "bound",
+   "detail": "maxItems: TT 16, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedExport/properties/@context",
+   "hcpLoc": "export.json#/properties/@context",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.audit",
+   "kind": "bound",
+   "detail": "maxItems: TT 1000000, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedExport/properties/audit",
+   "hcpLoc": "export.json#/properties/audit",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.audit[].categories",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedAuditEvent/properties/categories",
+   "hcpLoc": "audit-event.json#/properties/categories",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.audit[].disclosed",
+   "kind": "bound",
+   "detail": "maxItems: TT 20, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedAuditEvent/properties/disclosed",
+   "hcpLoc": "audit-event.json#/properties/disclosed",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.audit[].eventType",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedAuditEvent/properties/eventType",
+   "hcpLoc": "audit-event.json#/properties/eventType",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.audit[].eventType",
+   "kind": "bound",
+   "detail": "maxLength: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedAuditEvent/properties/eventType",
+   "hcpLoc": "audit-event.json#/properties/eventType",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.audit[].purpose",
+   "kind": "format",
+   "detail": "TT (none), HCP uri",
+   "dir": "tt-looser",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedAuditEvent/properties/purpose",
+   "hcpLoc": "audit-event.json#/properties/purpose",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.audit[].purpose",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedAuditEvent/properties/purpose",
+   "hcpLoc": "audit-event.json#/properties/purpose",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.audit[].purposeDescription",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedAuditEvent/properties/purposeDescription",
+   "hcpLoc": "audit-event.json#/properties/purposeDescription",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.delegations",
+   "kind": "bound",
+   "detail": "maxItems: TT 1000000, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedExport/properties/delegations",
+   "hcpLoc": "export.json#/properties/delegations",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.directives",
+   "kind": "bound",
+   "detail": "maxItems: TT 1000000, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedExport/properties/directives",
+   "hcpLoc": "export.json#/properties/directives",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.entries",
+   "kind": "bound",
+   "detail": "maxItems: TT 100000, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedExport/properties/entries",
+   "hcpLoc": "export.json#/properties/entries",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.exportedBy",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedExport/properties/exportedBy",
+   "hcpLoc": "export.json#/properties/exportedBy",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.exportedBy",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedExport/properties/exportedBy",
+   "hcpLoc": "export.json#/properties/exportedBy",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.rules",
+   "kind": "bound",
+   "detail": "maxItems: TT 1000000, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedExport/properties/rules",
+   "hcpLoc": "export.json#/properties/rules",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.subject.id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedExport/properties/subject/properties/id",
+   "hcpLoc": "export.json#/properties/subject/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.subject.id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedExport/properties/subject/properties/id",
+   "hcpLoc": "export.json#/properties/subject/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "export.versions",
+   "kind": "bound",
+   "detail": "maxItems: TT 1000000, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/ImportedExport/properties/versions",
+   "hcpLoc": "export.json#/properties/versions",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:request",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#",
+   "hcpLoc": "operations/import-request.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:response",
+   "path": "ext",
+   "kind": "only-tt",
+   "detail": "optional in TT; HCP does not declare it",
+   "dir": "",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/import-result.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/import:response",
+   "path": "outcomes",
+   "kind": "bound",
+   "detail": "maxItems: TT 100000, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/Response/properties/outcomes",
+   "hcpLoc": "operations/import-result.json#/properties/outcomes",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:response",
+   "path": "outcomes[]",
+   "kind": "rule",
+   "detail": "HCP schema rule not in the TT schema: if {\"properties\":{\"outcome\":{\"const\":\"rejected\"}}} then {\"required\":[\"reason\"]}",
+   "dir": "tt-looser",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/Response/properties/outcomes/items",
+   "hcpLoc": "operations/import-result.json#/properties/outcomes/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:response",
+   "path": "outcomes[].id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/Outcome/properties/id",
+   "hcpLoc": "operations/import-result.json#/properties/outcomes/items/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:response",
+   "path": "outcomes[].id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/Outcome/properties/id",
+   "hcpLoc": "operations/import-result.json#/properties/outcomes/items/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:response",
+   "path": "outcomes[].reason",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/Outcome/properties/reason",
+   "hcpLoc": "operations/import-result.json#/properties/outcomes/items/properties/reason",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:response",
+   "path": "outcomes[].reason",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/Outcome/properties/reason",
+   "hcpLoc": "operations/import-result.json#/properties/outcomes/items/properties/reason",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/import:response",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "import/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/import-result.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/export:request",
+   "path": "accessToken",
+   "kind": "only-tt",
+   "detail": "required in TT; HCP does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "export/0.1/payload.schema.json#",
+   "hcpLoc": "export.json#/properties/options",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/export:request",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "export/0.1/payload.schema.json#",
+   "hcpLoc": "export.json#/properties/options",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/shares/report:request",
+   "path": "accessToken",
+   "kind": "only-tt",
+   "detail": "required in TT; HCP does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "shares/report/0.1/payload.schema.json#",
+   "hcpLoc": "operations/report-sharing-request.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/shares/report:request",
+   "path": "recipient.domain",
+   "kind": "bound",
+   "detail": "maxLength: TT 253, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "shares/report/0.1/payload.schema.json#/$defs/ShareRecipient/properties/domain",
+   "hcpLoc": "operations/report-sharing-request.json#/properties/recipient/properties/domain",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/shares/report:request",
+   "path": "recipient.name",
+   "kind": "bound",
+   "detail": "maxLength: TT 1024, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "shares/report/0.1/payload.schema.json#/$defs/ShareRecipient/properties/name",
+   "hcpLoc": "operations/report-sharing-request.json#/properties/recipient/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/shares/report:request",
+   "path": "refs",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "shares/report/0.1/payload.schema.json#/properties/refs",
+   "hcpLoc": "operations/report-sharing-request.json#/properties/refs",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/shares/report:request",
+   "path": "refs[]",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "shares/report/0.1/payload.schema.json#/properties/refs/items",
+   "hcpLoc": "operations/report-sharing-request.json#/properties/refs/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/shares/report:request",
+   "path": "refs[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "shares/report/0.1/payload.schema.json#/properties/refs/items",
+   "hcpLoc": "operations/report-sharing-request.json#/properties/refs/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/shares/report:request",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "shares/report/0.1/payload.schema.json#",
+   "hcpLoc": "operations/report-sharing-request.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "path": "accessToken",
+   "kind": "only-tt",
+   "detail": "required in TT; HCP does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "rules/set/0.1/payload.schema.json#",
+   "hcpLoc": "standing-rule.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "path": "categories",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "rules/set/0.1/payload.schema.json#/properties/categories",
+   "hcpLoc": "standing-rule.json#/properties/categories",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "path": "operators",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "rules/set/0.1/payload.schema.json#/properties/operators",
+   "hcpLoc": "standing-rule.json#/properties/operators",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "path": "operators[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "rules/set/0.1/payload.schema.json#/properties/operators/items",
+   "hcpLoc": "standing-rule.json#/properties/operators/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "path": "requires",
+   "kind": "bound",
+   "detail": "maxItems: TT 64, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "rules/set/0.1/payload.schema.json#/properties/requires",
+   "hcpLoc": "standing-rule.json#/properties/requires",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "path": "createdAt",
+   "kind": "only-hcp",
+   "detail": "required in HCP; TT does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "rules/set/0.1/payload.schema.json#",
+   "hcpLoc": "standing-rule.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "path": "effect",
+   "kind": "only-hcp",
+   "detail": "required in HCP; TT does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "rules/set/0.1/payload.schema.json#",
+   "hcpLoc": "standing-rule.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "path": "ruleId",
+   "kind": "only-hcp",
+   "detail": "required in HCP; TT does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "rules/set/0.1/payload.schema.json#",
+   "hcpLoc": "standing-rule.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "path": "setBy",
+   "kind": "only-hcp",
+   "detail": "required in HCP; TT does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "rules/set/0.1/payload.schema.json#",
+   "hcpLoc": "standing-rule.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "rules/set/0.1/payload.schema.json#",
+   "hcpLoc": "standing-rule.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "path": "accessToken",
+   "kind": "only-tt",
+   "detail": "required in TT; HCP does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "directives/set/0.1/payload.schema.json#",
+   "hcpLoc": "directive.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "path": "action",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "directives/set/0.1/payload.schema.json#/properties/action",
+   "hcpLoc": "directive.json#/properties/action",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "path": "action",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "directives/set/0.1/payload.schema.json#/properties/action",
+   "hcpLoc": "directive.json#/properties/action",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "path": "action",
+   "kind": "union",
+   "detail": "HCP is a choice of [type string enum \"share\", \"sign\", \"transact\" | type string format uri pattern ^[A-Za-z][A-Za-z0-9+.-]*:[^\\s]+$]; TT is a single shape [type string pattern ^(share|sign|transact|[a-zA-Z][a-zA-Z0-9+.-]*:\\S+)$]",
+   "dir": "",
+   "ttLoc": "directives/set/0.1/payload.schema.json#/properties/action",
+   "hcpLoc": "directive.json#/properties/action",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "path": "categories",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "directives/set/0.1/payload.schema.json#/properties/categories",
+   "hcpLoc": "directive.json#/properties/categories",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "path": "operators",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "directives/set/0.1/payload.schema.json#/properties/operators",
+   "hcpLoc": "directive.json#/properties/operators",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "path": "operators[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "directives/set/0.1/payload.schema.json#/properties/operators/items",
+   "hcpLoc": "directive.json#/properties/operators/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "path": "text",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "directives/set/0.1/payload.schema.json#/properties/text",
+   "hcpLoc": "directive.json#/properties/text",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "path": "createdAt",
+   "kind": "only-hcp",
+   "detail": "required in HCP; TT does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "directives/set/0.1/payload.schema.json#",
+   "hcpLoc": "directive.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "path": "directiveId",
+   "kind": "only-hcp",
+   "detail": "required in HCP; TT does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "directives/set/0.1/payload.schema.json#",
+   "hcpLoc": "directive.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "path": "setBy",
+   "kind": "only-hcp",
+   "detail": "required in HCP; TT does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "directives/set/0.1/payload.schema.json#",
+   "hcpLoc": "directive.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "directives/set/0.1/payload.schema.json#",
+   "hcpLoc": "directive.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/delegations/list:response",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "delegations/list/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/delegations-result.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/disclosures/summary:response",
+   "path": "nextCursor",
+   "kind": "only-tt",
+   "detail": "optional in TT; HCP does not declare it",
+   "dir": "",
+   "ttLoc": "disclosures/summary/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/disclosure-summary-result.json#",
+   "inTheirs": true
+  },
+  {
+   "object": "hcp/disclosures/summary:response",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "disclosures/summary/0.1/payload.schema.json#/$defs/Response",
+   "hcpLoc": "operations/disclosure-summary-result.json#",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "actions",
+   "kind": "bound",
+   "detail": "maxItems: TT 3, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/AccessRequest/properties/actions",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/actions",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "categories",
+   "kind": "bound",
+   "detail": "maxItems: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/AccessRequest/properties/categories",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/categories",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "onwardSharing.domains",
+   "kind": "bound",
+   "detail": "minItems: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/OnwardSharingRequest/properties/domains",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/onwardSharing/properties/domains",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "onwardSharing.domains",
+   "kind": "bound",
+   "detail": "maxItems: TT 64, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/OnwardSharingRequest/properties/domains",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/onwardSharing/properties/domains",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "onwardSharing.domains[]",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/OnwardSharingRequest/properties/domains/items",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/onwardSharing/properties/domains/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "onwardSharing.domains[]",
+   "kind": "bound",
+   "detail": "maxLength: TT 253, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/OnwardSharingRequest/properties/domains/items",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/onwardSharing/properties/domains/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "onwardSharing.notTo",
+   "kind": "only-hcp",
+   "detail": "optional in HCP; TT does not declare it",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/AccessRequest/properties/onwardSharing",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/onwardSharing",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "onwardSharing",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/AccessRequest/properties/onwardSharing",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/onwardSharing",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "purposes",
+   "kind": "required",
+   "detail": "optional in TT, required in HCP",
+   "dir": "tt-looser",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/AccessRequest",
+   "hcpLoc": "common.json#/$defs/accessDetail",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "purposes",
+   "kind": "bound",
+   "detail": "maxItems: TT 32, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/AccessRequest/properties/purposes",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/purposes",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "purposes[].description",
+   "kind": "required",
+   "detail": "optional in TT, required in HCP",
+   "dir": "tt-looser",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/AccessRequest/properties/purposes/items",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/purposes/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "purposes[].description",
+   "kind": "bound",
+   "detail": "maxLength: TT 4096, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/RequestedPurpose/properties/description",
+   "hcpLoc": "common.json#/$defs/purpose/properties/description",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "purposes[]",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/AccessRequest/properties/purposes/items",
+   "hcpLoc": "common.json#/$defs/accessDetail/properties/purposes/items",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.access[]",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/AccessRequest",
+   "hcpLoc": "common.json#/$defs/accessDetail",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.requestingParty",
+   "path": "id",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/ProposedRequestingParty/properties/id",
+   "hcpLoc": "grant.json#/properties/requestingParty/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.requestingParty",
+   "path": "id",
+   "kind": "bound",
+   "detail": "maxLength: TT 2048, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/ProposedRequestingParty/properties/id",
+   "hcpLoc": "grant.json#/properties/requestingParty/properties/id",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.requestingParty",
+   "path": "name",
+   "kind": "bound",
+   "detail": "minLength: TT 1, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/ProposedRequestingParty/properties/name",
+   "hcpLoc": "grant.json#/properties/requestingParty/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.requestingParty",
+   "path": "name",
+   "kind": "bound",
+   "detail": "maxLength: TT 256, HCP (none)",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/ProposedRequestingParty/properties/name",
+   "hcpLoc": "grant.json#/properties/requestingParty/properties/name",
+   "inTheirs": false
+  },
+  {
+   "object": "hcp/grants/request:request.requestingParty",
+   "path": "(root)",
+   "kind": "additionalProperties",
+   "detail": "TT closed, HCP open",
+   "dir": "tt-stricter",
+   "ttLoc": "grants/request/0.1/payload.schema.json#/$defs/ProposedRequestingParty",
+   "hcpLoc": "grant.json#/properties/requestingParty",
+   "inTheirs": false
+  }
+ ],
+ "theirs": [
+  {
+   "object": "hcp/_shared:StandingRule",
+   "kind": "alternatives",
+   "path": "(root)",
+   "detail": "members present: ours no rule; HCP at least one of (operators | requires)",
+   "ref": "specs/hcp/rules/set/0.1/spec.md#hcp-field-mapping (the request body `operators`, `requires`, `categories` row); specs/hcp/import/0.1/spec.md#request"
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "kind": "required",
+   "path": "entryId",
+   "detail": "required in ours, optional in HCP",
+   "ref": "Q42"
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "kind": "required",
+   "path": "grantId",
+   "detail": "required in ours, optional in HCP",
+   "ref": "Q42"
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "kind": "required",
+   "path": "purpose",
+   "detail": "required in ours, optional in HCP",
+   "ref": "Q42"
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "kind": "required",
+   "path": "purposeDescription",
+   "detail": "required in ours, optional in HCP",
+   "ref": "Q42"
+  },
+  {
+   "object": "hcp/_shared:AuditEvent",
+   "kind": "required",
+   "path": "relatedEntryId",
+   "detail": "required in ours, optional in HCP",
+   "ref": "Q42"
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "kind": "required",
+   "path": "options",
+   "detail": "required in ours, optional in HCP",
+   "ref": "Q42"
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "kind": "required",
+   "path": "options.includeAudit",
+   "detail": "required in ours, optional in HCP",
+   "ref": "Q42"
+  },
+  {
+   "object": "hcp/_shared:Export",
+   "kind": "required",
+   "path": "options.includeVersions",
+   "detail": "required in ours, optional in HCP",
+   "ref": "Q42"
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "kind": "ours-only",
+   "path": "accessToken",
+   "detail": "required in ours; HCP does not declare it",
+   "ref": "specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)"
+  },
+  {
+   "object": "hcp/entries/create:request",
+   "kind": "hcp-only",
+   "path": "classification.permittedPurposes",
+   "detail": "optional in HCP; ours does not declare it",
+   "ref": "Q7"
+  },
+  {
+   "object": "hcp/entries/get:request",
+   "kind": "ours-only",
+   "path": "accessToken",
+   "detail": "required in ours; HCP does not declare it",
+   "ref": "specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)"
+  },
+  {
+   "object": "hcp/entries/get:response",
+   "kind": "nullable",
+   "path": "directives",
+   "detail": "null allowed in ours only",
+   "ref": "Q5"
+  },
+  {
+   "object": "hcp/entries/get:response",
+   "kind": "required",
+   "path": "directives",
+   "detail": "required in ours, optional in HCP",
+   "ref": "Q42"
+  },
+  {
+   "object": "hcp/entries/query:request",
+   "kind": "ours-only",
+   "path": "accessToken",
+   "detail": "required in ours; HCP does not declare it",
+   "ref": "specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)"
+  },
+  {
+   "object": "hcp/entries/query:response",
+   "kind": "nullable",
+   "path": "directives",
+   "detail": "null allowed in ours only",
+   "ref": "Q5"
+  },
+  {
+   "object": "hcp/entries/query:response",
+   "kind": "required",
+   "path": "directives",
+   "detail": "required in ours, optional in HCP",
+   "ref": "Q42"
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "kind": "ours-only",
+   "path": "accessToken",
+   "detail": "required in ours; HCP does not declare it",
+   "ref": "specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)"
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "kind": "ours-only",
+   "path": "assertion.basis",
+   "detail": "optional in ours; HCP does not declare it",
+   "ref": "Q8"
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "kind": "ours-only",
+   "path": "assertion.permittedPurposes",
+   "detail": "optional in ours; HCP does not declare it",
+   "ref": "Q8"
+  },
+  {
+   "object": "hcp/entries/revise:request",
+   "kind": "ours-only",
+   "path": "record.relationships[].proposal",
+   "detail": "optional in ours; HCP does not declare it",
+   "ref": "Q8"
+  },
+  {
+   "object": "hcp/entries/withdraw:request",
+   "kind": "ours-only",
+   "path": "accessToken",
+   "detail": "required in ours; HCP does not declare it",
+   "ref": "specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)"
+  },
+  {
+   "object": "hcp/entries/withdraw:response",
+   "kind": "alternatives",
+   "path": "(root)",
+   "detail": "members present: ours no rule; HCP exactly one of (entryId | ref)",
+   "ref": "specs/hcp/entries/withdraw/0.1/spec.md#hcp-field-mapping"
+  },
+  {
+   "object": "hcp/entries/withdraw:response",
+   "kind": "enum",
+   "path": "hardDeleted",
+   "detail": "closed in ours only (false)",
+   "ref": "Q10"
+  },
+  {
+   "object": "hcp/import:request",
+   "kind": "ours-only",
+   "path": "accessToken",
+   "detail": "required in ours; HCP does not declare it",
+   "ref": "specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)"
+  },
+  {
+   "object": "hcp/import:response",
+   "kind": "ours-only",
+   "path": "ext",
+   "detail": "optional in ours; HCP does not declare it",
+   "ref": "Q40"
+  },
+  {
+   "object": "hcp/export:request",
+   "kind": "ours-only",
+   "path": "accessToken",
+   "detail": "required in ours; HCP does not declare it",
+   "ref": "specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)"
+  },
+  {
+   "object": "hcp/shares/report:request",
+   "kind": "ours-only",
+   "path": "accessToken",
+   "detail": "required in ours; HCP does not declare it",
+   "ref": "specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)"
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "kind": "ours-only",
+   "path": "accessToken",
+   "detail": "required in ours; HCP does not declare it",
+   "ref": "specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)"
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "kind": "hcp-only",
+   "path": "createdAt",
+   "detail": "required in HCP; ours does not declare it",
+   "ref": "specs/hcp/rules/set/0.1/spec.md#hcp-field-mapping"
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "kind": "hcp-only",
+   "path": "effect",
+   "detail": "required in HCP; ours does not declare it",
+   "ref": "specs/hcp/rules/set/0.1/spec.md#hcp-field-mapping"
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "kind": "hcp-only",
+   "path": "ruleId",
+   "detail": "required in HCP; ours does not declare it",
+   "ref": "specs/hcp/rules/set/0.1/spec.md#hcp-field-mapping"
+  },
+  {
+   "object": "hcp/rules/set:request",
+   "kind": "hcp-only",
+   "path": "setBy",
+   "detail": "required in HCP; ours does not declare it",
+   "ref": "specs/hcp/rules/set/0.1/spec.md#hcp-field-mapping"
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "kind": "ours-only",
+   "path": "accessToken",
+   "detail": "required in ours; HCP does not declare it",
+   "ref": "specs/hcp/entries/query/0.1/spec.md#hcp-field-mapping (the `Authorization: Bearer` row every carried spec's table has)"
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "kind": "hcp-only",
+   "path": "createdAt",
+   "detail": "required in HCP; ours does not declare it",
+   "ref": "specs/hcp/directives/set/0.1/spec.md#hcp-field-mapping"
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "kind": "hcp-only",
+   "path": "directiveId",
+   "detail": "required in HCP; ours does not declare it",
+   "ref": "specs/hcp/directives/set/0.1/spec.md#hcp-field-mapping"
+  },
+  {
+   "object": "hcp/directives/set:request",
+   "kind": "hcp-only",
+   "path": "setBy",
+   "detail": "required in HCP; ours does not declare it",
+   "ref": "specs/hcp/directives/set/0.1/spec.md#hcp-field-mapping"
+  },
+  {
+   "object": "hcp/disclosures/summary:response",
+   "kind": "ours-only",
+   "path": "nextCursor",
+   "detail": "optional in ours; HCP does not declare it",
+   "ref": "Q3"
+  }
+ ],
+ "theirsUnmatched": [],
+ "hcpUnits": [
+  "audit-event.json#",
+  "common.json#/$defs/dateTime",
+  "common.json#/$defs/uri",
+  "common.json#/$defs/urnUuid",
+  "common.json#/$defs/category",
+  "common.json#/$defs/purposeCode",
+  "common.json#/$defs/purpose",
+  "common.json#/$defs/declarationType",
+  "common.json#/$defs/assurance",
+  "common.json#/$defs/entryStatus",
+  "common.json#/$defs/confidence",
+  "common.json#/$defs/relationshipType",
+  "common.json#/$defs/role",
+  "common.json#/$defs/action",
+  "common.json#/$defs/named",
+  "common.json#/$defs/clientDescription",
+  "common.json#/$defs/legalRetention",
+  "common.json#/$defs/credential",
+  "common.json#/$defs/verification",
+  "common.json#/$defs/evidenceItem",
+  "common.json#/$defs/evidence",
+  "common.json#/$defs/content",
+  "common.json#/$defs/assertion",
+  "common.json#/$defs/classification",
+  "common.json#/$defs/accessDetail",
+  "common.json#/$defs/minimization",
+  "common.json#/$defs/grantAction",
+  "common.json#/$defs/basis",
+  "delegation.json#",
+  "directive.json#",
+  "disclosure.json#",
+  "discovery.json#",
+  "entry.json#",
+  "error.json#",
+  "export.json#",
+  "grant.json#",
+  "minimization-report.json#",
+  "operations/create-request.json#",
+  "operations/create-result.json#",
+  "operations/delegations-result.json#",
+  "operations/disclosure-summary-result.json#",
+  "operations/get-entry-request.json#",
+  "operations/get-entry-result.json#",
+  "operations/import-request.json#",
+  "operations/import-result.json#",
+  "operations/query-request.json#",
+  "operations/query-result.json#",
+  "operations/read-own-grant-result.json#",
+  "operations/report-sharing-request.json#",
+  "operations/revise-request.json#",
+  "operations/revise-result.json#",
+  "operations/withdraw-request.json#",
+  "operations/withdraw-result.json#",
+  "problem.json#",
+  "standing-rule.json#"
+ ],
+ "hcpUncovered": [
+  "common.json#/$defs/credential",
+  "discovery.json#",
+  "error.json#",
+  "minimization-report.json#",
+  "problem.json#"
+ ],
+ "ttUnits": [
+  "_shared/0.1/audit-event.schema.json#/$defs/AuditEvent",
+  "_shared/0.1/audit-event.schema.json#/$defs/AuditParticipants",
+  "_shared/0.1/audit-event.schema.json#/$defs/AuditParty",
+  "_shared/0.1/audit-event.schema.json#/$defs/AuditDisclosed",
+  "_shared/0.1/common.schema.json#/$defs/Urn",
+  "_shared/0.1/common.schema.json#/$defs/Uri",
+  "_shared/0.1/common.schema.json#/$defs/Category",
+  "_shared/0.1/common.schema.json#/$defs/PurposeCode",
+  "_shared/0.1/common.schema.json#/$defs/Instant",
+  "_shared/0.1/common.schema.json#/$defs/Assurance",
+  "_shared/0.1/common.schema.json#/$defs/RelationshipType",
+  "_shared/0.1/common.schema.json#/$defs/MinimizationReport",
+  "_shared/0.1/context-entry.schema.json#/$defs/Entry",
+  "_shared/0.1/context-entry.schema.json#/$defs/EntrySubject",
+  "_shared/0.1/context-entry.schema.json#/$defs/Content",
+  "_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+  "_shared/0.1/context-entry.schema.json#/$defs/Basis",
+  "_shared/0.1/context-entry.schema.json#/$defs/Classification",
+  "_shared/0.1/context-entry.schema.json#/$defs/Record",
+  "_shared/0.1/context-entry.schema.json#/$defs/Provenance",
+  "_shared/0.1/context-entry.schema.json#/$defs/ClientDescription",
+  "_shared/0.1/context-entry.schema.json#/$defs/Relationship",
+  "_shared/0.1/context-entry.schema.json#/$defs/RecordedProposal",
+  "_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem",
+  "_shared/0.1/delegation.schema.json#/$defs/Delegation",
+  "_shared/0.1/delegation.schema.json#/$defs/DelegationBasis",
+  "_shared/0.1/delegation.schema.json#/$defs/DelegationScope",
+  "_shared/0.1/delegation.schema.json#/$defs/DelegationTerm",
+  "_shared/0.1/delegation.schema.json#/$defs/DelegationEnded",
+  "_shared/0.1/directive.schema.json#/$defs/Directive",
+  "_shared/0.1/disclosure.schema.json#/$defs/Disclosure",
+  "_shared/0.1/disclosure.schema.json#/$defs/Standing",
+  "_shared/0.1/disclosure.schema.json#/$defs/DisclosedEvidenceItem",
+  "_shared/0.1/disclosure.schema.json#/$defs/DisclosedRelationship",
+  "_shared/0.1/disclosure.schema.json#/$defs/DisclosedProvenance",
+  "_shared/0.1/entry-write.schema.json#/$defs/WriteSubject",
+  "_shared/0.1/entry-write.schema.json#/$defs/WriteClassification",
+  "_shared/0.1/entry-write.schema.json#/$defs/RevisionAssertion",
+  "_shared/0.1/entry-write.schema.json#/$defs/AssertedBy",
+  "_shared/0.1/entry-write.schema.json#/$defs/WriteProvenance",
+  "_shared/0.1/entry-write.schema.json#/$defs/Proposal",
+  "_shared/0.1/entry-write.schema.json#/$defs/WriteRelationship",
+  "_shared/0.1/entry-write.schema.json#/$defs/CreateProvenance",
+  "_shared/0.1/entry-write.schema.json#/$defs/CreateRecord",
+  "_shared/0.1/entry-write.schema.json#/$defs/WriteRecord",
+  "_shared/0.1/export.schema.json#/$defs/Export",
+  "_shared/0.1/export.schema.json#/$defs/ExportOptions",
+  "_shared/0.1/grant.schema.json#/$defs/Grant",
+  "_shared/0.1/grant.schema.json#/$defs/GrantParty",
+  "_shared/0.1/grant.schema.json#/$defs/AuthorizingPrincipal",
+  "_shared/0.1/grant.schema.json#/$defs/Named",
+  "_shared/0.1/grant.schema.json#/$defs/LegalRetention",
+  "_shared/0.1/grant.schema.json#/$defs/GrantClient",
+  "_shared/0.1/grant.schema.json#/$defs/RequestingParty",
+  "_shared/0.1/grant.schema.json#/$defs/Purpose",
+  "_shared/0.1/grant.schema.json#/$defs/OnwardSharing",
+  "_shared/0.1/grant.schema.json#/$defs/AccessDetail",
+  "_shared/0.1/standing-rule.schema.json#/$defs/StandingRule",
+  "audit/read/0.1/payload.schema.json#",
+  "audit/read/0.1/payload.schema.json#/$defs/Response",
+  "delegations/end/0.1/payload.schema.json#",
+  "delegations/end/0.1/payload.schema.json#/$defs/Response",
+  "delegations/list/0.1/payload.schema.json#",
+  "delegations/list/0.1/payload.schema.json#/$defs/Response",
+  "directives/list/0.1/payload.schema.json#",
+  "directives/list/0.1/payload.schema.json#/$defs/Response",
+  "directives/remove/0.1/payload.schema.json#",
+  "directives/remove/0.1/payload.schema.json#/$defs/Response",
+  "directives/set/0.1/payload.schema.json#",
+  "directives/set/0.1/payload.schema.json#/$defs/Response",
+  "disclosures/summary/0.1/payload.schema.json#",
+  "disclosures/summary/0.1/payload.schema.json#/$defs/Response",
+  "disclosures/summary/0.1/payload.schema.json#/$defs/ClientSummary",
+  "disclosures/summary/0.1/payload.schema.json#/$defs/GrantStatus",
+  "entries/confirm/0.1/payload.schema.json#",
+  "entries/confirm/0.1/payload.schema.json#/$defs/Response",
+  "entries/create/0.1/payload.schema.json#",
+  "entries/create/0.1/payload.schema.json#/$defs/Response",
+  "entries/get/0.1/payload.schema.json#",
+  "entries/get/0.1/payload.schema.json#/$defs/Response",
+  "entries/hard-delete/0.1/payload.schema.json#",
+  "entries/hard-delete/0.1/payload.schema.json#/$defs/Response",
+  "entries/query/0.1/payload.schema.json#",
+  "entries/query/0.1/payload.schema.json#/$defs/Response",
+  "entries/restrict-purposes/0.1/payload.schema.json#",
+  "entries/restrict-purposes/0.1/payload.schema.json#/$defs/Response",
+  "entries/revise/0.1/payload.schema.json#",
+  "entries/revise/0.1/payload.schema.json#/$defs/Response",
+  "entries/set-categories/0.1/payload.schema.json#",
+  "entries/set-categories/0.1/payload.schema.json#/$defs/Response",
+  "entries/withdraw/0.1/payload.schema.json#",
+  "entries/withdraw/0.1/payload.schema.json#/$defs/Response",
+  "export/0.1/payload.schema.json#",
+  "export/0.1/payload.schema.json#/$defs/Response",
+  "grants/list/0.1/payload.schema.json#",
+  "grants/list/0.1/payload.schema.json#/$defs/Response",
+  "grants/read-own/0.1/payload.schema.json#",
+  "grants/read-own/0.1/payload.schema.json#/$defs/Response",
+  "grants/relinquish/0.1/payload.schema.json#",
+  "grants/relinquish/0.1/payload.schema.json#/$defs/Response",
+  "grants/request/0.1/payload.schema.json#",
+  "grants/request/0.1/payload.schema.json#/$defs/AccessRequest",
+  "grants/request/0.1/payload.schema.json#/$defs/GrantAction",
+  "grants/request/0.1/payload.schema.json#/$defs/RequestedPurpose",
+  "grants/request/0.1/payload.schema.json#/$defs/OnwardSharingRequest",
+  "grants/request/0.1/payload.schema.json#/$defs/ProposedRequestingParty",
+  "grants/request/0.1/payload.schema.json#/$defs/Response",
+  "grants/revoke/0.1/payload.schema.json#",
+  "grants/revoke/0.1/payload.schema.json#/$defs/Response",
+  "grants/revoked/0.1/payload.schema.json#",
+  "grants/revoked/0.1/payload.schema.json#/$defs/Response",
+  "import/0.1/payload.schema.json#",
+  "import/0.1/payload.schema.json#/$defs/Response",
+  "import/0.1/payload.schema.json#/$defs/ImportedExport",
+  "import/0.1/payload.schema.json#/$defs/ImportedExportOptions",
+  "import/0.1/payload.schema.json#/$defs/ImportedAuditEvent",
+  "import/0.1/payload.schema.json#/$defs/HcpCarriageImportExtension",
+  "import/0.1/payload.schema.json#/$defs/Outcome",
+  "rules/list/0.1/payload.schema.json#",
+  "rules/list/0.1/payload.schema.json#/$defs/Response",
+  "rules/remove/0.1/payload.schema.json#",
+  "rules/remove/0.1/payload.schema.json#/$defs/Response",
+  "rules/set/0.1/payload.schema.json#",
+  "rules/set/0.1/payload.schema.json#/$defs/Response",
+  "shares/report/0.1/payload.schema.json#",
+  "shares/report/0.1/payload.schema.json#/$defs/ShareRecipient",
+  "shares/report/0.1/payload.schema.json#/$defs/Response"
+ ],
+ "ttUncovered": [
+  "audit/read/0.1/payload.schema.json#",
+  "audit/read/0.1/payload.schema.json#/$defs/Response",
+  "delegations/end/0.1/payload.schema.json#",
+  "delegations/end/0.1/payload.schema.json#/$defs/Response",
+  "delegations/list/0.1/payload.schema.json#",
+  "directives/list/0.1/payload.schema.json#",
+  "directives/list/0.1/payload.schema.json#/$defs/Response",
+  "directives/remove/0.1/payload.schema.json#",
+  "directives/remove/0.1/payload.schema.json#/$defs/Response",
+  "directives/set/0.1/payload.schema.json#/$defs/Response",
+  "disclosures/summary/0.1/payload.schema.json#",
+  "entries/confirm/0.1/payload.schema.json#",
+  "entries/confirm/0.1/payload.schema.json#/$defs/Response",
+  "entries/create/0.1/payload.schema.json#/$defs/Response",
+  "entries/hard-delete/0.1/payload.schema.json#",
+  "entries/restrict-purposes/0.1/payload.schema.json#",
+  "entries/restrict-purposes/0.1/payload.schema.json#/$defs/Response",
+  "entries/revise/0.1/payload.schema.json#/$defs/Response",
+  "entries/set-categories/0.1/payload.schema.json#",
+  "entries/set-categories/0.1/payload.schema.json#/$defs/Response",
+  "export/0.1/payload.schema.json#/$defs/Response",
+  "grants/list/0.1/payload.schema.json#",
+  "grants/list/0.1/payload.schema.json#/$defs/Response",
+  "grants/read-own/0.1/payload.schema.json#",
+  "grants/read-own/0.1/payload.schema.json#/$defs/Response",
+  "grants/relinquish/0.1/payload.schema.json#",
+  "grants/relinquish/0.1/payload.schema.json#/$defs/Response",
+  "grants/request/0.1/payload.schema.json#",
+  "grants/request/0.1/payload.schema.json#/$defs/Response",
+  "grants/revoke/0.1/payload.schema.json#",
+  "grants/revoke/0.1/payload.schema.json#/$defs/Response",
+  "grants/revoked/0.1/payload.schema.json#",
+  "grants/revoked/0.1/payload.schema.json#/$defs/Response",
+  "import/0.1/payload.schema.json#/$defs/HcpCarriageImportExtension",
+  "rules/list/0.1/payload.schema.json#",
+  "rules/list/0.1/payload.schema.json#/$defs/Response",
+  "rules/remove/0.1/payload.schema.json#",
+  "rules/remove/0.1/payload.schema.json#/$defs/Response",
+  "rules/set/0.1/payload.schema.json#/$defs/Response",
+  "shares/report/0.1/payload.schema.json#/$defs/Response"
+ ]
+}

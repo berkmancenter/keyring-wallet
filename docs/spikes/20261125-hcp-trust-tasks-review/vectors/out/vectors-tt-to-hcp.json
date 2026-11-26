@@ -1,0 +1,2610 @@
+[
+ {
+  "from": "transcript",
+  "src": "transcript.golden.txt:53",
+  "step": "2. Grant request (hcp/grants/request 0.1), held with trust-task-next-step",
+  "slug": "grants/request",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "common.json#/$defs/accessDetail",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "access": [
+    {
+     "actions": [
+      "read"
+     ],
+     "categories": [
+      "travel_preferences"
+     ],
+     "purposes": [
+      {
+       "code": "https://purposes.example/travel-booking",
+       "description": "Book trips that match how you like to travel"
+      }
+     ],
+     "type": "https://hcp.example/spec/authorization/context-access"
+    }
+   ],
+   "expiresIn": 14400,
+   "subjectHint": "acct:alex@provider.example"
+  }
+ },
+ {
+  "from": "transcript",
+  "src": "transcript.golden.txt:125",
+  "step": "2. Grant request (hcp/grants/request 0.1), held with trust-task-next-step",
+  "slug": "grants/request",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "common.json#/$defs/accessDetail",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "access": [
+    {
+     "actions": [
+      "read"
+     ],
+     "categories": [
+      "travel_preferences"
+     ],
+     "purposes": [
+      {
+       "code": "https://purposes.example/travel-booking",
+       "description": "Book trips that match how you like to travel"
+      }
+     ],
+     "type": "https://hcp.example/spec/authorization/context-access"
+    }
+   ],
+   "expiresIn": 14400,
+   "subjectHint": "acct:alex@provider.example"
+  }
+ },
+ {
+  "from": "transcript",
+  "src": "transcript.golden.txt:163",
+  "step": "2. Grant request (hcp/grants/request 0.1), held with trust-task-next-step",
+  "slug": "grants/request",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "grant.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "accessToken": "hcp_at…",
+   "grant": {
+    "access": [
+     {
+      "actions": [
+       "read"
+      ],
+      "categories": [
+       "travel_preferences"
+      ],
+      "purposes": [
+       {
+        "code": "https://purposes.example/travel-booking",
+        "description": "Book trips that match how you like to travel"
+       }
+      ],
+      "type": "https://hcp.example/spec/authorization/context-access"
+     }
+    ],
+    "authorizingPrincipal": {
+     "id": "hcp-sub-demo-alex"
+    },
+    "client": {
+     "id": "did:key:z6MkodJHzY8Bn6PycRu3pon7V3vzfk12nbndWcBz2mxMAsa2",
+     "name": "Wayfare booking agent",
+     "operator": {
+      "id": "booking.example",
+      "name": "Wayfare Travel Ltd"
+     }
+    },
+    "expiresAt": "2026-11-25T14:00:06Z",
+    "grantId": "urn:uuid:00000000-0000-4000-8000-000000000006",
+    "grantType": "temporary",
+    "issuedAt": "2026-11-25T10:00:06Z",
+    "status": "active",
+    "subject": {
+     "id": "hcp-sub-demo-alex"
+    }
+   },
+   "tokenExpiresAt": "2026-11-25T11:00:06Z"
+  }
+ },
+ {
+  "from": "transcript",
+  "src": "transcript.golden.txt:224",
+  "step": "3. Query (hcp/entries/query 0.1)",
+  "slug": "entries/query",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/query-request.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "accessToken": "hcp_at…",
+   "categories": [
+    "travel_preferences"
+   ],
+   "maxEntries": 5,
+   "purpose": "https://purposes.example/travel-booking",
+   "query": "How does Alex like to fly?"
+  }
+ },
+ {
+  "from": "transcript",
+  "src": "transcript.golden.txt:250",
+  "step": "3. Query (hcp/entries/query 0.1)",
+  "slug": "entries/query",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/query-result.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "categoriesSearched": [
+    "travel_preferences"
+   ],
+   "directives": [],
+   "entries": [
+    {
+     "assertion": {
+      "declarationType": "person-declared"
+     },
+     "classification": {
+      "categories": [
+       "travel_preferences"
+      ]
+     },
+     "content": {
+      "language": "en",
+      "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+      "value": "Prefers aisle seats and early-morning flights."
+     },
+     "ref": "hcp-ref-0001",
+     "standing": {
+      "assurance": "authenticated",
+      "confirmed": true
+     },
+     "useUntil": "2026-11-25T11:00:08Z",
+     "version": 1
+    },
+    {
+     "assertion": {
+      "declarationType": "person-declared"
+     },
+     "classification": {
+      "categories": [
+       "travel_preferences"
+      ]
+     },
+     "content": {
+      "language": "en",
+      "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+      "value": "Avoids overnight layovers."
+     },
+     "ref": "hcp-ref-0002",
+     "standing": {
+      "assurance": "authenticated",
+      "confirmed": true
+     },
+     "useUntil": "2026-11-25T11:00:08Z",
+     "version": 1
+    }
+   ],
+   "minimization": {
+    "method": "lexical"
+   },
+   "respondedAt": "2026-11-25T10:00:08Z",
+   "retrievalId": "urn:uuid:00000000-0000-4000-8000-000000000009"
+  }
+ },
+ {
+  "from": "transcript",
+  "src": "transcript.golden.txt:326",
+  "step": "4. Revoke (hcp/grants/revoke 0.1) from the Management Client",
+  "slug": "grants/revoke",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "accessToken": "hcp_mt…",
+   "grantId": "urn:uuid:00000000-0000-4000-8000-000000000006"
+  }
+ },
+ {
+  "from": "transcript",
+  "src": "transcript.golden.txt:347",
+  "step": "4. Revoke (hcp/grants/revoke 0.1) from the Management Client",
+  "slug": "grants/revoke",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {}
+ },
+ {
+  "from": "transcript",
+  "src": "transcript.golden.txt:367",
+  "step": "5. Query after revoke (hcp/entries/query 0.1) fails with hcp:invalidToken",
+  "slug": "entries/query",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/query-request.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "accessToken": "hcp_at…",
+   "categories": [
+    "travel_preferences"
+   ],
+   "maxEntries": 5,
+   "purpose": "https://purposes.example/travel-booking",
+   "query": "How does Alex like to fly?"
+  }
+ },
+ {
+  "from": "transcript",
+  "src": "transcript.golden.txt:421",
+  "step": "6. Revocation notice (hcp/grants/revoked 0.1)",
+  "slug": "grants/revoked",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "grantId": "urn:uuid:00000000-0000-4000-8000-000000000006",
+   "noticeId": "urn:uuid:00000000-0000-4000-8000-00000000000f",
+   "revokedAt": "2026-11-25T10:00:10Z"
+  }
+ },
+ {
+  "from": "transcript",
+  "src": "transcript.golden.txt:443",
+  "step": "6. Revocation notice (hcp/grants/revoked 0.1)",
+  "slug": "grants/revoked",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {}
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/export/0.1/spec.md:164",
+  "step": "Exporting to move to another provider",
+  "slug": "export",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "export.json#/properties/options",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "excludeDeleted": true,
+   "accessToken": "hcp_mt_8f3a1c9e7b2d4f60"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/export/0.1/spec.md:202",
+  "step": "The export, deleted entries excluded",
+  "slug": "export",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "export.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "export": {
+    "@context": [
+     "https://hcp.example/contexts/v2"
+    ],
+    "type": "ContextExport",
+    "schema": "https://hcp.example/spec/export/2.0",
+    "subject": {
+     "id": "did:web:person.example"
+    },
+    "exportedBy": "https://context.provider.example",
+    "exportedAt": "2026-11-25T09:00:02Z",
+    "options": {
+     "excludeDeleted": true,
+     "includeVersions": false,
+     "includeAudit": false
+    },
+    "entries": [
+     {
+      "@context": [
+       "https://hcp.example/contexts/v2"
+      ],
+      "schema": "https://hcp.example/spec/entry/2.0",
+      "id": "urn:uuid:53deb29f-c7ae-450b-a129-82c40041336a",
+      "type": [
+       "ContextEntry"
+      ],
+      "subject": {
+       "id": "did:web:person.example"
+      },
+      "content": {
+       "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+       "value": "Vegetarian; eats fish occasionally.",
+       "language": "en"
+      },
+      "assertion": {
+       "declarationType": "person-declared"
+      },
+      "classification": {
+       "categories": [
+        "general_preferences"
+       ]
+      },
+      "record": {
+       "status": "active",
+       "version": 2,
+       "provenance": {
+        "assertedBy": {
+         "id": "did:web:person.example",
+         "assurance": "authenticated"
+        },
+        "assertedAt": "2026-10-01T09:00:00Z",
+        "source": "person-input",
+        "submittedByClient": {
+         "id": "wallet-app",
+         "name": "Person Wallet",
+         "operator": {
+          "id": "wallet.person.example",
+          "name": "Wallet Co"
+         }
+        },
+        "authorizedUnder": "urn:uuid:245df6a2-f351-44c4-80e2-b836d09db543",
+        "recordedByProvider": "https://context.provider.example",
+        "recordedAt": "2026-10-01T09:00:01Z"
+       }
+      }
+     }
+    ],
+    "rules": [
+     {
+      "ruleId": "urn:uuid:d312c611-65f3-488d-aaf5-b60a654e8784",
+      "effect": "deny",
+      "operators": [
+       "ads.example"
+      ],
+      "categories": [
+       "health_context"
+      ],
+      "setBy": "context-subject",
+      "createdAt": "2026-09-14T18:20:00Z"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/import/0.1/spec.md:144",
+  "step": "A dry run, replacing a custom category",
+  "slug": "import",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/import-request.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "export": {
+    "@context": [
+     "https://hcp.example/contexts/v2"
+    ],
+    "type": "ContextExport",
+    "schema": "https://hcp.example/spec/export/2.0",
+    "subject": {
+     "id": "did:web:person.example"
+    },
+    "exportedBy": "https://context.provider.example",
+    "exportedAt": "2026-11-25T09:00:02Z",
+    "options": {
+     "excludeDeleted": true,
+     "includeVersions": false,
+     "includeAudit": false
+    },
+    "entries": [
+     {
+      "@context": [
+       "https://hcp.example/contexts/v2"
+      ],
+      "schema": "https://hcp.example/spec/entry/2.0",
+      "id": "urn:uuid:13462b18-de39-4fcc-b94d-56b776184381",
+      "type": [
+       "ContextEntry"
+      ],
+      "subject": {
+       "id": "did:web:person.example"
+      },
+      "content": {
+       "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+       "value": "Runs three mornings a week; prefers early slots.",
+       "language": "en"
+      },
+      "assertion": {
+       "declarationType": "person-declared"
+      },
+      "classification": {
+       "categories": [
+        "https://categories.example/fitness"
+       ]
+      },
+      "record": {
+       "status": "active",
+       "version": 1,
+       "provenance": {
+        "assertedBy": {
+         "id": "did:web:person.example",
+         "assurance": "authenticated"
+        },
+        "assertedAt": "2026-08-03T07:15:00Z",
+        "source": "person-input",
+        "submittedByClient": {
+         "id": "wallet-app",
+         "name": "Person Wallet",
+         "operator": {
+          "id": "wallet.person.example",
+          "name": "Wallet Co"
+         }
+        },
+        "authorizedUnder": "urn:uuid:7e702905-d484-487e-9c30-8f7fa67b6ac2",
+        "recordedByProvider": "https://context.provider.example",
+        "recordedAt": "2026-08-03T07:15:01Z"
+       }
+      }
+     },
+     {
+      "@context": [
+       "https://hcp.example/contexts/v2"
+      ],
+      "schema": "https://hcp.example/spec/entry/2.0",
+      "id": "urn:uuid:fa146974-0465-4023-9ec4-1c36ee8341f8",
+      "type": [
+       "ContextEntry"
+      ],
+      "subject": {
+       "id": "did:web:person.example"
+      },
+      "content": {
+       "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+       "value": "Prefers window seats.",
+       "language": "en"
+      },
+      "assertion": {
+       "declarationType": "person-declared"
+      },
+      "classification": {
+       "categories": [
+        "general_preferences"
+       ]
+      },
+      "record": {
+       "status": "active",
+       "version": 3,
+       "provenance": {
+        "assertedBy": {
+         "id": "did:web:person.example",
+         "assurance": "authenticated"
+        },
+        "assertedAt": "2026-06-11T12:00:00Z",
+        "source": "person-input",
+        "submittedByClient": {
+         "id": "wallet-app",
+         "name": "Person Wallet",
+         "operator": {
+          "id": "wallet.person.example",
+          "name": "Wallet Co"
+         }
+        },
+        "authorizedUnder": "urn:uuid:7e702905-d484-487e-9c30-8f7fa67b6ac2",
+        "recordedByProvider": "https://context.provider.example",
+        "recordedAt": "2026-06-11T12:00:01Z"
+       }
+      }
+     }
+    ],
+    "rules": [
+     {
+      "ruleId": "urn:uuid:712a4602-9af5-401f-b0bf-8f631dd82a5b",
+      "effect": "deny",
+      "operators": [
+       "ads.example"
+      ],
+      "categories": [
+       "health_context"
+      ],
+      "setBy": "context-subject",
+      "createdAt": "2026-09-14T18:20:00Z"
+     }
+    ]
+   },
+   "dryRun": true,
+   "categoryMap": {
+    "https://categories.example/fitness": "general_preferences"
+   },
+   "accessToken": "hcp_mt_3c7e1a9f5b2d8e40"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/import/0.1/spec.md:255",
+  "step": "An export written to HCP's schema alone",
+  "slug": "import",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/import-request.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "export": {
+    "@context": [
+     "https://hcp.example/contexts/v2"
+    ],
+    "type": "ContextExport",
+    "schema": "https://hcp.example/spec/export/2.0",
+    "subject": {
+     "id": "did:web:person.example"
+    },
+    "exportedBy": "https://other-context.provider.example",
+    "exportedAt": "2026-11-25T10:30:00Z",
+    "entries": [
+     {
+      "@context": [
+       "https://hcp.example/contexts/v2"
+      ],
+      "schema": "https://hcp.example/spec/entry/2.0",
+      "id": "urn:uuid:9f752f44-cf3e-469a-9def-a7253e13c969",
+      "type": [
+       "ContextEntry"
+      ],
+      "subject": {
+       "id": "did:web:person.example"
+      },
+      "content": {
+       "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+       "value": "Prefers aisle seats on long flights.",
+       "language": "en"
+      },
+      "assertion": {
+       "declarationType": "person-declared"
+      },
+      "classification": {
+       "categories": [
+        "general_preferences"
+       ]
+      },
+      "record": {
+       "status": "active",
+       "version": 1,
+       "provenance": {
+        "assertedBy": {
+         "id": "did:web:person.example",
+         "assurance": "authenticated"
+        },
+        "assertedAt": "2026-10-02T08:00:00Z",
+        "source": "person-input",
+        "submittedByClient": {
+         "id": "wallet-app",
+         "name": "Person Wallet",
+         "operator": {
+          "id": "wallet.person.example",
+          "name": "Wallet Co"
+         }
+        },
+        "authorizedUnder": "urn:uuid:7e702905-d484-487e-9c30-8f7fa67b6ac2",
+        "recordedByProvider": "https://other-context.provider.example",
+        "recordedAt": "2026-10-02T08:00:01Z"
+       }
+      }
+     }
+    ],
+    "rules": [
+     {
+      "ruleId": "urn:uuid:712a4602-9af5-401f-b0bf-8f631dd82a5b",
+      "effect": "deny",
+      "operators": [
+       "ads.example"
+      ],
+      "setBy": "context-subject",
+      "createdAt": "2026-09-14T18:20:00Z"
+     }
+    ],
+    "audit": [
+     {
+      "eventId": "urn:uuid:5d0b7c3e-8f21-4a6b-9c4d-2e7f1a3b6c58",
+      "eventType": "rule.set",
+      "timestamp": "2026-09-14T18:20:00Z",
+      "participants": {
+       "initiator": {
+        "role": "management-client",
+        "id": "wallet-app"
+       },
+       "provider": {
+        "id": "https://other-context.provider.example"
+       }
+      },
+      "data": {
+       "ruleId": "urn:uuid:712a4602-9af5-401f-b0bf-8f631dd82a5b"
+      }
+     }
+    ]
+   },
+   "accessToken": "hcp_mt_3c7e1a9f5b2d8e40"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/import/0.1/spec.md:353",
+  "step": "The dry run's outcomes",
+  "slug": "import",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/import-result.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "outcomes": [
+    {
+     "id": "urn:uuid:13462b18-de39-4fcc-b94d-56b776184381",
+     "outcome": "imported"
+    },
+    {
+     "id": "urn:uuid:fa146974-0465-4023-9ec4-1c36ee8341f8",
+     "outcome": "rejected",
+     "reason": "id held with different content"
+    }
+   ],
+   "dryRun": true
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/import/0.1/spec.md:379",
+  "step": "A delegate's import, with a rule not applied",
+  "slug": "import",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/import-result.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "outcomes": [
+    {
+     "id": "urn:uuid:d901edab-5d35-4f04-8e6e-d5e5325a3742",
+     "outcome": "imported"
+    }
+   ],
+   "ext": {
+    "vnd.trusttasks.hcp-carriage": {
+     "rulesNotApplied": [
+      "urn:uuid:712a4602-9af5-401f-b0bf-8f631dd82a5b"
+     ]
+    }
+   }
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/audit/read/0.1/spec.md:152",
+  "step": "The person reviews who read their health context in November",
+  "slug": "audit/read",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "accessToken": "hcp_mt_8f3a1c9e7b2d4f60",
+   "category": "health_context",
+   "eventType": "context.read",
+   "from": "2026-11-01T00:00:00Z",
+   "to": "2026-11-25T23:59:59Z",
+   "limit": 50
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/audit/read/0.1/spec.md:191",
+  "step": "A page of `context.read` events",
+  "slug": "audit/read",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "audit-event.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "events": [
+    {
+     "eventId": "urn:uuid:1d3f5b7c-9e0a-4c2e-8b4d-6f8a0c2e4b17",
+     "eventType": "context.read",
+     "timestamp": "2026-11-24T10:00:01Z",
+     "participants": {
+      "initiator": {
+       "role": "context-client",
+       "id": "https://booking-agent.example/client"
+      },
+      "clientOperator": {
+       "id": "https://booking-agent.example"
+      },
+      "authorizingPrincipal": {
+       "id": "subject-7f2c"
+      },
+      "provider": {
+       "id": "https://context.provider.example"
+      },
+      "retrievalId": "urn:uuid:9a1e5c73-2d4b-4e8f-a6c1-7b0d3e2f1a99"
+     },
+     "entryId": null,
+     "relatedEntryId": null,
+     "categories": [
+      "general_preferences",
+      "health_context"
+     ],
+     "purpose": "https://hcp.example/purposes/reservation",
+     "purposeDescription": "Book a table that can serve the guest's diet.",
+     "grantId": "urn:uuid:5e7a9c1b-3d4f-4a6b-8c0e-2f4a6c8e0b28",
+     "disclosed": [
+      {
+       "entryId": "urn:uuid:7b9d1f3a-5c6e-4b8a-9d0f-1a3c5e7b9d40",
+       "version": 1,
+       "useUntil": "2026-11-24T22:00:01Z"
+      }
+     ],
+     "data": {
+      "maxEntries": 3,
+      "categoriesSearched": [
+       "general_preferences",
+       "health_context"
+      ],
+      "directives": []
+     }
+    }
+   ],
+   "nextCursor": "Y3VyLTRmOWEyYzdlLTEx"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/audit/read/0.1/spec.md:241",
+  "step": "A former delegate's last page",
+  "slug": "audit/read",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "audit-event.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "events": [
+    {
+     "eventId": "urn:uuid:2e4a6c8e-0f1b-4d3a-8c5e-7a9c1e3b5d16",
+     "eventType": "context.read",
+     "timestamp": "2026-03-02T15:12:44Z",
+     "participants": {
+      "initiator": {
+       "role": "context-client",
+       "id": "https://tutor.example/client"
+      },
+      "clientOperator": {
+       "id": "https://tutor.example"
+      },
+      "provider": {
+       "id": "https://context.provider.example"
+      }
+     },
+     "entryId": null,
+     "relatedEntryId": null,
+     "categories": [
+      "learning_context"
+     ],
+     "purpose": "https://hcp.example/purposes/tutoring",
+     "purposeDescription": "Plan this week's maths practice.",
+     "grantId": "urn:uuid:6f8b0d2e-4a5c-4e7b-9d1f-3b5d7f9a1c39"
+    }
+   ]
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/delegations/end/0.1/spec.md:136",
+  "step": "A caregiver relinquishes a delegation",
+  "slug": "delegations/end",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "delegationId": "urn:uuid:5b7d9f1a-3c4e-4a6b-88d0-2e4a6c8e0f31",
+   "accessToken": "hcp_mt_c41e7a2d9b6f3058"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/delegations/end/0.1/spec.md:165",
+  "step": "The delegation has ended",
+  "slug": "delegations/end",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {}
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/delegations/list/0.1/spec.md:138",
+  "step": "The person asks for every delegation, ended ones included",
+  "slug": "delegations/list",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "accessToken": "hcp_mt_8f3a1c9e7b2d4f60",
+   "status": "ended"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/delegations/list/0.1/spec.md:172",
+  "step": "A parent's delegation, and a grandparent's sub-delegation that has ended",
+  "slug": "delegations/list",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/delegations-result.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "delegations": [
+    {
+     "delegationId": "urn:uuid:2e4a6c8d-0f1b-4d3e-b5a7-9c1e3a5c7e08",
+     "subject": {
+      "id": "subject-7f2c"
+     },
+     "delegate": {
+      "id": "person-parent-31",
+      "name": "Morgan Lee"
+     },
+     "relationship": "parent-or-guardian",
+     "basis": {
+      "method": "attested",
+      "description": "Parent on the school enrollment record, checked by the Authorization Service.",
+      "establishedBy": "https://auth.provider.example",
+      "establishedAt": "2025-09-01T09:00:00Z"
+     },
+     "scope": {
+      "categories": [
+       "general_preferences",
+       "learning_context"
+      ],
+      "actions": [
+       "read",
+       "write"
+      ]
+     },
+     "term": {
+      "endsAt": "2029-04-17T00:00:00Z",
+      "atMajority": true
+     },
+     "mayDelegate": true
+    },
+    {
+     "delegationId": "urn:uuid:3f5b7d9e-1a2c-4e4f-86b8-0d2f4b6d8f19",
+     "subject": {
+      "id": "subject-7f2c"
+     },
+     "delegate": {
+      "id": "person-grandparent-12",
+      "name": "Pat Lee"
+     },
+     "relationship": "caregiver",
+     "basis": {
+      "method": "delegated",
+      "description": "Appointed by Morgan Lee to look after learning context during travel.",
+      "parent": "urn:uuid:2e4a6c8d-0f1b-4d3e-b5a7-9c1e3a5c7e08",
+      "establishedBy": "https://auth.provider.example",
+      "establishedAt": "2026-07-01T08:00:00Z"
+     },
+     "scope": {
+      "categories": [
+       "learning_context"
+      ],
+      "actions": [
+       "read"
+      ]
+     },
+     "term": {
+      "endsAt": "2026-08-15T00:00:00Z",
+      "atMajority": true
+     },
+     "ended": {
+      "at": "2026-08-10T17:30:00Z",
+      "reason": "ended-by-delegate"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/directives/list/0.1/spec.md:128",
+  "step": "Reading the person's directives",
+  "slug": "directives/list",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "accessToken": "hcp_mt_8f3a1c9e7b2d4f60"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/directives/list/0.1/spec.md:156",
+  "step": "Two directives",
+  "slug": "directives/list",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "directive.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   },
+   {
+    "i": 1,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "directives": [
+    {
+     "directiveId": "urn:uuid:d5f7b9c1-3e2a-4d6f-8b0e-2c4a6e8f0b19",
+     "action": "share",
+     "effect": "deny",
+     "text": "Never pass my health context to another agent.",
+     "categories": [
+      "health_context"
+     ],
+     "setBy": "context-subject",
+     "createdAt": "2026-11-25T12:00:01Z"
+    },
+    {
+     "directiveId": "urn:uuid:e6a8c0d2-4f3b-4e7a-9c1d-3b5f7a9c1e28",
+     "action": "sign",
+     "effect": "ask-first",
+     "text": "Ask me before you sign anything.",
+     "setBy": "context-subject",
+     "createdAt": "2026-11-18T08:15:00Z"
+    }
+   ]
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/directives/remove/0.1/spec.md:120",
+  "step": "Removing a directive that asked before every signature",
+  "slug": "directives/remove",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "directiveId": "urn:uuid:e6a8c0d2-4f3b-4e7a-9c1d-3b5f7a9c1e28",
+   "accessToken": "hcp_mt_8f3a1c9e7b2d4f60"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/directives/remove/0.1/spec.md:149",
+  "step": "The directive is removed",
+  "slug": "directives/remove",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {}
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/directives/set/0.1/spec.md:125",
+  "step": "Never pass health context to another agent",
+  "slug": "directives/set",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "action": "share",
+   "effect": "deny",
+   "text": "Never pass my health context to another agent.",
+   "categories": [
+    "health_context"
+   ],
+   "accessToken": "hcp_mt_8f3a1c9e7b2d4f60"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/directives/set/0.1/spec.md:157",
+  "step": "The directive is set",
+  "slug": "directives/set",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "directive.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "directive": {
+    "directiveId": "urn:uuid:d5f7b9c1-3e2a-4d6f-8b0e-2c4a6e8f0b19",
+    "action": "share",
+    "effect": "deny",
+    "text": "Never pass my health context to another agent.",
+    "categories": [
+     "health_context"
+    ],
+    "setBy": "context-subject",
+    "createdAt": "2026-11-25T12:00:01Z"
+   }
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/disclosures/summary/0.1/spec.md:138",
+  "step": "What has been disclosed in health context",
+  "slug": "disclosures/summary",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "accessToken": "hcp_mt_8f3a1c9e7b2d4f60",
+   "category": "health_context",
+   "from": "2026-01-01T00:00:00Z"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/disclosures/summary/0.1/spec.md:181",
+  "step": "Two clients have received health context",
+  "slug": "disclosures/summary",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/disclosure-summary-result.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "clients": [
+    {
+     "client": {
+      "id": "https://booking-agent.example/client",
+      "name": "Table Finder",
+      "operator": {
+       "id": "https://booking-agent.example",
+       "name": "Table Finder Inc."
+      }
+     },
+     "grants": [
+      {
+       "grantId": "urn:uuid:5e7a9c1b-3d4f-4a6b-8c0e-2f4a6c8e0b28",
+       "status": "active"
+      }
+     ],
+     "categories": [
+      "health_context"
+     ],
+     "purposes": [
+      "https://hcp.example/purposes/reservation"
+     ],
+     "entries": 1,
+     "retrievals": 3,
+     "firstAt": "2026-10-12T19:04:10Z",
+     "lastAt": "2026-11-24T10:00:01Z",
+     "usableUntil": "2026-11-24T22:00:01Z",
+     "notification": "none"
+    },
+    {
+     "client": {
+      "id": "https://clinic.example/hcp-client",
+      "name": "Riverside Clinic intake",
+      "operator": {
+       "id": "https://clinic.example",
+       "name": "Riverside Clinic"
+      }
+     },
+     "grants": [
+      {
+       "grantId": "urn:uuid:8a0c2e4f-6b7d-4f9a-b1c3-5d7f9b1d3e64",
+       "status": "revoked"
+      }
+     ],
+     "categories": [
+      "health_context"
+     ],
+     "purposes": [
+      "https://hcp.example/purposes/treatment"
+     ],
+     "entries": 4,
+     "retrievals": 2,
+     "firstAt": "2026-06-03T08:15:00Z",
+     "lastAt": "2026-06-03T08:16:12Z",
+     "usableUntil": "2026-09-01T14:02:37Z",
+     "notification": "delivered",
+     "legalRetention": {
+      "record": "Patient medical record",
+      "obligation": "State medical records retention law",
+      "period": "10 years after the last visit"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/confirm/0.1/spec.md:150",
+  "step": "Accepting an inferred travel preference that was held in a conflict",
+  "slug": "entries/confirm",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "entryId": "urn:uuid:5affd201-734e-4217-a7b6-dc4dd177f561",
+   "disposition": "confirmed",
+   "expectedVersion": 2,
+   "accessToken": "hcp_mt_9d4b2e7a1c3f5068"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/confirm/0.1/spec.md:183",
+  "step": "The entry, accepted and active again",
+  "slug": "entries/confirm",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "entry.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "entry": {
+    "schema": "https://hcp.example/spec/entry/2.0",
+    "id": "urn:uuid:5affd201-734e-4217-a7b6-dc4dd177f561",
+    "type": [
+     "ContextEntry"
+    ],
+    "subject": {
+     "id": "https://context.provider.example/subjects/p-7f3a9c",
+     "relationship": null
+    },
+    "content": {
+     "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+     "value": "Prefers an aisle seat on flights longer than three hours.",
+     "language": "en"
+    },
+    "assertion": {
+     "declarationType": "model-inferred",
+     "confidence": "medium",
+     "basis": {
+      "rationale": "Chose an aisle seat on each of the last four long-haul bookings."
+     }
+    },
+    "classification": {
+     "categories": [
+      "general_preferences"
+     ],
+     "dimension": "flight-seat"
+    },
+    "record": {
+     "status": "active",
+     "version": 2,
+     "provenance": {
+      "assertedBy": {
+       "id": "https://travel-assistant.example/clients/planner",
+       "assurance": "authenticated"
+      },
+      "assertedAt": "2026-11-20T14:02:00Z",
+      "source": "integration",
+      "submittedByClient": {
+       "id": "https://travel-assistant.example/clients/planner",
+       "name": "Trip Planner",
+       "operator": {
+        "id": "https://travel-assistant.example",
+        "name": "Travel Assistant Ltd"
+       }
+      },
+      "authorizedUnder": "urn:uuid:eb54c220-b64f-40ad-a794-37a48095ce0b",
+      "recordedByProvider": "https://context.provider.example",
+      "recordedAt": "2026-11-20T14:02:01Z",
+      "confirmations": [
+       {
+        "disposition": "confirmed",
+        "confirmedBy": {
+         "id": "https://context.provider.example/subjects/p-7f3a9c"
+        },
+        "confirmedAt": "2026-11-25T09:00:01Z"
+       }
+      ]
+     },
+     "relationships": [
+      {
+       "type": "contradicts",
+       "target": "urn:uuid:b4f00822-4753-40a6-84cf-8fc51693b59e",
+       "assertedBy": {
+        "role": "hcp-provider",
+        "id": "https://context.provider.example"
+       },
+       "recordedAt": "2026-11-22T08:15:00Z"
+      }
+     ]
+    }
+   }
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/create/0.1/spec.md:145",
+  "step": "A booking agent records an inferred preference",
+  "slug": "entries/create",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/create-request.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "schema": "https://hcp.example/spec/entry/2.0",
+   "subject": {
+    "id": "urn:uuid:3f8a1c2e-5b7d-4e9f-a0c6-8d2b4e1f7a35"
+   },
+   "content": {
+    "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+    "value": "Prefers a window table.",
+    "language": "en"
+   },
+   "classification": {
+    "categories": [
+     "general_preferences"
+    ],
+    "dimension": "seating"
+   },
+   "assertion": {
+    "declarationType": "model-inferred",
+    "confidence": "medium",
+    "basis": {
+     "task": "Restaurant booking",
+     "rationale": "Asked for a window seat at three bookings."
+    }
+   },
+   "record": {
+    "provenance": {
+     "assertedBy": {
+      "id": "https://booking-agent.example/model/v4"
+     },
+     "source": "integration"
+    }
+   },
+   "accessToken": "hcp_at_2b7f0c6e9d1a4e8b"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/create/0.1/spec.md:192",
+  "step": "The entry, created",
+  "slug": "entries/create",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/create-result.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "entry": {
+    "ref": "hcp-ref-c73e19",
+    "version": 1,
+    "content": {
+     "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+     "value": "Prefers a window table.",
+     "language": "en"
+    },
+    "assertion": {
+     "declarationType": "model-inferred",
+     "confidence": "medium",
+     "basis": {
+      "task": "Restaurant booking",
+      "rationale": "Asked for a window seat at three bookings."
+     }
+    },
+    "classification": {
+     "categories": [
+      "general_preferences"
+     ],
+     "dimension": "seating"
+    },
+    "standing": {
+     "assurance": "authenticated",
+     "confirmed": false
+    },
+    "useUntil": "2026-11-26T10:00:01Z"
+   }
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/get/0.1/spec.md:140",
+  "step": "A Context Client reads an entry it was disclosed",
+  "slug": "entries/get",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/get-entry-request.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "ref": "hcp-ref-5e02bd",
+   "purpose": "https://hcp.example/purposes/reservation",
+   "purposeDescription": "Confirm the allergy before ordering.",
+   "accessToken": "hcp_at_2b7f0c6e9d1a4e8b"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/get/0.1/spec.md:179",
+  "step": "The entry, disclosed",
+  "slug": "entries/get",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/get-entry-result.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "entry": {
+    "ref": "hcp-ref-5e02bd",
+    "version": 1,
+    "content": {
+     "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+     "value": "Severe peanut allergy.",
+     "language": "en"
+    },
+    "assertion": {
+     "declarationType": "person-declared"
+    },
+    "classification": {
+     "categories": [
+      "health_context"
+     ]
+    },
+    "standing": {
+     "assurance": "authenticated",
+     "confirmed": true
+    },
+    "useUntil": "2026-11-25T21:00:01Z"
+   },
+   "retrievalId": "urn:uuid:0e7d4c2b-9a1f-4e3d-8b6c-2a5f1e0d9c83",
+   "minimization": {
+    "method": "none"
+   },
+   "directives": [
+    {
+     "directiveId": "urn:uuid:5b8c2e17-4a9d-4f3b-8e6a-1c0d9f7e2b44",
+     "action": "share",
+     "effect": "deny",
+     "text": "Never pass my health information to another agent.",
+     "categories": [
+      "health_context"
+     ],
+     "setBy": "context-subject",
+     "createdAt": "2026-10-02T08:30:00Z"
+    }
+   ],
+   "respondedAt": "2026-11-25T09:00:01Z"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/hard-delete/0.1/spec.md:131",
+  "step": "Erasing a withdrawn health entry at the person's request",
+  "slug": "entries/hard-delete",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "entryId": "urn:uuid:d29f48ce-af52-4f6d-b36c-102222532293",
+   "accessToken": "hcp_mt_5c1e9a7d3b2f4086"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/hard-delete/0.1/spec.md:166",
+  "step": "The entry is erased",
+  "slug": "entries/hard-delete",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/withdraw-result.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": false,
+    "errors": "/ must have required property 'status'"
+   }
+  ],
+  "payload": {
+   "entryId": "urn:uuid:d29f48ce-af52-4f6d-b36c-102222532293",
+   "hardDeleted": true,
+   "respondedAt": "2026-11-25T09:00:01Z"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/query/0.1/spec.md:150",
+  "step": "A query for dietary preferences, for a booking",
+  "slug": "entries/query",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/query-request.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "query": "dietary preferences and allergies for a restaurant booking",
+   "categories": [
+    "general_preferences",
+    "health_context"
+   ],
+   "purpose": "https://hcp.example/purposes/reservation",
+   "purposeDescription": "Book a table that can serve the guest's diet.",
+   "maxEntries": 3,
+   "accessToken": "hcp_at_2b7f0c6e9d1a4e8b"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/query/0.1/spec.md:192",
+  "step": "Two entries disclosed under the grant",
+  "slug": "entries/query",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/query-result.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "entries": [
+    {
+     "ref": "hcp-ref-a91c4f",
+     "version": 2,
+     "content": {
+      "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+      "value": "Vegetarian; eats fish occasionally.",
+      "language": "en"
+     },
+     "assertion": {
+      "declarationType": "person-declared"
+     },
+     "classification": {
+      "categories": [
+       "general_preferences"
+      ]
+     },
+     "standing": {
+      "assurance": "authenticated",
+      "confirmed": true
+     },
+     "useUntil": "2026-11-25T10:00:01Z"
+    },
+    {
+     "ref": "hcp-ref-5e02bd",
+     "version": 1,
+     "content": {
+      "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+      "value": "Severe peanut allergy.",
+      "language": "en"
+     },
+     "assertion": {
+      "declarationType": "person-declared"
+     },
+     "classification": {
+      "categories": [
+       "health_context"
+      ]
+     },
+     "standing": {
+      "assurance": "authenticated",
+      "confirmed": true
+     },
+     "useUntil": "2026-11-24T22:00:01Z"
+    }
+   ],
+   "retrievalId": "urn:uuid:9a1e5c73-2d4b-4e8f-a6c1-7b0d3e2f1a99",
+   "minimization": {
+    "method": "lexical"
+   },
+   "categoriesSearched": [
+    "general_preferences",
+    "health_context"
+   ],
+   "directives": [
+    {
+     "directiveId": "urn:uuid:5b8c2e17-4a9d-4f3b-8e6a-1c0d9f7e2b44",
+     "action": "share",
+     "effect": "deny",
+     "text": "Never pass my health information to another agent.",
+     "categories": [
+      "health_context"
+     ],
+     "setBy": "context-subject",
+     "createdAt": "2026-10-02T08:30:00Z"
+    }
+   ],
+   "respondedAt": "2026-11-24T10:00:01Z"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/restrict-purposes/0.1/spec.md:144",
+  "step": "Limiting a medication entry to care coordination",
+  "slug": "entries/restrict-purposes",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "entryId": "urn:uuid:16bc10cb-304a-4d25-802a-254d621e3cae",
+   "permittedPurposes": [
+    "https://purposes.example/care-coordination"
+   ],
+   "expectedVersion": 3,
+   "accessToken": "hcp_mt_7a2d9c4e1b6f3058"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/restrict-purposes/0.1/spec.md:173",
+  "step": "Withholding an entry from every purpose",
+  "slug": "entries/restrict-purposes",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "entryId": "urn:uuid:16bc10cb-304a-4d25-802a-254d621e3cae",
+   "permittedPurposes": [],
+   "expectedVersion": 3,
+   "accessToken": "hcp_mt_7a2d9c4e1b6f3058"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/restrict-purposes/0.1/spec.md:204",
+  "step": "The entry, now limited to care coordination",
+  "slug": "entries/restrict-purposes",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "entry.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "entry": {
+    "schema": "https://hcp.example/spec/entry/2.0",
+    "id": "urn:uuid:16bc10cb-304a-4d25-802a-254d621e3cae",
+    "type": [
+     "ContextEntry"
+    ],
+    "subject": {
+     "id": "https://context.provider.example/subjects/p-7f3a9c",
+     "relationship": null
+    },
+    "content": {
+     "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+     "value": "Takes 10 mg of lisinopril each morning.",
+     "language": "en"
+    },
+    "assertion": {
+     "declarationType": "person-declared"
+    },
+    "classification": {
+     "categories": [
+      "health_context"
+     ],
+     "permittedPurposes": [
+      "https://purposes.example/care-coordination"
+     ]
+    },
+    "record": {
+     "status": "active",
+     "version": 3,
+     "provenance": {
+      "assertedBy": {
+       "id": "https://context.provider.example/subjects/p-7f3a9c",
+       "assurance": "authenticated"
+      },
+      "assertedAt": "2026-10-03T07:45:00Z",
+      "source": "person-input",
+      "submittedByClient": {
+       "id": "https://wallet.person.example/clients/app",
+       "name": "Person Wallet",
+       "operator": {
+        "id": "https://wallet.person.example",
+        "name": "Person Wallet Co"
+       }
+      },
+      "authorizedUnder": "urn:uuid:6d0e0734-8161-42bb-89a9-056debd5ed4e",
+      "recordedByProvider": "https://context.provider.example",
+      "recordedAt": "2026-10-03T07:45:01Z"
+     }
+    }
+   }
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/revise/0.1/spec.md:155",
+  "step": "The booking agent corrects the preference",
+  "slug": "entries/revise",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/revise-request.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "ref": "hcp-ref-c73e19",
+   "expectedVersion": 1,
+   "content": {
+    "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+    "value": "Prefers a window table, away from the kitchen.",
+    "language": "en"
+   },
+   "reason": "The person added a detail when confirming a booking.",
+   "assertion": {
+    "declarationType": "person-declared"
+   },
+   "record": {
+    "provenance": {
+     "source": "person-input"
+    }
+   },
+   "accessToken": "hcp_at_2b7f0c6e9d1a4e8b"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/revise/0.1/spec.md:193",
+  "step": "Version 2",
+  "slug": "entries/revise",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/revise-result.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "entry": {
+    "ref": "hcp-ref-c73e19",
+    "version": 2,
+    "content": {
+     "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+     "value": "Prefers a window table, away from the kitchen.",
+     "language": "en"
+    },
+    "assertion": {
+     "declarationType": "person-declared"
+    },
+    "classification": {
+     "categories": [
+      "general_preferences"
+     ],
+     "dimension": "seating"
+    },
+    "standing": {
+     "assurance": "authenticated",
+     "confirmed": false
+    },
+    "useUntil": "2026-11-26T11:00:01Z"
+   }
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/set-categories/0.1/spec.md:147",
+  "step": "Letting work tools see an accessibility need",
+  "slug": "entries/set-categories",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "entryId": "urn:uuid:3928a8a2-e963-4355-b5b2-cbb8b23fe357",
+   "categories": [
+    "work_context",
+    "health_context"
+   ],
+   "expectedVersion": 2,
+   "accessToken": "hcp_mt_1f8c3a6e9b2d4075"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/set-categories/0.1/spec.md:178",
+  "step": "The entry, now in two categories",
+  "slug": "entries/set-categories",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "entry.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "entry": {
+    "schema": "https://hcp.example/spec/entry/2.0",
+    "id": "urn:uuid:3928a8a2-e963-4355-b5b2-cbb8b23fe357",
+    "type": [
+     "ContextEntry"
+    ],
+    "subject": {
+     "id": "https://context.provider.example/subjects/p-7f3a9c",
+     "relationship": null
+    },
+    "content": {
+     "profile": "https://hcp.example/spec/profiles/general-context/2.0",
+     "value": "Uses a screen reader; needs documents as tagged PDF or HTML.",
+     "language": "en"
+    },
+    "assertion": {
+     "declarationType": "person-declared"
+    },
+    "classification": {
+     "categories": [
+      "work_context",
+      "health_context"
+     ]
+    },
+    "record": {
+     "status": "active",
+     "version": 2,
+     "provenance": {
+      "assertedBy": {
+       "id": "https://context.provider.example/subjects/p-7f3a9c",
+       "assurance": "authenticated"
+      },
+      "assertedAt": "2026-09-14T11:20:00Z",
+      "source": "person-input",
+      "submittedByClient": {
+       "id": "https://wallet.person.example/clients/app",
+       "name": "Person Wallet",
+       "operator": {
+        "id": "https://wallet.person.example",
+        "name": "Person Wallet Co"
+       }
+      },
+      "authorizedUnder": "urn:uuid:40073c2b-9369-403c-b146-77a8e9a7f105",
+      "recordedByProvider": "https://context.provider.example",
+      "recordedAt": "2026-09-14T11:20:01Z"
+     }
+    }
+   }
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/withdraw/0.1/spec.md:127",
+  "step": "The person asks the agent to forget a preference",
+  "slug": "entries/withdraw",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/withdraw-request.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "ref": "hcp-ref-c73e19",
+   "reason": "The person asked the agent to forget it.",
+   "accessToken": "hcp_at_2b7f0c6e9d1a4e8b"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/entries/withdraw/0.1/spec.md:157",
+  "step": "Withdrawn",
+  "slug": "entries/withdraw",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/withdraw-result.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "ref": "hcp-ref-c73e19",
+   "status": "deleted",
+   "hardDeleted": false,
+   "respondedAt": "2026-11-25T12:00:01Z"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/list/0.1/spec.md:142",
+  "step": "Listing the person's active grants",
+  "slug": "grants/list",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "status": "active",
+   "limit": 50,
+   "accessToken": "hcp_mt_8f3a1c9e7b2d4f60"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/list/0.1/spec.md:177",
+  "step": "One active grant, to a booking agent",
+  "slug": "grants/list",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "grant.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "grants": [
+    {
+     "grantId": "urn:uuid:6f3157c9-8481-423e-a0b7-ea9c4ecad060",
+     "subject": {
+      "id": "hcp-sub-4f2a91c7"
+     },
+     "authorizingPrincipal": {
+      "id": "hcp-sub-4f2a91c7"
+     },
+     "client": {
+      "id": "booking-agent",
+      "name": "TableFinder booking assistant",
+      "operator": {
+       "id": "booking.example",
+       "name": "TableFinder Ltd"
+      }
+     },
+     "access": [
+      {
+       "type": "https://hcp.example/spec/authorization/context-access",
+       "actions": [
+        "read"
+       ],
+       "categories": [
+        "general_preferences",
+        "health_context"
+       ],
+       "purposes": [
+        {
+         "code": "https://hcp.example/purposes/reservation",
+         "description": "Book restaurant tables that can serve your diet."
+        }
+       ]
+      }
+     ],
+     "scopes": [
+      "hcp:general_preferences:read",
+      "hcp:health_context:read"
+     ],
+     "grantType": "temporary",
+     "issuedAt": "2026-11-24T09:30:00Z",
+     "expiresAt": "2026-11-25T13:30:00Z",
+     "status": "active"
+    }
+   ]
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/read-own/0.1/spec.md:133",
+  "step": "The booking agent checks what it was granted",
+  "slug": "grants/read-own",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "accessToken": "hcp_at_2b7f0c6e9d1a4e8b"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/read-own/0.1/spec.md:166",
+  "step": "The grant",
+  "slug": "grants/read-own",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/read-own-grant-result.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "grant": {
+    "grantId": "urn:uuid:c4d2e1f0-9a8b-4c7d-8e6f-5a4b3c2d1e0f",
+    "subject": {
+     "id": "urn:uuid:3f8a1c2e-5b7d-4e9f-a0c6-8d2b4e1f7a35"
+    },
+    "authorizingPrincipal": {
+     "id": "urn:uuid:3f8a1c2e-5b7d-4e9f-a0c6-8d2b4e1f7a35"
+    },
+    "client": {
+     "id": "booking-agent",
+     "name": "Example Booking Agent",
+     "operator": {
+      "id": "https://booking-agent.example",
+      "name": "Example Booking Ltd"
+     }
+    },
+    "access": [
+     {
+      "type": "https://hcp.example/spec/authorization/context-access",
+      "actions": [
+       "read",
+       "write"
+      ],
+      "categories": [
+       "general_preferences"
+      ],
+      "purposes": [
+       {
+        "code": "https://hcp.example/purposes/reservation",
+        "description": "Booking restaurants for you"
+       }
+      ],
+      "onwardSharing": {
+       "domains": [
+        "restaurants.example"
+       ]
+      }
+     },
+     {
+      "type": "https://hcp.example/spec/authorization/context-access",
+      "actions": [
+       "read"
+      ],
+      "categories": [
+       "health_context"
+      ],
+      "purposes": [
+       {
+        "code": "https://hcp.example/purposes/reservation",
+        "description": "Booking restaurants for you"
+       }
+      ]
+     }
+    ],
+    "scopes": [
+     "hcp:general_preferences:read",
+     "hcp:general_preferences:write",
+     "hcp:health_context:read"
+    ],
+    "grantType": "persistent",
+    "issuedAt": "2026-10-01T09:00:00Z",
+    "expiresAt": null,
+    "status": "active"
+   },
+   "directives": [
+    {
+     "directiveId": "urn:uuid:5b8c2e17-4a9d-4f3b-8e6a-1c0d9f7e2b44",
+     "action": "share",
+     "effect": "deny",
+     "text": "Never pass my health information to another agent.",
+     "categories": [
+      "health_context"
+     ],
+     "setBy": "context-subject",
+     "createdAt": "2026-10-02T08:30:00Z"
+    }
+   ]
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/relinquish/0.1/spec.md:121",
+  "step": "The booking agent gives up its grant",
+  "slug": "grants/relinquish",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "grantId": "urn:uuid:c4d2e1f0-9a8b-4c7d-8e6f-5a4b3c2d1e0f",
+   "accessToken": "hcp_at_2b7f0c6e9d1a4e8b"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/relinquish/0.1/spec.md:150",
+  "step": "Relinquished",
+  "slug": "grants/relinquish",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {}
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/request/0.1/spec.md:133",
+  "step": "A booking agent asks for travel preferences",
+  "slug": "grants/request",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "common.json#/$defs/accessDetail",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "access": [
+    {
+     "type": "https://hcp.example/spec/authorization/context-access",
+     "actions": [
+      "read"
+     ],
+     "categories": [
+      "general_preferences",
+      "travel_preferences"
+     ],
+     "purposes": [
+      {
+       "code": "https://purposes.example/travel-booking",
+       "description": "Book trips that match how you like to travel"
+      }
+     ]
+    }
+   ],
+   "expiresIn": 14400,
+   "subjectHint": "acct:alex@context.provider.example"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/request/0.1/spec.md:228",
+  "step": "The person approves",
+  "slug": "grants/request",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "grant.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "accessToken": "hcp_at_4d9a2c7e1b8f3a60",
+   "tokenExpiresAt": "2026-11-25T11:01:30Z",
+   "grant": {
+    "grantId": "urn:uuid:c4d2e1f0-9a8b-4c7d-8e6f-5a4b3c2d1e0f",
+    "subject": {
+     "id": "hcp-sub-7b2e40d1"
+    },
+    "authorizingPrincipal": {
+     "id": "hcp-sub-7b2e40d1"
+    },
+    "client": {
+     "id": "did:web:agent.booking.example",
+     "name": "Wayfare booking agent",
+     "operator": {
+      "id": "booking.example",
+      "name": "Wayfare Travel Ltd"
+     }
+    },
+    "access": [
+     {
+      "type": "https://hcp.example/spec/authorization/context-access",
+      "actions": [
+       "read"
+      ],
+      "categories": [
+       "travel_preferences"
+      ],
+      "purposes": [
+       {
+        "code": "https://purposes.example/travel-booking",
+        "description": "Book trips that match how you like to travel"
+       }
+      ]
+     }
+    ],
+    "scopes": [
+     "hcp:travel_preferences:read"
+    ],
+    "grantType": "temporary",
+    "issuedAt": "2026-11-25T10:01:30Z",
+    "expiresAt": "2026-11-25T14:01:30Z",
+    "status": "active"
+   }
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/revoke/0.1/spec.md:122",
+  "step": "Revoking a booking agent's grant",
+  "slug": "grants/revoke",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "grantId": "urn:uuid:c4d2e1f0-9a8b-4c7d-8e6f-5a4b3c2d1e0f",
+   "accessToken": "hcp_mt_8f3a1c9e7b2d4f60"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/revoke/0.1/spec.md:151",
+  "step": "The grant is revoked",
+  "slug": "grants/revoke",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {}
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/revoked/0.1/spec.md:128",
+  "step": "A grant was revoked",
+  "slug": "grants/revoked",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "noticeId": "urn:uuid:f1e2d3c4-b5a6-4978-8a6b-5c4d3e2f1a09",
+   "grantId": "urn:uuid:c4d2e1f0-9a8b-4c7d-8e6f-5a4b3c2d1e0f",
+   "revokedAt": "2026-11-24T11:00:01Z"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/revoked/0.1/spec.md:156",
+  "step": "A later delivery attempt of the same notice",
+  "slug": "grants/revoked",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "noticeId": "urn:uuid:f1e2d3c4-b5a6-4978-8a6b-5c4d3e2f1a09",
+   "grantId": "urn:uuid:c4d2e1f0-9a8b-4c7d-8e6f-5a4b3c2d1e0f",
+   "revokedAt": "2026-11-24T11:00:01Z"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/revoked/0.1/spec.md:184",
+  "step": "A grant ended with its delegation",
+  "slug": "grants/revoked",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "noticeId": "urn:uuid:6c5b4a39-2817-4f06-9e5d-4c3b2a190f8e",
+   "grantId": "urn:uuid:9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+   "revokedAt": "2027-03-01T00:00:00Z",
+   "reason": "delegation-ended"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/grants/revoked/0.1/spec.md:215",
+  "step": "The client accepted the notice",
+  "slug": "grants/revoked",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {}
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/rules/list/0.1/spec.md:128",
+  "step": "Reading the person's standing rules",
+  "slug": "rules/list",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "accessToken": "hcp_mt_8f3a1c9e7b2d4f60"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/rules/list/0.1/spec.md:156",
+  "step": "Two rules, one set by a delegate",
+  "slug": "rules/list",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "standing-rule.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   },
+   {
+    "i": 1,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "rules": [
+    {
+     "ruleId": "urn:uuid:3e9b1c7d-5a2f-4d8e-9b6c-0f1a2e3d4c5b",
+     "effect": "deny",
+     "operators": [
+      "ads.example"
+     ],
+     "categories": [
+      "health_context"
+     ],
+     "setBy": "context-subject",
+     "createdAt": "2026-11-25T10:00:01Z"
+    },
+    {
+     "ruleId": "urn:uuid:b2d4f6a8-0c1e-4a3b-9d5f-8e7c6b5a4d39",
+     "effect": "deny",
+     "requires": [
+      "https://hcp.example/spec/clients/directives/2.0"
+     ],
+     "categories": [
+      "education_learner_profile"
+     ],
+     "setBy": "urn:uuid:6c8e0a2b-4d1f-4b3c-8e5a-7f9d1b3c5e70",
+     "createdAt": "2026-11-20T16:30:00Z"
+    }
+   ]
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/rules/remove/0.1/spec.md:119",
+  "step": "Removing a rule that kept health context from an advertising network",
+  "slug": "rules/remove",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "ruleId": "urn:uuid:3e9b1c7d-5a2f-4d8e-9b6c-0f1a2e3d4c5b",
+   "accessToken": "hcp_mt_8f3a1c9e7b2d4f60"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/rules/remove/0.1/spec.md:148",
+  "step": "The rule is removed",
+  "slug": "rules/remove",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {}
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/rules/set/0.1/spec.md:126",
+  "step": "Keeping health context from an advertising network",
+  "slug": "rules/set",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {
+   "operators": [
+    "ads.example"
+   ],
+   "categories": [
+    "health_context"
+   ],
+   "accessToken": "hcp_mt_8f3a1c9e7b2d4f60"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/rules/set/0.1/spec.md:156",
+  "step": "The rule is set",
+  "slug": "rules/set",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "standing-rule.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "rule": {
+    "ruleId": "urn:uuid:3e9b1c7d-5a2f-4d8e-9b6c-0f1a2e3d4c5b",
+    "effect": "deny",
+    "operators": [
+     "ads.example"
+    ],
+    "categories": [
+     "health_context"
+    ],
+    "setBy": "context-subject",
+    "createdAt": "2026-11-25T10:00:01Z"
+   }
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/shares/report/0.1/spec.md:123",
+  "step": "The booking agent told a restaurant about a preference",
+  "slug": "shares/report",
+  "side": "request",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": "operations/report-sharing-request.json",
+  "hcp": [
+   {
+    "i": 0,
+    "ok": true,
+    "errors": ""
+   }
+  ],
+  "payload": {
+   "recipient": {
+    "domain": "restaurants.example",
+    "name": "Example Bistro"
+   },
+   "refs": [
+    "hcp-ref-a91c4f"
+   ],
+   "purpose": "https://hcp.example/purposes/reservation",
+   "sharedAt": "2026-11-25T13:10:00Z",
+   "accessToken": "hcp_at_2b7f0c6e9d1a4e8b"
+  }
+ },
+ {
+  "from": "spec.md",
+  "src": "specs/hcp/shares/report/0.1/spec.md:155",
+  "step": "Recorded",
+  "slug": "shares/report",
+  "side": "response",
+  "ttPass": true,
+  "ttErrors": "",
+  "hcpSchema": null,
+  "hcp": [],
+  "payload": {}
+ }
+]
