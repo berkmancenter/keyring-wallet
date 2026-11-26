@@ -1,0 +1,96 @@
+{
+  "recordedAt": "2026-11-26T07:11:03.034Z",
+  "source": {
+    "repository": "OpenVTC/verifiable-trust-infrastructure",
+    "commit": "f7b78e29dfa0fc79d125eba5970cce66d82b53d5",
+    "version": "0.79.0",
+    "profile": "debug"
+  },
+  "binarySha256": "3fe481cbda79052ccc9f4bf8dc5e17c6e7a28ed9c48e7a5ac360fff76af31b96",
+  "cases": {
+    "p1-administrator": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "p2-create-context": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "d-grant": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "p3-bound": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "o-hierarchy": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "b-register": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "c-swap": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "l-revoke-after-1-swap": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "l-revoke-after-2-swaps": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "l-disable": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "p5-narrow": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "p6-counts-delete": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "p7-two-identities": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "f-sign-as-persona": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    }
+  }
+}
