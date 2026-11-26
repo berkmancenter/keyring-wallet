@@ -18,7 +18,7 @@ const run = (script, st, input) =>
 const decision = (out) => (out ? JSON.parse(out).hookSpecificOutput.permissionDecision : 'none')
 
 for (const tool of ['Bash', 'Write', 'WebFetch', 'ToolSearch', 'Agent', 'mcp__vtamcp__memory_get']) {
-  test(`marker "other": ${tool} is denied, in auto and in bypassPermissions`, () => {
+  test(`marker "other": ${tool} is denied by the script whatever mode its input names (auto, bypassPermissions); whether Claude Code calls the hook in bypassPermissions is not shown here`, () => {
     for (const mode of ['auto', 'bypassPermissions']) {
       const st = state()
       fs.writeFileSync(path.join(st, 'turn-trust'), 'other')
