@@ -1,0 +1,23 @@
+{
+  "name": "ref-25-agent-pairing",
+  "private": true,
+  "type": "module",
+  "description": "TSP reference rung 25: what connecting an AI agent to a person's VTA needs from a mediator and a VTA, measured on the local lab (agent-connect-plan.md step 7.1). Node and ws; no app change.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node run.mjs",
+    "check": "node run.mjs --quiet"
+  },
+  "dependencies": {
+    "@noble/curves": "^2.3.0",
+    "@noble/hashes": "^2.0.1",
+    "@openvtc/vti-didcomm-js": "0.16.1",
+    "canonicalize": "^1.0.8",
+    "jsqr": "^1.4.0",
+    "qrcode": "^1.5.4",
+    "ws": "^8.21.3"
+  }
+}

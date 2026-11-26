@@ -1,0 +1,201 @@
+{
+  "ranAt": "2026-11-26T04:03:23.710Z",
+  "mode": "mailbox",
+  "mediatorDid": "did:peer:2.Vz6MksnZoLMVS7WnzpjQuSn8NPkLNLmnarf6PfA58NKbHvXph.Ez6LSsn2LBTey7NY3S8Xx6epuCvR6DY4aYj4HWFM2tFku1o4G.SeyJ0IjoiZG0iLCJzIjpbeyJ1cmkiOiJodHRwOi8vMTI3LjAuMC4xOjcwNjEvbWVkaWF0b3IvdjEiLCJhY2NlcHQiOlsiZGlkY29tbS92MiJdfSx7InVyaSI6IndzOi8vMTI3LjAuMC4xOjcwNjEvbWVkaWF0b3IvdjEvd3MiLCJhY2NlcHQiOlsiZGlkY29tbS92MiJdfV19.SeyJ0IjoiQXV0aGVudGljYXRpb24iLCJzIjoiaHR0cDovLzEyNy4wLjAuMTo3MDYxL21lZGlhdG9yL3YxL2F1dGhlbnRpY2F0ZSIsImlkIjoiI2F1dGgifQ.SeyJ0IjoidHNwIiwicyI6Imh0dHA6Ly8xMjcuMC4wLjE6NzA2MS9tZWRpYXRvci92MSIsImlkIjoiI3RzcCJ9",
+  "source": {
+    "repository": "affinidi/affinidi-messaging-mediator",
+    "commit": "f6ed8159a761344a96b5256e09c10e36cd2359d7",
+    "version": "0.53.0",
+    "profile": "debug"
+  },
+  "binarySha256": "c6492c18bfb6c2a69bb75c77cee52f98a53ee3ecee9b59d57a2f1cced63dbe59",
+  "config": {
+    "mode": "mailbox",
+    "set": {
+      "security.global_acl_default": "DENY_ALL,LOCAL,SEND_MESSAGES,RECEIVE_MESSAGES,RECEIVE_FORWARDED,ANON_RECEIVE,SEND_FORWARDED_CHANGE,MODE_EXPLICIT_DENY",
+      "limits.rate_limit_per_ip": "100",
+      "limits.rate_limit_burst": "50",
+      "limits.did_rate_limit_per_second": "20",
+      "limits.did_rate_limit_burst": "10",
+      "processors.forwarding.external_forwarding": "false",
+      "processors.wake.enabled": "false"
+    },
+    "settings": {
+      "security.mediator_acl_mode": "explicit_deny",
+      "security.global_acl_default": "DENY_ALL,LOCAL,SEND_MESSAGES,RECEIVE_MESSAGES,RECEIVE_FORWARDED,ANON_RECEIVE,SEND_FORWARDED_CHANGE,MODE_EXPLICIT_DENY",
+      "security.block_anonymous_outer_envelope": "true",
+      "security.force_session_did_match": "true",
+      "limits.queued_send_messages_per_peer": "50",
+      "limits.queued_send_messages_soft": "2000",
+      "limits.queued_send_messages_hard": "10000",
+      "limits.queued_receive_messages_soft": "200",
+      "limits.queued_receive_messages_hard": "1000",
+      "limits.rate_limit_per_ip": "100",
+      "limits.rate_limit_burst": "50",
+      "limits.did_rate_limit_per_second": "20",
+      "limits.did_rate_limit_burst": "10",
+      "processors.forwarding.external_forwarding": "false",
+      "processors.wake.enabled": "false"
+    },
+    "differsFromMailbox": {
+      "database.database_url": "the lab's own Redis",
+      "log_json": "log format only",
+      "mediator_did": "the lab mediator's own identity",
+      "security.cors_allow_origin": "a browser origin; the rung's clients are Node and send none",
+      "server.admin_did": "the lab mediator's own administrator",
+      "server.did_web_self_hosted": "the mailbox serves its own did:webvh log; the lab mediator is a did:peer",
+      "server.listen_address": "loopback",
+      "server.trust_xff_cidrs": "the mailbox sits behind a proxy; the lab has none, so every client is 127.0.0.1 to the per-IP limit"
+    }
+  },
+  "node": "v20.19.2",
+  "cases": {
+    "live/none": {
+      "send": {
+        "status": 401
+      },
+      "delivered": false
+    },
+    "offline/none": {
+      "send": {
+        "status": 401
+      },
+      "delivered": false
+    },
+    "never-seen/none": {
+      "send": {
+        "status": 401
+      },
+      "delivered": false
+    },
+    "anonymous/none": {
+      "send": {
+        "status": 401
+      },
+      "delivered": false
+    },
+    "peer-here-url/none": {
+      "attached": true,
+      "send": {
+        "status": 401
+      },
+      "delivered": false
+    },
+    "peer-here-did/none": {
+      "attached": true,
+      "send": {
+        "status": 401
+      },
+      "delivered": false
+    },
+    "peer-elsewhere/none": {
+      "attached": true,
+      "send": {
+        "status": 401
+      },
+      "delivered": false
+    },
+    "queue/none": {
+      "accepted": 0,
+      "refusal": {
+        "status": 401,
+        "retryAfter": "absent"
+      }
+    },
+    "live/session": {
+      "send": {
+        "status": 200
+      },
+      "delivered": true
+    },
+    "offline/session": {
+      "send": {
+        "status": 200
+      },
+      "delivered": true
+    },
+    "never-seen/session": {
+      "send": {
+        "status": 403,
+        "code": "e.p.delivery.refused"
+      },
+      "delivered": false
+    },
+    "anonymous/session": {
+      "send": {
+        "status": 400,
+        "code": "w.m.message.anonymous"
+      },
+      "delivered": false
+    },
+    "peer-here-url/session": {
+      "attached": true,
+      "send": {
+        "status": 200
+      },
+      "delivered": true
+    },
+    "peer-here-did/session": {
+      "attached": true,
+      "send": {
+        "status": 200
+      },
+      "delivered": true
+    },
+    "peer-elsewhere/session": {
+      "attached": true,
+      "send": {
+        "status": 200
+      },
+      "delivered": true
+    },
+    "queue/session": {
+      "accepted": 50,
+      "refusal": {
+        "status": 503,
+        "code": "e.p.limits.queue.peer",
+        "retryAfter": "present"
+      }
+    },
+    "second-socket": {
+      "secondOpens": true,
+      "firstEvicted": true
+    },
+    "fresh-key": {
+      "authenticates": true,
+      "socketOpens": true
+    },
+    "rest-only/none": {
+      "authenticated": true,
+      "send": {
+        "status": 401
+      }
+    },
+    "rest-only/session": {
+      "authenticated": true,
+      "send": {
+        "status": 403,
+        "code": "e.p.authorization.send_forwarded"
+      }
+    },
+    "self-grant": {
+      "attached": true,
+      "before": {
+        "send": {
+          "status": 403,
+          "code": "e.p.authorization.send_forwarded"
+        },
+        "delivered": false
+      },
+      "grant": {
+        "sendForwarded": true
+      },
+      "after": {
+        "send": {
+          "status": 200
+        },
+        "delivered": true
+      }
+    }
+  }
+}
