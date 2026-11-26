@@ -66,6 +66,7 @@ function run(
 ) {
   const clock = { now: T0 }
   let sealed = 0
+  const reads = { fail: false }
   const agentTask = jest.fn(async (type: string, payload: Record<string, unknown>): Promise<unknown> => {
     switch (type) {
       case ROOMS_TASK.keysList02:
@@ -83,9 +84,11 @@ function run(
       case ROOMS_TASK.keysProfileRead:
         return { roomId: ROOM, status: 'found', profile: { name: 'Room', recordMembers: ['kind', 'inReplyTo'] } }
       case ROOMS_TASK.keysRead: {
+        if (reads.fail) throw Object.assign(new Error('no answer'), { name: 'VtiSentNoAnswer' })
         const stored = host.records.get(String(payload.key))
         if (!stored) throw refusal('rooms/keys/read:notFound')
-        if (stored.sealedFor !== stored.version) throw new Error('the record did not decrypt at its version')
+        // Sealed for another version: the agent refuses to open it.
+        if (stored.sealedFor !== stored.version) throw refusal('rooms/keys/read:cannotOpen')
         return { key: payload.key, version: stored.version, status: 'active', plaintext: stored.plaintext }
       }
       case ROOMS_TASK.keysSeal02:
@@ -184,7 +187,17 @@ function run(
     await service.listNotes(ROOM)
     await settle()
   }
-  return { service, warn, settle, openWatched, landsUnseen, send, list, sendCompleted }
+  return {
+    service,
+    warn,
+    settle,
+    openWatched,
+    landsUnseen,
+    send,
+    list,
+    sendCompleted,
+    failReads: () => (reads.fail = true),
+  }
 }
 
 const opens = (host: ReturnType<typeof roomHost>, service: AgentRoomsService, idempotencyKey: string) => {
@@ -394,6 +407,50 @@ describe('a post left under a wrong seal by a failed write is kept no longer tha
     await second.list()
     expect(keptSends(wallet)).toEqual([])
     expect(second.warn).toHaveBeenCalledWith(expect.stringContaining('let go unchecked'))
+  })
+})
+
+describe('a kept post whose key holds a record at another version', () => {
+  test('that opens (the person wrote it from another device) is not written over, and is let go', async () => {
+    const host = roomHost()
+    const wallet = cacheWallet()
+    const first = run(host, wallet, { 2: 'hang' })
+    await first.openWatched()
+    first.landsUnseen()
+    void first.send('post-1', 'the words')
+    await first.settle()
+    // The same person's other device writes the post's record whole, at a later version.
+    const key = first.service.postKeyFor('post-1')
+    host.head += 1
+    const theirs = {
+      version: host.head,
+      sealedFor: host.head,
+      plaintext: b64url(JSON.stringify({ body: 'edited elsewhere' })),
+    }
+    host.records.set(key, theirs)
+    const second = run(host, wallet)
+    await second.list()
+    expect(host.records.get(key)).toEqual(theirs)
+    expect(second.sendCompleted).not.toHaveBeenCalled()
+    expect(keptSends(wallet)).toEqual([])
+    expect(second.warn).toHaveBeenCalledWith(expect.stringContaining('its key opens as written'))
+  })
+
+  test('that could not be read is not written over, and is let go', async () => {
+    const host = roomHost()
+    const wallet = cacheWallet()
+    const first = run(host, wallet, { 2: 'hang' })
+    await first.openWatched()
+    first.landsUnseen()
+    void first.send('post-1')
+    await first.settle()
+    const second = run(host, wallet)
+    second.failReads()
+    await second.list()
+    expect(opens(host, second.service, 'post-1')).toBe(false)
+    expect(second.sendCompleted).not.toHaveBeenCalled()
+    expect(keptSends(wallet)).toEqual([])
+    expect(second.warn).toHaveBeenCalledWith(expect.stringContaining('let go unwritten'))
   })
 })
 

@@ -1215,7 +1215,9 @@ export class AgentRoomsService implements RoomsService {
    * - listed at the version its last put was sealed for: it landed whole;
    * - listed at the version it had before the write (an edit's), or absent where the listing would show it: nothing
    *   of it landed, and it is not sent again (an app stopped before it, as before);
-   * - listed at another version: it landed under a wrong seal, and is sealed and put again over itself there;
+   * - listed at another version: read first. It landed under a wrong seal only where the agent refuses to open it; then
+   *   it is sealed and put again over itself there. A record that opens (the person's other device wrote it) or a read
+   *   that says nothing is not written over (`leftUnopenable`);
    * - absent where the listing could not show it (a window above it, a listing that stopped early): undecided, and let go
    *   all the same, with a line saying so.
    *
@@ -1251,7 +1253,12 @@ export class AgentRoomsService implements RoomsService {
         this.backend.warn(
           `rooms: ${logRef(roomId)} a post left being written was let go unchecked: the listing could not show it`
         )
-      if (listed !== undefined && listed !== send.sealedFor && listed !== send.before) {
+      if (
+        listed !== undefined &&
+        listed !== send.sealedFor &&
+        listed !== send.before &&
+        (await this.leftUnopenable(room, send.key))
+      ) {
         try {
           const note = { title: '', body: send.body, members: send.members as RecordMembers }
           await this.writeSealed(room, community, host, send.key, listed, note, false)
@@ -1263,6 +1270,26 @@ export class AgentRoomsService implements RoomsService {
         }
       }
       await journal.settle(place, send.key)
+    }
+  }
+
+  /**
+   * Whether the record a kept post's key holds is one this phone left under a wrong seal: the agent refuses to open it.
+   * At a version this run did not seal for, a record that opens is someone's own write (the person's other device), and
+   * a read with no answer says nothing: neither is written over, and the post is let go (the review of #1059). A post
+   * the person can type again is the loss, never an edit they cannot get back.
+   */
+  private async leftUnopenable(room: KnownRoom, key: string): Promise<boolean> {
+    try {
+      await this.readRecord(room, room.roomId, key)
+      this.backend.warn(`rooms: ${logRef(room.roomId)} a post left being written was let go: its key opens as written`)
+      return false
+    } catch (e) {
+      if (e instanceof Error && e.name === 'VtiRefusal' && refusalCode(e) !== 'notFound') return true
+      this.backend.warn(
+        `rooms: ${logRef(room.roomId)} a post left being written was let go unwritten: its key was not read (${failureCategory(e)})`
+      )
+      return false
     }
   }
 
