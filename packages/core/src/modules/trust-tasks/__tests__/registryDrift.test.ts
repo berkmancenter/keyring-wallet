@@ -76,6 +76,18 @@ describe('the registry clone the drift tests read', () => {
     )
   })
 
+  test('with TRUST_TASKS_REGISTRY set and no external/, another source fails its drift test rather than skipping', () => {
+    // The variable names only the registry; a source it does not cover must not quietly drop out where it is set.
+    const { root, fixtures } = repo()
+    process.env.TRUST_TASKS_REGISTRY = join(base, 'elsewhere')
+    expect(registryPath(fixtures, 'verifiable-trust-infrastructure')).toBe(
+      join(root, 'external', 'verifiable-trust-infrastructure')
+    )
+    expect(() => expectNoDrift(fixtures, {}, { source: 'verifiable-trust-infrastructure' })).toThrow(
+      /is missing.*registry only, not verifiable-trust-infrastructure/
+    )
+  })
+
   test('a file copied at one of several commits names it, and one PROVENANCE.sha does not list is refused', () => {
     const { root, fixtures } = repo({ clone: true })
     const clone = join(root, 'external', 'dtgwg-trust-tasks-tf')

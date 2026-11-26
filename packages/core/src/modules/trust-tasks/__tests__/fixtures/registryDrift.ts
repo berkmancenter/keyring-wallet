@@ -59,16 +59,18 @@ export function repoRootAbove(from: string): string | undefined {
  * `TRUST_TASKS_REGISTRY` overrides. Otherwise it is `external/dtgwg-trust-tasks-tf` in the repository's root
  * (`scripts/openvtc/setup-external.mjs` clones it there). Only a checkout with no `external/` at all answers undefined,
  * so only it skips: CI, which has no clone by design, and a fresh checkout. Where `external/` exists, or the variable is
- * set, the path is answered whether or not it is there: the drift test then runs, and `expectNoDrift` fails it, that
+ * set (for any source: it names the registry, but says drift checking is wanted), the path is answered whether or not it is there: the drift test then runs, and `expectNoDrift` fails it, that
  * one test, saying what is missing. A setup gap never collapses the rest of the file, and never passes as a skip.
  */
 export function registryPath(from: string = __dirname, source: DriftSource = REGISTRY): string | undefined {
-  const fromEnv = source === REGISTRY ? process.env.TRUST_TASKS_REGISTRY : undefined
-  if (fromEnv) return fromEnv
+  const fromEnv = process.env.TRUST_TASKS_REGISTRY
+  if (fromEnv && source === REGISTRY) return fromEnv
   const root = repoRootAbove(from)
   if (!root) return undefined
   const external = join(root, 'external')
-  return existsSync(external) ? join(external, source) : undefined
+  // The variable set says drift checking is wanted here, for every source, though it names only the registry: another
+  // source is then read from `external/` and fails its test where it is missing, never skipped.
+  return existsSync(external) || fromEnv ? join(external, source) : undefined
 }
 
 /** Fails the drift test that asked, when the clone it was pointed at is not there. */
@@ -78,7 +80,9 @@ function requireRegistry(registry: string, source: DriftSource): void {
     source === REGISTRY && process.env.TRUST_TASKS_REGISTRY
       ? `TRUST_TASKS_REGISTRY is ${registry}, which does not exist: the drift test cannot compare anything`
       : `${registry} is missing, so the drift test cannot compare anything: ` +
-        'run node scripts/openvtc/setup-external.mjs, or set TRUST_TASKS_REGISTRY'
+        (source === REGISTRY
+          ? 'run node scripts/openvtc/setup-external.mjs, or set TRUST_TASKS_REGISTRY'
+          : `run node scripts/openvtc/setup-external.mjs (TRUST_TASKS_REGISTRY names the Trust Tasks registry only, not ${source})`)
   )
 }
 
