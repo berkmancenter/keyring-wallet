@@ -12,6 +12,11 @@
  * - **What a failed, cancelled or unfinished pairing leaves at the VTA** (`cleanup` on the machine's state) is recorded
  *   here as a "Not finished" record (§3.10: listed "Not finished", offered "Remove", removed on its own after ten
  *   minutes), so nothing is forgotten. The removal itself is the actions' step (Remove, the not-finished sweep).
+ *   **The one leftover that cannot be recorded:** an `auth/oob` grant refused after the VTA wrote an entry, when neither
+ *   `prove` nor the grant named the subject. The machine then has no key to name (`pairing.ts`, the
+ *   `TODO(§11 Q7(c), step 7.5)` in `checkEnrolment`), so there is no row for Remove or the sweep. P0 cannot reach it:
+ *   the fallback knows its subject from the scanned `did:key`, and `auth/oob` is refused as unsupported. It opens with
+ *   `auth/oob`, and closes when Q7(c) is answered.
  *
  * @module connected-agents/driver
  */
@@ -239,6 +244,9 @@ export class AgentConnectDriver {
     choice: AgentConnectChoice | undefined
   ): Promise<PersistOutcome> {
     const existing = await this.ports.connections.get(cleanup.subject)
+    // A `pairing` record may be written over: it is written only after `confirmed`, and every cleanup-carrying phase
+    // comes before confirmation, so a cleanup for a subject already at `pairing` would come from a new pairing of that
+    // key. Anything further along (a connected, expired, revoking or revoked agent) is kept as it is.
     if (existing && existing.state !== 'pairing' && existing.state !== 'notFinished') {
       return { state: 'kept', subject: cleanup.subject }
     }
