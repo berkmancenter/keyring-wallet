@@ -12,6 +12,16 @@ import { communityTarget, type CommunityLink } from '../module/vtiCommunityLink'
 
 import { communityName, type CommunityName } from './communityName'
 
+/**
+ * Redraws the screen that calls it whenever any community's published name is learned. For a screen that names
+ * communities through the label functions (`communityLabelOf`, `communityLabelAloneOf`), which read the names kept in
+ * memory without subscribing: Messages' chips, for one, kept "(no name published yet)" after the names had been
+ * learned, until something else redrew the list (IN-814). Returns a number that changes with the names.
+ */
+export function useCommunityNamesLearned(): number {
+  return useSyncExternalStore(communityTarget.subscribe, communityTarget.namesLearned)
+}
+
 export function useCommunity(configured?: string): CommunityLink | undefined {
   const target = useSyncExternalStore(communityTarget.subscribe, communityTarget.get)
   if (target) return target
