@@ -110,6 +110,19 @@ describe('AgentConnectionStore: put, update and upsert share one lock per record
     expect(genericRecords.save.mock.calls.length + genericRecords.update.mock.calls.length).toBe(writes)
   })
 
+  it('the no-write rule is by reference: the same object writes nothing, a copy with nothing changed writes', async () => {
+    const { agent, genericRecords } = fakeAgent()
+    const store = new AgentConnectionStore(agent)
+    await store.put(agentRecord())
+    const id = agentRecord().id
+    const writes = () => genericRecords.save.mock.calls.length + genericRecords.update.mock.calls.length
+    const before = writes()
+    await store.update(id, (r) => r)
+    expect(writes()).toBe(before)
+    await store.update(id, (r) => ({ ...r }))
+    expect(writes()).toBe(before + 1)
+  })
+
   it('upsert creates a record that is absent, and refuses one under another id', async () => {
     const { agent } = fakeAgent()
     const store = new AgentConnectionStore(agent)
