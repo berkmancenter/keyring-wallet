@@ -32,18 +32,18 @@ const answers = (o: RevokeViewOutcome) => jest.fn(async () => o)
 
 describe('RevokeAgentSheet', () => {
   it('names the agent and, with rooms, the 4-hour tail', () => {
-    const view = show(<RevokeAgentSheet name={NAME} hasRooms onRevoke={answers({ kind: 'revoked' })} onKeep={jest.fn()} />)
+    const view = show(
+      <RevokeAgentSheet name={NAME} hasRooms onRevoke={answers({ kind: 'revoked' })} onKeep={jest.fn()} />
+    )
     expect(view.getByText('ConnectedAgents.RevokeTitle')).toBeTruthy()
-    expect(view.getByTestId(id('RevokeAgentBody'))).toHaveTextContent('ConnectedAgents.RevokeBody', { exact: true })
+    expect(view.getByTestId(id('RevokeAgentBody'))).toHaveTextContent(/^ConnectedAgents\.RevokeBody$/)
   })
 
   it("without rooms (P0) shows §6's no-room form", () => {
     const view = show(
       <RevokeAgentSheet name={NAME} hasRooms={false} onRevoke={answers({ kind: 'revoked' })} onKeep={jest.fn()} />
     )
-    expect(view.getByTestId(id('RevokeAgentBody'))).toHaveTextContent('ConnectedAgents.RevokeBodyNoRooms', {
-      exact: true,
-    })
+    expect(view.getByTestId(id('RevokeAgentBody'))).toHaveTextContent(/^ConnectedAgents\.RevokeBodyNoRooms$/)
   })
 
   it('the P0 sheet has no "Also delete what it remembered" row (P2, step 7.18): only Revoke and Keep', () => {
@@ -59,7 +59,9 @@ describe('RevokeAgentSheet', () => {
   })
 
   it('looks like canvas frame 19: Revoke filled in the danger red, Keep outlined in purple', () => {
-    const view = show(<RevokeAgentSheet name={NAME} hasRooms onRevoke={answers({ kind: 'revoked' })} onKeep={jest.fn()} />)
+    const view = show(
+      <RevokeAgentSheet name={NAME} hasRooms onRevoke={answers({ kind: 'revoked' })} onKeep={jest.fn()} />
+    )
     const revoke = StyleSheet.flatten(view.getByTestId(id('RevokeAgentConfirm')).props.style)
     const keep = StyleSheet.flatten(view.getByTestId(id('RevokeAgentKeep')).props.style)
     expect(revoke).toMatchObject({ backgroundColor: AGENT_COLORS.danger })
