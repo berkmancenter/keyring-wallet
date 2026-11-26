@@ -41,7 +41,7 @@ node scripts/openvtc/setup-external.mjs                  # once, at the reposito
 
 cd tsp-reference/ref-25-agent-pairing
 npm install
-npm test                                # 76 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, and the recordings
+npm test                                # 77 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, and the recordings
 lab/mediator.sh up mailbox              # or: open, deny
 npm start                               # every case for that mode, against the recorded result
 lab/mediator.sh down
@@ -130,6 +130,8 @@ section 2.6, the VTA versions). Each test quotes its row and asserts, with no la
 under `fixtures/` hold what the row says. It fails when the plan no longer has the row, and when a recording says
 something else. A row is compared by its words, so re-aligning a table changes nothing; a changed word, number or
 code fails the test that quotes the row, and the row is re-quoted there, beside the assertions it has to match.
+A last test reads both tables whole and fails if any row of either is quoted by no test, so a row added to a
+table is not left unmeasured.
 
 It reads those rows only: not the plan's prose and not this README. CI does not run it; `npm test` here does.
 

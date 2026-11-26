@@ -17,9 +17,13 @@ import { readFileSync } from "node:fs";
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 /** A line by its words: runs of spaces as one, none at the ends. */
 const words = (line) => line.replace(/ +/g, " ").trim();
-const planLines = new Set(read("../../docs/plans/agent-connect-plan.md").split("\n").map(words));
+const planText = read("../../docs/plans/agent-connect-plan.md").split("\n");
+const planLines = new Set(planText.map(words));
+/** Every row a test has quoted and found in the plan. The last test holds this to the two tables, whole. */
+const quoted = new Set();
 /** The plan must still have `row`. Each test calls this first, with the row it is about. */
 function planHas(row) {
+  if (planLines.has(words(row))) quoted.add(words(row));
   assert.ok(
     planLines.has(words(row)),
     `the plan no longer has the row this test quotes. Read the plan's new row against the assertions in this test; change them if what the row says changed; then quote the new row here.\nQuoted: ${row}`,
@@ -49,6 +53,21 @@ test("a row is compared by its words: re-aligned it is the same row, and with on
   // Spaces inside a cell's words still count: this is not the same text.
   assert.throws(() => planHas("| `acl/list` | 0. 3 | 0.4 | 0.4 |"), /no longer has the row/);
 });
+
+/**
+ * The data rows of the one table in a section of the plan: the lines that start with `|` between the section's
+ * heading and the next heading of any level, without the header row and the rule under it.
+ */
+function tableRows(heading) {
+  const starts = planText.flatMap((line, index) => (line.startsWith(heading) ? [index] : []));
+  assert.equal(starts.length, 1, `the plan has ${starts.length} headings that start "${heading}"`);
+  const after = planText.slice(starts[0] + 1);
+  const end = after.findIndex((line) => /^#{1,6} /.test(line));
+  assert.notEqual(end, -1, `no heading follows "${heading}"`);
+  const table = after.slice(0, end).filter((line) => line.startsWith("|"));
+  assert.match(table[1] ?? "", /^\|(?: *:?-+:? *\|)+$/, `the second line of the table under "${heading}" is not a rule`);
+  return table.slice(2).map(words);
+}
 
 // ───────────────────────────────────────────────────────────── section 2.4, the mediator
 
@@ -200,4 +219,19 @@ test("2.6, the cases: 14 of step 0.1; none can run at the pin; 0.84.0 and 0.87.0
 test("no recorded case is a case that threw", () => {
   for (const version of VERSIONS) for (const [name, result] of Object.entries(cases[version])) assert.equal("error" in result, false, `${version} ${name}`);
   for (const [mode, set] of Object.entries({ open, mailbox, deny })) for (const [name, result] of Object.entries(set)) assert.equal("error" in result, false, `${mode} ${name}`);
+});
+
+// ───────────────────────────────────────────────────────────── both tables, whole
+
+// This test is last on purpose: it reads what the tests above quoted. Run the whole file, not one test by name.
+test("every row of the two tables is quoted by a test above, so a row added to either is not left unmeasured", () => {
+  const mediator = tableRows("### 2.4 ");
+  const vta = tableRows("### 2.6 ");
+  // The counts are written out, so a table that moves, splits or loses its section fails here instead of
+  // quietly giving a smaller set to check.
+  assert.equal(mediator.length, 9, "section 2.4's table");
+  assert.equal(vta.length, 8, "section 2.6's table");
+  for (const row of [...mediator, ...vta]) {
+    assert.ok(quoted.has(row), `no test quotes this row of the plan, so nothing holds it to the recordings:\n${row}`);
+  }
 });
