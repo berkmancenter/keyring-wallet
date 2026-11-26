@@ -1,0 +1,278 @@
+/**
+ * What a rooms log line may say about a community and about why a read did not happen.
+ *
+ * A read refused because a step keeps the community session as another of this phone's identities (vtiAgent
+ * `VtiSessionHeld`) carries that step's reason ("signed in for a step just now", "polls"). Beside a community's DID
+ * that pairs a step, possibly a hidden-vetting persona's, with a community, which the hold's own rule forbids. A
+ * tester's 277.8 report logged it every 30 s (34VR-Y58H, 11-03). Any other error's words can name an identity too. So
+ * the community is named by short id, and why a read failed by its kind alone.
+ *
+ * @module rooms/roomsLogWords
+ */
+import { refusalCode } from './real/wire'
+import { RoomsRefused, RoomsUnavailable } from './types'
+
+/** vtiAgent's `VtiSessionHeld`, by name, as the rooms backend and the persona inbox read it. */
+const isSessionHeld = (e: unknown): boolean => e instanceof Error && e.name === 'VtiSessionHeld'
+
+/**
+ * A community or room in a log line: enough to tell it apart, never the whole DID. The short form the screens use
+ * (communityName `shortDid`), kept here so the rooms hooks import no screen.
+ */
+export const logRef = (did: string | undefined): string =>
+  !did ? 'none' : did.length <= 28 ? did : `${did.slice(0, 16)}…${did.slice(-8)}`
+
+/**
+ * The refusal codes a log line may repeat, and no others. A community writes a refusal's code and details as well as
+ * its message, so a code is only a kind while it is one this list knows: anything else reads as `other`, whatever it
+ * says. An unlisted code loses a word in a report, never more.
+ *
+ * **`refused (other)` in a report means a code missing from this list: find out what it was, and add it.** The list
+ * can't find its own gaps, because a code an agent sends and no specification declares reaches here only from a device.
+ * So regenerating the specifications' part must keep what is listed apart from it.
+ */
+const LOGGED_REFUSAL_CODES = new Set([
+  // The framework's own (trust-tasks-rs StandardCode, SPEC 8.3).
+  'malformedRequest',
+  'unsupportedType',
+  'unsupportedVersion',
+  'unsupportedExtension',
+  'expired',
+  'proofRequired',
+  'proofInvalid',
+  'permissionDenied',
+  'wrongRecipient',
+  'identityMismatch',
+  'idConflict',
+  'cancelled',
+  'taskFailed',
+  'unavailable',
+  'internalError',
+  'indeterminate',
+  // A room task's own: every code any version of the rooms and community rooms specifications declares (vti-specs-rooms
+  // at VTI 4614eabb9), and those their docs name beside them.
+  'aboveCeiling',
+  'actionNotHeld',
+  'admissionPending',
+  'alreadyAccepted',
+  'alreadyExists',
+  'alreadyJoined',
+  'alreadyMember',
+  'alreadyRetracted',
+  'authorNotPrincipal',
+  'blobNotFound',
+  'bodyInvalid',
+  'cannotOpen',
+  'capacityExceeded',
+  'chainTooDeep',
+  'chunkMismatch',
+  'chunkOutOfRange',
+  'commitInvalid',
+  'configNotActive',
+  'configNotFound',
+  'contended',
+  'credentialRequired',
+  'didNotOpen',
+  'digestMismatch',
+  'earlierRemovalRefused',
+  'emptyActions',
+  'entryNotPermitted',
+  'epochConflict',
+  'epochGap',
+  'epochMismatch',
+  'filesDisabled',
+  'forbidden',
+  'hostRefused',
+  'hostUnreachable',
+  'incomplete',
+  'invalidCombination',
+  'invalidCursor',
+  'invalidManifest',
+  'invalidParts',
+  'invalidRange',
+  'invalidSettings',
+  'issuerNotPrincipal',
+  'keyHolderRefused',
+  'keyHolderUnavailable',
+  'keyPackageInvalid',
+  'keyPackageNotExpected',
+  'keyPackageNotHeld',
+  'keyPackageRequired',
+  'lastAdmin',
+  'limitExceeded',
+  // rooms/keys/watch/0.1 (VTA 0.79): a watch past the agent's bound, and a member the caller may not act as.
+  'limitReached',
+  'listInvalid',
+  // rooms/watch/0.2 (VTA 0.81): a live watch asked of a room whose signal delay is not `none`. It comes back as a watch
+  // outcome's `hostCode` (`rooms/watch:liveNotPermitted`).
+  'liveNotPermitted',
+  'locationMismatch',
+  'memberLimitsUnavailable',
+  'memberNotPrincipal',
+  'memberUsageUnavailable',
+  'noAuthority',
+  'noGroup',
+  'noKeyHolder',
+  'noList',
+  'nonSequential',
+  'noRetention',
+  'noSigningKey',
+  'notAhead',
+  'notAMember',
+  'notAppendOnly',
+  'notAttempted',
+  'notAvailable',
+  'notDelivered',
+  'notFound',
+  'notHeld',
+  'notInRoom',
+  'notInvited',
+  'notMember',
+  'notNominated',
+  'noTransferMode',
+  'notTheOwner',
+  'notWitnessed',
+  'offerExpired',
+  'offerWithdrawn',
+  'ownLeaf',
+  'principalAmbiguous',
+  'privateRoom',
+  'rateLimited',
+  'recordTooLarge',
+  'retentionConflict',
+  'retentionNotPermitted',
+  'roomNotFound',
+  'roomNotLive',
+  'roomStillLive',
+  'roomSubject',
+  'sealedRoomMint',
+  'sequenceConflict',
+  'stale',
+  'subjectBindingMissing',
+  'tierUnknown',
+  'tooManyUploads',
+  'typeNotActable',
+  'unknownEpoch',
+  'unknownStorageConfig',
+  'uploadKeyInUse',
+  'versionConflict',
+  'visibilityNotPermitted',
+  'welcomeInvalid',
+  'wrongState',
+  // Declared by no specification and not seen as a code. A test models the two-credential refusal as
+  // `rooms/keys/seal:conflict`. A VTA at vta-service-v0.72.0 sends `taskFailed` with `details.reason: "conflict"`
+  // instead (room_oracle.rs:188, helpers.rs:193, read, not run); that reads through LOGGED_REFUSAL_REASONS. 277.8's
+  // reports hold only the message. Listed as a precaution, should an agent ever send it as a code.
+  'conflict',
+  // Keyring's own, for a step that went wrong between a room's tasks.
+  'empty',
+  'fileTooLarge',
+  'joinFailed',
+  'roomKeptMoving',
+  'senderRefused',
+  'tooLarge',
+  'tooLong',
+  'welcomeMissing',
+  // Why the agent could not open a record: an `unknownEpoch` refusal's `details.reason`, which `readNote` throws as its
+  // code (`RECORD_UNOPENED_REASONS`; `notDelivered` is listed above as a spec code).
+  'beyondChain',
+  'removed',
+  // A record a member may not rewrite or withdraw, and a tier its record writes aren't built for (`sendRecord`).
+  'notThatKind',
+  'notYours',
+  'retracted',
+  'tierNotYet',
+])
+
+/**
+ * What a VTA says in `details.reason` when everything else reads `taskFailed` (vta-sdk `trust_task_reject_reasons`).
+ * It is the only thing that tells "no persona holds this room" (`not_found`) from "more than one does" (`conflict`).
+ */
+const LOGGED_REFUSAL_REASONS = new Set([
+  'not_found',
+  'conflict',
+  'gone',
+  'upstream_unavailable',
+  'no_matching_protocol',
+])
+
+const loggedCode = (code: string | undefined): string => (code && LOGGED_REFUSAL_CODES.has(code) ? code : 'other')
+
+/**
+ * A bare refusal code, as an answer names one inside it rather than as an error (a watch's per-room `refused`, a host's
+ * `hostCode`), in the form a log line may repeat: its last segment where it is on the list, else `other`.
+ */
+export const loggedRefusalCode = (code: string | undefined): string =>
+  loggedCode(code === undefined ? undefined : code.slice(code.lastIndexOf(':') + 1))
+
+/** A refusal's `details.reason`, where it is on the closed list; else nothing. */
+function loggedReason(e: unknown): string | undefined {
+  const reason = (e as { details?: { reason?: unknown } } | null | undefined)?.details?.reason
+  return typeof reason === 'string' && LOGGED_REFUSAL_REASONS.has(reason) ? reason : undefined
+}
+
+const refusedAs = (code: string, reason: string | undefined) =>
+  reason ? `refused (${code}, ${reason})` : `refused (${code})`
+
+/**
+ * Why an agent could not reach a room's host, where its `hostUnreachable` refusal says: one word from a closed list,
+ * read off the agent's own sentence and never the sentence itself (it names the host, and can name more). The agent
+ * turns every failed send into `hostUnreachable` (vta-service `room_group.rs` `host_failure`), and what went wrong is
+ * only in its words (`operations/outbound.rs`): the host's DID not resolving, its key not retrieved, its reply's proof
+ * not verifying, or no answer at all. A report held only the code (ATZC-JPDE, 11-17: a did:webs community's room, one
+ * agent refusing what another read), so which of them it was could not be told. Words not listed here add nothing: the
+ * line reads `refused (hostUnreachable)` as before.
+ *
+ * The first that matches is the word, so the order is behaviour: a narrower sentence stands above a wider one
+ * (`hostMethodNotResolved` above `hostKeyNotRetrieved`, whose words it also holds).
+ */
+const HOST_FAILURE_KINDS: [RegExp, string][] = [
+  [/does not resolve, so there is nothing to send to/, 'hostDidNotResolved'],
+  [/unsupportedDidMethod|a method this agent does not resolve/, 'hostMethodNotResolved'],
+  [/could not retrieve .{0,400}verification key/, 'hostKeyNotRetrieved'],
+  [/unsigned or its proof does not verify/, 'replyProofNotVerified'],
+  [/will not dial/, 'endpointNotDialled'],
+  [/did not answer/, 'noAnswer'],
+  [/cannot read as a Trust-Task|not a Trust-Task document|unreadable body|is not JSON/, 'replyUnreadable'],
+  // vti-common error.rs `NoMatchingProtocol`: "no transport in common with `<peer>`: it advertises […] and this agent
+  // can initiate […]". The literal phrase only.
+  [/no transport in common with/, 'noMatchingProtocol'],
+]
+
+function hostFailureKind(said: unknown): string | undefined {
+  if (typeof said !== 'string' || !said) return undefined
+  return HOST_FAILURE_KINDS.find(([words]) => words.test(said))?.[1]
+}
+
+/** `refused (hostUnreachable: <kind>)` where the agent's words say which; any other code as before. */
+const refusedWith = (code: string, reason: string | undefined, said: unknown) => {
+  const kind = code === 'hostUnreachable' && !reason ? hostFailureKind(said) : undefined
+  return kind ? `refused (${code}: ${kind})` : refusedAs(code, reason)
+}
+
+/**
+ * A `VtiRefusal` by its closed code and reason. Its message is the community's or the agent's and is never repeated
+ * here; for `hostUnreachable` alone it is matched against a closed list (`hostFailureKind`).
+ */
+function refusalKind(e: Error): string {
+  return refusedWith(loggedCode(refusalCode(e)), loggedReason(e), e.message)
+}
+
+/**
+ * Why a read failed, by kind only: no persona, step or task detail. The only form a line that names a community or room
+ * may use. An error's own words can name an identity ("did:key:…'s agent is no longer linked"), and beside a
+ * community that is the pairing the hold's rule forbids, whatever the error.
+ */
+export function failureCategory(e: unknown): string {
+  if (isSessionHeld(e)) return 'the session is kept for another identity'
+  if (e instanceof RoomsUnavailable) return `unavailable (${e.reason})`
+  if (e instanceof RoomsRefused)
+    return refusedWith(
+      loggedCode(e.code),
+      loggedReason(e.refusal),
+      (e.refusal as { message?: unknown } | undefined)?.message
+    )
+  if (e instanceof Error && e.name === 'VtiRefusal') return refusalKind(e)
+  if (e instanceof Error && e.name === 'VtiSentNoAnswer') return 'no answer yet'
+  return e instanceof Error && e.name && e.name !== 'Error' ? e.name : 'failed'
+}

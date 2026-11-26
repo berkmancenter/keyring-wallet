@@ -293,10 +293,10 @@ emulator-only and silently unreachable from a real phone.
 
 ```sh
 # Witness-server changes
-cd bifold/packages/witness-server && yarn test
+cd packages/witness-server && yarn test
 
 # Core changes (vrc-manager, ContactCredentialDetails, ListContacts)
-cd bifold/packages/core && yarn test
+cd packages/core && yarn test
 
 # App-side demo profile + card changes
 cd app && yarn test __tests__/demo-profiles/ && yarn lint && yarn typecheck

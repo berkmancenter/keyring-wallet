@@ -555,7 +555,7 @@ this applies").
   needs: `yarn lint`, `yarn prettier` and `yarn typecheck` at the root; the
   tests related to the files the PR changes, not the whole suite (for example
   `cd app && TZ=GMT yarn jest --findRelatedTests <changed files>`, or the
-  changed test files under `bifold/packages/*`); and the build the change could
+  changed test files under `packages/*`); and the build the change could
   break (a native build when it touches `app/ios`, `app/android`, native
   modules or patches). Tests stay minimal: they cover what the PR changes. CI
   runs the broad suites. The
@@ -582,9 +582,9 @@ this applies").
   machine, run one heavy suite or build at a time with few workers, and send
   broad runs to CI.
 - **Commits** follow the root `CLAUDE.md` "Commit conventions" (conventional
-  commits, signed, `Signed-off-by:`). `bifold/` is part of this repository
-  since the one-codebase fold, so a step that changes `bifold/packages/*` is one
-  PR here, with no paired PR and no pin to bump.
+  commits, signed, `Signed-off-by:`). The framework's packages are part of this
+  repository, at `packages/*`, since the one-codebase fold, so a step that
+  changes them is one PR here, with no paired PR and no pin to bump.
 - **Hot fixes and quick fixes are exempt.** A hot fix, a quick fix or a small
   ask from the Keyring feedback channel goes straight to its own PR against the
   branch it fixes (`main`, or a `hotfix/*` branch), without a plan or a stack,

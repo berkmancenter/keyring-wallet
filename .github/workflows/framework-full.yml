@@ -1,10 +1,11 @@
 name: Framework full suite
 
-# Every jest suite of the framework (bifold/) with coverage, in five parts: core in
+# Every jest suite of the framework (packages/*) with coverage, in five parts: core in
 # four shards and every other package in the fifth. Ported from the former
 # keyring-bifold repository's full-tests.yaml at the fold (docs/plans/
-# single-codebase-plan.md, Phase 3). Runs on every push to main that touches
-# bifold/, nightly, and on dispatch; a pull request runs the selected subset in
+# single-codebase-plan.md, Phase 3); since Phase 2 the packages are workspaces of the
+# one install at the repository root. Runs on every push to main that touches
+# packages/, nightly, and on dispatch; a pull request runs the selected subset in
 # framework.yml instead. The upload to codecov is not ported: neither repository
 # holds a CODECOV_TOKEN, so that step never reported anything.
 
@@ -12,7 +13,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "bifold/**"
+      - "packages/**"
       - ".github/workflows/framework-full.yml"
   schedule:
     - cron: "23 7 * * *"
@@ -20,10 +21,6 @@ on:
 
 permissions:
   contents: read
-
-defaults:
-  run:
-    working-directory: bifold
 
 jobs:
   shard:
@@ -46,19 +43,20 @@ jobs:
       - name: Restore dependencies
         uses: actions/cache@v4
         with:
+          # The one install of the repository (app and packages/* are its workspaces, one yarn.lock at the root).
           path: |
-            bifold/node_modules
-            bifold/packages/*/node_modules
-            bifold/samples/*/node_modules
-            bifold/.yarn/cache
-            bifold/.yarn/install-state.gz
-          key: framework-deps-v1-${{ runner.os }}-${{ hashFiles('bifold/yarn.lock', 'bifold/.yarnrc.yml', 'bifold/.yarn/patches/**', 'bifold/package.json', 'bifold/packages/*/package.json', 'bifold/samples/*/package.json', '.github/workflows/actions/setup-node/action.yml') }}
+            node_modules
+            app/node_modules
+            packages/*/node_modules
+            .yarn/cache
+            .yarn/install-state.gz
+          key: framework-deps-v2-${{ runner.os }}-${{ hashFiles('yarn.lock', '.yarnrc.yml', '.yarn/patches/**', 'package.json', 'app/package.json', 'packages/*/package.json', '.github/workflows/actions/setup-node/action.yml') }}
 
       - name: Install dependencies
         run: yarn install --immutable
 
-      - name: Build Workspace
-        run: yarn build
+      - name: Build the Node-consumed packages
+        run: yarn build:packages
 
       - name: Date jest's cache
         id: jest-cache
@@ -69,10 +67,10 @@ jobs:
         if: startsWith(matrix.part, 'core ')
         uses: actions/cache@v4
         with:
-          path: bifold/packages/core/.jest/cache
-          key: framework-jest-cov-v1-${{ runner.os }}-${{ hashFiles('bifold/yarn.lock', 'bifold/packages/core/babel.config.js', 'bifold/packages/core/jest.config.js') }}-${{ matrix.part }}-${{ steps.jest-cache.outputs.day }}
+          path: packages/core/.jest/cache
+          key: framework-jest-cov-v2-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-${{ matrix.part }}-${{ steps.jest-cache.outputs.day }}
           restore-keys: |
-            framework-jest-cov-v1-${{ runner.os }}-${{ hashFiles('bifold/yarn.lock', 'bifold/packages/core/babel.config.js', 'bifold/packages/core/jest.config.js') }}-${{ matrix.part }}-
+            framework-jest-cov-v2-${{ runner.os }}-${{ hashFiles('yarn.lock', 'packages/core/babel.config.js', 'packages/core/jest.config.js') }}-${{ matrix.part }}-
 
       - name: Automated testing with coverage
         env:
@@ -80,7 +78,8 @@ jobs:
         run: |
           case "$PART" in
             core\ *) yarn workspace @bifold/core run coverage --ci --shard="${PART#core }" ;;
-            *) yarn workspaces foreach --all --topological-dev --exclude keyring-bifold --exclude @bifold/core run coverage --ci ;;
+            # The root (keyring-wallet) and the app are workspaces of the same install, not the framework's suites.
+            *) yarn workspaces foreach --all --topological-dev --exclude keyring-wallet --exclude keyring-wallet-mobile-app --exclude @bifold/core run coverage --ci ;;
           esac
 
   full:
@@ -90,7 +89,6 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Every shard passed
-        working-directory: .
         env:
           RESULT: ${{ needs.shard.result }}
         run: |

@@ -31,14 +31,14 @@ jobs:
           port: 22
           envs: BRANCH_NAME,APP_PATH
           script: |
-            echo "Resetting witness in folder: $APP_PATH/bifold/packages/witness-server, branch: $BRANCH_NAME..."
+            echo "Resetting witness in folder: $APP_PATH/packages/witness-server, branch: $BRANCH_NAME..."
             cd $APP_PATH
             GIT_SSH_COMMAND='ssh -i ~/.ssh/id_AdvancedIdentity_deploy_ed25519' git fetch origin
             GIT_SSH_COMMAND='ssh -i ~/.ssh/id_AdvancedIdentity_deploy_ed25519' git reset --hard origin/$BRANCH_NAME
-            # bifold/ is part of the repository since the fold; a checkout that still has the submodule's own .git drops it once.
-            if [ -f bifold/.git ]; then rm -rf bifold; GIT_SSH_COMMAND='ssh -i ~/.ssh/id_AdvancedIdentity_deploy_ed25519' git reset --hard origin/$BRANCH_NAME; fi
-            test -d bifold/packages || { echo 'bifold/packages missing after the reset: the checkout is broken, not deploying'; exit 1; }
-            cd $APP_PATH/bifold/packages/witness-server
+            # The framework's packages are workspaces of this repository under packages/ (one root install; the witness's
+            # image is built from the repository root by its docker-compose.yml, which runs that install and the builds).
+            test -d packages/witness-server || { echo 'packages/witness-server missing after the reset: the checkout is broken, not deploying'; exit 1; }
+            cd $APP_PATH/packages/witness-server
             echo "Restarting witness server..."
             docker compose down
             docker compose up -d --build

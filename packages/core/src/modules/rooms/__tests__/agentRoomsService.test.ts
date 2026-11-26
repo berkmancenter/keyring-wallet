@@ -1,0 +1,1276 @@
+import {
+  AgentRoomsService,
+  SERVED_UNKNOWN_RETRY_MS,
+  type RoomsBackend,
+  type RoomsCommunity,
+} from '../real/agentRoomsService'
+import { ROOMS_TASK } from '../real/wire'
+import { RECORD_UNOPENED_REASONS, RoomsRefused, RoomsUnavailable } from '../types'
+import { failureCategory, logRef } from '../roomsLogWords'
+import { postOf, reactionValueOf } from '../roomPosts'
+import { ROOMS_READ_MARKER } from '../readMarkerSwitch'
+import { READ_MARKER_SETTLE_MS } from '../real/readMarkers'
+
+const SPEC = 'https://trusttasks.org/spec/'
+const COMMUNITY: RoomsCommunity = { did: 'did:webvh:community:a', name: 'Garden club', personaDid: 'did:key:persona-a' }
+const ROOM = 'did:webvh:room:0123456789abcdef'
+const CUSTODY_ROOM = 'did:webvh:room:custodyonly42'
+const HOST = 'did:webvh:community:a'
+
+const b64url = (s: string) => Buffer.from(s, 'utf8').toString('base64url')
+
+/** A refusal as both legs throw it (`VtiRefusal`). */
+const refused = (code: string) => Object.assign(new Error(`refused: ${code}`), { name: 'VtiRefusal', code })
+
+function backend(overrides: Partial<RoomsBackend> = {}) {
+  const agentTask = jest.fn(async (type: string, payload: Record<string, unknown>): Promise<unknown> => {
+    switch (type) {
+      case ROOMS_TASK.keysList02:
+        return {
+          rooms: [
+            { roomId: ROOM, epoch: 3, earliestReadableEpoch: 1, member: 'did:key:persona-a' },
+            {
+              roomId: CUSTODY_ROOM,
+              epoch: 1,
+              earliestReadableEpoch: 1,
+              member: 'did:key:persona-a',
+              personal: { label: 'My old room' },
+            },
+          ],
+        }
+      case ROOMS_TASK.keysBrowse:
+        return {
+          records: [
+            { key: 'n1', version: 2, status: 'active', title: 'Agenda', author: 'did:key:x', updatedAt: '2026-10-01' },
+            { key: 'bad' }, // no version: dropped
+          ],
+          complete: true,
+          verification: { priorRoots: 'agree', anchor: 'agrees', trace: 'verified', count: 'agrees' },
+        }
+      case ROOMS_TASK.keysRead:
+        return {
+          key: payload.key,
+          version: 2,
+          status: 'active',
+          plaintext: b64url(JSON.stringify({ title: 'Agenda', body: 'Bring <b>seeds</b>' })),
+          verification: { priorRoots: 'noneHeld', anchor: 'none' },
+        }
+      default:
+        throw new Error(`unexpected agent task ${type}`)
+    }
+  })
+  const communityTask = jest.fn(
+    async (_did: string, type: string, payload: Record<string, unknown>): Promise<unknown> => {
+      if (type !== ROOMS_TASK.membershipsList) throw new Error(`unexpected community task ${type}`)
+      if (!payload.cursor)
+        return {
+          items: [
+            {
+              roomId: ROOM,
+              host: HOST,
+              label: 'Seed swap',
+              visibility: 'attributed',
+              actions: ['read', 'write', 'fly'],
+              state: 'admitted',
+            },
+          ],
+          nextCursor: 'page2',
+        }
+      return {
+        items: [
+          { roomId: 'did:webvh:room:offered', host: HOST, visibility: 'open', actions: ['read'], state: 'offered' },
+        ],
+      }
+    }
+  )
+  const b: RoomsBackend = {
+    agentLinked: () => true,
+    agentServedTypes: async () => [
+      ROOMS_TASK.keysList02,
+      ROOMS_TASK.keysList01,
+      ROOMS_TASK.keysBrowse,
+      ROOMS_TASK.keysRead,
+    ],
+    agentTask,
+    communities: async () => [COMMUNITY],
+    communityTask,
+    sendCompleted: jest.fn(async () => ({})),
+    newId: () => 'id-1',
+    leaveCommunity: jest.fn(async () => undefined),
+    decodeBase64Url: (s) => Buffer.from(s, 'base64url').toString('utf8'),
+    encodeBase64Url: (text) => Buffer.from(text, 'utf8').toString('base64url'),
+    hiddenOffers: async () => [],
+    hideOffer: jest.fn(async () => undefined),
+    warn: jest.fn(),
+    ...overrides,
+  }
+  return { b, agentTask, communityTask }
+}
+
+describe('a reaction, read from its body as written', () => {
+  const read = async (body: string) => {
+    const { b, agentTask } = backend()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    agentTask.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
+      if (type !== ROOMS_TASK.keysRead) return {}
+      return {
+        key: payload.key,
+        version: 2,
+        status: 'active',
+        plaintext: b64url(JSON.stringify({ kind: 'reaction', inReplyTo: { key: 'm1' }, body })),
+      }
+    })
+    return postOf(await service.readNote(ROOM, 'r1'))
+  }
+
+  it('refuses a line terminator that making it inert would have removed', async () => {
+    for (const eol of ['\u000B', '\u000C', '\u0085']) {
+      const post = await read(`a${eol}b`)
+      expect(String(post.text)).toBe('ab')
+      expect(reactionValueOf(post)).toBeUndefined()
+    }
+  })
+
+  it('takes a value that reads, and says nothing of it being refused (control)', async () => {
+    const post = await read('👍')
+    expect(post.kind).toBe('reaction')
+    expect(post.inReplyTo).toEqual({ key: 'm1' })
+    expect(reactionValueOf(post)).toBe('👍')
+    expect(Object.keys(post)).not.toContain('reactionRefused')
+  })
+})
+
+describe('AgentRoomsService', () => {
+  it('joins the community’s record with the agent’s custody', async () => {
+    const { b, agentTask, communityTask } = backend()
+    const rooms = await new AgentRoomsService(b).listMyRooms()
+
+    expect(communityTask).toHaveBeenCalledTimes(2) // followed the cursor
+    expect(agentTask).toHaveBeenCalledWith(ROOMS_TASK.keysList02, { includePersonal: true })
+    expect(rooms.map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM]) // the offer is not a room yet
+
+    const [community, custody] = rooms
+    expect(community).toMatchObject({
+      source: 'community',
+      nameFrom: 'community',
+      communityDid: COMMUNITY.did,
+      tier: 'attributed',
+      verbs: ['read', 'write'], // an unknown verb is dropped
+      host: HOST,
+      standing: 'member',
+    })
+    expect(String(community.name)).toBe('Seed swap')
+    expect(custody).toMatchObject({ source: 'custody', nameFrom: 'personal', tier: 'unknown' })
+    expect(custody.verbs).toBeUndefined()
+    expect(custody).not.toHaveProperty('host')
+  })
+
+  it('asks keys/list 0.1 when the agent does not serve 0.2', async () => {
+    const { b, agentTask } = backend({ agentServedTypes: async () => [ROOMS_TASK.keysList01] })
+    agentTask.mockImplementation(async () => ({
+      rooms: [{ roomId: CUSTODY_ROOM, epoch: 1, earliestReadableEpoch: 1 }],
+    }))
+    const rooms = await new AgentRoomsService(b).listMyRooms()
+    expect(agentTask).toHaveBeenCalledWith(ROOMS_TASK.keysList01, {})
+    const custody = rooms.find((r) => r.roomId === CUSTODY_ROOM)
+    expect(custody).toMatchObject({ nameFrom: 'roomId', source: 'custody' })
+    // What tells it apart (roomRef): this ID has no path, so the end of its SCID, said to be cut; never its last 10.
+    expect(String(custody?.name)).toBe('…room')
+  })
+
+  it('keeps the other rooms when one community cannot answer, and logs why it did not', async () => {
+    const other: RoomsCommunity = { did: 'did:webvh:community:b', name: 'Choir', personaDid: 'did:key:persona-b' }
+    const { b, communityTask } = backend({ communities: async () => [COMMUNITY, other] })
+    const answer = communityTask.getMockImplementation()
+    communityTask.mockImplementation(async (did, type, payload) => {
+      if (did === other.did) throw new Error('community unreachable')
+      return answer?.(did, type, payload)
+    })
+    const rooms = await new AgentRoomsService(b).listMyRooms()
+    expect(rooms.map((r) => [r.roomId, r.source])).toEqual([
+      [ROOM, 'community'],
+      [CUSTODY_ROOM, 'custody'],
+    ])
+    expect(b.warn).toHaveBeenCalledTimes(1)
+    expect(b.warn).toHaveBeenCalledWith(`rooms: ${other.did} did not list this member's rooms: failed`)
+  })
+
+  // A member whose community session could not open (an identity brought back from the agent, before its keys
+  // were borrowed: 10-28) saw one sealed room by its id and no open room at all, and nothing said why.
+  it('fails, saying no community was reached, when none answers, and logs each reason', async () => {
+    const { b } = backend({
+      communityTask: jest.fn(async () => {
+        throw new Error('vtiAgent: the persona has no borrowed key-agreement key')
+      }),
+    })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({
+      name: 'RoomsUnavailable',
+      operation: 'listMyRooms',
+      reason: 'communityUnreachable',
+    })
+    // By kind: the error's words can name an identity, and this line names the community (roomsLogWords).
+    expect(b.warn).toHaveBeenCalledWith(`rooms: ${COMMUNITY.did} did not list this member's rooms: failed`)
+  })
+
+  // #938: an identity whose keys are not on the phone yet is refused before any session opens (VtiKeysNotHeld). Its
+  // community was never asked, so "Couldn't reach your community" is not what happened: the screen says to let the
+  // agent connect. The raw sign-in failure above stays unreached (control).
+  it('says the identity keys are not here yet, not that no community answered, when that is why none was read', async () => {
+    const { b } = backend({
+      communityTask: jest.fn(async () => {
+        throw Object.assign(new Error("rooms: this identity's keys are not on this phone yet"), {
+          name: 'VtiKeysNotHeld',
+        })
+      }),
+    })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({
+      name: 'RoomsUnavailable',
+      operation: 'listMyRooms',
+      reason: 'keysNotHeld',
+    })
+  })
+
+  it('with another community unreached as well, says that one was not reached', async () => {
+    const other: RoomsCommunity = { did: 'did:webvh:community:b', personaDid: 'did:key:persona-b' }
+    const { b } = backend({
+      communities: async () => [COMMUNITY, other],
+      communityTask: jest.fn(async (did: string) => {
+        throw did === other.did
+          ? new Error('community unreachable')
+          : Object.assign(new Error('keys'), { name: 'VtiKeysNotHeld' })
+      }),
+    })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({ reason: 'communityUnreachable' })
+  })
+
+  // An older community answers, and the answer is that it has no such task (277, on a VTC before rooms): "Couldn't
+  // reach your community" was not what happened.
+  it('says the community is too old for rooms, not unreached, when it answers that it has no such task', async () => {
+    const { b } = backend({
+      communityTask: jest.fn(async () => {
+        throw refused('unsupportedType')
+      }),
+    })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({
+      name: 'RoomsUnavailable',
+      operation: 'listMyRooms',
+      reason: 'communityDoesNotServe',
+    })
+  })
+
+  it('says a community was not reached when one that may come back is among those too old', async () => {
+    const other: RoomsCommunity = { did: 'did:webvh:community:b', personaDid: 'did:key:persona-b' }
+    const { b } = backend({
+      communities: async () => [COMMUNITY, other],
+      communityTask: jest.fn(async (did: string) => {
+        throw did === other.did ? new Error('community unreachable') : refused('unsupportedType')
+      }),
+    })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({ reason: 'communityUnreachable' })
+  })
+
+  it('keeps the other rooms when one community is too old for them', async () => {
+    const other: RoomsCommunity = { did: 'did:webvh:community:b', personaDid: 'did:key:persona-b' }
+    const { b, communityTask } = backend({ communities: async () => [COMMUNITY, other] })
+    const answer = communityTask.getMockImplementation()
+    communityTask.mockImplementation(async (did, type, payload) => {
+      if (did === other.did) throw refused('unsupportedType')
+      return answer?.(did, type, payload)
+    })
+    expect((await new AgentRoomsService(b).listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+  })
+
+  // A version the community no longer serves may be Keyring that is behind, so it is not said to be the community's.
+  it('does not call a community too old for a version it refuses', async () => {
+    const { b } = backend({
+      communityTask: jest.fn(async () => {
+        throw refused('unsupportedVersion')
+      }),
+    })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({ reason: 'communityUnreachable' })
+  })
+
+  it('a phone in no community still lists the rooms its agent holds keys for', async () => {
+    const { b, communityTask } = backend({ communities: async () => [] })
+    const rooms = await new AgentRoomsService(b).listMyRooms()
+    expect(communityTask).not.toHaveBeenCalled()
+    expect(rooms.map((r) => [r.roomId, r.source])).toEqual([
+      [ROOM, 'custody'],
+      [CUSTODY_ROOM, 'custody'],
+    ])
+  })
+
+  it('lists and opens notes through the agent, naming the host from the membership', async () => {
+    const { b, agentTask } = backend()
+    const service = new AgentRoomsService(b)
+
+    const list = await service.listNotes(ROOM)
+    expect(agentTask).toHaveBeenCalledWith(ROOMS_TASK.keysBrowse, { roomId: ROOM, host: HOST })
+    expect(list.notes.map((n) => n.key)).toEqual(['n1'])
+    expect(list.check.verdict).toBe('consistent')
+
+    const note = await service.readNote(ROOM, 'n1')
+    expect(agentTask).toHaveBeenCalledWith(ROOMS_TASK.keysRead, { roomId: ROOM, host: HOST, key: 'n1' })
+    expect(String(note.title)).toBe('Agenda')
+    expect(String(note.body)).toBe('Bring <b>seeds</b>') // inert: kept as text, never interpreted
+    expect(note.check.verdict).toBe('unverified')
+  })
+
+  it('refuses notes in a custody-only room, and where the member lacks the right', async () => {
+    const { b, communityTask } = backend()
+    communityTask.mockImplementation(async () => ({
+      items: [{ roomId: ROOM, host: HOST, visibility: 'private', actions: ['write'], state: 'admitted' }],
+    }))
+    const service = new AgentRoomsService(b)
+    await expect(service.listNotes(CUSTODY_ROOM)).rejects.toMatchObject({ reason: 'detailsNotLoaded' })
+    await expect(service.readNote(ROOM, 'n1')).rejects.toMatchObject({ reason: 'noRight' })
+  })
+
+  it('reports per-room capabilities from the membership', async () => {
+    const { b } = backend()
+    const service = new AgentRoomsService(b)
+    const caps = await service.roomCapabilities(ROOM)
+    expect(caps.listNotes).toMatchObject({ status: 'available' })
+    // Built, but this agent cannot complete a write as the member (no rooms/keys/act).
+    expect(caps.write).toMatchObject({ status: 'unavailable', reason: 'agentDoesNotServe' })
+    expect((await service.roomCapabilities(CUSTODY_ROOM)).readNote.reason).toBe('detailsNotLoaded')
+  })
+
+  it('marks a removed membership with no rights', async () => {
+    const { b, communityTask } = backend()
+    communityTask.mockImplementation(async () => ({
+      items: [{ roomId: ROOM, host: HOST, visibility: 'open', actions: ['read'], state: 'removed' }],
+    }))
+    const room = await new AgentRoomsService(b).getRoom(ROOM)
+    expect(room).toMatchObject({ standing: 'removed', verbs: [] })
+    expect(room.actingAs.did).toBe(COMMUNITY.personaDid)
+  })
+
+  it('without discovery, says so instead of sending anything', async () => {
+    const { b, agentTask, communityTask } = backend({ agentServedTypes: async () => undefined })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({ reason: 'agentUnknown' })
+    expect(agentTask).not.toHaveBeenCalled()
+    expect(communityTask).not.toHaveBeenCalled()
+  })
+
+  it('asks an agent that could not say what it serves again after a while, and keeps an answer it gave', async () => {
+    // Lost while the session reopened after an unlock, the answer was kept: every room said "Couldn't reach your
+    // agent" until a pull to refresh (#772, 10-30).
+    let now = 0
+    let answer: string[] | undefined = undefined
+    const agentServedTypes = jest.fn(async () => answer)
+    const { b } = backend({ agentServedTypes })
+    const service = new AgentRoomsService(b, undefined, { now: () => now })
+    await expect(service.listMyRooms()).rejects.toMatchObject({ reason: 'agentUnknown' })
+
+    // The agent could answer now, but within the wait it is not asked again (control: not on every call).
+    answer = [ROOMS_TASK.keysList02]
+    now = SERVED_UNKNOWN_RETRY_MS - 1
+    await expect(service.listMyRooms()).rejects.toMatchObject({ reason: 'agentUnknown' })
+    expect(agentServedTypes).toHaveBeenCalledTimes(1)
+
+    now = SERVED_UNKNOWN_RETRY_MS
+    await expect(service.listMyRooms()).resolves.toHaveLength(2)
+    expect(agentServedTypes).toHaveBeenCalledTimes(2)
+
+    // An answer it gave is kept (control).
+    now = 10 * SERVED_UNKNOWN_RETRY_MS
+    await service.listMyRooms()
+    expect(agentServedTypes).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps an empty answer: an agent that serves none of it is not asked again', async () => {
+    let now = 0
+    const agentServedTypes = jest.fn(async (): Promise<string[] | undefined> => [])
+    const { b } = backend({ agentServedTypes })
+    const service = new AgentRoomsService(b, undefined, { now: () => now })
+    await expect(service.listMyRooms()).rejects.toMatchObject({ reason: 'agentDoesNotServe' })
+    now = 10 * SERVED_UNKNOWN_RETRY_MS
+    await expect(service.listMyRooms()).rejects.toMatchObject({ reason: 'agentDoesNotServe' })
+    expect(agentServedTypes).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks once while an ask is out: every caller waits for the same answer', async () => {
+    let answer: (types: string[] | undefined) => void = () => undefined
+    const agentServedTypes = jest.fn(() => new Promise<string[] | undefined>((resolve) => (answer = resolve)))
+    const { b } = backend({ agentServedTypes })
+    const service = new AgentRoomsService(b)
+    // Callers that need an answer, not a fresh one (a refresh starts its own: below).
+    const asks = [service.capabilities(), service.capabilities(), service.capabilities()]
+    expect(agentServedTypes).toHaveBeenCalledTimes(1)
+    answer([ROOMS_TASK.keysList02])
+    const answers = await Promise.all(asks)
+    expect(answers.map((c) => c.listMyRooms.status)).toEqual(['available', 'available', 'available'])
+    // Once it has answered, a refresh asks again (control: the sharing ends with the ask).
+    agentServedTypes.mockImplementation(async () => [ROOMS_TASK.keysList02])
+    await service.capabilities({ refresh: true })
+    expect(agentServedTypes).toHaveBeenCalledTimes(2)
+  })
+
+  // The real backend gives the agent's last answer at once and asks the agent again behind (agentLastKnownSwitch.ts):
+  // its stamp moves when the agent turned out to serve something else, and the answer held here is read again.
+  describe('an answer the backend says has moved', () => {
+    const stamped = () => {
+      let stamp = 0
+      let types: string[] = [ROOMS_TASK.keysList01]
+      const agentServedTypes = jest.fn(async () => types)
+      const { b } = backend({ agentServedTypes, agentServedStamp: () => stamp })
+      return {
+        service: new AgentRoomsService(b),
+        agentServedTypes,
+        /** The agent was asked again and serves something else now. */
+        move: (now: string[]) => {
+          types = now
+          stamp++
+        },
+      }
+    }
+
+    it('is read again by the next caller, and what it derives follows the new answer', async () => {
+      const { service, agentServedTypes, move } = stamped()
+      expect((await service.capabilities()).listMyRooms.status).toBe('available')
+      expect(agentServedTypes).toHaveBeenCalledTimes(1)
+      move([])
+      expect((await service.capabilities()).listMyRooms).toMatchObject({ status: 'unavailable' })
+      expect(agentServedTypes).toHaveBeenCalledTimes(2)
+      // Read once for the move, not on every call after it.
+      await service.capabilities()
+      await service.capabilities()
+      expect(agentServedTypes).toHaveBeenCalledTimes(2)
+    })
+
+    it('control: an answer that has not moved is not read again', async () => {
+      const { service, agentServedTypes } = stamped()
+      await service.capabilities()
+      await service.capabilities()
+      await service.capabilities()
+      expect(agentServedTypes).toHaveBeenCalledTimes(1)
+    })
+
+    it('is read again once, however many callers find it moved together', async () => {
+      const { service, agentServedTypes, move } = stamped()
+      await service.capabilities()
+      move([ROOMS_TASK.keysList02])
+      const answers = await Promise.all([service.capabilities(), service.capabilities(), service.capabilities()])
+      expect(agentServedTypes).toHaveBeenCalledTimes(2)
+      expect(answers.map((c) => c.listMyRooms.status)).toEqual(['available', 'available', 'available'])
+    })
+
+    it('that moves while a read is out is read again by the caller after it', async () => {
+      let stamp = 0
+      const answers: ((types: string[]) => void)[] = []
+      const agentServedTypes = jest.fn(() => new Promise<string[]>((resolve) => answers.push(resolve)))
+      const { b } = backend({ agentServedTypes, agentServedStamp: () => stamp })
+      const service = new AgentRoomsService(b)
+      const first = service.capabilities()
+      // The agent's new answer lands while the first read is still out: that read may carry either answer.
+      stamp++
+      answers[0]([ROOMS_TASK.keysList01])
+      await first
+      const second = service.capabilities()
+      expect(agentServedTypes).toHaveBeenCalledTimes(2)
+      answers[1]([])
+      expect((await second).listMyRooms).toMatchObject({ status: 'unavailable' })
+      await service.capabilities()
+      expect(agentServedTypes).toHaveBeenCalledTimes(2)
+    })
+
+    it('control: a backend with no stamp is asked once, as before', async () => {
+      const agentServedTypes = jest.fn(async () => [ROOMS_TASK.keysList01])
+      const { b } = backend({ agentServedTypes })
+      const service = new AgentRoomsService(b)
+      await service.capabilities()
+      await service.capabilities()
+      expect(agentServedTypes).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it.each([
+    ['the earlier ask answers first', ['A', 'B']],
+    ['the earlier ask answers last', ['B', 'A']],
+  ])(
+    "a refresh asks afresh, not joining an ask already out, and keeps the latest ask's answer (%s)",
+    async (_, order) => {
+      // An ask sent while A was linked, then the agent switched to B and a refresh asked for B's services: A's answer
+      // must not be kept as B's (it never aged out: A serves something).
+      const answers: Record<string, (types: string[]) => void> = {}
+      const agentServedTypes = jest
+        .fn<Promise<string[] | undefined>, []>()
+        .mockImplementationOnce(() => new Promise((resolve) => (answers.A = resolve)))
+        .mockImplementationOnce(() => new Promise((resolve) => (answers.B = resolve)))
+      const { b } = backend({ agentServedTypes })
+      const service = new AgentRoomsService(b)
+      const before = service.capabilities()
+      const refreshed = service.capabilities({ refresh: true })
+      expect(agentServedTypes).toHaveBeenCalledTimes(2)
+      const served = { A: [ROOMS_TASK.keysList02], B: [ROOMS_TASK.keysBrowse] }
+      for (const agent of order) answers[agent](served[agent as 'A' | 'B'])
+      await Promise.all([before, refreshed])
+      // B serves no key list: listing rooms is not available, as B said.
+      const now = await service.capabilities()
+      expect(now.listMyRooms.reason).toBe('agentDoesNotServe')
+      expect(now.listNotes.reason).toBe('ok')
+    }
+  )
+
+  it('leaves through the community and forgets its rooms', async () => {
+    const { b } = backend()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    await service.leaveViaCommunity(COMMUNITY.did)
+    expect(b.leaveCommunity).toHaveBeenCalledWith(COMMUNITY.did)
+  })
+
+  // The agent keeps its keys to a room after the leave (no task drops them): listed from custody, the room came back
+  // by its ID, "Details not loaded", with no community (277.7, 11-03).
+  it('does not show the keys an identity the phone left as still holds', async () => {
+    const { b } = backend({
+      communities: async () => [],
+      departedPersonas: async () => ['did:key:persona-a'],
+    })
+    expect(await new AgentRoomsService(b).listMyRooms()).toEqual([])
+  })
+
+  it('still shows the keys held as an identity it did not leave as', async () => {
+    const { b } = backend({
+      communities: async () => [],
+      departedPersonas: async () => ['did:key:persona-b'],
+    })
+    const rooms = await new AgentRoomsService(b).listMyRooms()
+    expect(rooms.map((r) => [r.roomId, r.source])).toEqual([
+      [ROOM, 'custody'],
+      [CUSTODY_ROOM, 'custody'],
+    ])
+  })
+
+  it('shows every held room when the departures cannot be read', async () => {
+    const { b } = backend({
+      communities: async () => [],
+      departedPersonas: async () => Promise.reject(new Error('store locked')),
+    })
+    expect(await new AgentRoomsService(b).listMyRooms()).toHaveLength(2)
+  })
+
+  it('drops a community left elsewhere at once, and lists afresh after', async () => {
+    const { b, communityTask } = backend()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    const asked = communityTask.mock.calls.length
+    // A listing asked before the leave, still out: its answer is not what the next caller gets.
+    const before = service.listMyRooms()
+    service.leftCommunity(COMMUNITY.did)
+    const after = service.listMyRooms()
+    expect(after).not.toBe(before)
+    await Promise.all([before, after])
+    expect(communityTask.mock.calls.length).toBeGreaterThan(asked)
+    expect(b.leaveCommunity).not.toHaveBeenCalled()
+  })
+
+  it('reports later phases as not built, without sending anything', async () => {
+    const { b, agentTask } = backend({
+      agentServedTypes: async () => [ROOMS_TASK.keysList02, `${SPEC}rooms/keys/present/0.2`],
+    })
+    const service = new AgentRoomsService(b)
+    const err = await service.listAgentAccess().catch((e) => e)
+    expect(err).toBeInstanceOf(RoomsUnavailable)
+    expect(err).toMatchObject({ reason: 'clientNotBuilt' })
+    expect(agentTask).not.toHaveBeenCalled()
+  })
+})
+
+// Screens that list rooms read again on focus, together; the agent client sends one task at a time, so each copy
+// of the key list queued behind the last (five in 4.5 s in a tester's run, 10-29).
+describe('the agent’s key list, read by several screens at once', () => {
+  const keyListAsks = (agentTask: jest.Mock) => agentTask.mock.calls.filter(([type]) => type === ROOMS_TASK.keysList02)
+
+  it('is asked once while one read is in flight, and both callers get the rooms', async () => {
+    const { b, agentTask } = backend()
+    const answer = agentTask.getMockImplementation()!
+    let release!: () => void
+    const held = new Promise<void>((resolve) => (release = resolve))
+    agentTask.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
+      if (type === ROOMS_TASK.keysList02) await held
+      return answer(type, payload)
+    })
+    const service = new AgentRoomsService(b)
+
+    const both = Promise.all([service.listMyRooms(), service.listMyRooms()])
+    // Both lists reach the key list before it answers.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    release()
+    const [first, second] = await both
+
+    expect(keyListAsks(agentTask)).toHaveLength(1)
+    expect(first.map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+    expect(second.map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+  })
+
+  it('is asked again by a read that starts after the last one answered (control: nothing is kept)', async () => {
+    const { b, agentTask } = backend()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    await service.listMyRooms()
+    expect(keyListAsks(agentTask)).toHaveLength(2)
+  })
+
+  it('is asked again after a read that failed', async () => {
+    const { b, agentTask } = backend()
+    const answer = agentTask.getMockImplementation()!
+    agentTask.mockImplementationOnce(async () => {
+      throw new Error('no answer')
+    })
+    agentTask.mockImplementation(answer)
+    const service = new AgentRoomsService(b)
+    await expect(service.listMyRooms()).rejects.toThrow('no answer')
+    expect((await service.listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+    expect(keyListAsks(agentTask)).toHaveLength(2)
+  })
+})
+
+describe("the member's rooms, listed by several surfaces at once", () => {
+  // A community's membership list is a read, sent again for each caller that asks (vtiAgent VTI_READ_TASKS): six
+  // answers landed at once in a tester's run (276.10, 10-30). Counted by first page: a listing reads two here.
+  const listAsks = (communityTask: jest.Mock) =>
+    communityTask.mock.calls.filter(([, type, payload]) => type === ROOMS_TASK.membershipsList && !payload.cursor)
+  const keyListAsks = (agentTask: jest.Mock) => agentTask.mock.calls.filter(([type]) => type === ROOMS_TASK.keysList02)
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  /** The community answers each first page only when its gate is opened, in the order asked. */
+  function gatedCommunity() {
+    const { b, agentTask, communityTask } = backend()
+    const answer = communityTask.getMockImplementation()!
+    const gates: (() => void)[] = []
+    communityTask.mockImplementation(async (did: string, type: string, payload: Record<string, unknown>) => {
+      if (!payload.cursor) await new Promise<void>((resolve) => gates.push(resolve))
+      return answer(did, type, payload)
+    })
+    return { b, agentTask, communityTask, open: (n: number) => gates[n]() }
+  }
+
+  it('is one listing while one is out: the community is asked once, and every caller gets the rooms', async () => {
+    const { b, communityTask, open } = gatedCommunity()
+    const service = new AgentRoomsService(b)
+    const all = Promise.all([service.listMyRooms(), service.listMyRooms(), service.listMyRooms()])
+    await tick()
+    open(0)
+    const lists = await all
+    expect(listAsks(communityTask)).toHaveLength(1)
+    for (const list of lists) expect(list.map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+  })
+
+  it('is listed again by a caller that asks after the last listing answered (control)', async () => {
+    const { b, communityTask } = backend()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    await service.listMyRooms()
+    expect(listAsks(communityTask)).toHaveLength(2)
+  })
+
+  it("asks the agent's key list beside the community's list, not after its answer", async () => {
+    const { b, agentTask, communityTask, open } = gatedCommunity()
+    const service = new AgentRoomsService(b)
+    const listing = service.listMyRooms()
+    await tick()
+    // The community has not answered, and the key list is already asked.
+    expect(listAsks(communityTask)).toHaveLength(1)
+    expect(keyListAsks(agentTask)).toHaveLength(1)
+    open(0)
+    expect((await listing).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+  })
+
+  it('is listed afresh after a leave, and a listing asked before the leave does not bring its rooms back', async () => {
+    const { b, communityTask, open } = gatedCommunity()
+    const service = new AgentRoomsService(b)
+    const before = service.listMyRooms()
+    await tick()
+    await service.leaveViaCommunity(COMMUNITY.did)
+    const after = service.listMyRooms()
+    await tick()
+    expect(listAsks(communityTask)).toHaveLength(2)
+    open(0)
+    // Its caller is answered, as asked; what the service knows is not set back to before the leave.
+    expect((await before).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+    expect((service as unknown as { rooms: Map<string, unknown> }).rooms.has(ROOM)).toBe(false)
+    open(1)
+    await after
+    expect((service as unknown as { rooms: Map<string, unknown> }).rooms.has(ROOM)).toBe(true)
+  })
+
+  it("fails on the community when none answers, even when the agent's key list fails too", async () => {
+    const { b, agentTask } = backend({
+      communityTask: jest.fn(async () => {
+        throw new Error('socket closed while the message was packed')
+      }),
+    })
+    agentTask.mockImplementation(async () => {
+      throw new Error('the VTA did not answer within 30 s')
+    })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({
+      name: 'RoomsUnavailable',
+      reason: 'communityUnreachable',
+    })
+  })
+
+  it('a listing that failed is not shared with the next caller', async () => {
+    const { b, communityTask } = backend()
+    const answer = communityTask.getMockImplementation()!
+    communityTask.mockImplementationOnce(async () => {
+      throw new Error('socket closed while the message was packed')
+    })
+    communityTask.mockImplementation(answer)
+    const service = new AgentRoomsService(b)
+    await expect(service.listMyRooms()).rejects.toMatchObject({ reason: 'communityUnreachable' })
+    expect((await service.listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+    expect(listAsks(communityTask)).toHaveLength(2)
+  })
+})
+
+// 10-31: a step kept the community session as an identity of none of the listed communities (a join under way). That
+// is not every community failing: the rooms show from custody for now, and are read again when the session is free.
+// 34VR-Y58H (277.8, 11-03): removed, then re-invited with a new identity. First VTC listed its sealed room for the new
+// identity, the agent held its keys only as the old one, and the room's posts, notes and files said "Couldn't read…
+// Try again later" for ever.
+describe('a sealed room the agent holds no keys to as this identity', () => {
+  const SEALED = 'did:webvh:room:sealed1'
+  const listing = (tier: string) => async (_did: string, type: string, payload: Record<string, unknown>) => {
+    if (type !== ROOMS_TASK.membershipsList || payload.cursor) return { items: [] }
+    return {
+      items: [
+        {
+          roomId: SEALED,
+          host: HOST,
+          label: 'First Room',
+          visibility: tier,
+          actions: ['read', 'write'],
+          state: 'admitted',
+        },
+      ],
+    }
+  }
+  const keys = (rooms: Record<string, unknown>[]) =>
+    jest.fn(async (type: string): Promise<unknown> => {
+      if (type === ROOMS_TASK.keysList02) return { rooms }
+      throw new Error(`unexpected agent task ${type}`)
+    })
+  const sealedRoom = async (tier: string, held: Record<string, unknown>[]) => {
+    const { b } = backend({ communityTask: jest.fn(listing(tier)), agentTask: keys(held) })
+    return (await new AgentRoomsService(b).listMyRooms()).find((r) => r.roomId === SEALED)
+  }
+
+  it('is not joined yet when the agent holds none of its keys', async () => {
+    expect(await sealedRoom('attributed', [])).toMatchObject({ source: 'community', joined: false })
+  })
+
+  it('nor when it holds them only as another identity: an old, removed one is not this member', async () => {
+    const room = await sealedRoom('attributed', [
+      { roomId: SEALED, epoch: 3, earliestReadableEpoch: 1, member: 'did:key:old-removed-identity' },
+    ])
+    expect(room).toMatchObject({ joined: false })
+  })
+
+  it('is joined when the agent holds its keys as this identity (control)', async () => {
+    const room = await sealedRoom('attributed', [
+      { roomId: SEALED, epoch: 3, earliestReadableEpoch: 1, member: COMMUNITY.personaDid },
+    ])
+    expect(room).not.toHaveProperty('joined')
+  })
+
+  it('an open room needs no keys, and is never "not joined" (control)', async () => {
+    expect(await sealedRoom('open', [])).not.toHaveProperty('joined')
+  })
+})
+
+describe('every community kept from for now', () => {
+  const kept = () => Object.assign(new Error('vtiAgent: the session is kept'), { name: 'VtiSessionHeld' })
+
+  it('lists the rooms custody holds instead of failing, and is told when to read again', async () => {
+    let free!: () => void
+    const { b } = backend({
+      communityTask: jest.fn(async () => {
+        throw kept()
+      }),
+      sessionKept: (e) => e instanceof Error && e.name === 'VtiSessionHeld',
+      sessionFree: jest.fn(() => new Promise<void>((resolve) => (free = resolve))),
+    })
+    const service = new AgentRoomsService(b, undefined, { sleep: async () => undefined })
+    const readable = jest.fn()
+    service.onReadable(readable)
+    expect((await service.listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+    free()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(readable).toHaveBeenCalledTimes(1)
+  })
+
+  it('names the communities it could not read for now, and only those, for the screens to say "Still loading…"', async () => {
+    const other: RoomsCommunity = { did: 'did:webvh:community:b', name: 'Choir', personaDid: 'did:key:persona-b' }
+    const { b } = backend({
+      communities: async () => [COMMUNITY, other],
+      communityTask: jest.fn(async (did: string, type: string, payload: Record<string, unknown>) => {
+        if (did === other.did) throw kept()
+        return backend().communityTask(did, type, payload)
+      }),
+      sessionKept: (e) => e instanceof Error && e.name === 'VtiSessionHeld',
+      sessionFree: jest.fn(() => new Promise<void>(() => undefined)),
+    })
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    expect(service.heldBack().map((c) => [c.communityDid, String(c.communityName)])).toEqual([[other.did, 'Choir']])
+  })
+
+  // 34VR-Y58H (277.8, 11-03): the warn put the hold's reason beside the community's whole DID, every 30 s. The hold's
+  // own rule: never its reason, nor the DID it is kept for, beside a community's DID.
+  it("logs a kept community by short id and says only that the session is kept: never the step's reason", async () => {
+    const LONG = 'did:webvh:QmcSLGfx8V7PJNheJJSXN6HxihM6NNLUXw8TWx8bBDbhz3:dids.oma.ic3.dev:vtc'
+    const held = Object.assign(
+      new Error("vtiAgent: the session is kept for another of this phone's identities (signed in for a step just now)"),
+      { name: 'VtiSessionHeld', heldAs: 'did:webvh:QmHidden:ids.example:step-persona' }
+    )
+    const { b } = backend({
+      communities: async () => [{ did: LONG, personaDid: 'did:key:persona-a' }],
+      communityTask: jest.fn(async () => {
+        throw held
+      }),
+      sessionKept: (e) => e instanceof Error && e.name === 'VtiSessionHeld',
+      sessionFree: jest.fn(() => new Promise<void>(() => undefined)),
+    })
+    await new AgentRoomsService(b).listMyRooms()
+    const lines = (b.warn as jest.Mock).mock.calls.map(([line]) => String(line))
+    expect(lines).toEqual([
+      "rooms: did:webvh:QmcSLG….dev:vtc did not list this member's rooms: the session is kept for another identity",
+    ])
+    for (const line of lines) {
+      expect(line).not.toContain(LONG)
+      expect(line).not.toMatch(/signed in for a step|step-persona/)
+    }
+  })
+
+  // ac's review of #903: any error's words may name an identity, not only a hold's reason. Each of these went into the
+  // line whole before; only its kind may.
+  it.each([
+    [
+      'unavailable',
+      new RoomsUnavailable('listMyRooms', 'communityUnreachable', 'did:webvh:x said no'),
+      'unavailable (communityUnreachable)',
+    ],
+    [
+      'refused',
+      Object.assign(new Error('did:key:persona-a is not one'), { name: 'VtiRefusal', code: 'notMember' }),
+      'refused (notMember)',
+    ],
+    [
+      'refused for more than one persona',
+      Object.assign(new Error('you may act as 2 personas, did:key:persona-a among them'), {
+        name: 'VtiRefusal',
+        code: 'taskFailed',
+        details: { reason: 'conflict' },
+      }),
+      'refused (taskFailed, conflict)',
+    ],
+    [
+      'refused with words for a code',
+      Object.assign(new Error('said no'), { name: 'VtiRefusal', code: 'did:key:persona-a said no' }),
+      'refused (other)',
+    ],
+    ['a TypeError', new TypeError("did:key:persona-a's agent is gone"), 'TypeError'],
+    ['a plain error naming an identity', new Error("did:key:persona-a's agent is no longer linked"), 'failed'],
+  ])('logs %s by its kind alone, never its words', async (_label, error, kind) => {
+    const { b } = backend({
+      communityTask: jest.fn(async () => {
+        throw error
+      }),
+    })
+    await new AgentRoomsService(b).listMyRooms().catch(() => undefined)
+    const lines = (b.warn as jest.Mock).mock.calls.map(([line]) => String(line))
+    expect(lines).toEqual([`rooms: ${COMMUNITY.did} did not list this member's rooms: ${kind}`])
+    expect(lines.join('\n')).not.toMatch(/persona-a|said no/)
+  })
+
+  // 278.12, 11-10: a room of a kept community, opened while its row still showed its name, said "Unnamed room" and
+  // "Details not loaded": the listing kept the rows (#981) but the service held the room as its custody stand-in.
+  describe('a room of a community kept from for now, as last read', () => {
+    const OTHER: RoomsCommunity = { did: 'did:webvh:community:b', name: 'Choir', personaDid: 'did:key:persona-b' }
+    const OTHER_ROOM = 'did:webvh:room:choirroom77'
+    type Mode = 'answers' | 'kept' | 'unreachable' | 'listsNone'
+    const twoCommunities = () => {
+      let mode: Mode = 'answers'
+      // The first community lists the other's room too: one listed now by a community that answered.
+      let alsoListedHere = false
+      const base = backend()
+      const { b } = backend({
+        communities: async () => [COMMUNITY, OTHER],
+        agentTask: jest.fn(async (type: string, payload: Record<string, unknown>) => {
+          const answer = await base.agentTask(type, payload)
+          if (type !== ROOMS_TASK.keysList02) return answer
+          const rooms = (answer as { rooms: unknown[] }).rooms
+          return {
+            rooms: [...rooms, { roomId: OTHER_ROOM, epoch: 2, earliestReadableEpoch: 1, member: OTHER.personaDid }],
+          }
+        }),
+        communityTask: jest.fn(async (did: string, type: string, payload: Record<string, unknown>) => {
+          if (did !== OTHER.did) {
+            const answer = (await base.communityTask(did, type, payload)) as { items: unknown[] }
+            if (!alsoListedHere || payload.cursor) return answer
+            const moved = { roomId: OTHER_ROOM, host: HOST, label: 'Moved here', visibility: 'attributed' }
+            return { ...answer, items: [...answer.items, { ...moved, actions: ['read'], state: 'admitted' }] }
+          }
+          if (mode === 'kept') throw kept()
+          if (mode === 'unreachable') throw new Error('community unreachable')
+          if (mode === 'listsNone') return { items: [] }
+          return {
+            items: [
+              {
+                roomId: OTHER_ROOM,
+                host: OTHER.did,
+                label: 'Choir practice',
+                visibility: 'attributed',
+                actions: ['read', 'write'],
+                state: 'admitted',
+              },
+            ],
+          }
+        }),
+        sessionKept: (e) => e instanceof Error && e.name === 'VtiSessionHeld',
+        sessionFree: jest.fn(() => new Promise<void>(() => undefined)),
+      })
+      const service = new AgentRoomsService(b)
+      const list = async (now: Mode) => {
+        mode = now
+        return (await service.listMyRooms()).find((r) => r.roomId === OTHER_ROOM)
+      }
+      return { service, list, listHereToo: () => (alsoListedHere = true) }
+    }
+
+    it('lists it, and opens it, with its name and rights as last read, not as custody', async () => {
+      const { service, list } = twoCommunities()
+      const read = await list('answers')
+      expect(read).toMatchObject({ source: 'community', nameFrom: 'community', communityDid: OTHER.did })
+      expect(String(read?.name)).toBe('Choir practice')
+      expect(await list('kept')).toEqual(read)
+      const opened = await service.getRoom(OTHER_ROOM)
+      expect(opened).toMatchObject({ source: 'community', communityDid: OTHER.did, verbs: ['read', 'write'] })
+      expect(String(opened.name)).toBe('Choir practice')
+    })
+
+    it('a community that answers keeps being read afresh while the other is kept (control)', async () => {
+      const { service, list } = twoCommunities()
+      await list('answers')
+      await list('kept')
+      expect(await service.getRoom(ROOM)).toMatchObject({ source: 'community', communityDid: COMMUNITY.did })
+      expect(await service.getRoom(CUSTODY_ROOM)).toMatchObject({ source: 'custody' })
+    })
+
+    it('a room another community lists now is that one’s, not the kept copy (control)', async () => {
+      const { list, listHereToo } = twoCommunities()
+      await list('answers')
+      listHereToo()
+      const now = await list('kept')
+      expect(now).toMatchObject({ communityDid: COMMUNITY.did, verbs: ['read'] })
+      expect(String(now?.name)).toBe('Moved here')
+    })
+
+    it('a first listing with the community kept has nothing earlier: custody, as today (control)', async () => {
+      const { list } = twoCommunities()
+      expect(await list('kept')).toMatchObject({ source: 'custody', nameFrom: 'roomId' })
+    })
+
+    it('a community that could not be reached is not kept: custody, as today (control)', async () => {
+      const { list } = twoCommunities()
+      await list('answers')
+      expect(await list('unreachable')).toMatchObject({ source: 'custody' })
+    })
+
+    it('read again, the community decides: a room it no longer lists is not held over (control)', async () => {
+      const { list } = twoCommunities()
+      await list('answers')
+      await list('kept')
+      expect(await list('listsNone')).toMatchObject({ source: 'custody' })
+    })
+  })
+
+  it('still fails when a community that could not be reached is among them', async () => {
+    const other: RoomsCommunity = { did: 'did:webvh:community:b', personaDid: 'did:key:persona-b' }
+    const { b } = backend({
+      communities: async () => [COMMUNITY, other],
+      communityTask: jest.fn(async (did: string) => {
+        throw did === other.did ? new Error('community unreachable') : kept()
+      }),
+      sessionKept: (e) => e instanceof Error && e.name === 'VtiSessionHeld',
+      sessionFree: jest.fn(() => new Promise<void>(() => undefined)),
+    })
+    await expect(new AgentRoomsService(b).listMyRooms()).rejects.toMatchObject({ reason: 'communityUnreachable' })
+  })
+
+  it('does not fail on a community too old for rooms while another is only kept: the read again decides', async () => {
+    const other: RoomsCommunity = { did: 'did:webvh:community:b', personaDid: 'did:key:persona-b' }
+    const { b } = backend({
+      communities: async () => [COMMUNITY, other],
+      communityTask: jest.fn(async (did: string) => {
+        throw did === other.did ? refused('unsupportedType') : kept()
+      }),
+      sessionKept: (e) => e instanceof Error && e.name === 'VtiSessionHeld',
+      sessionFree: jest.fn(() => new Promise<void>(() => undefined)),
+    })
+    expect((await new AgentRoomsService(b).listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+  })
+})
+
+// A record the agent could not open says why in `details.reason`, after the agent has tried to repair its keys
+// (VTI #2231). A read's own refusal is `cannotOpen` (the rows just below). `unknownEpoch` is rooms/keys/open's and
+// file-key's code for the same reasons (vta-service room_group.rs open_refused); the rows after them feed it to the same
+// helper, which reads both. The reason reaches the screen; nothing else changes.
+describe('a record the agent cannot open', () => {
+  const unknownEpoch = (reason: string) =>
+    Object.assign(refused('rooms/keys/open:unknownEpoch'), { details: { reason, earliestEpoch: 3 } })
+  const failingRead = (refusal: unknown) => {
+    const { b, agentTask } = backend()
+    const answer = agentTask.getMockImplementation()!
+    agentTask.mockImplementation(async (type, payload) => {
+      if (type === ROOMS_TASK.keysRead) throw refusal
+      return answer(type, payload)
+    })
+    return { b, service: new AgentRoomsService(b) }
+  }
+
+  // IN-758: what a record read actually refuses with (vta-service room_profile_tests.rs asserts this code): every
+  // record First Room's reads could not open was logged as `other`, because only `unknownEpoch` was read.
+  const cannotOpen = (reason: string) =>
+    Object.assign(refused('rooms/keys/read:cannotOpen'), { details: { reason, epoch: 3, heldEpoch: 2 } })
+
+  it.each([
+    ['removed', false],
+    ['beyondChain', false],
+    ['notDelivered', true],
+  ] as const)("a read's own refusal, cannotOpen, says its reason: %s (retryable %s)", async (reason, retryable) => {
+    const refusal = cannotOpen(reason)
+    const { service } = failingRead(refusal)
+    const error = await service.readNote(ROOM, 'n1').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(RoomsRefused)
+    expect(error).toMatchObject({ operation: 'readNote', code: reason, retryable, refusal })
+    expect(failureCategory(error)).toBe(`refused (${reason})`)
+  })
+
+  it.each([
+    ['removed', false],
+    ['beyondChain', false],
+    ['notDelivered', true],
+  ] as const)(
+    "open's and file-key's code, unknownEpoch, read by the same helper: %s (retryable %s)",
+    async (reason, retryable) => {
+      const refusal = unknownEpoch(reason)
+      const { service } = failingRead(refusal)
+      const error = await service.readNote(ROOM, 'n1').catch((e: unknown) => e)
+      expect(error).toBeInstanceOf(RoomsRefused)
+      expect(error).toMatchObject({ operation: 'readNote', code: reason, retryable, refusal })
+      expect(failureCategory(error)).toBe(`refused (${reason})`)
+    }
+  )
+
+  it.each([
+    ['another refusal', refused('notFound')],
+    ['another refusal carrying a reason', Object.assign(refused('notFound'), { details: { reason: 'removed' } })],
+    ['unknownEpoch with a reason Keyring does not know', unknownEpoch('somethingNew')],
+    ['unknownEpoch with no details', refused('unknownEpoch')],
+    ['cannotOpen with a reason Keyring does not know', cannotOpen('somethingNew')],
+    ['cannotOpen with no details', refused('rooms/keys/read:cannotOpen')],
+    ['a failure that is not a refusal', new Error('no answer')],
+  ])('passes %s on as it came (control)', async (_what, refusal) => {
+    const { service } = failingRead(refusal)
+    await expect(service.readNote(ROOM, 'n1')).rejects.toBe(refusal)
+  })
+
+  it('logs every reason readNote can throw as itself, never as other', () => {
+    expect(RECORD_UNOPENED_REASONS.length).toBeGreaterThan(0)
+    const unknown = RECORD_UNOPENED_REASONS.filter(
+      (reason) => failureCategory(new RoomsRefused('readNote', reason, false)) !== `refused (${reason})`
+    )
+    expect(unknown).toEqual([])
+  })
+
+  it("logs a page's unopened records as reasons and counts, in one line, and nothing for none", () => {
+    const { b } = backend()
+    const service = new AgentRoomsService(b)
+    service.noteUnread(ROOM, { beyondChain: 3, other: 1, removed: 0 })
+    service.noteUnread(ROOM, {})
+    expect(b.warn).toHaveBeenCalledTimes(1)
+    expect(b.warn).toHaveBeenCalledWith(
+      `rooms: ${logRef(ROOM)} records not opened on this page: beyondChain 3, other 1`
+    )
+  })
+})
+
+// Where the person has read a room to, kept by their agent (real/readMarkers.ts): the key list at 0.3 brings each
+// room's marker, the room screen's posts are told to the agent as the room's member, and a marker moved on another
+// device is heard.
+describe("read markers kept by the person's agent", () => {
+  const SET = ROOMS_TASK.keysReadMarkerSet01
+  const listed03 = {
+    rooms: [
+      { roomId: ROOM, epoch: 3, earliestReadableEpoch: 1, member: 'did:key:persona-a', readMarker: { version: 7 } },
+      { roomId: CUSTODY_ROOM, epoch: 1, earliestReadableEpoch: 1, member: 'did:key:persona-a' },
+    ],
+  }
+  const serving03 = (answer03: () => unknown = () => listed03) => {
+    const made = backend({
+      agentServedTypes: async () => [ROOMS_TASK.keysList03, ROOMS_TASK.keysList02, ROOMS_TASK.keysList01, SET],
+    })
+    const before = made.agentTask.getMockImplementation()!
+    made.agentTask.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
+      if (type === ROOMS_TASK.keysList03) return answer03()
+      if (type === SET)
+        return { roomId: payload.roomId, member: payload.member, readMarker: payload.readMarker, moved: true }
+      return before(type, payload)
+    })
+    return made
+  }
+  const listTypes = (agentTask: jest.Mock) =>
+    agentTask.mock.calls.map(([type]) => type as string).filter((type) => type.includes('/rooms/keys/list/'))
+  afterEach(() => {
+    ROOMS_READ_MARKER.on = true
+    ROOMS_READ_MARKER.remoteOff = false
+    jest.useRealTimers()
+  })
+
+  it('the key list is asked at 0.3 where the agent serves it, and each room has the marker it brought', async () => {
+    const { b, agentTask } = serving03()
+    const service = new AgentRoomsService(b)
+    const rooms = await service.listMyRooms()
+    expect(agentTask).toHaveBeenCalledWith(ROOMS_TASK.keysList03, { includePersonal: true })
+    expect(listTypes(agentTask)).toEqual([ROOMS_TASK.keysList03])
+    expect(rooms.map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+    expect(service.roomReadMarker(ROOM)).toEqual({ version: 7 })
+    // A room held only in custody is no member's room on this phone: it has no marker here.
+    expect(service.roomReadMarker(CUSTODY_ROOM)).toBeUndefined()
+  })
+
+  it.each([
+    ['the release switch off', () => void (ROOMS_READ_MARKER.on = false)],
+    ['the release kill', () => void (ROOMS_READ_MARKER.remoteOff = true)],
+  ])('%s: the key list is asked at 0.2, exactly as before, and no marker is held (control)', async (_, turnOff) => {
+    turnOff()
+    const { b, agentTask } = serving03()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    expect(listTypes(agentTask)).toEqual([ROOMS_TASK.keysList02])
+    expect(service.roomReadMarker(ROOM)).toBeUndefined()
+  })
+
+  it.each([
+    ['the switch on', () => undefined],
+    ['the switch off: it is the one version the agent has', () => void (ROOMS_READ_MARKER.on = false)],
+  ])(
+    'an agent that serves the key list at 0.3 alone is asked at 0.3 (%s), and its rooms are listed',
+    async (_, set) => {
+      set()
+      const { b, agentTask } = serving03()
+      b.agentServedTypes = async () => [ROOMS_TASK.keysList03]
+      const service = new AgentRoomsService(b)
+      expect((await service.listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+      expect(listTypes(agentTask)).toEqual([ROOMS_TASK.keysList03])
+      // Off, the marker the list brought is not taken.
+      expect(service.roomReadMarker(ROOM)).toEqual(ROOMS_READ_MARKER.on ? { version: 7 } : undefined)
+    }
+  )
+
+  it('an agent that does not serve 0.3 is asked at 0.2 (control: every agent before vta-service 0.84)', async () => {
+    const { b, agentTask } = backend()
+    await new AgentRoomsService(b).listMyRooms()
+    expect(listTypes(agentTask)).toEqual([ROOMS_TASK.keysList02])
+  })
+
+  it.each(['unsupportedVersion', 'unsupportedType'])(
+    'an agent that lists 0.3 and refuses it (%s) is asked at 0.2, then and for the session: the rooms are still listed',
+    async (code) => {
+      const { b, agentTask } = serving03(() => {
+        throw refused(code)
+      })
+      const service = new AgentRoomsService(b)
+      expect((await service.listMyRooms()).map((r) => r.roomId)).toEqual([ROOM, CUSTODY_ROOM])
+      expect(listTypes(agentTask)).toEqual([ROOMS_TASK.keysList03, ROOMS_TASK.keysList02])
+      await service.listMyRooms()
+      expect(listTypes(agentTask)).toEqual([ROOMS_TASK.keysList03, ROOMS_TASK.keysList02, ROOMS_TASK.keysList02])
+    }
+  )
+
+  it('what the room screen shows is told to the agent as the member the room is held as, once the reading settles', async () => {
+    const { b, agentTask } = serving03()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    jest.useFakeTimers()
+    service.markRoomRead(ROOM, { version: 9, createdAt: '2026-11-25T05:59:00Z' })
+    // The agent holds 7 already: a post at or before it is not sent.
+    service.markRoomRead(ROOM, { version: 7 })
+    // Not a member's room on this phone: nothing to tell.
+    service.markRoomRead(CUSTODY_ROOM, { version: 2 })
+    expect(agentTask.mock.calls.filter(([type]) => type === SET)).toEqual([])
+    await jest.advanceTimersByTimeAsync(READ_MARKER_SETTLE_MS)
+    expect(agentTask.mock.calls.filter(([type]) => type === SET)).toEqual([
+      [
+        SET,
+        { roomId: ROOM, member: 'did:key:persona-a', readMarker: { version: 9, createdAt: '2026-11-25T05:59:00Z' } },
+        expect.objectContaining({ waitForConsent: false }),
+      ],
+    ])
+    expect(service.roomReadMarker(ROOM)).toEqual({ version: 9, createdAt: '2026-11-25T05:59:00Z' })
+  })
+
+  it("a marker moved on another device is heard for the room's own member, and stops being heard", async () => {
+    let push: (payload: Record<string, unknown>) => void = () => undefined
+    const stopped = jest.fn()
+    const { b } = serving03()
+    b.onRoomReadMarkerMoved = (listener) => {
+      push = listener
+      return stopped
+    }
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    const heard = jest.fn()
+    const stop = service.onRoomReadMarker(heard)
+    push({ roomId: ROOM, member: 'did:key:persona-a', readMarker: { version: 2 } })
+    // Another identity's marker, and a room this phone does not hold: nothing.
+    push({ roomId: ROOM, member: 'did:key:someone-else', readMarker: { version: 5 } })
+    push({ roomId: 'did:webvh:room:unknown', member: 'did:key:persona-a', readMarker: { version: 5 } })
+    expect(heard.mock.calls).toEqual([[ROOM, { version: 2 }, 'moved']])
+    stop()
+    expect(stopped).toHaveBeenCalledTimes(1)
+  })
+
+  it('a room marked unread elsewhere is held unread through the app leaving and returning, until it is entered', async () => {
+    let push: (payload: Record<string, unknown>) => void = () => undefined
+    const { b, agentTask } = serving03()
+    b.onRoomReadMarkerMoved = (listener) => {
+      push = listener
+      return () => undefined
+    }
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    service.onRoomReadMarker(() => undefined)
+    // The room is open on this phone; the agent held 7, and the person marks it unread at 2 on their laptop.
+    service.roomInView(ROOM, true)
+    push({ roomId: ROOM, member: 'did:key:persona-a', readMarker: { version: 2 } })
+    expect(service.roomMarkedUnread(ROOM)).toBe(true)
+    // The app goes to the background and comes back with the room still on screen: out of view, then in view. The
+    // phone was only picked up, so the hold stays (control: hung on this transition, it ended here).
+    service.roomInView(ROOM, false)
+    service.roomInView(ROOM, true)
+    expect(service.roomMarkedUnread(ROOM)).toBe(true)
+    jest.useFakeTimers()
+    service.markRoomRead(ROOM, { version: 9 })
+    await jest.advanceTimersByTimeAsync(READ_MARKER_SETTLE_MS)
+    expect(agentTask.mock.calls.filter(([type]) => type === SET)).toEqual([])
+    // The person navigates away and back to the room: it is theirs to read again.
+    service.roomEntered(ROOM)
+    expect(service.roomMarkedUnread(ROOM)).toBe(false)
+    service.markRoomRead(ROOM, { version: 9 })
+    await jest.advanceTimersByTimeAsync(READ_MARKER_SETTLE_MS)
+    expect(agentTask.mock.calls.filter(([type]) => type === SET)).toHaveLength(1)
+  })
+
+  it('a lock forgets every marker', async () => {
+    const { b } = serving03()
+    const service = new AgentRoomsService(b)
+    await service.listMyRooms()
+    service.dropOpenedRecords()
+    expect(service.roomReadMarker(ROOM)).toBeUndefined()
+  })
+})

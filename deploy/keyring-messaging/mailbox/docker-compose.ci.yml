@@ -1,0 +1,48 @@
+# CI ONLY. Never used on the VM: the deployment runs docker-compose.yml alone.
+#
+# The repository's "Mailbox mediator image" check (.github/workflows/
+# push-gateway-image.yml, job `mailbox`) lays this file over docker-compose.yml
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait redis mediator
+#
+# to boot the mediator on a GitHub runner, which has no GCP project, no public
+# hostname and no TLS. Three things differ from the deployment, nothing else:
+#
+#   1. Secrets. The deployment reads its keys from Secret Manager
+#      (gcp_secrets://, one secret holding the bundle setup-identity.sh writes).
+#      Here the mediator reads the SAME keys from the plaintext file backend,
+#      file:///<absolute path> (upstream docs/secrets-backend.md, "Backend
+#      URLs": three slashes, always compiled in, "dev only"). The file backend's
+#      store is the bare {"entries": {name: base64url}} map (upstream
+#      affinidi-messaging-mediator-common src/secrets/backends/file.rs,
+#      StoreFile); the bundle is that map inside the {version, kind, data}
+#      envelope, so the job unwraps it with jq into ci-secrets/secrets.json
+#      (gitignored by the repository's *secrets* rule). Mounted read-only: the
+#      mediator only reads its store at startup and on /readyz (the read-only
+#      probe), and the file backend treats a missing file as healthy, so an
+#      unreadable or badly placed copy shows up as a refused start ("JWT
+#      signing secret is missing"), not as a silent pass. The copy is mode
+#      0644: the mediator runs as uid 10001 and the identity is a throwaway.
+#   2. No Caddy. Only redis and mediator are started (caddy is not named on
+#      the command line, and nothing depends on it), so nothing terminates TLS
+#      and no port is published by the stack itself. LOCAL_ENDPOINTS and
+#      CORS_ALLOW_ORIGIN keep the https:// values docker-compose.yml sets,
+#      which is what the identity's DID document names.
+#   3. A published port. The image carries no curl (its healthcheck is the
+#      binary's own `mediator healthcheck`), so the job probes livez, readyz
+#      and /inbound from the runner through the mediator's port on the
+#      runner's loopback. On the VM only Caddy publishes ports.
+#
+# The hostname is MAILBOX_HOSTNAME from .env, which the job sets to a name
+# setup-identity.sh accepts and nothing ever resolves; GCP_PROJECT is set to a
+# dummy so docker-compose.yml's ${GCP_PROJECT:?} interpolates, and the value is
+# then overridden here and never used.
+
+services:
+  mediator:
+    environment:
+      MEDIATOR_SECRETS_BACKEND: file:///run/secrets/mailbox-ci/secrets.json
+    volumes:
+      - ./ci-secrets:/run/secrets/mailbox-ci:ro
+    ports:
+      - "127.0.0.1:7037:7037"
