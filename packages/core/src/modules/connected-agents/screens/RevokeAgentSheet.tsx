@@ -4,8 +4,8 @@ import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-nat
 
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { testIdWithKey } from '../../../utils/testable'
-import RevokeOutcomeNotice, { RevokeViewOutcome } from '../components/RevokeOutcomeNotice'
 import { AGENT_COLORS } from '../components/agentStyle'
+import RevokeOutcomeNotice, { RevokeViewOutcome } from '../components/RevokeOutcomeNotice'
 
 export interface RevokeAgentSheetProps {
   /** The name the owner gave the agent. */
