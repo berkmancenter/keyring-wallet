@@ -188,7 +188,9 @@ describe('ConnectNumberView', () => {
 
   // "One try" stands on three layers, and the test above proves only that they hold together: removing any one of
   // them alone leaves it passing (measured). So each layer a person can reach is asserted on its own here; the third,
-  // the check inside submit, is a backstop that no event reaches while the other two stand.
+  // the check inside submit, is reached by no event while the other two stand, but it is load-bearing: with the
+  // field lock removed it is what stops a second submit (measured in review: lock and check removed together, the
+  // number is sent twice). Keep it.
   it('locks the field once the number is sent', () => {
     const tree = show(<ConnectNumberView onSubmit={jest.fn()} onCancel={jest.fn()} />)
     fireEvent.changeText(field(tree), '47')
