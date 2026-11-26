@@ -204,6 +204,11 @@ class CommunityTarget {
     this.notify()
   }
 
+  /**
+   * Forget the community shown, the community chosen and every published name. Only tests call it today. A caller in
+   * the app must also make the saved names be read again (`savedCommunityNames`, which reads them once per agent and
+   * keeps that read): without it the names stay gone until the app is started again, and nothing fails.
+   */
   clear(): void {
     if (!this.viewing && !this.chosen && this.published.size === 0) return
     this.viewing = undefined
