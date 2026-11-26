@@ -1,52 +1,132 @@
 /**
  * Step 7.10's screens and words (docs/plans/agent-connect-plan.md §6, §3.9): the Revoke sheet says "up to 4 hours"
- * and never that it is instant; the not-confirmed and unreachable lines with "Try again"; and no locale file says
- * "instant".
+ * and never that it is instant, and its "Revoke" runs `revokeAgentConnection`; the Revoke incomplete and Revoke not
+ * confirmed lines with "Try again"; and no locale file says "instant".
  */
-import { fireEvent, render } from '@testing-library/react-native'
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import { readdirSync, readFileSync } from 'fs'
 import path from 'path'
 import React from 'react'
 
-import { BasicAppContext } from '../../../../__tests__/helpers/app'
-import { testIdWithKey } from '../../../utils/testable'
-import RevokeAgentSheet from '../components/RevokeAgentSheet'
-import RevokeOutcomeNotice from '../components/RevokeOutcomeNotice'
+import type {
+  RevokableConnection,
+  RevokeConnectionStore,
+  RevokeDeps,
+  RevokeVta,
+} from '../../src/modules/connected-agents/revoke'
+import RevokeAgentSheet from '../../src/screens/RevokeAgentSheet'
+import RevokeOutcomeNotice from '../../src/screens/RevokeOutcomeNotice'
+import { testIdWithKey } from '../../src/utils/testable'
+import { BasicAppContext } from '../helpers/app'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
+jest.mock('react-native-keychain', () => ({ ACCESS_CONTROL: {}, ACCESSIBLE: {}, STORAGE_TYPE: {} }))
 
 const id = (key: string) => testIdWithKey(key)
 const show = (node: React.ReactElement) => render(<BasicAppContext>{node}</BasicAppContext>)
 
+const AGENT = { id: 'did:key:z6MkAgent', name: 'Notes helper' }
+
+/** An in-memory store with one active record, and a VTA whose listing is set per test. */
+function fakes() {
+  const records = new Map<string, RevokableConnection>([
+    [
+      AGENT.id,
+      { id: AGENT.id, name: AGENT.name, agentDid: AGENT.id, deviceId: 'dev-1', state: 'active', keyChanged: false },
+    ],
+  ])
+  const store: RevokeConnectionStore = {
+    list: async () => [...records.values()].map((r) => ({ ...r })),
+    get: async (key) => (records.has(key) ? { ...(records.get(key) as RevokableConnection) } : undefined),
+    put: async (record) => {
+      records.set(record.id, { ...record })
+    },
+    remove: async (key) => {
+      records.delete(key)
+    },
+  }
+  const findAgentEntries = jest.fn<ReturnType<RevokeVta['findAgentEntries']>, []>(async () => ({
+    complete: true,
+    matches: [],
+  }))
+  const revokeSubject = jest.fn(async () => undefined)
+  const vta = { findAgentEntries, revokeSubject } as unknown as RevokeVta
+  const deps: RevokeDeps = { store, vta, now: () => Date.parse('2026-11-26T12:00:00Z') }
+  return { records, deps, findAgentEntries, revokeSubject }
+}
+
 describe('RevokeAgentSheet', () => {
-  it('names the agent and, with rooms, the 4-hour tail; Revoke and Keep each do their one thing', () => {
-    const onRevoke = jest.fn()
-    const onKeep = jest.fn()
-    const view = show(<RevokeAgentSheet name="Notes helper" inRooms onRevoke={onRevoke} onKeep={onKeep} />)
+  it('names the agent and, with rooms, the 4-hour tail', () => {
+    const view = show(<RevokeAgentSheet agent={AGENT} inRooms deps={fakes().deps} onKeep={jest.fn()} />)
     expect(view.getByText('Revoke "Notes helper"?')).toBeTruthy()
     const body = view.getByTestId(id('RevokeAgentBody'))
     expect(body).toHaveTextContent(
       'It loses access to your memory and rooms. A room permission it already holds can work for up to 4 hours. Past messages stay.'
     )
     expect(body).toHaveTextContent(/up to 4 hours/)
-    fireEvent.press(view.getByTestId(id('RevokeAgentConfirm')))
-    expect([onRevoke.mock.calls.length, onKeep.mock.calls.length]).toEqual([1, 0])
-    fireEvent.press(view.getByTestId(id('RevokeAgentKeep')))
-    expect([onRevoke.mock.calls.length, onKeep.mock.calls.length]).toEqual([1, 1])
   })
 
   it("without rooms (P0) shows §6's no-room form", () => {
-    const view = show(<RevokeAgentSheet name="Notes helper" inRooms={false} onRevoke={jest.fn()} onKeep={jest.fn()} />)
+    const view = show(<RevokeAgentSheet agent={AGENT} inRooms={false} deps={fakes().deps} onKeep={jest.fn()} />)
     expect(view.getByTestId(id('RevokeAgentBody'))).toHaveTextContent(
       'It loses access to your memory. Past messages stay.'
     )
   })
 
-  it('while busy, neither button acts', () => {
-    const onRevoke = jest.fn()
-    const view = show(<RevokeAgentSheet name="N" inRooms onRevoke={onRevoke} onKeep={jest.fn()} busy />)
-    fireEvent.press(view.getByTestId(id('RevokeAgentConfirm')))
-    expect(onRevoke).not.toHaveBeenCalled()
+  it('"Keep" closes and sends nothing', () => {
+    const f = fakes()
+    const onKeep = jest.fn()
+    const view = show(<RevokeAgentSheet agent={AGENT} inRooms deps={f.deps} onKeep={onKeep} />)
+    fireEvent.press(view.getByTestId(id('RevokeAgentKeep')))
+    expect(onKeep).toHaveBeenCalledTimes(1)
+    expect(f.findAgentEntries).not.toHaveBeenCalled()
+    expect(f.records.get(AGENT.id)?.state).toBe('active')
+  })
+
+  it('"Revoke" runs revokeAgentConnection: revoked once a full listing shows no entry', async () => {
+    const f = fakes()
+    const onOutcome = jest.fn()
+    const view = show(<RevokeAgentSheet agent={AGENT} inRooms deps={f.deps} onKeep={jest.fn()} onOutcome={onOutcome} />)
+    await act(async () => {
+      fireEvent.press(view.getByTestId(id('RevokeAgentConfirm')))
+    })
+    await waitFor(() => expect(onOutcome).toHaveBeenCalledWith({ kind: 'revoked' }))
+    expect(f.findAgentEntries).toHaveBeenCalledWith({ deviceId: 'dev-1', subject: AGENT.id })
+    expect(f.records.get(AGENT.id)?.state).toBe('revoked')
+    expect(view.queryByTestId(id('RevokeOutcomeNotice'))).toBeNull()
+  })
+
+  it('Revoke incomplete: "still connected", and "Try again" runs it again', async () => {
+    const f = fakes()
+    f.findAgentEntries.mockRejectedValueOnce(new Error('the VTA did not answer'))
+    const onOutcome = jest.fn()
+    const view = show(<RevokeAgentSheet agent={AGENT} inRooms deps={f.deps} onKeep={jest.fn()} onOutcome={onOutcome} />)
+    await act(async () => {
+      fireEvent.press(view.getByTestId(id('RevokeAgentConfirm')))
+    })
+    await waitFor(() =>
+      expect(view.getByText('We couldn\'t reach your VTA, so "Notes helper" is still connected.')).toBeTruthy()
+    )
+    expect(f.records.get(AGENT.id)?.state).toBe('revoking')
+    await act(async () => {
+      fireEvent.press(view.getByTestId(id('RevokeTryAgain')))
+    })
+    await waitFor(() => expect(onOutcome).toHaveBeenLastCalledWith({ kind: 'revoked' }))
+    expect(f.records.get(AGENT.id)?.state).toBe('revoked')
+  })
+
+  it('Revoke not confirmed: a partial listing is not proof', async () => {
+    const f = fakes()
+    f.findAgentEntries.mockResolvedValue({ complete: false, matches: [] })
+    const view = show(<RevokeAgentSheet agent={AGENT} inRooms deps={f.deps} onKeep={jest.fn()} />)
+    await act(async () => {
+      fireEvent.press(view.getByTestId(id('RevokeAgentConfirm')))
+    })
+    await waitFor(() =>
+      expect(view.getByText('"Notes helper" may still have access. Keyring will check again.')).toBeTruthy()
+    )
+    expect(view.getByText('Revoke not confirmed')).toBeTruthy()
+    expect(f.records.get(AGENT.id)?.state).toBe('revoking')
   })
 })
 
@@ -88,7 +168,7 @@ describe('no locale file says "instant" (§6, step 7.10)', () => {
     'fr/fr.json': /\binstantan/i,
     'pt-br/pt-br.json': /\binstant[aâ]ne/i,
   }
-  const dir = path.resolve(__dirname, '../../../localization')
+  const dir = path.resolve(__dirname, '../../src/localization')
   const files = readdirSync(dir, { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .flatMap((d) => readdirSync(path.join(dir, d.name)).map((f) => path.join(dir, d.name, f)))

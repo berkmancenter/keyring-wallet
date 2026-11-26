@@ -3,11 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { StyleSheet, TouchableOpacity, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
-import { ThemedText } from '../../../components/texts/ThemedText'
-import { testIdWithKey } from '../../../utils/testable'
-import type { RevokeOutcome } from '../revoke'
-
-import { AGENT_COLORS } from './agentStyle'
+import { ThemedText } from '../components/texts/ThemedText'
+import { AGENT_COLORS } from '../modules/connected-agents/components/agentStyle'
+import type { RevokeOutcome } from '../modules/connected-agents/revoke'
+import { testIdWithKey } from '../utils/testable'
 
 export interface RevokeOutcomeNoticeProps {
   name: string

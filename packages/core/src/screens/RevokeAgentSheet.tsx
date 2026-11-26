@@ -1,26 +1,29 @@
-import React from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native'
 
-import { ThemedText } from '../../../components/texts/ThemedText'
-import { testIdWithKey } from '../../../utils/testable'
+import { ThemedText } from '../components/texts/ThemedText'
+import { AGENT_COLORS } from '../modules/connected-agents/components/agentStyle'
+import { revokeAgentConnection } from '../modules/connected-agents/revoke'
+import type { RevokeDeps, RevokeOutcome } from '../modules/connected-agents/revoke'
+import { testIdWithKey } from '../utils/testable'
 
-import { AGENT_COLORS } from './agentStyle'
+import RevokeOutcomeNotice from './RevokeOutcomeNotice'
 
 export interface RevokeAgentSheetProps {
-  /** The agent's name, as the owner gave it. */
-  name: string
+  /** The agent's connection record id and the name the owner gave it. */
+  agent: { id: string; name: string }
   /**
    * Whether the agent was added to any room. Without rooms (all of P0) the body is §6's no-room form, "It loses access
    * to your memory. Past messages stay."; with rooms it names the 4-hour tail of a room permission already held.
    */
   inRooms: boolean
-  /** "Revoke": the caller runs `revokeAgent` (revoke.ts). */
-  onRevoke: () => void
+  /** The store and the VTA that `revokeAgentConnection` (connected-agents/revoke.ts) runs on. */
+  deps: RevokeDeps
   /** "Keep": closes the sheet; nothing changes. */
   onKeep: () => void
-  /** While the revoke runs: the buttons are off and "Revoke" shows a spinner. */
-  busy?: boolean
+  /** Each revoke's outcome. On `revoked` the caller closes the sheet; otherwise the sheet shows why, with "Try again". */
+  onOutcome?: (outcome: RevokeOutcome) => void
 }
 
 const styles = StyleSheet.create({
@@ -36,29 +39,56 @@ const styles = StyleSheet.create({
 })
 
 /**
- * The Revoke sheet (§6, mockup 17; §3.9): "Revoke "<name>"?", what remains after it, and "Revoke" / "Keep". The
- * contents only: the agent details present it in their bottom sheet. It never says the revoke is immediate: a room
- * permission already held can work for up to 4 hours (§3.9, step 7.10).
+ * The Revoke sheet (§6, mockup 17; §3.9): "Revoke "<name>"?", what remains after it, and "Revoke" / "Keep". "Revoke"
+ * runs `revokeAgentConnection`; when it is not confirmed the sheet shows §6's Revoke incomplete or Revoke not confirmed
+ * line with "Try again". The contents only: the agent details present it in their bottom sheet. It never says the
+ * revoke is immediate: a room permission already held can work for up to 4 hours (§3.9, step 7.10).
  */
-const RevokeAgentSheet: React.FC<RevokeAgentSheetProps> = ({ name, inRooms, onRevoke, onKeep, busy }) => {
+const RevokeAgentSheet: React.FC<RevokeAgentSheetProps> = ({ agent, inRooms, deps, onKeep, onOutcome }) => {
   const { t } = useTranslation()
+  const [busy, setBusy] = useState(false)
+  const [outcome, setOutcome] = useState<RevokeOutcome | undefined>()
+  const mounted = useRef(true)
+  useEffect(
+    () => () => {
+      mounted.current = false
+    },
+    []
+  )
+
+  const revoke = useCallback(async () => {
+    setBusy(true)
+    try {
+      const result = await revokeAgentConnection(deps, agent.id)
+      if (mounted.current) setOutcome(result)
+      onOutcome?.(result)
+    } catch {
+      // No record, or one that has no revoke (§3.10's states): nothing was sent, and the sheet stays as it was.
+    } finally {
+      if (mounted.current) setBusy(false)
+    }
+  }, [deps, agent.id, onOutcome])
+
   return (
     <View style={styles.sheet} testID={testIdWithKey('RevokeAgentSheet')}>
       <ThemedText style={styles.title} accessibilityRole="header">
-        {t('ConnectedAgents.RevokeTitle', { name })}
+        {t('ConnectedAgents.RevokeTitle', { name: agent.name })}
       </ThemedText>
       <ThemedText style={styles.body} testID={testIdWithKey('RevokeAgentBody')}>
         {t(inRooms ? 'ConnectedAgents.RevokeBody' : 'ConnectedAgents.RevokeBodyNoRooms')}
       </ThemedText>
+      {outcome && outcome.kind !== 'revoked' ? (
+        <RevokeOutcomeNotice name={agent.name} outcome={outcome} onTryAgain={busy ? undefined : revoke} />
+      ) : null}
       <View style={styles.buttons}>
         <TouchableOpacity
           style={[styles.button, styles.revoke]}
-          onPress={onRevoke}
+          onPress={revoke}
           disabled={busy}
           testID={testIdWithKey('RevokeAgentConfirm')}
           accessibilityRole="button"
           accessibilityLabel={t('ConnectedAgents.Revoke')}
-          accessibilityState={{ disabled: Boolean(busy), busy: Boolean(busy) }}
+          accessibilityState={{ disabled: busy, busy }}
         >
           {busy ? (
             <ActivityIndicator color="#FFFFFF" />
@@ -73,7 +103,7 @@ const RevokeAgentSheet: React.FC<RevokeAgentSheetProps> = ({ name, inRooms, onRe
           testID={testIdWithKey('RevokeAgentKeep')}
           accessibilityRole="button"
           accessibilityLabel={t('ConnectedAgents.Keep')}
-          accessibilityState={{ disabled: Boolean(busy) }}
+          accessibilityState={{ disabled: busy }}
         >
           <ThemedText style={styles.keepText}>{t('ConnectedAgents.Keep')}</ThemedText>
         </TouchableOpacity>
