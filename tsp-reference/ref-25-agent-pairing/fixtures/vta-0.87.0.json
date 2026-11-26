@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-11-26T04:33:13.399Z",
+  "recordedAt": "2026-11-26T07:02:47.423Z",
   "source": {
     "repository": "OpenVTC/verifiable-trust-infrastructure",
     "commit": "4e5861d95b799c0910e92a81bec6af17d1578e2d",
@@ -131,6 +131,21 @@
     ],
     "vault/credentials/present": [
       "0.1"
+    ],
+    "vta/webvh/dids/create": [
+      "1.2"
+    ],
+    "keys/sign-document": [
+      "0.1"
+    ],
+    "vta/credentials/issue": [
+      "0.2"
+    ],
+    "credential-exchange/issue": [
+      "0.1"
+    ],
+    "vault/sign-trust-task": [
+      "0.2"
     ]
   }
 }

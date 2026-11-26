@@ -28,6 +28,8 @@ export const FAMILIES = [
   "auth/oob/request", "auth/oob/claim", "auth/oob/prove", "auth/oob/respond", "auth/oob/grant", "auth/oob/redeem",
   "task-consent/request", "task-consent/decision",
   "vault/credentials/present",
+  // Step 0.1(f): a persona's DID, and the tasks that could sign a credential as it.
+  "vta/webvh/dids/create", "keys/sign-document", "vta/credentials/issue", "credential-exchange/issue", "vault/sign-trust-task",
 ];
 
 let lab;

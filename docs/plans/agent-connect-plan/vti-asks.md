@@ -81,12 +81,12 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Extension:** an `agents` member (`allowed`, `notAllowed`) in the community's room record and the room profile; later, enforcement for "only with VDCs to people in the room".
 - **Severity:** P1 works around (advisory; "not stated" counts as no, plan §3.8); P2 blocks the third setting.
 
-### AC-07 No task signs a VDC as the persona, and no status hosting for it
+### AC-07 No status hosting for a VDC a persona issues (the signing task exists: answered)
 
-- **Hit:** `docs/` and `vti-specs*` carry VAC and VMC issuance, no VDC.
-- **Evidence:** search of `docs/` and `vti-specs*` at `origin/main`; plan §2.3 item 5.
-- **Extension:** a persona-issuing task for a W3C credential (or a Trust Task envelope the VTA signs) and a status-list hosting path for it.
-- **Severity:** P0 works around (7-day validity re-issued while the entry is active, no status entry; a revoked agent's VDC can stay valid up to 7 days and nothing shows it in P0 and P1 shows it only in the agent's profile record in rooms; Phase 0 step 0.1(f) measures what exists); P1 blocks presenting the VDC with a revocation guarantee.
+- **Hit:** nothing hosts a status entry for a credential a persona issues. The signing half of this ask is **answered**: `keys/sign-document/0.1` signs a W3C credential as the persona.
+- **Evidence:** the rung `tsp-reference/ref-25-agent-pairing`, case `f-sign-as-persona`, on lab VTAs 0.84.0 at `97fda9813` and 0.87.0 at `4e5861d95`, 2026-11-26 (plan §2.3 item 5; companion `2026-11-26-al.md` finding 8): the credential comes back unchanged with an `eddsa-jcs-2022` proof by the persona's `#key-0`, it verifies, and an agent's entry is refused the task. For status: search of `docs/` and `vti-specs*` at `origin/main`.
+- **Extension:** a status-list hosting path for such a credential.
+- **Severity:** P0 none for signing; P0 works around the missing status (7-day validity re-issued while the entry is active, no status entry; a revoked agent's VDC can stay valid up to 7 days and nothing shows it in P0 and P1 shows it only in the agent's profile record in rooms); P2 blocks presenting the VDC with a revocation guarantee.
 
 ### AC-08 Rooms cannot show whose agent a record's author is
 
