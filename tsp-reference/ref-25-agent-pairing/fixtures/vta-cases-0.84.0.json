@@ -1,0 +1,206 @@
+{
+  "recordedAt": "2026-11-26T04:43:48.083Z",
+  "source": {
+    "repository": "OpenVTC/verifiable-trust-infrastructure",
+    "commit": "97fda98130047ca8ff4c0af1b60116d558968d2a",
+    "version": "0.84.0",
+    "profile": "debug"
+  },
+  "binarySha256": "aa334ba5e3f06e983bfc6763615f0f7c7362e2f74610fd7c02172d06a01f71a2",
+  "cases": {
+    "p1-administrator": {
+      "roles": [
+        "admin"
+      ],
+      "scopes": []
+    },
+    "p2-create-context": {
+      "create": "ok",
+      "idAsAsked": true,
+      "createAgain": "taskFailed",
+      "createAgainSaysConflict": true,
+      "listedWithItsName": true,
+      "scopedAdministrator": {
+        "roles": [
+          "admin"
+        ],
+        "scoped": true,
+        "createsTopLevel": "permissionDenied",
+        "createsUnderItsOwn": "ok"
+      }
+    },
+    "d-grant": {
+      "kebabCase": "ok",
+      "camelCase": "malformedRequest",
+      "aPurposeNameNobodyDefined": "ok",
+      "aPurposeNameWithAHyphen": "malformedRequest",
+      "noPurposesMember": "malformedRequest",
+      "agentSees": {
+        "roles": [
+          "application"
+        ],
+        "scopes": [
+          "ctx:<its memory>"
+        ],
+        "capabilities": [
+          "memory-read",
+          "memory-write"
+        ]
+      }
+    },
+    "p3-bound": {
+      "own": {
+        "put": "ok",
+        "get": "ok",
+        "readBack": true
+      },
+      "other": {
+        "put": "vta/memory/put:contextForbidden",
+        "get": "vta/memory/get:contextForbidden",
+        "list": "vta/memory/list:contextForbidden"
+      },
+      "grantNamingAContextThatDoesNotExist": "taskFailed"
+    },
+    "o-hierarchy": {
+      "childIdIsParentSlashId": true,
+      "aPathAsTheId": "malformedRequest",
+      "entryNamingTheParent": {
+        "putInChild": "ok",
+        "getInChild": "ok"
+      },
+      "entryNamingTheChild": {
+        "putInChild": "ok",
+        "putInParent": "vta/memory/put:contextForbidden",
+        "getInParent": "vta/memory/get:contextForbidden"
+      }
+    },
+    "b-register": {
+      "actBeforeRegistering": "rooms/keys/act:typeNotActable",
+      "register": "ok",
+      "kindOnTheWire": {
+        "kind": "service",
+        "serviceKind": "aiAgent"
+      },
+      "hasDeviceId": true,
+      "actAfterRegistering": "permissionDenied",
+      "registerAgain": "taskFailed",
+      "registerAgainSaysAlreadyRegistered": true
+    },
+    "c-swap": {
+      "withoutALinkProof": "taskFailed",
+      "withoutALinkProofSays": "acl:link_proof_required",
+      "swap": "ok",
+      "theNewKeySignsIn": true,
+      "oldSubjectStillListed": false,
+      "keeps": {
+        "role": true,
+        "act": true,
+        "capabilities": true,
+        "purposes": true,
+        "expiresAt": true,
+        "label": true
+      },
+      "deviceFollows": {
+        "sameDeviceId": true,
+        "consumerIsTheNewKey": true,
+        "kind": {
+          "kind": "service",
+          "serviceKind": "aiAgent"
+        }
+      },
+      "theOldSessionAfterTheSwap": "permissionDenied",
+      "theNewKeyReadsItsMemory": "ok"
+    },
+    "l-revoke-after-1-swap": {
+      "memoryBeforeRevoke": "ok",
+      "deviceListNamesTheNewestKey": true,
+      "revokingTheFirstKey": "acl/revoke:subjectNotPresent",
+      "revokeByTheDevicesKey": "ok",
+      "deviceStillListed": false,
+      "entryStillListed": false,
+      "onTheSessionOpenedBeforeTheRevoke": {
+        "whoami": "permissionDenied",
+        "memoryGet": "vta/memory/get:purposeNotGranted",
+        "memoryPut": "ok",
+        "memoryPutNamingItsPurpose": "vta/memory/put:purposeNotGranted",
+        "memoryList": "vta/memory/list:purposeNotGranted",
+        "sessionLifetimeMinutes": 15
+      },
+      "signInAgain": "refused"
+    },
+    "l-revoke-after-2-swaps": {
+      "memoryBeforeRevoke": "ok",
+      "deviceListNamesTheNewestKey": true,
+      "revokingTheFirstKey": "acl/revoke:subjectNotPresent",
+      "revokeByTheDevicesKey": "ok",
+      "deviceStillListed": false,
+      "entryStillListed": false,
+      "onTheSessionOpenedBeforeTheRevoke": {
+        "whoami": "permissionDenied",
+        "memoryGet": "vta/memory/get:purposeNotGranted",
+        "memoryPut": "ok",
+        "memoryPutNamingItsPurpose": "vta/memory/put:purposeNotGranted",
+        "memoryList": "vta/memory/list:purposeNotGranted",
+        "sessionLifetimeMinutes": 15
+      },
+      "signInAgain": "refused"
+    },
+    "l-disable": {
+      "disable": "ok",
+      "nextMemoryGetOnTheOldSession": "ok",
+      "signInAgain": "permissionDenied",
+      "memoryOnANewSession": "no session",
+      "entryStillListed": true
+    },
+    "p5-narrow": {
+      "before": {
+        "kept": "ok",
+        "removed": "ok"
+      },
+      "narrowWithAclUpdate": "acl/update:narrowingNotPermitted",
+      "narrowWithAclRevokeKindAct": "ok",
+      "theActItNamesIsWhatRemains": true,
+      "after": {
+        "kept": "ok",
+        "removed": "ok",
+        "getRemoved": "ok"
+      },
+      "whoamiScopesOnThatSession": 1,
+      "onANewSession": {
+        "kept": "ok",
+        "removed": "vta/memory/put:contextForbidden",
+        "getRemoved": "vta/memory/get:contextForbidden"
+      }
+    },
+    "p6-counts-delete": {
+      "list": "ok",
+      "count": 3,
+      "anyValueReturned": false,
+      "deleteAnEmptyMemory": "ok",
+      "aMemoryWithItemsAndNoEntry": {
+        "withoutForce": "ok",
+        "withForce": "not needed",
+        "stillListed": false
+      },
+      "aMemoryAnEntryNames": {
+        "withoutForce": "vta/contexts/delete:notEmpty",
+        "withForce": "ok",
+        "stillListed": false
+      },
+      "theEntryThatNamedIt": {
+        "listed": false
+      },
+      "theAgentsNextGet": "vta/memory/get:purposeNotGranted"
+    },
+    "p7-two-identities": {
+      "first": {
+        "own": "ok",
+        "theOthers": "vta/memory/get:contextForbidden"
+      },
+      "second": {
+        "own": "ok",
+        "theOthers": "vta/memory/get:contextForbidden"
+      }
+    }
+  }
+}
