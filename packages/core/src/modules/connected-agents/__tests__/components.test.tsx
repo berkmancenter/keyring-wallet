@@ -4,6 +4,8 @@
  * and pt-br, with the proposals the plan does not have yet listed in PROPOSED_COPY.
  */
 import { fireEvent, render, waitFor } from '@testing-library/react-native'
+import { readdirSync, readFileSync, statSync } from 'fs'
+import path from 'path'
 import React from 'react'
 import { StyleSheet } from 'react-native'
 import { container } from 'tsyringe'
@@ -19,7 +21,7 @@ import AgentContactCard from '../components/AgentContactCard'
 import { AGENT_STATUSES, AgentStatusChip } from '../components/AgentStatusChip'
 import MemoryAccessNotice from '../components/MemoryAccessNotice'
 import MemoryPicker, { CreateMemoryResult, PickerMemory } from '../components/MemoryPicker'
-import { PROPOSED_COPY } from '../proposedCopy'
+import { NO_ROOM_FORMS, PROPOSED_COPY } from '../proposedCopy'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -44,11 +46,73 @@ describe('ConnectedAgents words', () => {
     }
   })
 
-  it('lists every proposal it carries, and lists none it does not carry', () => {
-    for (const key of Object.keys(PROPOSED_COPY)) expect([key, key in EN]).toEqual([key, true])
-    // Control: a key the plan does define is not a proposal.
-    expect('ApproveOwnTerminal' in PROPOSED_COPY).toBe(false)
-    expect(EN.ApproveOwnTerminal).toBe('Only continue if you ran the command in your own terminal just now.')
+  // The plan's §6 is the source: a string it quotes is settled, one it does not is a proposal (or a no-room cut of a
+  // settled one). Derived, not kept by hand, so the list cannot drift from the plan in either direction.
+  const PLAN = readFileSync(path.resolve(__dirname, '../../../../../../docs/plans/agent-connect-plan.md'), 'utf8')
+  const SECTION_6 = PLAN.slice(PLAN.indexOf('\n## 6. UX'), PLAN.indexOf('\n## 7. Steps'))
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // "{{name}}" in a locale string is "<name>" (or "<n>", "<time>") in the plan.
+  const asPlan = (text: string) =>
+    text
+      .split(/{{\s*\w+\s*}}/)
+      .map(escape)
+      .join('<[^>"]+>')
+  const quotedIn6 = (text: string) => new RegExp(`"${asPlan(text)}"`).test(SECTION_6)
+  const partOf6 = (text: string) => new RegExp(asPlan(text)).test(SECTION_6)
+  // A plural's "_one" stands or falls with its "_other", which is the form the plan quotes.
+  const settled = (key: string) => quotedIn6(EN[key.endsWith('_one') ? `${key.slice(0, -4)}_other` : key])
+
+  it('reads the plan: §6 is found and quotes the words it is known to quote', () => {
+    expect(SECTION_6.length).toBeGreaterThan(10000)
+    expect(settled('ApproveOwnTerminal')).toBe(true)
+    // Control: a proposal's words are not in §6, and a key word-for-word in §6 inside a longer string is not "quoted".
+    expect(settled('SeeDetails')).toBe(false)
+    expect(quotedIn6('It will be able to read and change it.')).toBe(false)
+  })
+
+  it('carries no words that are neither in the plan nor listed as a proposal', () => {
+    const unlisted = Object.keys(EN).filter(
+      (key) => !settled(key) && !(key in PROPOSED_COPY) && !(key in NO_ROOM_FORMS)
+    )
+    expect(unlisted).toEqual([])
+  })
+
+  it('lists no proposal the plan has since settled, and none it does not carry', () => {
+    for (const key of Object.keys(PROPOSED_COPY)) expect([key, key in EN, settled(key)]).toEqual([key, true, false])
+  })
+
+  it('keeps each no-room form a cut of a §6 string', () => {
+    for (const key of Object.keys(NO_ROOM_FORMS))
+      expect([key, settled(key), partOf6(EN[key])]).toEqual([key, false, true])
+  })
+
+  it('is reachable from nowhere yet: only the container and the flag reach into the module', () => {
+    // Until the screens are wired (S2 onwards), the proposed words cannot show: no screen, navigator or hook outside
+    // the module imports it, and only the container names the agent card's token.
+    const src = path.resolve(__dirname, '../../..')
+    const files: string[] = []
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const full = path.join(dir, name)
+        if (statSync(full).isDirectory()) {
+          if (name !== '__tests__' && full !== path.join(src, 'modules', 'connected-agents')) walk(full)
+        } else if (/\.tsx?$/.test(name)) files.push(full)
+      }
+    }
+    walk(src)
+    const reaches = files.flatMap((file) =>
+      [...readFileSync(file, 'utf8').matchAll(/from '([^']*connected-agents\/[^']*)'/g)].map(
+        (m) => `${path.relative(src, file)} -> ${m[1].replace(/^.*connected-agents\//, '')}`
+      )
+    )
+    expect(reaches.sort()).toEqual([
+      'container-impl.ts -> components/AgentContactCard',
+      'modules/trust-tasks/module/triggerLink.ts -> agentConnectFlag',
+    ])
+    const namesToken = files
+      .filter((file) => readFileSync(file, 'utf8').includes('COMPONENT_AGENT_CONTACT_CARD'))
+      .map((file) => path.relative(src, file))
+    expect(namesToken.sort()).toEqual(['container-api.ts', 'container-impl.ts', 'types/agent-contact-card.ts'])
   })
 
   it('keeps the plan copy rules: no "instant", "encrypted", "private" or "no trace" (§6, §7.10)', () => {
@@ -116,9 +180,12 @@ describe('AgentStatusChip', () => {
     ])
   })
 
-  it('says a temporary agent with its end time', () => {
-    // The end time is required by AgentStatusChipProps for connectedUntil; tsc checks that at every call site in
-    // src/ (test files are outside the package's tsconfig, so this file cannot hold the type-level case itself).
+  it('says a temporary agent with its end time, and cannot be drawn without it', () => {
+    // CI's "Type check (ratchet)" type-checks this file (packages/core/tsconfig.ratchet.json adds the tests back), so
+    // the directive below is evaluated there: if the props ever allowed a missing time, it would be unused, and fail.
+    // @ts-expect-error: "Connected" alone is a persistent agent's status, so connectedUntil requires `until`.
+    const missing = <AgentStatusChip status="connectedUntil" />
+    expect(missing).toBeTruthy()
     const tree = show(<AgentStatusChip status="connectedUntil" until="14:30" />)
     expect(tree.getByText('ConnectedAgents.ConnectedUntil')).toBeTruthy()
     expect(tree.queryByText('ConnectedAgents.StatusConnected')).toBeNull()

@@ -4,7 +4,10 @@
  * a TODO naming the same finding. When the plan owner rules, the words change in the three locale files and the key
  * leaves this list; a key the plan drops is removed from the locale files too.
  *
- * A test holds this list to the locale files, so a proposal cannot ship without being listed here.
+ * A test derives the rule from the plan itself: every ConnectedAgents.* string is either quoted in §6 (settled), cut
+ * from a §6 string by the plan's own no-room rule ({@link NO_ROOM_FORMS}), or listed here; and a string listed here
+ * that §6 now quotes fails until it leaves the list. A change to settled words (P-h, "Personalise") is not listed:
+ * the shipped words are the plan's until the ruling changes §6.
  *
  * @module connected-agents/proposedCopy
  */
@@ -30,7 +33,15 @@ export const PROPOSED_COPY: Readonly<Record<string, string>> = {
   MemoryCountWarning: 'P-c',
   MemoryCountFailed: 'P-c',
   PendingMemory: 'seam gap: finding 7 of #1048, a memory not reached yet',
-  PurposePersonalisation: 'P-h, the spelling',
+  MemoryCreateFailed: "C4: the words are §3.15's; §6 gains them",
   NumberDigitEmpty: 'accessibility: §6 says each digit is announced, not in which words',
   NumberDigitFilled: 'accessibility: as above',
+}
+
+/**
+ * Strings that are a §6 string with its room sentence left out, by the plan's own rule for P0 ("The no-room form":
+ * "20 omits "This also applies in <rooms>.""). Settled, but not quoted on their own. Each must be part of a §6 string.
+ */
+export const NO_ROOM_FORMS: Readonly<Record<string, string>> = {
+  WidenBody: 'change memories, widening: §6 body without "This also applies in <rooms>."',
 }
