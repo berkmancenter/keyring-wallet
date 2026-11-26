@@ -51,6 +51,10 @@ export interface ConnectionRecords {
   list(): Promise<AgentConnection[]>
   get(id: string): Promise<AgentConnection | undefined>
   put(record: AgentConnection): Promise<void>
+  /** One read-modify-write per record (`AgentConnectionStore.update`): step 7.10 writes the same records. */
+  update(id: string, change: (record: AgentConnection) => AgentConnection): Promise<AgentConnection | undefined>
+  /** The record whose `id` (first key) or `agentDid` (current key, §3.9) is `did`. */
+  findByKey(did: string): Promise<AgentConnection | undefined>
 }
 
 /** A persona's signing key, as minting and the DID list give it (`vdc.ts`, step 0.1(f)). */
@@ -229,8 +233,11 @@ export class AgentConnectDriver {
     this.handles = [...this.handles, record.handle]
     if (record.pendingContexts.length > 0) {
       const done = await completeEnrolment(access, agent, record.memoryContexts)
-      record = { ...record, pendingContexts: done.complete ? [] : done.missing }
-      await connections.put(record)
+      const pendingContexts = done.complete ? [] : done.missing
+      record = (await connections.update(record.id, (r) => ({ ...r, pendingContexts }))) ?? {
+        ...record,
+        pendingContexts,
+      }
     }
     return this.issueGrant(record)
   }
@@ -243,7 +250,10 @@ export class AgentConnectDriver {
     cleanup: PairingCleanup,
     choice: AgentConnectChoice | undefined
   ): Promise<PersistOutcome> {
-    const existing = await this.ports.connections.get(cleanup.subject)
+    // By either key: after a rotation (§3.9) a connected agent's record keeps its first key as `id` and holds the
+    // current one as `agentDid`. A leftover keyed by a connected agent's current key would offer "Remove", which
+    // revokes by subject: the connected agent's live entry.
+    const existing = await this.ports.connections.findByKey(cleanup.subject)
     // A `pairing` record may be written over: it is written only after `confirmed`, and every cleanup-carrying phase
     // comes before confirmation, so a cleanup for a subject already at `pairing` would come from a new pairing of that
     // key. Anything further along (a connected, expired, revoking or revoked agent) is kept as it is.
@@ -267,13 +277,19 @@ export class AgentConnectDriver {
         ...(record.expiresAt ? { entryExpiresAt: record.expiresAt } : {}),
       })
       const grant = await issueVdc(unsigned, vtaVdcSigner(vdcSign, keyId))
-      await connections.put({
-        ...record,
-        state: 'active',
-        vdcGrant: grant as unknown as Record<string, unknown>,
-        lastReconciledAt: new Date(clock()).toISOString(),
-      })
-      return { state: 'active' }
+      // Written onto the record as it is NOW, not as it was read before signing: step 7.10's reconcile may have recorded
+      // a changed key meanwhile. Only a record still pairing becomes active.
+      const written = await connections.update(record.id, (r) =>
+        r.state === 'pairing'
+          ? {
+              ...r,
+              state: 'active',
+              vdcGrant: grant as unknown as Record<string, unknown>,
+              lastReconciledAt: new Date(clock()).toISOString(),
+            }
+          : r
+      )
+      return written?.state === 'active' ? { state: 'active' } : { state: 'pairing', reason: 'vdc' }
     } catch {
       return { state: 'pairing', reason: 'vdc' }
     }
@@ -290,7 +306,9 @@ export class AgentConnectDriver {
       const outcome = await this.issueGrant(record)
       if (outcome.state === 'active') continue
       if (now - Date.parse(record.createdAt) >= NOT_FINISHED_AFTER_MS) {
-        await this.ports.connections.put({ ...record, state: 'notFinished', lastReconciledAt: iso(now) })
+        await this.ports.connections.update(record.id, (r) =>
+          r.state === 'pairing' && !r.vdcGrant ? { ...r, state: 'notFinished', lastReconciledAt: iso(now) } : r
+        )
       }
     }
   }
