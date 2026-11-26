@@ -11,7 +11,7 @@ fallback and hooks the plugin relies on. Throwaway probes, no app change. The re
 | Item | Result |
 |---|---|
 | (a) a channel wakes an idle session | **Yes.** The event reached a session idle for 49 s and was answered in about a second. Control: without the flag the same event is dropped silently. |
-| (b) a channel in a background session | **No.** `claude --bg` and `/background` both restart the probe server, but the development channel does not register there, and events are dropped. |
+| (b) a channel in a background session | **No.** `claude --bg` and `/background` both restart the probe server, but the development channel does not register there, and events are dropped. Control: the same background session, attached, recorded a typed turn after the push, and the event never arrived. |
 | (c) minimum version, authentication | 2.1.80 (changelog). A claude.ai login or a Console API key (the key from 2.1.128); not on Bedrock, Agent Platform or Foundry; Team and Enterprise need `channelsEnabled`. Measured only on 2.1.332 with an individual login. |
 | (d) `asyncRewake` on an idle prompt | **Yes**, once per hook run. Not relied on. |
 | (e) the Monitor fallback, with a re-arm | **Yes**, in an interactive and in a `claude --bg` session; the re-arm left a 1.5 s gap. |
@@ -45,7 +45,7 @@ node --test                                # the gate and Stop hook, offline
 
 **(a)** In `/tmp/notify-03/proj-a`, start `python3 <here>/ptydrive.py ../run-a -- <here>/cleanenv.sh claude --ax-screen-reader --setting-sources project,local --dangerously-load-development-channels server:probe`. Answer the trust prompt and the development-channel warning with `y{ENTER}` on `../run-a/ctl`. Leave the session idle, then `curl -d 'reply with PONG' 127.0.0.1:8791`. The answer appears in `out.raw` and the transcript. For the control, start it again without the flag. The server must be in the project's `.mcp.json`: given with `--mcp-config`, `server:probe` reports "no MCP server configured with that name".
 
-**(b)** In `proj-a`: `claude --bg --setting-sources project,local --dangerously-load-development-channels server:probe -- "Say READY"`. A prompt must come after `--`, because the flag takes every following word as an entry. Then push an event. Also: start (a) interactively, send one message, run `/background`, and push. Read the job with `claude logs <id>` and `~/.claude/jobs/<id>/state.json` (`respawnFlags`). Remove it afterwards with `claude stop <id>` and `claude rm <id>`.
+**(b)** In `proj-a`: `claude --bg --setting-sources project,local --dangerously-load-development-channels server:probe -- "Say READY"`. A prompt must come after `--`, because the flag takes every following word as an entry. Then push an event. Also: start (a) interactively, send one message, run `/background`, and push. For the control, `claude attach <id>` (through `ptydrive.py`), push, then type a message: it must appear in the session's transcript after the push while the event does not. Read the job with `claude logs <id>` and `~/.claude/jobs/<id>/state.json` (`respawnFlags`). Remove it afterwards with `claude stop <id>` and `claude rm <id>`.
 
 **(d)** In `proj-d`, start a session and leave it idle. The hook exits 2 after 45 s.
 

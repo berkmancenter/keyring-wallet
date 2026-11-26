@@ -26,7 +26,8 @@
       "runs": [
         { "run": "b1", "start": "claude --bg ... --dangerously-load-development-channels server:probe \"<prompt>\"", "note": "crashed before init: the flag is variadic and took the prompt as an entry ('entries must be tagged')" },
         { "run": "b2", "start": "claude --bg ... --dangerously-load-development-channels server:probe -- \"<prompt>\"", "serverConnected": "16:50:11.697", "pushed": "16:51:06.770", "deliveredToSession": null, "note": "no development-channel warning was shown and no 'Channels (experimental)' notice; the job's respawn flags do not carry the channel flag" },
-        { "run": "b3", "start": "interactive with the flag, warning accepted, one turn, then /background", "serverRestarted": "16:52:51.198", "pushed": "16:53:25.090", "deliveredToSession": null, "note": "the moved session's respawn flags do not carry the channel flag" }
+        { "run": "b3", "start": "interactive with the flag, warning accepted, one turn, then /background", "serverRestarted": "16:52:51.198", "pushed": "16:53:25.090", "deliveredToSession": null, "note": "the moved session's respawn flags do not carry the channel flag" },
+        { "run": "b4", "start": "claude --bg with the flag, then claude attach to approve the project's server", "serverConnected": "17:27:42.496", "serverPid": 9613, "pushed": "17:28:08.501", "deliveredToSession": null, "control": { "typedTurn": "17:28:34.111", "answered": "17:28:35.194" }, "note": "control: the same session recorded a typed turn 26 s after the push, so the probe would have seen a channel turn; none arrived and no reply was called" }
       ]
     },
     "c": {
