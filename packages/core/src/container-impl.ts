@@ -29,6 +29,7 @@ import { Locales } from './localization'
 import { IHistoryManager } from './modules/history'
 import HistoryManager from './modules/history/context/historyManager'
 import { RefreshOrchestrator } from './modules/openid/refresh/refreshOrchestrator'
+import AgentContactCard from './modules/connected-agents/components/AgentContactCard'
 import ContactCard from './modules/vrc/components/ContactCard'
 import { IRefreshOrchestrator, OpenIDCredentialRefreshFlowType } from './modules/openid/refresh/types'
 import OnboardingStack from './navigators/OnboardingStack'
@@ -181,6 +182,7 @@ export class MainContainer implements Container {
     this._container.registerInstance(TOKENS.COMPONENT_RECORD, Record)
     this._container.registerInstance(TOKENS.COMPONENT_CONTACT_LIST_ITEM, ContactListItem)
     this._container.registerInstance(TOKENS.COMPONENT_CONTACT_CARD, ContactCard)
+    this._container.registerInstance(TOKENS.COMPONENT_AGENT_CONTACT_CARD, AgentContactCard)
     this._container.registerInstance(TOKENS.COMPONENT_CONTACT_DETAILS_CRED_LIST_ITEM, ContactCredentialListItem)
     this._container.registerInstance(TOKENS.COMPONENT_CONTACT_DETAILS_FOOTER, () => null)
     this._container.registerInstance(TOKENS.COMPONENT_CONNECTION_ALERT, ConnectionAlert)

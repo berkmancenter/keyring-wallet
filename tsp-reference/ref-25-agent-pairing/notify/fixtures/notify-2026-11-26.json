@@ -1,0 +1,70 @@
+{
+  "what": "agent-connect-plan.md step 7.1 item 0.3, the notification checks, recorded on 2026-11-26",
+  "host": {
+    "claudeCode": "2.1.332",
+    "login": "claude.ai, an individual plan (no organisation)",
+    "model": "haiku (Haiku 5.5), to keep the runs cheap",
+    "permissionMode": "auto (the default these sessions started in)",
+    "mcpSdk": "@modelcontextprotocol/sdk 1.32.2 (negotiates 2025-11-25)",
+    "os": "macOS (Darwin 25.3.0), Node 20.19.2"
+  },
+  "isolation": "Each session ran in a throwaway folder outside the repository, from cleanenv.sh, with --setting-sources project,local; nothing installed, no user setting written. Times are UTC, from the probe servers' logs and the session transcripts.",
+  "items": {
+    "a": {
+      "result": "pass",
+      "summary": "A channel started with --dangerously-load-development-channels server:probe wakes an idle session; without the flag the same event is dropped silently.",
+      "runs": [
+        { "run": "a2", "flag": true, "idleBeforeEventSeconds": 49, "pushed": "16:46:18.467", "deliveredToSession": "16:46:18.512", "answered": "16:46:19.651", "note": "answered as text: the reply tool is deferred behind ToolSearch and was not called" },
+        { "run": "a2", "flag": true, "pushed": "16:47:12.997", "replyToolCalled": "16:47:16.664", "note": "the model loaded the deferred reply tool with ToolSearch first" },
+        { "run": "a3", "flag": false, "pushed": "16:48:27.662", "deliveredToSession": null, "note": "control: the server's notification resolved with no error and nothing reached the session" },
+        { "run": "a1", "flag": true, "note": "a server given with --mcp-config is not found by server:<name> ('no MCP server configured with that name'); it must be in the project's .mcp.json" }
+      ]
+    },
+    "b": {
+      "result": "fail",
+      "summary": "A development channel does not register in a background session, whether started with claude --bg or moved there with /background; the probe server is restarted and connects, and its events are dropped.",
+      "runs": [
+        { "run": "b1", "start": "claude --bg ... --dangerously-load-development-channels server:probe \"<prompt>\"", "note": "crashed before init: the flag is variadic and took the prompt as an entry ('entries must be tagged')" },
+        { "run": "b2", "start": "claude --bg ... --dangerously-load-development-channels server:probe -- \"<prompt>\"", "serverConnected": "16:50:11.697", "pushed": "16:51:06.770", "deliveredToSession": null, "note": "no development-channel warning was shown and no 'Channels (experimental)' notice; the job's respawn flags do not carry the channel flag" },
+        { "run": "b3", "start": "interactive with the flag, warning accepted, one turn, then /background", "serverRestarted": "16:52:51.198", "pushed": "16:53:25.090", "deliveredToSession": null, "note": "the moved session's respawn flags do not carry the channel flag" },
+        { "run": "b4", "start": "claude --bg with the flag, then claude attach to approve the project's server", "serverConnected": "17:27:42.496", "serverPid": 9613, "pushed": "17:28:08.501", "deliveredToSession": null, "control": { "typedTurn": "17:28:34.111", "answered": "17:28:35.194" }, "note": "control: the same session recorded a typed turn 26 s after the push, so the probe would have seen a channel turn; none arrived and no reply was called" }
+      ]
+    },
+    "c": {
+      "result": "recorded from the changelog and documentation; one configuration measured",
+      "minimumVersion": "2.1.80 (channels added); 2.1.81 permission relay; 2.1.128 a Console API key; 2.1.234 permission requests only to servers registered as channels",
+      "authentication": "Anthropic authentication: a claude.ai login or a Console API key; not on Bedrock, Google Cloud's Agent Platform or Microsoft Foundry. Pro, Max and Ultra users without an organisation skip the organisation checks. claude.ai Team and Enterprise: blocked until an Owner sets channelsEnabled. Console with managed settings: blocked until channelsEnabled is set.",
+      "measured": "2.1.332 with a claude.ai individual login: the development channel registers and delivers (item a)",
+      "notRun": ["a Console API key (a secret)", "a Team or Enterprise organisation", "any version other than 2.1.332"],
+      "alsoFound": "On the v2 MCP client a channel server that negotiates MCP revision 2026-07-28 is not registered as a channel (docs, mcp.md 'Push messages with channels'); MCP_PROTOCOL_NEGOTIATION=legacy keeps stdio servers on the earlier handshake."
+    },
+    "d": {
+      "result": "pass (recorded, not relied on)",
+      "summary": "A SessionStart hook with asyncRewake that exits 2 wakes an idle session.",
+      "runs": [
+        { "run": "d1", "hookStart": "16:54:41", "previousTurnEnded": "16:54:49.984", "hookExit2": "16:55:26", "deliveredToSession": "16:55:26.369", "answered": "16:55:28.321", "note": "delivered as a task-notification headed 'Stop hook feedback', its text labelled 'Stop hook blocking error from command \"SessionStart:startup\"'; one wake per hook run" }
+      ]
+    },
+    "e": {
+      "result": "pass",
+      "summary": "A skill arms Monitor on inbox.sh --follow; lines reach an idle session, the watch expires, the session re-arms it on the expiry notice, and lines after the re-arm arrive. The same in a claude --bg session.",
+      "runs": [
+        { "run": "e1", "armed": "16:56:36.749", "timeoutMs": 60000, "line1Written": "16:57:16", "line1Delivered": "16:57:16.664", "expiryNotice": "16:57:39.696", "reArmed": "16:57:41.166", "gapSeconds": 1.5, "line2Written": "16:58:22", "line2Delivered": "16:58:23.204" },
+        { "run": "e2", "background": true, "line1Written": "16:59:47", "line1Acked": true, "reArmFollowStart": "17:00:08", "line2Written": "17:01:12", "line2Acked": true }
+      ],
+      "framing": "each line arrives as <task-notification><summary>Monitor event: \"<description>\"</summary><event>LINE</event></task-notification>; the expiry as '[Monitor expired after 1m with 1 event delivered. Re-arm it if you still need the watch.]'",
+      "limits": "timeout_ms defaults to 300000 and is capped at 1800000; a line written between the expiry and the re-arm is not seen by a tail that starts at the end (tail -n 0)"
+    },
+    "f": {
+      "result": "pass in auto mode with the tools pre-allowed; bypassPermissions not run",
+      "summary": "A plugin's PreToolUse hook denies every tool but the plugin's reply while the turn-trust marker is 'other'; the Stop hook clears it and held owner events then go out as their own turn.",
+      "runs": [
+        { "run": "f2", "holdBack": { "otherPushed": "17:08:07.063", "ownerHeld": "17:08:09.087", "stop": "17:08:10", "ownerReleased": "17:08:11.050", "ownerTurnBashPassed": "17:08:12", "ownerReply": "17:08:15.433" }, "note": "the model declined the third party's request on its own, so this run did not test the gate" },
+        { "run": "f3", "adversarial": "the marker set to 'other' while the event is labelled owner, so the model tries the tools", "denied": ["ToolSearch 17:09:38", "Bash 17:09:39", "Write 17:11:13", "mcp__vtamcp__memory_get 17:11:42 (pre-allowed, loaded on an owner turn first)", "ToolSearch for WebFetch 17:12:13"], "notAttempted": ["Agent (the model declined after the earlier denials)"], "replyPassed": true, "sideEffects": "none: no pwned.log, no other.txt, no vtamcp.log" },
+        { "run": "f5", "note": "the committed plugin from this folder: Bash denied 17:17:47, reply passed, Stop cleared the marker" }
+      ],
+      "notRun": "bypassPermissions (--dangerously-skip-permissions): this session's own permission classifier refused to start it; the owner can run it (README.md)",
+      "alsoFound": "MCP tools are deferred behind ToolSearch; with the gate denying ToolSearch the reply tool must carry _meta['anthropic/alwaysLoad']: true, and with it the model called reply without a search. A --plugin-dir plugin is <name>@inline; its channel delivers although the startup notice says 'plugin not installed'."
+    }
+  }
+}
