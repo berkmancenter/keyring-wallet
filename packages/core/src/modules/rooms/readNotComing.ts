@@ -29,11 +29,15 @@
  * Two limits of what is claimed, so a wrong row is not taken for a new bug:
  *
  * `servedVersions` is a hint, not the whole list (trust-tasks `taskVersions.ts`, its header). An agent builds it
- * from its dispatch table, and some agents also answer OLDER versions the table does not list (vta-service v0.60.0
- * to v0.66.0, for `device/*` and `vault/*`). That cannot turn the side round here. The version asked for was
- * refused, so it is not served. An unlisted version is older than the listed ones it is rewritten to. So where
- * every listed version is older than the one asked for, every served one is; and where every listed version is
- * newer, updating the one that asked still gets it answered, whatever older version is also served.
+ * from its dispatch table, and some agents also answer versions the table does not list (vta-service v0.60.0 to
+ * v0.66.0, for `device/*` and `vault/*`: a request at 0.2 is converted DOWN at the edge onto the handler listed as
+ * 0.1, `trust_tasks/wire_v0_2.rs` and `received.rs`). Such an unlisted version is NEWER than the listed one it is
+ * converted to. It is also one the agent answers, so it is not the one refused: it sits between the listed versions
+ * and the version asked for. So where every listed version is older than the one asked for, so is every unlisted
+ * one, and "the one asked is behind" stands; and where every listed version is newer than the one asked for,
+ * updating the one that asked still gets it answered. What would turn the side round is an agent that serves a
+ * version newer than the one it refused while listing only older ones, which contradicts its own refusal and has
+ * not been seen.
  *
  * `unsupportedType` says only that the one asked serves no version of the task, which has two causes the refusal
  * cannot tell apart: it never had the task (it is behind, which is what the row says, as the rooms listing reads a
