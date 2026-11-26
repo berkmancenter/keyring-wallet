@@ -4031,7 +4031,6 @@
     "NumberBodyTwoDigits": "Digite os dois dígitos que seu terminal mostra. Você tem uma tentativa.",
     "NumberBodyFourDigits": "Digite os quatro dígitos que seu terminal mostra. Você tem uma tentativa.",
     "NumberFieldLabel": "Número do seu terminal",
-    "NumberDigitEmpty": "Dígito {{position}} de {{total}}, vazio",
     "NumberDigitFilled": "Dígito {{position}} de {{total}}, {{digit}}",
     "ApproveTitle": "Conectar \"{{name}}\"?",
     "ApproveRunBy": "Executado por você, do seu próprio terminal.",

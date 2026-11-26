@@ -4115,7 +4115,6 @@
     "NumberBodyTwoDigits": "Tapez les deux chiffres affichés par votre terminal. Vous n'avez qu'un essai.",
     "NumberBodyFourDigits": "Tapez les quatre chiffres affichés par votre terminal. Vous n'avez qu'un essai.",
     "NumberFieldLabel": "Nombre de votre terminal",
-    "NumberDigitEmpty": "Chiffre {{position}} sur {{total}}, vide",
     "NumberDigitFilled": "Chiffre {{position}} sur {{total}}, {{digit}}",
     "ApproveTitle": "Connecter « {{name}} » ?",
     "ApproveRunBy": "Lancé par vous, depuis votre propre terminal.",

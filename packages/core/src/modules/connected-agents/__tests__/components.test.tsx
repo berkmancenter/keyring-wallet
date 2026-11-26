@@ -101,6 +101,23 @@ describe('ConnectedAgents words', () => {
       expect([key, settled(key), partOf6(EN[key])]).toEqual([key, false, true])
   })
 
+  // Global flag: use it with matchAll only, which clones it. A .test() or .exec() on this shared regex would start
+  // from the last match's index and silently miss.
+  const REACHES_MODULE = /(?:from|require\(|import\()\s*['"]([^'"]*connected-agents(?:\/[^'"]*)?)['"]/g
+  it('finds every way a file can reach the module, so the next test cannot pass by missing one', () => {
+    const found = (text: string) => [...text.matchAll(REACHES_MODULE)].map((m) => m[1])
+    expect(found(`import x from '../connected-agents/components/AgentMark'`)).toEqual([
+      '../connected-agents/components/AgentMark',
+    ])
+    expect(found(`import x from '../connected-agents'`)).toEqual(['../connected-agents'])
+    expect(found(`const x = require("../../connected-agents/pairing")`)).toEqual(['../../connected-agents/pairing'])
+    expect(found(`const x = await import('../connected-agents/screens/ApproveView')`)).toEqual([
+      '../connected-agents/screens/ApproveView',
+    ])
+    // Control: a name that only starts the same is not the module.
+    expect(found(`import x from '../connected-agents-old/thing'`)).toEqual([])
+  })
+
   it('is reachable from nowhere yet: only the container and the flag reach into the module', () => {
     // Until the screens are wired (S2 onwards), the proposed words cannot show: no screen, navigator or hook outside
     // the module imports it, and only the container names the agent card's token.
@@ -116,8 +133,9 @@ describe('ConnectedAgents words', () => {
     }
     walk(src)
     const reaches = files.flatMap((file) =>
-      [...readFileSync(file, 'utf8').matchAll(/from '([^']*connected-agents\/[^']*)'/g)].map(
-        (m) => `${path.relative(src, file)} -> ${m[1].replace(/^.*connected-agents\//, '')}`
+      // A static import, a require() and a dynamic import(), of a file in the module or of the module as a whole.
+      [...readFileSync(file, 'utf8').matchAll(REACHES_MODULE)].map(
+        (m) => `${path.relative(src, file)} -> ${m[1].replace(/^.*connected-agents\/?/, '') || '(index)'}`
       )
     )
     expect(reaches.sort()).toEqual([

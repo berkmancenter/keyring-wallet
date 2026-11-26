@@ -4157,7 +4157,6 @@
     "NumberBodyTwoDigits": "Type the two digits your terminal shows. You get one try.",
     "NumberBodyFourDigits": "Type the four digits your terminal shows. You get one try.",
     "NumberFieldLabel": "Number from your terminal",
-    "NumberDigitEmpty": "Digit {{position}} of {{total}}, empty",
     "NumberDigitFilled": "Digit {{position}} of {{total}}, {{digit}}",
     "ApproveTitle": "Connect \"{{name}}\"?",
     "ApproveRunBy": "Run by you, from your own terminal.",
