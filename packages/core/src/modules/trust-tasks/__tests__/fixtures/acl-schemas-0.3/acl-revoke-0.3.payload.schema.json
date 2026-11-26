@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/acl/revoke/0.3",
+  "title": "ACL Revoke 0.3 — payload",
+  "description": "Remove a subject's AclEntry 0.3, or narrow its act scope. What is revoked is stated explicitly in `revocation` — there is no form in which the absence of a member selects full removal. Narrowing of other axes (capabilities, approvable capabilities, approve scope, keys) is carried by acl/update/0.3 as a privilege reduction. The outer document members are owned by the framework — SPEC §6.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["subject", "revocation"],
+  "properties": {
+    "subject": {
+      "type": "string",
+      "minLength": 1,
+      "description": "VID of the subject whose entry is removed or narrowed."
+    },
+    "revocation": {
+      "$ref": "#/$defs/Revocation",
+      "description": "What is revoked: the whole entry, or act scope down to a stated narrower one."
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 1024,
+      "description": "Optional human-readable rationale for the revocation."
+    },
+    "ext": {
+      "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+      "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+    }
+  },
+  "$defs": {
+    "Revocation": {
+      "title": "Revocation",
+      "description": "Exactly one of: `{\"kind\": \"entry\"}` — remove the entry entirely; `{\"kind\": \"act\", \"act\": AuthorityScope}` — replace the entry's act scope with the stated, strictly narrower one, keeping the entry.",
+      "oneOf": [
+        { "$ref": "#/$defs/RevokeEntry" },
+        { "$ref": "#/$defs/NarrowAct" }
+      ]
+    },
+    "RevokeEntry": {
+      "title": "RevokeEntry",
+      "description": "Remove the subject's entry entirely.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "entry" }
+      }
+    },
+    "NarrowAct": {
+      "title": "NarrowAct",
+      "description": "Narrow the entry's act scope to `act`, which MUST be strictly narrower than the stored act scope (a subset of its contexts, or `none`). The entry, and every other axis of it, remains.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "act"],
+      "properties": {
+        "kind": { "const": "act" },
+        "act": {
+          "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/AuthorityScope",
+          "description": "The resulting act scope, in the explicit form. Stating the result rather than a list of contexts to remove means the producer and the maintainer cannot disagree about what remains."
+        }
+      }
+    },
+    "Response": {
+      "$anchor": "response",
+      "title": "ACL Revoke 0.3 — response payload",
+      "description": "The success response to an acl/revoke/0.3 request. Carried in a Trust Task document whose type is https://trusttasks.org/spec/acl/revoke/0.3#response.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry"],
+      "properties": {
+        "entry": {
+          "description": "null for a removal; the resulting AclEntry for an act-scope narrowing.",
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/AclEntry" }
+          ]
+        },
+        "ext": {
+          "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+          "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+        }
+      }
+    }
+  }
+}

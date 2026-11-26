@@ -658,6 +658,175 @@ export function parseAclEntries(raw: unknown): VtaAclEntry[] {
 }
 
 /**
+ * Agent connect (docs/plans/agent-connect-plan.md §3.3, §3.9, step 7.4): the access-list writes an AI agent's entry
+ * needs, at `acl/_shared` 0.3 only. 0.1 and 0.2 have no `purposes` member (and 0.1 no listed capabilities), so an
+ * entry written there grants every purpose but `modelTraining`: wider than the owner chose. A VTA that serves no 0.3
+ * (vta-service 0.79.0 serves acl 0.2 only; 0.84.0 and 0.87.0 serve 0.3, as step 7.1 measured) is refused with this
+ * error, never asked an older version.
+ */
+export class AgentAccessUnsupportedError extends Error {
+  constructor(readonly task: string) {
+    super(`${LOG_PREFIX} the VTA does not serve ${task}, which an agent's entry needs; nothing was written`)
+    this.name = 'AgentAccessUnsupportedError'
+  }
+}
+
+/** The purpose an agent is never granted (§3.3). */
+const MODEL_TRAINING = 'modelTraining'
+
+/** An AI agent's entry as Keyring writes it (§3.3). */
+export type AgentGrant = {
+  subject: string
+  /** The memories it is bound to, by exact context path (at least one). */
+  contexts: string[]
+  /** `memory-read`, `memory-write`, …; none means `{scope: none}`. */
+  capabilities: string[]
+  /** `personalisation`, `taskExecution`; never `modelTraining`. */
+  purposes: string[]
+  label?: string
+  /** RFC 3339. */
+  expiresAt?: string
+}
+
+/** A capability scope in the 0.3 shape: `none`, or exactly the listed grants. */
+export function capabilityScopeOf(capabilities: readonly string[]) {
+  return capabilities.length === 0
+    ? { scope: 'none' as const }
+    : { scope: 'listed' as const, grants: [...new Set(capabilities)].map((capability) => ({ capability })) }
+}
+
+/** The `acl/grant/0.3` payload for an agent's entry (§3.3): `application`, the named contexts, no keys. */
+export function agentGrantPayload(grant: AgentGrant): Record<string, unknown> {
+  if (grant.contexts.length === 0) throw new Error(`${LOG_PREFIX} an agent's entry names at least one context`)
+  if (grant.purposes.length === 0) throw new Error(`${LOG_PREFIX} an agent's entry lists at least one purpose`)
+  if (grant.purposes.includes(MODEL_TRAINING)) throw new Error(`${LOG_PREFIX} an agent is never granted modelTraining`)
+  const label = grant.label?.trim().slice(0, ACL_LABEL_MAX)
+  return {
+    entry: {
+      subject: grant.subject,
+      role: 'application',
+      act: { scope: 'contexts', contexts: [...new Set(grant.contexts)] },
+      keys: { scope: 'none' },
+      capabilities: capabilityScopeOf(grant.capabilities),
+      purposes: { scope: 'listed', purposes: [...new Set(grant.purposes)] },
+      ...(label ? { label } : {}),
+      ...(grant.expiresAt ? { expiresAt: grant.expiresAt } : {}),
+    },
+  }
+}
+
+/** A change to an agent's entry: its contexts (from what the entry holds to what it should), its capabilities. */
+export type AgentAccessChange = {
+  subject: string
+  /** `from` is what the entry holds now, read from the VTA just before the call, never what an earlier call started from. */
+  act?: { from: readonly string[]; to: readonly string[] }
+  /** The capability set wanted, replacing the entry's (either way). */
+  capabilities?: readonly string[]
+}
+
+/**
+ * The writes a change needs, in the order to send them. At `acl/_shared` 0.3 `acl/update` refuses a narrower `act`
+ * (`narrowingNotPermitted`: "NARROWING THE ACT SCOPE IS A REVOCATION"), so a context removed is `acl/revoke` 0.3
+ * `{kind: "act"}` to the contexts kept (or `none`), and a context added, or a capability change either way, is
+ * `acl/update` 0.3. A change that does both narrows first, so the entry never holds more than either end state.
+ */
+export function agentAccessWrites(change: AgentAccessChange): { type: string; payload: Record<string, unknown> }[] {
+  const writes: { type: string; payload: Record<string, unknown> }[] = []
+  const update: Record<string, unknown> = {}
+  if (change.act) {
+    const from = new Set(change.act.from)
+    const to = [...new Set(change.act.to)]
+    if (to.length === 0) throw new Error(`${LOG_PREFIX} an agent's entry names at least one context`)
+    const kept = to.filter((c) => from.has(c))
+    const removed = [...from].some((c) => !to.includes(c))
+    const added = to.some((c) => !from.has(c))
+    if (removed) {
+      writes.push({
+        // version-pinned: an agent's entry is written at acl 0.3 only, since 0.1 and 0.2 cannot state purposes (AgentAccessUnsupportedError)
+        type: VTA_TASK.aclRevoke03,
+        payload: {
+          subject: change.subject,
+          revocation: {
+            kind: 'act',
+            act: kept.length > 0 ? { scope: 'contexts', contexts: kept } : { scope: 'none' },
+          },
+        },
+      })
+    }
+    if (added) update.act = { scope: 'contexts', contexts: to }
+  }
+  if (change.capabilities) update.capabilities = capabilityScopeOf(change.capabilities)
+  if (Object.keys(update).length > 0)
+    // version-pinned: an agent's entry is written at acl 0.3 only, since 0.1 and 0.2 cannot state purposes (AgentAccessUnsupportedError)
+    writes.push({ type: VTA_TASK.aclUpdate03, payload: { subject: change.subject, ...update } })
+  return writes
+}
+
+/** One device binding, as agent connect reads it (`device/_shared/0.2` DeviceBinding). */
+export type VtaDeviceRow = {
+  deviceId: string
+  /** The key the device authenticates with now: after `acl/swap-key`, the entry's new subject. */
+  consumerDid: string
+  /** `ai-agent` is the wire's `{kind: service, serviceKind: aiAgent}`. */
+  kind: 'ai-agent' | 'mediator' | 'daemon' | 'companion' | 'unknown'
+  disabled: boolean
+  wiped: boolean
+}
+
+/** A device binding off the wire, or undefined when it lacks the members agent connect relies on. */
+export function deviceRowFrom(value: unknown): VtaDeviceRow | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const raw = value as Record<string, unknown>
+  if (typeof raw.deviceId !== 'string' || !raw.deviceId) return undefined
+  if (typeof raw.consumerDid !== 'string' || !raw.consumerDid) return undefined
+  const ck = (raw.consumerKind ?? {}) as { kind?: unknown; serviceKind?: unknown }
+  const kind: VtaDeviceRow['kind'] =
+    ck.kind === 'companion'
+      ? 'companion'
+      : ck.kind === 'service' && ck.serviceKind === 'aiAgent'
+        ? 'ai-agent'
+        : ck.kind === 'service' && ck.serviceKind === 'mediator'
+          ? 'mediator'
+          : ck.kind === 'service' && ck.serviceKind === 'daemon'
+            ? 'daemon'
+            : 'unknown'
+  return {
+    deviceId: raw.deviceId,
+    consumerDid: raw.consumerDid,
+    kind,
+    disabled: typeof raw.disabledAt === 'string',
+    wiped: typeof raw.wipedAt === 'string',
+  }
+}
+
+/**
+ * Whether a listing page leaves more to read, across the versions: 0.3 and later say so with `nextCursor`; 0.1 and
+ * 0.2 with `truncated` and `cursor`. A page that says it is truncated and gives no cursor cannot be continued, so the
+ * listing it ends is incomplete.
+ */
+export function pageContinuation(answer: unknown): { next?: string; complete: boolean } {
+  const a = (answer ?? {}) as { nextCursor?: unknown; cursor?: unknown; truncated?: unknown }
+  if (typeof a.nextCursor === 'string' && a.nextCursor) return { next: a.nextCursor, complete: false }
+  if (a.truncated === true) {
+    return typeof a.cursor === 'string' && a.cursor ? { next: a.cursor, complete: false } : { complete: false }
+  }
+  return { complete: true }
+}
+
+/** The most pages a listing reads before it gives up and says it is incomplete. */
+export const AGENT_LISTING_MAX_PAGES = 100
+
+/**
+ * `device/list` at 0.3, else 0.2 (`device/_shared/0.2` bindings in both), newest first.
+ *
+ * @versionLadder device/list
+ */
+const DEVICE_LIST_VERSIONS = [
+  'https://trusttasks.org/spec/device/list/0.3',
+  'https://trusttasks.org/spec/device/list/0.2',
+] as const
+
+/**
  * How a log line names this phone's agent beside a task type: not at all, for
  * hidden vetting.
  *
@@ -2529,6 +2698,138 @@ export class VtaClient {
       this.task(type, { subject: did, label: label.trim().slice(0, ACL_LABEL_MAX) })
     )
     return answeredEntry(uri, answer)
+  }
+
+  /**
+   * Write an AI agent's entry (§3.3): `acl/grant/0.3` with role `application`, the named contexts, `listed`
+   * capabilities (or none), no keys and `listed` purposes. Sent at 0.3 only; a VTA that serves no 0.3 is refused
+   * with {@link AgentAccessUnsupportedError} and nothing is written. Answers the entry the VTA now holds.
+   */
+  async grantApplication(grant: AgentGrant): Promise<VtaAclEntry> {
+    const payload = agentGrantPayload(grant)
+    // version-pinned: an agent's entry is written at acl 0.3 only, since 0.1 and 0.2 cannot state purposes (AgentAccessUnsupportedError)
+    const answer = await this.agentAccessTask(VTA_TASK.aclGrant03, payload)
+    // version-pinned: an agent's entry is written at acl 0.3 only, since 0.1 and 0.2 cannot state purposes (AgentAccessUnsupportedError)
+    return answeredEntry(VTA_TASK.aclGrant03, answer)
+  }
+
+  /**
+   * Change an agent's contexts or capabilities (§3.15 "Change memories", §3.6 a room add): the writes of
+   * {@link agentAccessWrites}, narrowing first, at 0.3 only. Answers the entry after the last write.
+   *
+   * Not atomic. If a later write fails after the narrowing landed, the call throws and the entry is left narrowed.
+   * A retry must re-read the entry ({@link findAgentEntries}) and compute `act.from` from what it holds now: the same
+   * change again would ask `acl/revoke` 0.3 to narrow to what the entry already holds, which it refuses ("MUST be
+   * strictly narrower than the stored act scope").
+   */
+  async narrowOrWidenCapabilities(change: AgentAccessChange): Promise<VtaAclEntry> {
+    const writes = agentAccessWrites(change)
+    if (writes.length === 0) throw new Error(`${LOG_PREFIX} nothing to change on the agent's entry`)
+    let entry: VtaAclEntry | undefined
+    for (const write of writes) {
+      entry = answeredEntry(write.type, await this.agentAccessTask(write.type, write.payload))
+    }
+    return entry as VtaAclEntry
+  }
+
+  /** One access-list write for agent connect, mapping "no such version" to {@link AgentAccessUnsupportedError}. */
+  private async agentAccessTask(type: string, payload: Record<string, unknown>): Promise<unknown> {
+    try {
+      return await this.task(type, payload)
+    } catch (error) {
+      if (isUnsupportedVersionRefusal(error)) throw new AgentAccessUnsupportedError(type)
+      throw error
+    }
+  }
+
+  /**
+   * Every page of a listing: the first in the newest version the agent serves (`ladder`), the rest in that one.
+   * Complete only when the last page read says nothing remains; a page that cannot be continued, a cursor seen
+   * twice, or more than {@link AGENT_LISTING_MAX_PAGES} pages leaves it incomplete.
+   */
+  private async allPages(
+    family: string,
+    ladder: readonly string[],
+    payloadFor: (cursor?: string) => Record<string, unknown>,
+    itemsOf: (answer: unknown) => unknown[]
+  ): Promise<{ items: unknown[]; complete: boolean }> {
+    const first = await this.versions.ask(family, ladder, (uri) => this.task(uri, payloadFor()))
+    const items = [...itemsOf(first.answer)]
+    let page = pageContinuation(first.answer)
+    const seen = new Set<string>()
+    for (let n = 1; page.next !== undefined; n++) {
+      if (n >= AGENT_LISTING_MAX_PAGES || seen.has(page.next)) return { items, complete: false }
+      seen.add(page.next)
+      const answer = await this.task(first.uri, payloadFor(page.next))
+      items.push(...itemsOf(answer))
+      page = pageContinuation(answer)
+    }
+    return { items, complete: page.complete }
+  }
+
+  /**
+   * The agent's device bindings (`device/list`, every page, disabled and wiped ones included), of one service kind
+   * when asked. `complete` is false when the listing could not be read to its end: an absent device is then not
+   * proof of anything (§3.9).
+   */
+  async devicesByKind(
+    serviceKind?: 'aiAgent' | 'mediator' | 'daemon'
+  ): Promise<{ devices: VtaDeviceRow[]; complete: boolean }> {
+    const { items, complete } = await this.allPages(
+      'deviceList',
+      DEVICE_LIST_VERSIONS,
+      (cursor) => ({
+        includeDisabled: true,
+        includeWiped: true,
+        ...(serviceKind ? { consumerKindFilter: 'service', serviceKindFilter: serviceKind } : {}),
+        ...(cursor ? { cursor } : {}),
+      }),
+      (answer) => {
+        const devices = (answer as { devices?: unknown } | undefined)?.devices
+        return Array.isArray(devices) ? devices : []
+      }
+    )
+    const devices = items.map(deviceRowFrom).filter((d): d is VtaDeviceRow => d !== undefined)
+    return { devices, complete }
+  }
+
+  /** The consumer kind of the device a subject authenticates as, from every page of `device/list`. */
+  async entryKind(subject: string): Promise<{ kind?: VtaDeviceRow['kind']; deviceId?: string; complete: boolean }> {
+    const { devices, complete } = await this.devicesByKind()
+    const row = devices.find((d) => d.consumerDid === subject)
+    return row ? { kind: row.kind, deviceId: row.deviceId, complete } : { complete }
+  }
+
+  /**
+   * Every access-list entry that is the agent's (§3.9): the one whose device has this `deviceId` (under whatever key
+   * it moved to with `acl/swap-key`), and any whose subject is the stored DID. Both listings are read to their end;
+   * `complete` is false if either was not, so "no match" is only an answer when it is true.
+   */
+  async findAgentEntries(query: { deviceId?: string; subject?: string }): Promise<{
+    complete: boolean
+    matches: { entry: VtaAclEntry; deviceId?: string; kind?: VtaDeviceRow['kind'] }[]
+  }> {
+    const devices = await this.devicesByKind()
+    const acl = await this.allPages(
+      'aclList',
+      VTA_TASK_VERSIONS.aclList,
+      (cursor) => (cursor ? { cursor } : {}),
+      (answer) => {
+        const entries = (answer as { entries?: unknown } | undefined)?.entries
+        return Array.isArray(entries) ? entries : []
+      }
+    )
+    const subjects = new Set<string>()
+    if (query.subject) subjects.add(query.subject)
+    if (query.deviceId) for (const d of devices.devices) if (d.deviceId === query.deviceId) subjects.add(d.consumerDid)
+    const byDid = new Map(devices.devices.map((d) => [d.consumerDid, d]))
+    const matches = parseAclEntries(acl.items)
+      .filter((entry) => subjects.has(entry.subject))
+      .map((entry) => {
+        const d = byDid.get(entry.subject)
+        return { entry, ...(d ? { deviceId: d.deviceId, kind: d.kind } : {}) }
+      })
+    return { complete: devices.complete && acl.complete, matches }
   }
 
   /**

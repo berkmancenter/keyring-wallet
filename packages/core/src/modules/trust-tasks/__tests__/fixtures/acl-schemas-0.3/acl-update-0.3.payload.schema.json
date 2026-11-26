@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/acl/update/0.3",
+  "title": "ACL Update 0.3 — payload",
+  "description": "Amend the non-role attributes of an existing AclEntry 0.3: its act scope (widening only), approve scope, capability scope, approvable-capability scope, key scope, purpose scope, label, expiry or step-up requirement. Every member REPLACES the stored value; an omitted member leaves it unchanged. Role changes are NOT expressible here — they go through acl/change-role, which requires the current role as a compare-and-swap. `delegatedBy` and the provenance timestamps are maintainer-populated and not settable.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "subject"
+  ],
+  "properties": {
+    "subject": {
+      "type": "string",
+      "minLength": 1,
+      "description": "VID of the entry to amend. The entry MUST already exist; this task does not create one (use acl/grant)."
+    },
+    "act": {
+      "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/AuthorityScope",
+      "description": "Replacement act scope, in the same explicit form as the entry's (`all`, `none`, or a non-empty context list). A replacement that WIDENS or equals the stored scope is accepted, subject to the granter bound. NARROWING THE ACT SCOPE IS A REVOCATION and a consumer MUST refuse it here with `narrowingNotPermitted`, directing the caller to acl/revoke, so that every removal of where a subject may act passes through the task that is audited and reasoned as a revocation."
+    },
+    "approve": {
+      "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/AuthorityScope",
+      "description": "Replacement approve scope. To withdraw approve authority entirely, send `{\"scope\": \"none\"}` — there is no null form, because the explicit value is the only spelling that cannot be misread. Widening is an escalation vector (a subject able to approve can ratify operations it could not authorize) and is bounded by the granter's own approve authority. Narrowing is accepted here and is a privilege reduction (see the specification)."
+    },
+    "capabilities": {
+      "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/CapabilityScope",
+      "description": "Replacement capability scope, applied wholesale, in the same explicit form as the entry's. Omitted leaves it unchanged. `{\"scope\": \"ceiling\"}` returns the entry to its role's full ceiling — a privilege INCREASE, bounded and gated like any widening; `{\"scope\": \"none\"}` removes every capability; `listed` states the exact set. There is no null form. Every listed capability is checked as on a grant (registry, ceiling, additive, granter bound). A replacement that removes a capability the entry held is a privilege reduction."
+    },
+    "approveCapabilities": {
+      "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/ApproveCapabilityScope",
+      "description": "Replacement approvable-capability scope, applied wholesale. Omitted leaves it unchanged. `{\"scope\": \"ceiling\"}` lets the subject approve its role's full approve ceiling within its approve scope (a privilege increase); `{\"scope\": \"none\"}` withdraws it; `listed` states the exact set. There is no null form. Bounded by the granter's own approve authority."
+    },
+    "keys": {
+      "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/KeyScope",
+      "description": "Replacement key scope, applied wholesale. Omitted leaves it unchanged. `{\"scope\": \"all\"}` lets the subject reach every key within its act scope again — a privilege increase a consumer SHOULD gate like clearing `expiresAt`; `{\"scope\": \"none\"}` removes every key; `listed` states the exact set. There is no null form. A replacement that narrows the stored key scope IS a privilege reduction: it is accepted here, because acl/revoke/0.3 narrows only the act scope, but the consumer MUST audit it as a reduction and apply it at the subject's next authorization decision."
+    },
+    "purposes": {
+      "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/PurposeScope",
+      "description": "Replacement purpose scope, applied wholesale. Omitted leaves it unchanged. `{\"scope\": \"any\"}` lets the subject use what it reads for any purpose but `modelTraining` — a privilege increase over a list, bounded by the granter's own purposes like any grant (`purposeOutsideDelegator`); `listed` states the exact set. There is no null form and no empty list. A replacement that narrows the stored purpose scope IS a privilege reduction: the consumer MUST audit it as a reduction and apply it at the subject's next purpose-bound operation."
+    },
+    "label": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256,
+      "description": "Replacement human-readable label. Explicit `null` clears it. Omitted leaves it unchanged."
+    },
+    "expiresAt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "Replacement expiry. Explicit `null` makes the entry permanent — a privilege increase, which a consumer SHOULD gate at least as strictly as the original grant, and which is refused where the granter's own entry expires."
+    },
+    "stepUp": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Replacement per-entry step-up configuration. Same additive-only rule as on the entry itself: it MAY raise the assurance required of this subject above the system floor but MUST NOT lower it.",
+      "properties": {
+        "approver": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "VID that ratifies step-up for this subject. `null` clears it."
+        },
+        "require": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "self",
+            "delegated",
+            null
+          ],
+          "description": "Minimum step-up mode. `null` clears the per-entry override."
+        }
+      }
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 1024,
+      "description": "Optional human-readable rationale, recorded with the change."
+    },
+    "ext": {
+      "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+      "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "ACL Update 0.3 — response payload",
+      "description": "The success response to an acl/update/0.3 request. Carried in a Trust Task document whose type is https://trusttasks.org/spec/acl/update/0.3#response.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entry"
+      ],
+      "properties": {
+        "entry": {
+          "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/AclEntry",
+          "description": "The realized entry the maintainer now holds, after the amendment."
+        },
+        "ext": {
+          "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+          "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+        }
+      }
+    }
+  }
+}

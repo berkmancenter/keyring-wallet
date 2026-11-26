@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/device/list/0.3",
+  "title": "Device List — payload",
+  "description": "List DeviceBindings known to the maintainer, optionally filtered by consumer kind, capability, status, and last-seen time.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "consumerKindFilter": {
+      "type": "string",
+      "enum": ["companion", "service"]
+    },
+    "formFactorFilter": {
+      "type": "string",
+      "enum": ["browser", "mobile", "desktop"]
+    },
+    "serviceKindFilter": {
+      "type": "string",
+      "enum": ["mediator", "aiAgent", "daemon"]
+    },
+    "capabilityFilter": {
+      "$ref": "../../_shared/0.2/device-binding.schema.json#/$defs/Capability"
+    },
+    "includeDisabled": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, include devices with `disabledAt` set. Default omits disabled."
+    },
+    "includeWiped": {
+      "type": "boolean",
+      "default": false
+    },
+    "lastSeenSince": { "type": "string", "format": "date-time" },
+    "cursor": {
+      "type": "string",
+      "description": "An opaque continuation token from a previous response's `nextCursor`; a responder MUST NOT accept a cursor it did not issue."
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "description": "The most devices to return; the responder chooses a default and MAY return fewer."
+    },
+    "ext": { "$ref": "../../../_framework/0.2/framework.schema.json#/$defs/Ext" }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "Device List — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["devices"],
+      "properties": {
+        "devices": {
+          "type": "array",
+          "items": { "$ref": "../../_shared/0.2/device-binding.schema.json#/$defs/DeviceBinding" }
+        },
+        "nextCursor": {
+          "type": "string",
+          "description": "Opaque continuation token for the next page, sent back as the request's `cursor`. Present when more matching devices remain; absent on the last page."
+        },
+        "ext": { "$ref": "../../../_framework/0.2/framework.schema.json#/$defs/Ext" }
+      }
+    }
+  }
+}
