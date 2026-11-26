@@ -149,3 +149,5 @@ node vtc-admin.mjs <vtcBase/v1> <vtcDid> <adminCredential.json> manifest
 node join.mjs <communityDid> <mediatorDid> manifest
 node join.mjs <communityDid> <mediatorDid> submit <requirementsDigest>
 ```
+
+<!-- path-filter probe, test/tspref-alive: never merged -->
