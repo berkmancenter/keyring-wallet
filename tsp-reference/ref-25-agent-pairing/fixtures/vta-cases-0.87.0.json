@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-11-26T07:57:38.801Z",
+  "recordedAt": "2026-11-26T08:56:26.594Z",
   "source": {
     "repository": "OpenVTC/verifiable-trust-infrastructure",
     "commit": "4e5861d95b799c0910e92a81bec6af17d1578e2d",
@@ -187,6 +187,94 @@
       "second": {
         "own": "ok",
         "theOthers": "vta/memory/get:contextForbidden"
+      }
+    },
+    "pairing-readback": {
+      "grant": "ok",
+      "theAgent": {
+        "register": "ok",
+        "swap": "ok",
+        "theNewKeySignsIn": true
+      },
+      "readBack": {
+        "deviceFoundByItsId": true,
+        "deviceNamesTheNewKey": true,
+        "kindIsOnTheDevice": {
+          "kind": "service",
+          "serviceKind": "aiAgent"
+        },
+        "deviceCapabilities": [
+          "memoryRead",
+          "memoryWrite"
+        ],
+        "anEntryUnderTheThrowawayKey": false,
+        "role": "application",
+        "act": {
+          "contexts": [
+            "<first>",
+            "<second>"
+          ],
+          "scope": "contexts"
+        },
+        "capabilities": {
+          "grants": [
+            {
+              "capability": "memory-read"
+            },
+            {
+              "capability": "memory-write"
+            }
+          ],
+          "scope": "listed"
+        },
+        "keys": {
+          "scope": "none"
+        },
+        "purposes": {
+          "purposes": [
+            "personalisation",
+            "taskExecution"
+          ],
+          "scope": "listed"
+        },
+        "label": "notes-helper",
+        "expiresAtIsTheOneSent": true,
+        "hasAKindMember": false,
+        "membersNobodySent": [
+          "approve",
+          "createdAt",
+          "createdBy",
+          "delegatedBy"
+        ],
+        "approve": {
+          "scope": "none"
+        },
+        "aclShowAgrees": true
+      },
+      "widening": {
+        "grantWithOne": "ok",
+        "actBefore": {
+          "contexts": [
+            "<first>"
+          ],
+          "scope": "contexts"
+        },
+        "update": "ok",
+        "theAnswerCarriesTheEntry": true,
+        "actAfter": {
+          "contexts": [
+            "<first>",
+            "<second>"
+          ],
+          "scope": "contexts"
+        },
+        "everyOtherMemberUnchanged": true,
+        "theSameUpdateAgain": "ok",
+        "theEntryAfterItIsTheSame": true,
+        "onANewSession": {
+          "first": "ok",
+          "second": "ok"
+        }
       }
     },
     "f-sign-as-persona": {

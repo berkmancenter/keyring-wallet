@@ -150,7 +150,7 @@ One VTA on localhost that serves its own `did:webvh`, started by `lab/vta.sh` af
 cargo build --locked -p vta-service
 lab/vta.sh up <path to target/debug/vta> "$(git -C <that checkout> rev-parse HEAD)"
 node vta-serves.mjs        # which version of each task family this VTA serves
-node vta-run.mjs           # the 14 cases, against the recorded result for this version
+node vta-run.mjs           # the 15 cases, against the recorded result for this version
 lab/vta.sh down
 ```
 
@@ -171,7 +171,7 @@ commits, so the rung ran on three builds, each a debug build from a checkout at 
 | `keys/sign-document` 0.1, `vta/webvh/dids/create` 1.2, `vta/credentials/issue` 0.2, `credential-exchange/issue` 0.1, `vault/sign-trust-task` 0.2 (item (f)) | the same on all three | | |
 | `auth/oob/*`, `task-consent/request` | not served (`unsupportedType`) on all three | | |
 | The seeded administrator | roles `admin`, no scopes, 27 capabilities, on all three | | |
-| The 14 cases | **none can run**: `acl/grant` 0.3 and `vta/memory/put` 0.3 are not served | 14 recorded, each repeats | 14 recorded, each repeats, **the same as 0.84.0 on every case** |
+| The 15 cases | **none can run**: `acl/grant` 0.3 and `vta/memory/put` 0.3 are not served | 15 recorded, each repeats | 15 recorded, each repeats, **the same as 0.84.0 on every case** |
 
 A VTA serves one version of each `acl` task, not two. So a client speaks `acl/grant` 0.3 to a 0.84.0 or a 0.87.0
 and 0.2 to a 0.79.0, and agent connect as the plan describes it needs 0.84.0 or later.
@@ -222,6 +222,29 @@ in `fixtures/vta-signed-as-persona-<version>.json`, and `proof.test.mjs` verifie
 `keys/sign-document` 0.1 is also served at the pinned 0.79.0. The case itself cannot run there, because its agent
 entries need `acl/grant` 0.3.
 
+### Step 7.5, the fallback pairing: the entry as Keyring reads it back
+
+One case, `pairing-readback`, for the lab half of step 7.5's fallback: the administrator plays Keyring, the rung
+plays the agent. It is not one of step 0.1's items.
+
+Keyring grants a throwaway key an `application` entry for two memories: listed `memory-read` and `memory-write`,
+`keys` scope `none`, listed purposes `personalisation` and `taskExecution`, a label, and an `expiresAt` four hours
+ahead. The agent signs in with that key, registers as `aiAgent`, and swaps to its own key. Keyring then reads back.
+
+| Question | Result |
+|---|---|
+| Is the device found by its `deviceId`, under the new key? | Yes. `device/list` names the new key as `consumerDid` |
+| Is anything left under the throwaway key? | No entry |
+| Does the entry come back as granted? | Yes: `role`, `act` (both memories, in the order sent), `capabilities`, `keys`, `purposes` and `label` are the ones sent, and `expiresAt` is the same string. `acl/show` gives the same entry as `acl/list` |
+| Where is the agent's kind? | On the device only: `consumerKind` is `{ kind: "service", serviceKind: "aiAgent" }`. The entry has no kind member |
+| How are capabilities spelled? | Kebab-case on the entry (`memory-read`), camelCase on the device (`memoryRead`) |
+| What does the entry carry that nobody sent? | `approve` (`{ scope: "none" }`), `createdAt`, `createdBy` and `delegatedBy` |
+
+**Widening.** An entry granted one memory is widened with `acl/update` 0.3, sending `act` with both. The update
+is accepted and its answer carries the entry; `act` then names both memories and every other member is unchanged.
+The same update sent again is accepted, and the entry after it is the same. On a new session the agent writes
+both memories.
+
 ## Not measured yet
 
 - **For (f): a hosted persona, a status entry, and a verifier outside the rung.** The lab persona's log is hosted
@@ -230,6 +253,8 @@ entries need `acl/grant` 0.3.
   the rung's own `eddsa-jcs-2022` code, not a second implementation.
 - **The DIDComm and TSP path to the VTA**, for every VTA case: the lab VTA has no mediator, and the cases run over
   its HTTPS binding.
+- **For step 7.5:** the same sequence with Keyring's own client in place of the rung's administrator, a call on a
+  session opened before the widening, and the `auth/oob` `deviceEnrol` path, which no lab VTA serves.
 - The parts that decide later tiers: (g), (i), (k), (m), (n), (r), (s), the room parts of (p) and (e).
 
 Pinned against: `affinidi-messaging-mediator` `f6ed8159a` (v0.53.0); VTI `f7b78e29d` (the link producer, and vta 0.79.0), `97fda9813` (vta 0.84.0) and `4e5861d95` (vta 0.87.0);

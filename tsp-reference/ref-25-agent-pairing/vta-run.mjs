@@ -330,6 +330,74 @@ add("p7-two-identities", "0.1(p) item 7: two identities, two memories, each reac
   };
 });
 
+add("pairing-readback", "step 7.5, the fallback: the entry Keyring grants a throwaway key, as Keyring reads it back after the agent registers and swaps its key; and a widening", async () => {
+  const [first, second] = [await newContext("Work notes"), await newContext("Travel")];
+  const expiresAt = inFourHours();
+  const options = { purposes: ["personalisation", "taskExecution"], expiresAt, label: "notes-helper" };
+  const named = (value) => JSON.parse(JSON.stringify(value ?? null).replaceAll(first, "<first>").replaceAll(second, "<second>"));
+
+  // Keyring grants the throwaway key both memories. The agent signs in with it, registers, and moves to its own key.
+  const throwaway = mintIdentity();
+  const granted = await call(A, "acl/grant/0.3", { entry: entryFor(throwaway.did, { ...options, contexts: [first, second] }) });
+  if (!granted.ok) return { grant: code(granted) };
+  const asThrowaway = { identity: throwaway, session: await signIn({ ...at, identity: throwaway }) };
+  const registered = await registerAgent(asThrowaway.session);
+  const deviceId = registered.payload.binding?.deviceId;
+  const swapped = await swap(asThrowaway);
+
+  // Keyring reads back: the device by its id, then the entry under the key the device names.
+  const device = deviceId ? await deviceOf(deviceId) : undefined;
+  const entry = device ? await entryOf(device.consumerDid) : undefined;
+  const shown = device ? await call(A, "acl/show/0.3", { subject: device.consumerDid }) : undefined;
+  const SENT = ["subject", "role", "act", "keys", "capabilities", "purposes", "label", "expiresAt"];
+
+  // The widening: an entry with one memory, widened to two from the entry as read back, and the same update again.
+  const narrow = mintIdentity();
+  const one = await call(A, "acl/grant/0.3", { entry: entryFor(narrow.did, { ...options, contexts: [first] }) });
+  const before = await entryOf(narrow.did);
+  const widen = { subject: narrow.did, act: { scope: "contexts", contexts: [...(before?.act?.contexts ?? []), second] } };
+  const update = await call(A, "acl/update/0.3", widen);
+  const after = await entryOf(narrow.did);
+  const again = await call(A, "acl/update/0.3", widen);
+  const afterAgain = await entryOf(narrow.did);
+  const without = (entry, name) => JSON.stringify({ ...entry, [name]: undefined });
+  const widened = one.ok ? await signIn({ ...at, identity: narrow }) : undefined;
+
+  return {
+    grant: code(granted),
+    theAgent: { register: code(registered), swap: code(swapped.answer), theNewKeySignsIn: Boolean(swapped.party) },
+    readBack: {
+      deviceFoundByItsId: Boolean(device),
+      deviceNamesTheNewKey: device?.consumerDid === swapped.party?.identity.did,
+      kindIsOnTheDevice: device?.consumerKind,
+      deviceCapabilities: sorted(device?.capabilities),
+      anEntryUnderTheThrowawayKey: Boolean(await entryOf(throwaway.did)),
+      role: entry?.role,
+      act: named(entry?.act),
+      capabilities: entry?.capabilities,
+      keys: entry?.keys,
+      purposes: entry?.purposes,
+      label: entry?.label,
+      expiresAtIsTheOneSent: entry?.expiresAt === expiresAt,
+      hasAKindMember: entry ? "kind" in entry || "consumerKind" in entry : undefined,
+      membersNobodySent: entry ? sorted(Object.keys(entry).filter((name) => !SENT.includes(name))) : undefined,
+      approve: entry?.approve,
+      aclShowAgrees: shown?.ok ? JSON.stringify(shown.payload.entry) === JSON.stringify(entry) : false,
+    },
+    widening: {
+      grantWithOne: code(one),
+      actBefore: named(before?.act),
+      update: code(update),
+      theAnswerCarriesTheEntry: JSON.stringify(update.payload?.entry) === JSON.stringify(after),
+      actAfter: named(after?.act),
+      everyOtherMemberUnchanged: Boolean(before && after) && without(before, "act") === without(after, "act"),
+      theSameUpdateAgain: code(again),
+      theEntryAfterItIsTheSame: Boolean(after) && JSON.stringify(after) === JSON.stringify(afterAgain),
+      onANewSession: widened ? { first: code(await put(widened, first)), second: code(await put(widened, second)) } : undefined,
+    },
+  };
+});
+
 /** A persona as Keyring makes one: a context, and a `did:webvh` the VTA mints and holds the keys of. */
 async function newPersona() {
   const contextId = `keyring-persona-${uniq()}`;
