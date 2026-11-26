@@ -7,24 +7,24 @@
  * `acl/revoke:subjectNotPresent` on the first key, `ok` on the key the device lists).
  *
  * In order:
- * 1. The record is written `revoking` before any VTA call, so a restart in the middle still shows "Revoke not
- *    confirmed" and retries. Then the ACL entry: every entry whose device has the stored `deviceId`, and any whose
- *    subject is the stored `agentDid`, is revoked through `VtaClient.revokeSubject`. Its answer is never taken as
- *    success (an empty answer means "no entry under that key"); only a full listing (every page, no error) that shows
- *    no such entry confirms it. Up to {@link REVOKE_MAX_ROUNDS} rounds of revoke and re-list.
- * 2. The VDC is no longer re-issued (`shouldReissueVdc` refuses a `revoking` or `revoked` record) and is marked
- *    revoked in the record: `vdcRevokedAt`. There is no status entry in P0, so a copy already shown stays valid.
- * 3. The agent is told over the chat, once, best effort. Not relied on.
- * 4. The record becomes `revoked` only after step 1 is confirmed; otherwise it stays `revoking`.
+ * 1. The record goes from `active` or `expired` to `revoking` before any VTA call, so a restart in the middle still
+ *    shows "Revoke not confirmed" and retries. Then the ACL entry: every entry whose device has the stored `deviceId`,
+ *    and any whose subject is the stored `agentDid`, is revoked through `VtaClient.revokeSubject`. Its answer is never
+ *    taken as success (an empty answer means "no entry under that key"); only a full listing (every page, no error)
+ *    that shows no such entry confirms it. Up to {@link REVOKE_MAX_ROUNDS} rounds of revoke and re-list.
+ * 2. The VDC is no longer re-issued: `shouldReissueVdc` (vdc.ts) refuses any record that is not `active`, so the
+ *    `revoking` state is the mark. There is no status entry in P0, so a copy already shown stays valid.
+ * 3. The agent is told over the chat, best effort, on the one run that confirms step 1. Not relied on.
+ * 4. The record goes from `revoking` to `revoked` only once a full listing no longer shows the entry.
  *
- * The app-start reconcile ({@link reconcileAgents}) retries every `revoking` record, and for the others records a key
- * the agent changed without Keyring (`keyChanged`) and access that went away on its own.
+ * **What it writes.** Of the `AgentConnection` record (§3.11), only `state` and `lastReconciledAt`, always as get,
+ * change, put. `keyChanged` is read, never written: the reconcile reports a changed key ({@link ReconcileResult}) and
+ * the record's owner, step 7.7, records it.
  *
- * **Isolated dependency.** The `AgentConnection` record and its store are step 7.7's (#1065, a draft whose type is
- * still to be agreed with the Keyring core lane). This module does not import them: it names the members it reads and
- * writes ({@link RevokableConnection}) and the store calls it makes ({@link RevokeConnectionStore}), and 7.7's
- * `AgentConnection` and `AgentConnectionStore` satisfy both structurally. Three members are this step's proposal to
- * that type and are not in §3.11's list: `currentSubject`, `vdcRevokedAt` and `revokeToldAt`.
+ * **The store.** Step 7.7's `AgentConnectionStore` (`list`, `get`, `put`, `remove`; no partial update) is in #1065,
+ * not merged yet. Until it is, this module names the members it uses ({@link RevokableConnection}) and that store's
+ * calls ({@link RevokeConnectionStore}). 7.7's `AgentConnection` and `AgentConnectionStore` satisfy both
+ * structurally; once #1065 merges, the local types can become imports.
  *
  * @module connected-agents/revoke
  */
@@ -34,39 +34,38 @@ import type { VtaClient } from '../trust-tasks/module/VtaClient'
 /** Rounds of revoke and re-list before the record is left `revoking` (§3.9 step 1, "at most three rounds"). */
 export const REVOKE_MAX_ROUNDS = 3
 
-/** §3.11's states, as step 7.7 stores them. */
+/** §3.11's states, as step 7.7's `AgentConnectionState`. */
 export type RevokableState = 'pairing' | 'active' | 'expired' | 'revoking' | 'revoked' | 'notFinished'
 
+/** The states a revoke starts from (§3.9). `pairing` and `notFinished` are the pairing's (§3.10). */
+export const REVOKABLE_FROM: readonly RevokableState[] = ['active', 'expired']
+
 /**
- * The members of step 7.7's `AgentConnection` this step reads and writes. A record carries more; every other member
- * is kept as it is, since each write re-reads the record and changes only these.
+ * The members of step 7.7's `AgentConnection` this step uses. A record carries more; every other member is kept as it
+ * is, since each write re-reads the record and changes only `state` and `lastReconciledAt`.
  */
 export type RevokableConnection = {
-  /** The record's key (7.7 keys it by the agent's first DID). */
+  /** The record's key (7.7 keys it by the agent's DID). */
   id: string
   name: string
-  /** The DID the agent was paired with. Never moved by a reconcile: the chat stays on it (§3.9). */
+  /** The DID the agent was paired with. Never moved here: the chat stays on it (§3.9). */
   agentDid: string
   /** Set by `device/register`, copied by every `acl/swap-key`: what the agent is found by. */
   deviceId: string
   state: RevokableState
-  keyChanged: boolean
+  /** Read-only for this step. */
+  readonly keyChanged: boolean
   /** ISO 8601; absent for a persistent agent. */
   expiresAt?: string
   lastReconciledAt?: string
-  /** Proposed to 7.7's type: the subject the agent's `deviceId` is under now, when it is not `agentDid` (§3.9). */
-  currentSubject?: string
-  /** Proposed to 7.7's type: when Revoke stopped the VDC's re-issue (§3.9 step 2). */
-  vdcRevokedAt?: string
-  /** Proposed to 7.7's type: when the agent was told it is revoked (§3.9 step 3), so it is told once. */
-  revokeToldAt?: string
 }
 
-/** The store calls this step makes; 7.7's `AgentConnectionStore` has them. */
+/** Step 7.7's `AgentConnectionStore` (#1065): `list`, `get`, `put`, `remove`. There is no partial update. */
 export interface RevokeConnectionStore<C extends RevokableConnection = RevokableConnection> {
   list(): Promise<C[]>
   get(id: string): Promise<C | undefined>
   put(record: C): Promise<void>
+  remove(id: string): Promise<void>
 }
 
 /** The two VTA calls this step makes (step 7.4). */
@@ -91,7 +90,7 @@ export type NotConfirmedReason = 'listingFailed' | 'partialListing' | 'entryRema
  * - `notConfirmed`: "Revoke not confirmed" and, in the details, `ConnectedAgents.RevokeNotConfirmedBody` with "Try
  *   again" (§6).
  * - `unreachable`: no VTA call got any answer: `ConnectedAgents.RevokeUnreachable`, "We couldn't reach your VTA, so
- *   "<name>" is still connected." (§3.9). The record is `revoking` all the same and is retried.
+ *   "<name>" is still connected." (§6, Revoke incomplete). The record is `revoking` all the same and is retried.
  */
 export type RevokeOutcome =
   | { kind: 'revoked' }
@@ -142,9 +141,13 @@ const inFlight = new WeakMap<object, Map<string, Promise<RevokeOutcome>>>()
 
 /**
  * Revoke the agent of record `id` (§3.9). Safe to call again on a `revoking` record ("Try again", app start, opening
- * the list): the agent is told once, and a `revoked` record answers `revoked` without a VTA call.
+ * the list); a `revoked` record answers `revoked` without a VTA call. A `pairing` or `notFinished` record has no
+ * revoke (§3.10 ends it) and is refused with an error.
  */
-export function revokeAgent<C extends RevokableConnection>(deps: RevokeDeps<C>, id: string): Promise<RevokeOutcome> {
+export function revokeAgentConnection<C extends RevokableConnection>(
+  deps: RevokeDeps<C>,
+  id: string
+): Promise<RevokeOutcome> {
   let mine = inFlight.get(deps.store)
   if (!mine) inFlight.set(deps.store, (mine = new Map()))
   const running = mine.get(id)
@@ -159,61 +162,71 @@ async function runRevoke<C extends RevokableConnection>(deps: RevokeDeps<C>, id:
   const record = await deps.store.get(id)
   if (!record) throw new Error(`[connected-agents] no agent connection ${id}`)
   if (record.state === 'revoked') return { kind: 'revoked' }
+  if (record.state !== 'revoking' && !REVOKABLE_FROM.includes(record.state))
+    throw new Error(`[connected-agents] a ${record.state} agent connection cannot be revoked`)
 
-  // Written before any VTA call: a restart from here on shows "Revoke not confirmed" and retries.
-  if (record.state !== 'revoking') await update(deps.store, id, { state: 'revoking' } as Partial<C>)
+  // active or expired -> revoking, before any VTA call: a restart from here on shows "Revoke not confirmed" and
+  // retries, and no VDC is re-issued (`shouldReissueVdc` wants `active`).
+  if (record.state !== 'revoking') await write(deps.store, id, { state: 'revoking' })
 
   // 1. The ACL entry, first.
   const outcome = await removeAgentEntries(deps.vta, record)
+  if (outcome.kind !== 'revoked') return outcome
 
-  // 2. No more VDCs, whatever step 1 came to: the owner's decision stands.
-  const after = (await deps.store.get(id)) ?? record
-  if (!after.vdcRevokedAt) await update(deps.store, id, { vdcRevokedAt: iso(now()) } as Partial<C>)
-
-  // 3. Tell the agent, once. A failure changes nothing: it is not relied on.
-  if (deps.tellAgent && !after.revokeToldAt) {
+  // 3. Tell the agent. Only the run that confirms step 1 gets here, and it then leaves `revoking`, so this happens
+  // once. A failure changes nothing: it is not relied on.
+  if (deps.tellAgent) {
     try {
-      await deps.tellAgent((await deps.store.get(id)) ?? after)
-      await update(deps.store, id, { revokeToldAt: iso(now()) } as Partial<C>)
+      await deps.tellAgent((await deps.store.get(id)) ?? record)
     } catch {
-      // Told again on the next run.
+      // Best effort.
     }
   }
 
-  // 4. `revoked` only on step 1's confirmation.
-  if (outcome.kind === 'revoked')
-    await update(deps.store, id, { state: 'revoked', lastReconciledAt: iso(now()) } as Partial<C>)
+  // 4. revoking -> revoked: a full listing no longer shows the entry.
+  await write(deps.store, id, { state: 'revoked', lastReconciledAt: iso(now()) })
   return outcome
 }
 
-/** Re-read and write only `changes`, so a member another step wrote meanwhile is kept. */
-async function update<C extends RevokableConnection>(
+/** The only members this step writes. */
+type Written = { state?: RevokableState; lastReconciledAt?: string }
+
+/** Get, change `state` and `lastReconciledAt` only, put: a member another step wrote meanwhile is kept. */
+async function write<C extends RevokableConnection>(
   store: RevokeConnectionStore<C>,
   id: string,
-  changes: Partial<C>
+  changes: Written
 ): Promise<void> {
   const current = await store.get(id)
   if (!current) return
-  await store.put({ ...current, ...changes })
+  const next: C = { ...current }
+  if (changes.state !== undefined) next.state = changes.state
+  if (changes.lastReconciledAt !== undefined) next.lastReconciledAt = changes.lastReconciledAt
+  await store.put(next)
 }
 
-/** What the reconcile found for one record. */
+/**
+ * What the reconcile found for one record. `keyChanged` and `gone` are reported, not written: the first is
+ * `keyChanged`, which this step only reads; the second would be a state change outside Revoke's two (§3.9), so the
+ * record's owner (step 7.7) decides what it shows.
+ */
 export type ReconcileResult =
   | { id: string; kind: 'revoke'; outcome: RevokeOutcome }
+  /** The agent's `deviceId` is under `subject`, not `agentDid`: it changed its key without Keyring. */
   | { id: string; kind: 'keyChanged'; subject: string }
-  | { id: string; kind: 'gone'; state: 'expired' | 'revoked' }
+  /** A full listing shows no entry with the `deviceId` or under `agentDid`: access went away without a revoke. */
+  | { id: string; kind: 'gone' }
   | { id: string; kind: 'unchanged' }
   /** The listing failed or was partial: nothing is concluded, nothing written. */
   | { id: string; kind: 'unknown' }
 
 /**
  * The reconcile at app start, and on opening the list or the details (§3.9), for every record not `revoked`:
- * - `revoking`: the revoke runs again;
- * - the agent's `deviceId` under a subject other than `agentDid`: that subject is recorded as `currentSubject` and
- *   `keyChanged` set (""<name>" changed its key. Revoke it if you did not expect that."). `agentDid` and the chat are
- *   not moved: a rotation Keyring did not witness proves nothing about who holds the new key;
- * - no entry with the `deviceId` or under `agentDid`, on a full listing: access is gone, `expired` when `expiresAt`
- *   has passed and `revoked` otherwise (removed elsewhere).
+ * - `revoking`: the revoke runs again, and the record becomes `revoked` once a full listing shows no entry;
+ * - `active` or `expired`: one full listing, stamped as `lastReconciledAt`. The agent's `deviceId` under a subject
+ *   other than `agentDid` is reported as `keyChanged` (""<name>" changed its key. Revoke it if you did not expect
+ *   that."); `agentDid` and the chat are not moved, since a rotation Keyring did not witness proves nothing about who
+ *   holds the new key. No entry at all is reported as `gone`.
  * `pairing` and `notFinished` records are the pairing's (§3.10) and are left alone. One record at a time.
  */
 export async function reconcileAgents<C extends RevokableConnection>(
@@ -224,11 +237,11 @@ export async function reconcileAgents<C extends RevokableConnection>(
   const records = (await deps.store.list()).filter((r) => !ids || ids.includes(r.id))
   const results: ReconcileResult[] = []
   for (const record of records) {
-    if (record.state === 'revoked' || record.state === 'pairing' || record.state === 'notFinished') continue
     if (record.state === 'revoking') {
-      results.push({ id: record.id, kind: 'revoke', outcome: await revokeAgent(deps, record.id) })
+      results.push({ id: record.id, kind: 'revoke', outcome: await revokeAgentConnection(deps, record.id) })
       continue
     }
+    if (!REVOKABLE_FROM.includes(record.state)) continue
     let found: Awaited<ReturnType<RevokeVta['findAgentEntries']>>
     try {
       found = await deps.vta.findAgentEntries({ deviceId: record.deviceId, subject: record.agentDid })
@@ -240,24 +253,11 @@ export async function reconcileAgents<C extends RevokableConnection>(
       results.push({ id: record.id, kind: 'unknown' })
       continue
     }
-    const stamp = { lastReconciledAt: iso(now()) }
+    await write(deps.store, record.id, { lastReconciledAt: iso(now()) })
     const moved = found.matches.find((m) => m.deviceId === record.deviceId && m.entry.subject !== record.agentDid)
-    if (moved) {
-      await update(deps.store, record.id, {
-        ...stamp,
-        currentSubject: moved.entry.subject,
-        keyChanged: true,
-      } as Partial<C>)
-      results.push({ id: record.id, kind: 'keyChanged', subject: moved.entry.subject })
-    } else if (found.matches.length === 0) {
-      const expired = record.expiresAt !== undefined && Date.parse(record.expiresAt) <= now()
-      const state = expired ? 'expired' : 'revoked'
-      await update(deps.store, record.id, { ...stamp, state } as Partial<C>)
-      results.push({ id: record.id, kind: 'gone', state })
-    } else {
-      await update(deps.store, record.id, stamp as Partial<C>)
-      results.push({ id: record.id, kind: 'unchanged' })
-    }
+    if (moved) results.push({ id: record.id, kind: 'keyChanged', subject: moved.entry.subject })
+    else if (found.matches.length === 0) results.push({ id: record.id, kind: 'gone' })
+    else results.push({ id: record.id, kind: 'unchanged' })
   }
   return results
 }

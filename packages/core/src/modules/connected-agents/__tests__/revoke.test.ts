@@ -3,7 +3,8 @@
  * order is ACL entry first; the agent is found by `deviceId` after one and two key swaps and its entry under the new
  * key is revoked; an empty `revokeSubject` answer is never success; a partial or failed listing leaves `revoking`,
  * which survives a restart and clears only on a full listing; the app-start reconcile records a changed key without
- * moving the chat; a failed ACL call leaves `revoking` and retries.
+ * moving the chat; a failed ACL call leaves `revoking` and retries. And Keyring's 7.10 contract for the record: only
+ * `state` (active or expired -> revoking -> revoked) and `lastReconciledAt` are written, `keyChanged` is read-only.
  *
  * The VTA side is the real `VtaClient` (its `findAgentEntries` and `revokeSubject`, step 7.4) over a fake `task` that
  * keeps an access list and device bindings, and behaves as the lab measured (ref-25 `l-revoke-after-1-swap` and
@@ -19,7 +20,7 @@ import {
   RevokeDeps,
   reconcileAgents,
   removeAgentEntries,
-  revokeAgent,
+  revokeAgentConnection,
 } from '../revoke'
 import { shouldReissueVdc } from '../vdc'
 
@@ -123,6 +124,9 @@ function storage() {
         writes.push(record)
         disk.set(record.id, JSON.stringify(record))
       },
+      remove: async (id) => {
+        disk.delete(id)
+      },
     }
   }
   return { open, disk }
@@ -157,21 +161,30 @@ async function setup(over: Partial<Conn> = {}) {
 }
 
 describe('order: the ACL entry first', () => {
-  it('revokes the entry before the VDC is marked or the agent told, and only then writes revoked', async () => {
+  it('writes revoking before any VTA call, revokes the entry, tells the agent, and only then writes revoked', async () => {
     const s = await setup()
-    const out = await revokeAgent(s.deps, K_A)
+    const events: string[] = []
+    const put = s.store.put
+    s.store.put = async (record) => {
+      events.push(`put:${record.state}`)
+      await put(record)
+    }
+    const task = s.vta.task as jest.Mock
+    const real = task.getMockImplementation() as (...args: unknown[]) => Promise<unknown>
+    task.mockImplementation(async (...args: unknown[]) => {
+      events.push(`vta:${String(args[0]).includes('acl/revoke') ? 'revoke' : 'list'}`)
+      return real(...args)
+    })
+    s.tellAgent.mockImplementation(async () => {
+      events.push('tell')
+    })
+    const out = await revokeAgentConnection(s.deps, K_A)
     expect(out).toEqual({ kind: 'revoked' })
-    // The record went revoking before any VTA call, then the VDC mark, the notice, and revoked last.
-    expect(s.store.writes.map((w) => [w.state, Boolean(w.vdcRevokedAt), Boolean(w.revokeToldAt)])).toEqual([
-      ['active', false, false], // setup
-      ['revoking', false, false],
-      ['revoking', true, false],
-      ['revoking', true, true],
-      ['revoked', true, true],
-    ])
-    expect(s.sent[0].type).toContain('/device/list/')
+    expect(events[0]).toBe('put:revoking')
+    expect(events.indexOf('vta:revoke')).toBeGreaterThan(0)
+    expect(events.slice(-2)).toEqual(['tell', 'put:revoked'])
+    expect(s.store.writes.map((w) => w.state)).toEqual(['active', 'revoking', 'revoked'])
     expect(s.revokes()).toEqual([K_A])
-    // The revoke call precedes the notice: the first VTA call came after `revoking` was written, the notice after it.
     expect(s.tellAgent).toHaveBeenCalledTimes(1)
     expect(s.entries.has(K_A)).toBe(false)
     expect(s.entries.has(OTHER)).toBe(true)
@@ -180,10 +193,9 @@ describe('order: the ACL entry first', () => {
   it('no VDC is re-issued once revoke starts, whatever it came to', async () => {
     const s = await setup()
     s.vtaState.down = true
-    await revokeAgent(s.deps, K_A)
+    await revokeAgentConnection(s.deps, K_A)
     const after = (await s.store.get(K_A)) as Conn
     expect(after.state).toBe('revoking')
-    expect(after.vdcRevokedAt).toBe(new Date(NOW).toISOString())
     const reissue = (state: Conn['state']) =>
       shouldReissueVdc({ state, entryConfirmedPresent: true, grantValidUntil: '2026-11-26T13:00:00Z', now: NOW })
     expect([reissue(after.state), reissue('revoked'), reissue('active')]).toEqual([false, false, true])
@@ -198,7 +210,7 @@ describe('found by deviceId after the agent swapped its key', () => {
     const s = await setup()
     for (const key of keys) s.swap('dev-1', key)
     const newest = keys[keys.length - 1]
-    expect(await revokeAgent(s.deps, K_A)).toEqual({ kind: 'revoked' })
+    expect(await revokeAgentConnection(s.deps, K_A)).toEqual({ kind: 'revoked' })
     // The stored agentDid (K_A) has no entry any more and is never sent: the device's key is.
     expect(s.revokes()).toEqual([newest])
     expect([...s.entries.keys()]).toEqual([OTHER])
@@ -224,7 +236,7 @@ describe('found by deviceId after the agent swapped its key', () => {
       s.swap('dev-1', K_B)
       s.vtaState.revokeDoesNothing = false
     }
-    expect(await revokeAgent(s.deps, K_A)).toEqual({ kind: 'revoked' })
+    expect(await revokeAgentConnection(s.deps, K_A)).toEqual({ kind: 'revoked' })
     expect(s.revokes()).toEqual([K_A, K_B])
   })
 })
@@ -236,7 +248,7 @@ describe('an empty revokeSubject answer is never success', () => {
     // The answer the client gets is empty (undefined), as for a real removal.
     expect(await s.vta.revokeSubject(K_A)).toBeUndefined()
     s.sent.length = 0
-    const out = await revokeAgent(s.deps, K_A)
+    const out = await revokeAgentConnection(s.deps, K_A)
     expect(out).toEqual({ kind: 'notConfirmed', reason: 'entryRemains' })
     expect(s.revokes()).toHaveLength(REVOKE_MAX_ROUNDS)
     expect((await s.store.get(K_A))?.state).toBe('revoking')
@@ -247,7 +259,7 @@ describe('Revoke not confirmed: partial or failed listings, a restart, and clear
   it('a partial listing is never proof: revoking, after a restart too, until a full listing clears it', async () => {
     const s = await setup()
     s.vtaState.partial = true
-    expect(await revokeAgent(s.deps, K_A)).toEqual({ kind: 'notConfirmed', reason: 'partialListing' })
+    expect(await revokeAgentConnection(s.deps, K_A)).toEqual({ kind: 'notConfirmed', reason: 'partialListing' })
     // The entry did go, but no listing ever reached its end: still not confirmed.
     expect(s.entries.has(K_A)).toBe(false)
     expect((await s.store.get(K_A))?.state).toBe('revoking')
@@ -272,26 +284,26 @@ describe('Revoke not confirmed: partial or failed listings, a restart, and clear
   it('a refused listing is not confirmed; no answer at all is "couldn\'t reach"', async () => {
     const s = await setup()
     jest.spyOn(s.vta, 'findAgentEntries').mockRejectedValueOnce(new VtiRefusal('forbidden', 'no'))
-    expect(await revokeAgent(s.deps, K_A)).toEqual({ kind: 'notConfirmed', reason: 'listingFailed' })
+    expect(await revokeAgentConnection(s.deps, K_A)).toEqual({ kind: 'notConfirmed', reason: 'listingFailed' })
     s.vtaState.down = true
-    expect(await revokeAgent(s.deps, K_A)).toEqual({ kind: 'unreachable' })
+    expect(await revokeAgentConnection(s.deps, K_A)).toEqual({ kind: 'unreachable' })
     expect((await s.store.get(K_A))?.state).toBe('revoking')
   })
 
   it('a failed ACL call leaves revoking, and the retry finishes it', async () => {
     const s = await setup()
     s.vtaState.revokeThrows = true
-    expect(await revokeAgent(s.deps, K_A)).toEqual({ kind: 'notConfirmed', reason: 'entryRemains' })
+    expect(await revokeAgentConnection(s.deps, K_A)).toEqual({ kind: 'notConfirmed', reason: 'entryRemains' })
     expect((await s.store.get(K_A))?.state).toBe('revoking')
     s.vtaState.revokeThrows = false
     // "Try again"
-    expect(await revokeAgent(s.deps, K_A)).toEqual({ kind: 'revoked' })
+    expect(await revokeAgentConnection(s.deps, K_A)).toEqual({ kind: 'revoked' })
     expect((await s.store.get(K_A))?.state).toBe('revoked')
   })
 
   it('a second caller joins the revoke in flight', async () => {
     const s = await setup()
-    const [a, b] = await Promise.all([revokeAgent(s.deps, K_A), revokeAgent(s.deps, K_A)])
+    const [a, b] = await Promise.all([revokeAgentConnection(s.deps, K_A), revokeAgentConnection(s.deps, K_A)])
     expect([a, b]).toEqual([{ kind: 'revoked' }, { kind: 'revoked' }])
     expect(s.revokes()).toEqual([K_A])
     expect(s.tellAgent).toHaveBeenCalledTimes(1)
@@ -299,15 +311,74 @@ describe('Revoke not confirmed: partial or failed listings, a restart, and clear
 
   it('a revoked record answers revoked without a VTA call', async () => {
     const s = await setup({ state: 'revoked' })
-    expect(await revokeAgent(s.deps, K_A)).toEqual({ kind: 'revoked' })
+    expect(await revokeAgentConnection(s.deps, K_A)).toEqual({ kind: 'revoked' })
     expect(s.sent).toEqual([])
   })
 
-  it('the notice failing changes nothing, and is tried again next time', async () => {
+  it('the notice failing changes nothing: it is not relied on', async () => {
     const s = await setup()
     s.tellAgent.mockRejectedValueOnce(new Error('chat down'))
-    expect(await revokeAgent(s.deps, K_A)).toEqual({ kind: 'revoked' })
-    expect((await s.store.get(K_A))?.revokeToldAt).toBeUndefined()
+    expect(await revokeAgentConnection(s.deps, K_A)).toEqual({ kind: 'revoked' })
+    expect((await s.store.get(K_A))?.state).toBe('revoked')
+  })
+
+  it('the agent is not told before the entry is confirmed gone', async () => {
+    const s = await setup()
+    s.vtaState.partial = true
+    await revokeAgentConnection(s.deps, K_A)
+    expect(s.tellAgent).not.toHaveBeenCalled()
+  })
+})
+
+describe("Keyring's 7.10 contract for the record", () => {
+  const NEVER = ['currentSubject', 'vdcRevokedAt', 'revokeToldAt']
+
+  /** Every member that differs between two consecutive writes of one record. */
+  const changed = (writes: Conn[]) =>
+    writes.slice(1).flatMap((w, i) => {
+      const before = writes[i] as Record<string, unknown>
+      const after = w as Record<string, unknown>
+      return [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(
+        (k) => JSON.stringify(before[k]) !== JSON.stringify(after[k])
+      )
+    })
+
+  it('a revoke, its retries and the reconcile write only state and lastReconciledAt', async () => {
+    const s = await setup()
+    s.vtaState.partial = true
+    await revokeAgentConnection(s.deps, K_A)
+    await reconcileAgents(s.deps)
+    s.vtaState.partial = false
+    await reconcileAgents(s.deps)
+    expect((await s.store.get(K_A))?.state).toBe('revoked')
+    expect([...new Set(changed(s.store.writes))].sort()).toEqual(['lastReconciledAt', 'state'])
+    for (const w of s.store.writes) for (const k of NEVER) expect(w).not.toHaveProperty(k)
+  })
+
+  it('state goes active -> revoking -> revoked, and expired -> revoking -> revoked', async () => {
+    for (const from of ['active', 'expired'] as const) {
+      const s = await setup({ state: from })
+      expect(await revokeAgentConnection(s.deps, K_A)).toEqual({ kind: 'revoked' })
+      expect(s.store.writes.map((w) => w.state)).toEqual([from, 'revoking', 'revoked'])
+    }
+  })
+
+  it('a pairing or not finished record is not revoked, and nothing is sent', async () => {
+    for (const from of ['pairing', 'notFinished'] as const) {
+      const s = await setup({ state: from })
+      await expect(revokeAgentConnection(s.deps, K_A)).rejects.toThrow('cannot be revoked')
+      expect(s.sent).toEqual([])
+      expect(s.store.writes.map((w) => w.state)).toEqual([from])
+    }
+  })
+
+  it('keyChanged is read-only: a changed key is reported, the record keeps its keyChanged', async () => {
+    for (const keyChanged of [false, true]) {
+      const s = await setup({ keyChanged })
+      s.swap('dev-1', K_B)
+      await reconcileAgents(s.deps)
+      expect((await s.store.get(K_A))?.keyChanged).toBe(keyChanged)
+    }
   })
 })
 
@@ -327,14 +398,14 @@ describe('removeAgentEntries: rounds', () => {
 })
 
 describe('the app-start reconcile', () => {
-  it('records a changed key without moving the chat or the agent DID', async () => {
+  it('reports a changed key without moving the chat or the agent DID, and writes only the stamp', async () => {
     const s = await setup()
     s.swap('dev-1', K_B)
     expect(await reconcileAgents(s.deps)).toEqual([{ id: K_A, kind: 'keyChanged', subject: K_B }])
     const after = (await s.store.get(K_A)) as Conn
+    expect(after).not.toHaveProperty('currentSubject')
     expect(after).toMatchObject({
-      keyChanged: true,
-      currentSubject: K_B,
+      keyChanged: false,
       agentDid: K_A,
       chatDid: 'did:peer:2.chat',
       handle: 'notes-helper',
@@ -350,16 +421,14 @@ describe('the app-start reconcile', () => {
     expect((await s.store.get(K_A))?.keyChanged).toBe(false)
   })
 
-  it('no entry on a full listing: Revoked before its expiry, Expired after', async () => {
-    const s = await setup()
-    s.entries.delete(K_A)
-    s.devices.delete('dev-1')
-    expect(await reconcileAgents(s.deps)).toEqual([{ id: K_A, kind: 'gone', state: 'revoked' }])
-    const late = await setup()
-    late.entries.delete(K_A)
-    late.devices.delete('dev-1')
-    const after = { ...late.deps, now: () => Date.parse('2026-11-26T17:00:00Z') }
-    expect(await reconcileAgents(after)).toEqual([{ id: K_A, kind: 'gone', state: 'expired' }])
+  it('no entry on a full listing is reported as gone; the state is not changed outside a revoke', async () => {
+    for (const from of ['active', 'expired'] as const) {
+      const s = await setup({ state: from })
+      s.entries.delete(K_A)
+      s.devices.delete('dev-1')
+      expect(await reconcileAgents(s.deps)).toEqual([{ id: K_A, kind: 'gone' }])
+      expect(await s.store.get(K_A)).toMatchObject({ state: from, lastReconciledAt: new Date(NOW).toISOString() })
+    }
   })
 
   it('a partial listing concludes nothing; pairing, not finished and revoked records are left alone', async () => {
