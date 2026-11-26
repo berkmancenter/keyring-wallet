@@ -1157,11 +1157,11 @@ flowchart LR
   linkStyle 0,1,2,3,4,5,14,15,19 stroke:#c00,stroke-width:4px
 ```
 
-**The stack, and what runs in parallel.** One step is one PR. Steps 7.2 to 7.4 (pure logic, each after the measurements of 7.1) can run in parallel; 7.7 needs them; 7.8 (the My Agent tab) follows 7.7, which builds the AI agents list it opens on, and 7.9 and 7.10 need 7.7; the plugin's home is decided (OpenVTC's `vta-agent-memory`, extended, D45), so no step waits on §11 Q1; the plugin steps are pull requests to `vta-agent-memory`, built and tested on a fork branch while a merge lags, so §11 Q6 and the upstream review gate the merge, not the stack.
+**The stack, and what runs in parallel.** One step is one PR. The stack sits on the feature branch `feat/agent-connect`, cut from `main`: a PR with no PR below it is based on that branch, each PR merges into it on review, and one PR at the end merges it into `main` ([`CLAUDE.md`](./CLAUDE.md), "Implementing a plan: stacked PRs"). Steps 7.2 to 7.4 (pure logic, each after the measurements of 7.1) can run in parallel; 7.7 needs them; 7.8 (the My Agent tab) follows 7.7, which builds the AI agents list it opens on, and 7.9 and 7.10 need 7.7; the plugin's home is decided (OpenVTC's `vta-agent-memory`, extended, D45), so no step waits on this plan's §11 Q1; the plugin steps are pull requests to `vta-agent-memory`, built and tested on a fork branch while a merge lags, so this plan's §11 Q6 and the upstream review gate the merge, not the stack.
 
 | PR n of N | Step | Tier | Base | Can start after |
 |---|---|---|---|---|
-| 1 of 30 | 7.1 | P0 | main | none |
+| 1 of 30 | 7.1 | P0 | `feat/agent-connect` | none |
 | 2 of 30 | 7.2 | P0 | PR 1 | PR 1 |
 | 3 of 30 | 7.3 | P0 | PR 1 | PR 1 |
 | 4 of 30 | 7.4 | P0 | PR 1 | PR 1 |
@@ -1187,7 +1187,7 @@ flowchart LR
 | 24 of 30 | 7.24 | P1 | OpenVTC/vta-agent-memory (a fork branch until merged) | PR 6, PR 12 |
 | 25 of 30 | 7.25 | P2 | OpenVTC/vta-agent-memory (a fork branch until merged) | PR 19, PR 24 |
 | 26 of 30 | 7.26 | P2 | PR 17 | PR 13, PR 17 |
-| 27 of 30 | 7.27 | P0 | main | none |
+| 27 of 30 | 7.27 | P0 | `feat/agent-connect` | none |
 | 28 of 30 | 7.28 | P0 | PR 7 | PR 7 |
 | 29 of 30 | 7.29 | P1 | PR 28 | PR 13, PR 14, PR 15, PR 16, PR 27, PR 28 |
 | 30 of 30 | 7.30 | P2 | PR 29 | PR 17, PR 29 |
