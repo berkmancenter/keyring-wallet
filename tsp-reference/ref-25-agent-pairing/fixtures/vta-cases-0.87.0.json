@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-11-26T07:04:43.538Z",
+  "recordedAt": "2026-11-26T07:57:38.801Z",
   "source": {
     "repository": "OpenVTC/verifiable-trust-infrastructure",
     "commit": "4e5861d95b799c0910e92a81bec6af17d1578e2d",
@@ -118,13 +118,10 @@
       "revokeByTheDevicesKey": "ok",
       "deviceStillListed": false,
       "entryStillListed": false,
-      "onTheSessionOpenedBeforeTheRevoke": {
+      "theAgentsNextRead": {
         "whoami": "permissionDenied",
         "memoryGet": "vta/memory/get:purposeNotGranted",
-        "memoryPut": "ok",
-        "memoryPutNamingItsPurpose": "vta/memory/put:purposeNotGranted",
-        "memoryList": "vta/memory/list:purposeNotGranted",
-        "sessionLifetimeMinutes": 15
+        "memoryList": "vta/memory/list:purposeNotGranted"
       },
       "signInAgain": "refused"
     },
@@ -135,19 +132,15 @@
       "revokeByTheDevicesKey": "ok",
       "deviceStillListed": false,
       "entryStillListed": false,
-      "onTheSessionOpenedBeforeTheRevoke": {
+      "theAgentsNextRead": {
         "whoami": "permissionDenied",
         "memoryGet": "vta/memory/get:purposeNotGranted",
-        "memoryPut": "ok",
-        "memoryPutNamingItsPurpose": "vta/memory/put:purposeNotGranted",
-        "memoryList": "vta/memory/list:purposeNotGranted",
-        "sessionLifetimeMinutes": 15
+        "memoryList": "vta/memory/list:purposeNotGranted"
       },
       "signInAgain": "refused"
     },
     "l-disable": {
       "disable": "ok",
-      "nextMemoryGetOnTheOldSession": "ok",
       "signInAgain": "permissionDenied",
       "memoryOnANewSession": "no session",
       "entryStillListed": true
@@ -160,12 +153,6 @@
       "narrowWithAclUpdate": "acl/update:narrowingNotPermitted",
       "narrowWithAclRevokeKindAct": "ok",
       "theActItNamesIsWhatRemains": true,
-      "after": {
-        "kept": "ok",
-        "removed": "ok",
-        "getRemoved": "ok"
-      },
-      "whoamiScopesOnThatSession": 1,
       "onANewSession": {
         "kept": "ok",
         "removed": "vta/memory/put:contextForbidden",

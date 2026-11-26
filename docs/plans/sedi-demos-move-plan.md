@@ -1,7 +1,7 @@
 # Moving the SEDI demos off `main`
 
 **Status:** Draft, 2026-11-23. This plan changes no code; nothing is built.
-**Reviewers:** Alberto Leon and the product owner.
+**Reviewers:** Alberto Leon and Brendan.
 **Scope:** take every State-Endorsed Digital Identity (SEDI) _demo_ off `main` and onto a `sedi-demos` branch, together with the guardianship flow, the trusted approvers feature ("Who approves") and their Developer options rows, while keeping `did:webs` resolution and everything Keyring needs to join, sign in to and be vetted by a VTC community whose DID is a `did:webs`. **Principle:** everything removed from `main` (the demo, guardianship, trusted approvers, and every one of their Developer options rows, store fields, locale keys and test ids) is preserved on `sedi-demos`, which is cut first (S0); nothing removed is dropped. If `sedi-demos` is archived (R1) it is preserved but unmaintained.
 **Companions:** [`sedi-demos-move-plan/`](sedi-demos-move-plan/): the inventory evidence and the reading of the earlier modularity note ([`2026-11-23-bam.md`](sedi-demos-move-plan/2026-11-23-bam.md)); the review that traced what join, sign-in and vetting reach ([`2026-11-23-al.md`](sedi-demos-move-plan/2026-11-23-al.md)); the owner's requirements and the review findings applied ([`2026-11-23-bam-2.md`](sedi-demos-move-plan/2026-11-23-bam-2.md)); review index in this plan's §11.
 **Related plans:** [`keri-holder-plan.md`](keri-holder-plan.md) (the KERI holder work this keeps room for), [`delegated-batch-issuance-plan.md`](delegated-batch-issuance-plan.md) (the SEDI-motivated plan that assumes the KEL verifier), [`single-codebase-plan.md`](single-codebase-plan.md) (why `bifold/` paths are ordinary paths here).
@@ -61,7 +61,7 @@ flowchart LR
 
 | Question                                                               | Recommendation                                                                                                  | Who decides   | By when, or what it blocks              |
 | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------- | --------------------------------------- |
-| Does `sedi-demos` stay maintained against `main`, or is it an archive? | Archive (§8, R1). The state office's server side is already scaled down, so nothing can run the demo end to end | Product owner | Before S0; changes how much S8 promises |
+| Does `sedi-demos` stay maintained against `main`, or is it an archive? | Archive (§8, R1). The state office's server side is already scaled down, so nothing can run the demo end to end | Brendan | Before S0; changes how much S8 promises |
 
 **Not doing:** deleting `modules/sedi/cesr`, `guardian/kel.ts` or the `webs/{identifier,document,resolve}.ts` files; writing the KERI holder (that is its own plan, parked by D2); verifying the KEL on community sign-in (today and after this plan, `did:webs` sign-in reads `did.json` only; §8, R9); renaming the `sedi-vtc` DID strings or fixtures; adding a build-time flag or plug-in system to make the demo optional (§3, D5); making the demo a separate package (§3, D5). (§3, §9)
 
@@ -192,7 +192,7 @@ There is no "Confirm it's you" row any more (`DeveloperConfirmItsYouRow.test.tsx
 
 ## 3. Decisions
 
-D1 to D7 were taken on 2026-11-23 (D1 and D3 to D5 by the product owner, D2, D6 and D7 by Alberto; reasoning in the companions). The reasoning behind each is standing rationale: an implementer must not re-open it without the constraint that rules the other option out.
+D1 to D7 were taken on 2026-11-23 (D1 and D3 to D5 by Brendan, D2, D6 and D7 by Alberto; reasoning in the companions). The reasoning behind each is standing rationale: an implementer must not re-open it without the constraint that rules the other option out.
 
 **D1. State-verified approvers are demo-only and are removed; `resolveWebs` loses its gate.**
 
@@ -236,7 +236,7 @@ D1 to D7 were taken on 2026-11-23 (D1 and D3 to D5 by the product owner, D2, D6 
 On `main` after S7:
 
 - Everything stripped from `main` is on `sedi-demos`, cut at S0 before any removal: the demo, the guardianship flow, trusted approvers, and every Developer options row, store field, locale key and test id that belonged to them. Removal from `main` is the only change made to those things; none is rewritten or dropped. If `sedi-demos` is archived (R1) that content is preserved but unmaintained, and no one is promised it builds against a later `main`.
-- `S` is not a demo module. The kept files live where §5 puts them: `modules/sedi/cesr/*`, `modules/sedi/guardian/kel.ts` and `modules/sedi/webs/{identifier,document,resolve}.ts`, in place. A rename of the folder is a separate follow-up, only if the product owner wants it, so the move stays a pure deletion plus one small refactor commit.
+- `S` is not a demo module. The kept files live where §5 puts them: `modules/sedi/cesr/*`, `modules/sedi/guardian/kel.ts` and `modules/sedi/webs/{identifier,document,resolve}.ts`, in place. A rename of the folder is a separate follow-up, only if Brendan wants it, so the move stays a pure deletion plus one small refactor commit.
 - No code reads or writes `EnableStateCard`, `DemoStateHost`, `SediDemoSide`, `EnableStateVerifiedApprovers`, `EnableTrustTestState` or the trusted-approvers setting; orphaned values in storage, and the approver records in §2.7, are harmless and are not migrated.
 - `keyring://guardian-card` is not claimed by `vtiLinks.ts`; see R2. Every other link classifies exactly as before.
 - No screen offers to ask a contact to approve, and the Requests list shows only the person's own agent's requests.
@@ -309,9 +309,9 @@ All implementation runs as subagents, one branch off `main` per step group. Heav
 
 - _Done when:_ `git grep -n -iw sedi -- docs` lists only intentional motivation text and this plan, and `git grep -n -i "trusted approver" -- docs` lists only this plan, the findings lines and dated companions.
 
-**S6. Branches.** Rebase `origin/feat/sedi-k0-developer-rows` and `origin/feat/sedi-state-office` onto `sedi-demos` (D3), force-pushing only those two feature branches after the product owner agrees to it.
+**S6. Branches.** Rebase `origin/feat/sedi-k0-developer-rows` and `origin/feat/sedi-state-office` onto `sedi-demos` (D3), force-pushing only those two feature branches. Brendan agrees to the rebase; the force-push itself also needs Alberto's own word, given to the session that runs it.
 
-- _Done when:_ both branches build and pass the demo's tests on `sedi-demos`, or a note on each says why not and what remains. Owner of the decision to drop one instead: the product owner.
+- _Done when:_ both branches build and pass the demo's tests on `sedi-demos`, or a note on each says why not and what remains. Owner of the decision to drop one instead: Brendan. Owning the decision does not authorise a push: carrying it out by a force-push or a branch delete also needs Alberto's own word.
 
 **S7. Verify.** On the removal branch: root `yarn lint`, `yarn typecheck`, `yarn test`; `cd bifold/packages/core && yarn test`; `git grep -n -iw sedi` and review each hit (kept paths, the `sedi-vtc` strings, docs); a second agent reads each call site named in §2.6 and §2.7 on the diff (R3).
 
@@ -327,7 +327,7 @@ All implementation runs as subagents, one branch off `main` per step group. Heav
 - Record the VTC's image versions and the date. The fixtures are dated 2026-11-17, so a different version is information, not failure.
 - If the VTC offers vetting, run it once and record it; that is the only thing that closes R10. If not, R10 stays open.
 - _Proves:_ the happy path of resolution, join and sign-in against the real server after the removal, and that removing `takeForeignReply` handling did not break inbound replies. _Does not prove:_ refusal paths, revocation, or KEL verification (R9: sign-in reads `did.json` only).
-- _Done when:_ both runs pass on both install paths and the record (build, commit, date, VTC versions, outcome) is in the PR. If the VTC is unreachable, "VTC unreachable" is recorded with the date instead. S7 and S8 are not done until one of the two exists, and the unreachable record blocks merge unless the product owner waives it.
+- _Done when:_ both runs pass on both install paths and the record (build, commit, date, VTC versions, outcome) is in the PR. If the VTC is unreachable, "VTC unreachable" is recorded with the date instead. S7 and S8 are not done until one of the two exists, and the unreachable record blocks merge unless Brendan waives it.
 
 **S8. Merge and hand over.** After S7b. Squash per the repository's `main` rules (signed, conventional). State in the PR body how to run the demo from `sedi-demos`.
 
@@ -339,7 +339,7 @@ All implementation runs as subagents, one branch off `main` per step group. Heav
 
 ## 8. Risks
 
-- **R1. `sedi-demos` drifts from `main`.** If it is archived it is preserved but unmaintained: it holds everything removed from `main`, and builds only against the `main` commit it was cut from. It has no CI of its own and the kept code under it keeps changing. Recommendation: archive, with a note naming the `main` commit it was cut from and the command to rebase; the cost of a maintained branch is a standing merge chore for a demo with no scheduled use. Decided by the product owner.
+- **R1. `sedi-demos` drifts from `main`.** If it is archived it is preserved but unmaintained: it holds everything removed from `main`, and builds only against the `main` commit it was cut from. It has no CI of its own and the kept code under it keeps changing. Recommendation: archive, with a note naming the `main` commit it was cut from and the command to rebase; the cost of a maintained branch is a standing merge chore for a demo with no scheduled use. Decided by Brendan.
 - **R2. `keyring://guardian-card` changes behaviour.** With the `vtiLinks.ts:126` prefix claim gone the link falls through to the connection flow and gives a different error. Accepted: the link existed only for the demo, and the state office's server side is already scaled down. The check runs first on every link today, so its removal is guarded by S2's link-classification table: every other kind must classify exactly as before.
 - **R3. The circular seam hides a caller.** `ceremony.ts`, `approverRole.ts`, `ApproverOfferModal.tsx` and `VtaTrustedApprovers.tsx` each reach the demo differently (lazy require, static import, direct import), and trusted-approver code is hosted in ten screens (§2.7). S2 and S2b are reviewed by a second agent reading each call site, not by the grep alone; the greps are the floor.
 - **R4. `trustedStateRoots()` adds the K0 test root in any `__DEV__` build** (`S/guardian/stateRoots.ts:95-97`). It leaves with the demo; the S7 review checks nothing kept relied on it.
@@ -367,6 +367,7 @@ S1 is a refactor with its own tests and reverts alone. S2 to S4 are deletions th
 | 2026-11-23, BAM | [`2026-11-23-bam.md`](sedi-demos-move-plan/2026-11-23-bam.md): the inventory behind this plan's §2 against `main` `800a44ba`, and how it differs from the earlier modularity note                                                                                                         |
 | 2026-11-23, AL  | [`2026-11-23-al.md`](sedi-demos-move-plan/2026-11-23-al.md): review: the scope of guardianship and trusted approvers (D2, D6, D7), what join, sign-in and vetting reach (this plan's §2.6), the corrections to this plan's §2.3, the upstream findings touched (this plan's §12) |
 | 2026-11-23, BAM (second) | [`2026-11-23-bam-2.md`](sedi-demos-move-plan/2026-11-23-bam-2.md): the owner's two requirements (everything removed moves to `sedi-demos`; Keyring joins `sedi-vtc` afterwards), the S2 to S3 ordering fix, and the review findings applied |
+| 2026-11-26, AL  | [`2026-11-26-al.md`](sedi-demos-move-plan/2026-11-26-al.md): S6 names whose word each branch action needs: Brendan's for the rebase and for dropping a branch, Alberto's own for the force-push or delete that carries either out |
 
 ## 12. Upstream findings touched
 

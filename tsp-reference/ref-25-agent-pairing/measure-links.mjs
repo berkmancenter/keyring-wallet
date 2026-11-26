@@ -21,7 +21,7 @@ const deadline = Math.floor(Date.now() / 1000) + 300;
 const out = { limitBytes: MAX_LINK_BYTES_LEVEL_M, longestServiceDidBytes: longestServiceDid(), oob: [], agentConnect: {} };
 for (const did of dids) {
   const method = did.split(":").slice(0, 2).join(":");
-  out.oob.push({ method, didBytes: Buffer.byteLength(did), ...measureLink(oobLink({ serviceDid: did, requestId, deadline })) });
+  out.oob.push({ did, method, didBytes: Buffer.byteLength(did), ...measureLink(oobLink({ serviceDid: did, requestId, deadline })) });
 }
 const agent = mintIdentity();
 const widest = { capabilities: ["memory-read", "memory-write", "room-present", "room-open"], purposes: [] };
