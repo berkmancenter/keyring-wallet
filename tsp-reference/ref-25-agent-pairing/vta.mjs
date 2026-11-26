@@ -14,7 +14,23 @@ export const ERROR_TYPE_PREFIX = `${SPEC}trust-task-error/`;
 
 const wireTime = (date = new Date()) => date.toISOString().replace(/\.\d{3}Z$/, "Z");
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * POST, waiting out a 429. A VTA limits sign-in attempts per address and says when to come back; its own client
+ * waits and sends again (vta-sdk `redeem_challenge`), and so does this one, for at most two minutes in all.
+ */
 async function post(baseUrl, type, document, token) {
+  const deadline = Date.now() + 120_000;
+  for (;;) {
+    const answer = await postOnce(baseUrl, type, document, token);
+    if (answer.status !== 429 || Date.now() >= deadline) return answer;
+    const seconds = Number(answer.retryAfter);
+    await sleep(Math.min(Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 1000, 30_000));
+  }
+}
+
+async function postOnce(baseUrl, type, document, token) {
   const headers = { "content-type": "application/json", "Trust-Task": type };
   if (token) headers.authorization = `Bearer ${token}`;
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}/trust-tasks`, { method: "POST", headers, body: JSON.stringify(document) });
