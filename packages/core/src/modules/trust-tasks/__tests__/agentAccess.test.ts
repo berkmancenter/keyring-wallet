@@ -22,6 +22,7 @@ import {
   pageContinuation,
 } from '../module/VtaClient'
 import { VtiRefusal } from '../module/vtiAgent'
+import { expectNoDrift, registryPath } from './fixtures/registryDrift'
 
 jest.mock('react-native-keychain', () => ({ ACCESS_CONTROL: {}, ACCESSIBLE: {}, STORAGE_TYPE: {} }))
 
@@ -397,5 +398,26 @@ describe('entryKind and findAgentEntries: found by deviceId after the subject ch
     // acl/list 0.4 says "more" only with nextCursor; a cursor given twice cannot be continued
     const cut = vtaAfterSwap([{ entries: [wireEntry(OTHER, ['z'])], nextCursor: 'again' }])
     expect((await cut.vta.findAgentEntries({ deviceId: 'dev-1' })).complete).toBe(false)
+  })
+})
+
+describe('the vendored acl 0.3 and device/list schemas still match the registry', () => {
+  // Runs where the registry clone is found (registryPath); CI has none and skips. Byte comparison: the folder is in
+  // packages/.prettierignore and vendored verbatim, so a reformatting is drift.
+  const maybe = registryPath() ? it : it.skip
+
+  maybe('byte-identical to the commit PROVENANCE names', () => {
+    expectNoDrift(DIR, {
+      'acl-entry-0.3.schema.json': 'specs/acl/_shared/0.3/acl-entry.schema.json',
+      'acl-grant-0.3.payload.schema.json': 'specs/acl/grant/0.3/payload.schema.json',
+      'acl-update-0.3.payload.schema.json': 'specs/acl/update/0.3/payload.schema.json',
+      'acl-revoke-0.3.payload.schema.json': 'specs/acl/revoke/0.3/payload.schema.json',
+      'acl-list-0.4.payload.schema.json': 'specs/acl/list/0.4/payload.schema.json',
+      'device-list-0.3.payload.schema.json': 'specs/device/list/0.3/payload.schema.json',
+      'device-list-0.2.payload.schema.json': 'specs/device/list/0.2/payload.schema.json',
+      'device-binding-0.2.schema.json': 'specs/device/_shared/0.2/device-binding.schema.json',
+      'framework-0.4.schema.json': 'specs/_framework/0.4/framework.schema.json',
+      'framework-0.2.schema.json': 'specs/_framework/0.2/framework.schema.json',
+    })
   })
 })
