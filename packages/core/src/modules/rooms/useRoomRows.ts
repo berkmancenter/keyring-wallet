@@ -56,6 +56,7 @@ import { onSessionOpened } from './agentSession'
 import { toInertText, type InertText } from './inertText'
 import { askOffersAgain } from './useRoomOffersCount'
 import { failureCategory, logRef } from './roomsLogWords'
+import { readNotComing, refusedVersionsWords, type RowCannotRead } from './readNotComing'
 import {
   emptyRowsAtStart,
   isRowsAtStartOn,
@@ -125,6 +126,11 @@ export interface RoomRow {
   reading?: boolean
   /** A sealed room not joined yet (`RoomSummary.joined`): never read, and the row says so rather than reading. */
   notJoined?: boolean
+  /**
+   * Its read was refused for a reason asking again will not change (readNotComing): the row says who needs an update
+   * rather than reading for ever. Never beside `reading`.
+   */
+  cannotRead?: RowCannotRead
   /**
    * The row is the last run's (rowsAtStart), not yet replaced by this run's listing: it is `reading`, quietly. Messages
    * shows no spinner on a row it already had (Alberto, 11-24: "in real apps that do messaging we dont see this lag").
@@ -362,7 +368,11 @@ async function readRoom(service: RoomsService, room: RoomSummary, track: Track |
   return next
 }
 
-const rowOf = (room: RoomSummary & { communityDid: string }, track: Track | undefined): RoomRow => ({
+const rowOf = (
+  room: RoomSummary & { communityDid: string },
+  track: Track | undefined,
+  cannotRead?: RowCannotRead
+): RoomRow => ({
   key: room.roomId,
   roomId: room.roomId,
   roomName: room.name,
@@ -373,10 +383,37 @@ const rowOf = (room: RoomSummary & { communityDid: string }, track: Track | unde
   unread: track?.unread.size ?? 0,
   ...(moreUnread(track) ? { unreadMore: true } : {}),
   lastPost: track?.last,
-  ...(room.joined === false ? { notJoined: true } : track ? {} : { reading: true }),
+  // Never read: it is reading, unless its read was refused for good, which the row says instead.
+  ...(room.joined === false ? { notJoined: true } : track ? {} : cannotRead ? { cannotRead } : { reading: true }),
   tier: room.tier,
   ...(room.validUntil !== undefined ? { validUntil: room.validUntil } : {}),
 })
+
+/**
+ * The rooms whose read was refused for a reason asking again will not change, and why, per service. Kept apart from
+ * the tracks: a track is what a read found, and such a room has none. A room is taken out when a read of it succeeds.
+ */
+const refusedReads = new WeakMap<RoomsService, Map<string, RowCannotRead>>()
+const cannotReadOf = (service: RoomsService, roomId: string): RowCannotRead | undefined =>
+  refusedReads.get(service)?.get(roomId)
+
+/** The line for a room that was not read: why by kind, and for a version refusal who refused and the versions named. */
+const notReadLine = (room: { roomId: string; communityDid?: string }, e: unknown): string =>
+  `[Rooms:rows] ${logRef(room.roomId)} of ${logRef(room.communityDid)} not read: ${failureCategory(e)}${refusedVersionsWords(e)}`
+
+/** A read of `roomId` ended: with `e` when it failed. Notes a refusal that will not change, and forgets one on success. */
+function readEnded(service: RoomsService, roomId: string, e?: unknown): void {
+  const why = e === undefined ? undefined : readNotComing(e)
+  if (!why) {
+    // A success, or a failure the next read may get past: either way the row is not held as refused. A failure after
+    // a refusal means something changed (the one behind was updated, and now another thing is in the way).
+    refusedReads.get(service)?.delete(roomId)
+    return
+  }
+  let rooms = refusedReads.get(service)
+  if (!rooms) refusedReads.set(service, (rooms = new Map()))
+  rooms.set(roomId, why)
+}
 
 const TIERS: readonly NonNullable<RoomRow['tier']>[] = ['open', 'attributed', 'private', 'unknown']
 
@@ -388,9 +425,10 @@ const TIERS: readonly NonNullable<RoomRow['tier']>[] = ['open', 'attributed', 'p
 const listedRow = (
   room: RoomSummary & { communityDid: string },
   track: Track | undefined,
-  before: readonly RoomRow[] | undefined
+  before: readonly RoomRow[] | undefined,
+  cannotRead?: RowCannotRead
 ): RoomRow => {
-  const row = rowOf(room, track)
+  const row = rowOf(room, track, cannotRead)
   if (!row.reading) return row
   const last = before?.find((shown) => shown.roomId === room.roomId && shown.fromLastTime)
   if (!last) return row
@@ -488,6 +526,7 @@ const sameRow = (a: RoomRow, b: RoomRow): boolean =>
   a.communityName === b.communityName &&
   a.nameFrom === b.nameFrom &&
   !!a.reading === !!b.reading &&
+  a.cannotRead === b.cannotRead &&
   !!a.fromLastTime === !!b.fromLastTime &&
   a.tier === b.tier &&
   a.validUntil === b.validUntil &&
@@ -755,7 +794,12 @@ async function readAll(service: RoomsService): Promise<void> {
       const { rooms: answeredRooms, answered } = partial
       const ids = new Set(answeredRooms.map((room) => room.roomId))
       const waiting = (feed.all ?? []).filter((row) => !answered.has(row.communityDid) && !ids.has(row.roomId))
-      const next = [...answeredRooms.map((room) => listedRow(room, known.get(room.roomId), feed.all)), ...waiting]
+      const next = [
+        ...answeredRooms.map((room) =>
+          listedRow(room, known.get(room.roomId), feed.all, cannotReadOf(service, room.roomId))
+        ),
+        ...waiting,
+      ]
       const before = feed.all
       if (before && next.length === before.length && next.every((row, i) => sameRow(row, before[i]))) return
       feed.all = next
@@ -783,10 +827,12 @@ async function readAll(service: RoomsService): Promise<void> {
           readThisAsk.add(room.roomId)
           try {
             known.set(room.roomId, await readRoom(service, room, known.get(room.roomId)))
+            readEnded(service, room.roomId)
           } catch (e) {
             // Read again with the rest once the listing ends.
             readThisAsk.delete(room.roomId)
-            log?.(`[Rooms:rows] ${logRef(room.roomId)} of ${logRef(room.communityDid)} not read: ${failureCategory(e)}`)
+            readEnded(service, room.roomId, e)
+            log?.(notReadLine(room, e))
           }
           // Drawn as it ends, the listing ended or not: a read that ended after it waited for the others in flight.
           if (listingEnded) showListed()
@@ -809,7 +855,10 @@ async function readAll(service: RoomsService): Promise<void> {
     const show = () => {
       const kept = (feed.all ?? []).filter((row) => skipped.has(row.communityDid) && !listedIds.has(row.roomId))
       feed.keptRooms = new Set(kept.map((row) => row.roomId))
-      const next = [...rooms.map((room) => listedRow(room, known.get(room.roomId), feed.all)), ...kept]
+      const next = [
+        ...rooms.map((room) => listedRow(room, known.get(room.roomId), feed.all, cannotReadOf(service, room.roomId))),
+        ...kept,
+      ]
       const before = feed.all
       feed.failed = false
       if (before && next.length === before.length && next.every((row, i) => sameRow(row, before[i]))) return
@@ -850,10 +899,13 @@ async function readAll(service: RoomsService): Promise<void> {
       if (room.joined === false || readThisAsk.has(room.roomId)) return
       try {
         byRoom.set(room.roomId, await readRoom(service, room, byRoom.get(room.roomId)))
+        readEnded(service, room.roomId)
       } catch (e) {
         // The next read tries again. Why it did not read is said, by kind only: a row that stayed "reading" through a
-        // whole report said nothing of why (34VR-Y58H, 11-03).
-        log?.(`[Rooms:rows] ${logRef(room.roomId)} of ${logRef(room.communityDid)} not read: ${failureCategory(e)}`)
+        // whole report said nothing of why (34VR-Y58H, 11-03). A refusal asking again will not change ends the row's
+        // spinner instead (readNotComing), and the line says who refused and the versions it named.
+        readEnded(service, room.roomId, e)
+        log?.(notReadLine(room, e))
       }
       if (feed.service !== service) return
       show()
@@ -863,7 +915,11 @@ async function readAll(service: RoomsService): Promise<void> {
     // A kept row is not this listing's: it neither asks a retry nor counts as not read, as it did not when it went.
     const reading = (feed.all ?? []).filter((row) => row.reading && !feed.keptRooms.has(row.roomId)).length
     const keptLine = feed.keptRooms.size > 0 ? `, ${feed.keptRooms.size} kept as read before` : ''
-    log?.(`[Rooms:rows] ${rooms.length} rooms listed, ${reading} not read yet${keptLine}, in ${Date.now() - began} ms`)
+    const refused = (feed.all ?? []).filter((row) => row.cannotRead && !feed.keptRooms.has(row.roomId)).length
+    const refusedLine = refused > 0 ? `, ${refused} that an update has to come for` : ''
+    log?.(
+      `[Rooms:rows] ${rooms.length} rooms listed, ${reading} not read yet${refusedLine}${keptLine}, in ${Date.now() - began} ms`
+    )
     retrySoon(service, reading > 0)
   } catch {
     if (feed.service === service) {
@@ -943,6 +999,7 @@ async function readOneOnSignal(service: RoomsService, roomId: string): Promise<v
     const track = await readRoom(service, room, byRoom.get(roomId))
     if (feed.service !== service) return
     byRoom.set(roomId, track)
+    readEnded(service, roomId)
     const all = feed.all ?? []
     const at = all.findIndex((row) => row.roomId === roomId)
     if (at >= 0) {

@@ -153,6 +153,66 @@ describe("a room's Messages row", () => {
   })
 })
 
+describe('a row whose read was refused over a version (IN-814)', () => {
+  const refused = (cannotRead: NonNullable<RoomRow['cannotRead']>) =>
+    render(
+      <BasicAppContext>
+        <RoomMessageRow
+          row={row({ unread: 0, lastPost: undefined, lastActivityAt: undefined, cannotRead })}
+          onOpen={jest.fn()}
+        />
+      </BasicAppContext>
+    )
+
+  test.each([
+    ['communityNeedsUpdate', 'Rooms.RowCommunityNeedsUpdate'],
+    ['agentNeedsUpdate', 'Rooms.RowAgentNeedsUpdate'],
+    ['appNeedsUpdate', 'Rooms.RowAppNeedsUpdate'],
+    ['cannotTell', 'Rooms.RowCannotRead'],
+  ] as const)('%s: its words on the row and in its spoken label, and no spinner', (cannotRead, key) => {
+    const tree = refused(cannotRead)
+    expect(tree.getByText(key)).toBeTruthy()
+    expect(tree.UNSAFE_queryByType(ActivityIndicator)).toBeNull()
+    expect(tree.getByTestId(id('RoomMessageRow')).props.accessibilityLabel).toContain('Rooms.RowLabelIn')
+    expect(tree.queryByText('Rooms.RowNoPosts')).toBeNull()
+  })
+
+  test('the control: the same row reading has the spinner and none of those words', () => {
+    const tree = render(
+      <BasicAppContext>
+        <RoomMessageRow
+          row={row({ unread: 0, lastPost: undefined, lastActivityAt: undefined, reading: true })}
+          onOpen={jest.fn()}
+        />
+      </BasicAppContext>
+    )
+    expect(tree.UNSAFE_getByType(ActivityIndicator)).toBeTruthy()
+    expect(tree.queryByText(/^Rooms\.Row(Community|Agent|App)NeedsUpdate$|^Rooms\.RowCannotRead$/)).toBeNull()
+  })
+
+  test('a room with a post shows the post, whatever its row holds of a refusal', () => {
+    const tree = render(
+      <BasicAppContext>
+        <RoomMessageRow row={row({ cannotRead: 'communityNeedsUpdate' })} onOpen={jest.fn()} />
+      </BasicAppContext>
+    )
+    expect(tree.queryByText('Rooms.RowCommunityNeedsUpdate')).toBeNull()
+  })
+
+  test('the words exist in en, fr and pt-BR, and differ from one language to the next', () => {
+    for (const key of [
+      'RowCommunityNeedsUpdate',
+      'RowAgentNeedsUpdate',
+      'RowAppNeedsUpdate',
+      'RowCannotRead',
+    ] as const) {
+      const words = [en, fr, ptBr].map((language) => (language.Rooms as Record<string, string>)[key])
+      for (const said of words) expect(typeof said === 'string' && said.length > 0).toBe(true)
+      expect(new Set(words).size).toBe(3)
+    }
+  })
+})
+
 describe("Hide, behind a room's row", () => {
   test('the swipe action and a long press both hide the room, with Undo; nothing hidden, no toast (control)', () => {
     const toast = jest.spyOn(Toast, 'show').mockImplementation(() => undefined)
