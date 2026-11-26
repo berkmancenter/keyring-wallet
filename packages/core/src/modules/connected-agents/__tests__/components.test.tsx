@@ -101,6 +101,8 @@ describe('ConnectedAgents words', () => {
       expect([key, settled(key), partOf6(EN[key])]).toEqual([key, false, true])
   })
 
+  // Global flag: use it with matchAll only, which clones it. A .test() or .exec() on this shared regex would start
+  // from the last match's index and silently miss.
   const REACHES_MODULE = /(?:from|require\(|import\()\s*['"]([^'"]*connected-agents(?:\/[^'"]*)?)['"]/g
   it('finds every way a file can reach the module, so the next test cannot pass by missing one', () => {
     const found = (text: string) => [...text.matchAll(REACHES_MODULE)].map((m) => m[1])
