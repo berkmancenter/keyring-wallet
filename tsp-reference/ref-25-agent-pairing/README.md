@@ -125,10 +125,11 @@ holds it to that producer's own test vector.
 
 ## The plan's tables are held to the recordings
 
-`recordings.test.mjs` quotes each row of the plan's two measured tables (section 2.4, the mediator; section 2.6,
-the VTA versions) and asserts, with no lab running, that the recordings under `fixtures/` hold what the row says.
-It fails when the plan no longer has a row as quoted, and when a recording says something else. So a table edit
-or a re-recording cannot pass until a person has read the two together and quoted the new row.
+`recordings.test.mjs` has one test for each row of the plan's two measured tables (section 2.4, the mediator;
+section 2.6, the VTA versions). Each test quotes its row and asserts, with no lab running, that the recordings
+under `fixtures/` hold what the row says. It fails when the plan no longer has the row, and when a recording says
+something else. A row is compared by its words, so re-aligning a table changes nothing; a changed word, number or
+code fails the test that quotes the row, and the row is re-quoted there, beside the assertions it has to match.
 
 It reads those rows only: not the plan's prose and not this README. CI does not run it; `npm test` here does.
 
