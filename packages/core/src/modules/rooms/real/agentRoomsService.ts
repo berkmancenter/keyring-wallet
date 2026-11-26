@@ -337,9 +337,13 @@ export const HELD_FRESH_MS = 5 * 60_000
  * since would have been signalled; not always read: a signal that comes while a failed poll still owes its skipped
  * ticks is not read early (useRoomPosts), and a room left and come back to may have moved between its watches. A
  * wrong guess is a version race: the host stores the record at its next
- * version, sealed for another, so it does not open until the write seals and puts it again at the version the host
- * gave (SEALED_WRITE_ATTEMPTS); if the app stops between the two, that record stays unopenable. Two minutes is the
- * watched room's own poll.
+ * version, sealed for another, and the write seals and puts it again at the version the host gave
+ * (SEALED_WRITE_ATTEMPTS). Such a record opens anyway on the reader's agent since VTI #2452 (vta-service 0.75.0,
+ * 2026-11-05): a stored seal with no `version` (this phone's puts send none, wire.ts `parseSealed`) is read at its
+ * version and then each earlier one (`rooms/keys/read`, `Search::Earlier`), so it opens at the version it was sealed
+ * for (`sealedAt`). Only an agent older than that cannot open it, so a write cut short between the two puts costs
+ * nothing on current agents. Read at source (vta-service 0.75.0 through 0.87.2 and VTI main), not measured on a phone.
+ * Two minutes is the watched room's own poll.
  */
 export const HEAD_FRESH_MS = 120_000
 
@@ -507,8 +511,9 @@ export class AgentRoomsService implements RoomsService {
   /** Each room's newest version as a listing found it, and when: a sealed write's head while fresh (HEAD_FRESH_MS). */
   private readonly heads = new Map<string, { version: number; at: number }>()
   /**
-   * Records this phone left stored under a seal for another version, so they do not open, by room and key: the version
-   * each is stored at. Set when a put lands at a version other than the one sealed for, and taken off when one lands
+   * Records this phone left stored under a seal for another version, by room and key: the version each is stored at.
+   * An agent since vta-service 0.75.0 opens one anyway, at the version it was sealed for ({@link HEAD_FRESH_MS}); an
+   * older one cannot, and this is for that one. Set when a put lands at a version other than the one sealed for, and taken off when one lands
    * at its own. A retry of the post finds its record there, and must seal and put it again, not take it as sent.
    * Kept through a lock: it says what the host holds, nothing that was read.
    */
@@ -2577,8 +2582,9 @@ export class AgentRoomsService implements RoomsService {
    * (`rooms/keys/seal/0.2`, `signAsPrincipal`), and the sealed form is put as the member like any write.
    *
    * The seal binds the version, and the host assigns versions from a room-wide counter, so the version is predicted
-   * as the room's newest plus one. When another write took it, the note is stored but sealed for another version and
-   * does not open: it is sealed again for the next version and written over exactly what landed, a few times.
+   * as the room's newest plus one. When another write took it, the note is stored but sealed for another version (which
+   * an agent since vta-service 0.75.0 opens anyway, and an older one cannot, {@link HEAD_FRESH_MS}): it is sealed again
+   * for the next version and written over exactly what landed, a few times.
    * `ownKey`: the key is this post's own, so a record already there at the first try is this post, sent again
    * after its answer was lost; one this phone left under a seal for another version (`wrongSeals`) is sealed again.
    */
@@ -2662,7 +2668,7 @@ export class AgentRoomsService implements RoomsService {
       'write',
       'roomKeptMoving',
       true,
-      `${key} is stored at version ${landed} but sealed for another version, so it does not open: the room kept moving`
+      `${key} is stored at version ${landed} but sealed for another version (an agent before 0.75.0 cannot open it): the room kept moving`
     )
   }
 
