@@ -44,22 +44,37 @@ class MemoryRecords implements ConnectionRecords {
   public async get(id: string) {
     return this.records.get(id)
   }
-  public async put(record: AgentConnection) {
-    this.records.set(record.id, JSON.parse(JSON.stringify(record)))
-  }
   private queue: Promise<unknown> = Promise.resolve()
-  public update(id: string, change: (r: AgentConnection) => AgentConnection) {
-    const next = this.queue.then(async () => {
-      const r = await this.get(id)
-      if (!r) return undefined
-      const n = change(JSON.parse(JSON.stringify(r)))
-      await this.put(n)
-      return n
-    })
+  /** Called once, by the next findByKey, before it answers: lets a test land another writer's change just then. */
+  public beforeNextFind?: () => void
+  // One queue for every write of the fake, as the store has one lock per record.
+  private locked<T>(work: () => Promise<T>): Promise<T> {
+    const next = this.queue.then(work)
     this.queue = next.catch(() => undefined)
     return next
   }
+  public put(record: AgentConnection) {
+    return this.locked(async () => {
+      this.records.set(record.id, JSON.parse(JSON.stringify(record)))
+    })
+  }
+  public update(id: string, change: (r: AgentConnection) => AgentConnection) {
+    return this.upsert(id, (r) => (r ? change(r) : undefined))
+  }
+  public upsert(id: string, decide: (r: AgentConnection | undefined) => AgentConnection | undefined) {
+    return this.locked(async () => {
+      const stored = this.records.get(id)
+      const current = stored ? (JSON.parse(JSON.stringify(stored)) as AgentConnection) : undefined
+      const next = decide(current)
+      if (next === undefined || next === current) return current
+      this.records.set(id, JSON.parse(JSON.stringify(next)))
+      return next
+    })
+  }
   public async findByKey(did: string) {
+    const hook = this.beforeNextFind
+    this.beforeNextFind = undefined
+    hook?.()
     return [...this.records.values()].find((r) => r.id === did || r.agentDid === did)
   }
 }
@@ -396,6 +411,41 @@ describe('two writers of one record at app start (step 7.10 and the driver)', ()
       keyChanged: true,
       agentDid: 'did:key:z6MkRotatedByReconcile',
     })
+  })
+
+  it("a record that becomes active between the leftover's read and its write is kept, grant and all", async () => {
+    const t = await setup()
+    await t.connections.put({
+      id: K_T,
+      name: 'Being granted',
+      handle: 'granted-k3qa',
+      agentDid: K_T,
+      deviceId: 'dev-0',
+      ownerPersonaDid: PERSONA,
+      vtaDid: VTA,
+      contexts: [],
+      memoryContexts: [],
+      pendingContexts: [],
+      capabilities: [],
+      purposes: ['personalisation'],
+      grantType: 'persistent',
+      answersOthers: false,
+      state: 'pairing',
+      keyChanged: false,
+      createdAt: new Date(T0).toISOString(),
+    })
+    await t.driver.start(choice())
+    await t.driver.scan(fallbackLink())
+    await t.driver.approve()
+    // Another writer stores the grant just after the leftover's lookup has read "pairing".
+    let granting: Promise<unknown> = Promise.resolve()
+    t.connections.beforeNextFind = () => {
+      granting = t.connections.update(K_T, (r) => ({ ...r, state: 'active', vdcGrant: { issuer: PERSONA } }))
+    }
+    await t.driver.cancel()
+    expect(await t.driver.settled()).toEqual({ state: 'kept', subject: K_T })
+    await granting
+    expect(t.connections.records.get(K_T)).toMatchObject({ state: 'active', vdcGrant: { issuer: PERSONA } })
   })
 
   it("a leftover naming a connected agent's CURRENT key is not written beside it (Remove would revoke it)", async () => {
