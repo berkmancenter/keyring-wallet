@@ -22,6 +22,9 @@
  * - a caller more than two imports below a navigator file (a deeper one does not count: put the call in the routed
  *   container rather than loosen this);
  * - imports matched by file name, not resolved paths: two files of one name are not told apart.
+ * - the one way it can admit a caller it should not: any file containing `.Screen` (or creating a navigator) counts as
+ *   a navigator and seeds the search, so a stray `.Screen` token outside navigation would count a file as routed. It
+ *   over-counts navigators, which fails open on "is Revoke wired"; 14 navigator files is right for this app today.
  *
  * None of these exists today; a new way of turning the flag on must come through the setter or be added here.
  */
