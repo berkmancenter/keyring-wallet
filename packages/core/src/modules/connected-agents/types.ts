@@ -40,7 +40,13 @@ export type MemoryRef = { id: string; name: string }
 export type PickerMemory = MemoryRef & { containsOthers: boolean }
 
 /** The answer to "New memory" (§3.15, §6). */
-export type CreateMemoryResult = { ok: true; memory: MemoryRef } | { ok: false; code: 'duplicateName' | 'failed' }
+export type CreateMemoryResult =
+  | { ok: true; memory: MemoryRef }
+  /**
+   * `heldForApproval`: an approval rule on `vta/contexts/create` held it, and the phone never waits on its own approval
+   * (#1060 finding 20). Its words name the rule; never "Try again", since a retry fails the same way.
+   */
+  | { ok: false; code: 'duplicateName' | 'failed' | 'heldForApproval' }
 
 /** A connection's stored state (§3.11). */
 export type AgentConnectionState = 'pairing' | 'active' | 'expired' | 'revoking' | 'revoked' | 'notFinished'

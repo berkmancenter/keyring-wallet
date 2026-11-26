@@ -90,7 +90,9 @@ const CREATE_ATTEMPTS = 3
 export async function createMemory(
   port: Pick<MemoryPort, 'listContexts' | 'createContext'>,
   typed: string,
-  randomBytes: (length: number) => Uint8Array
+  randomBytes: (length: number) => Uint8Array,
+  /** Whether a refused create was held for consent (`VtaClient`'s `consentPendingOf`); never retried. */
+  isHeld: (error: unknown) => boolean = () => false
 ): Promise<CreateMemoryResult> {
   const name = typed.trim()
   if (name.length < 1 || name.length > 64) return { ok: false, code: 'failed' }
@@ -110,7 +112,8 @@ export async function createMemory(
     try {
       await port.createContext(id, name)
       return { ok: true, memory: { id, name } }
-    } catch {
+    } catch (error) {
+      if (isHeld(error)) return { ok: false, code: 'heldForApproval' }
       // A create refused because the id exists (step 0.1(p): a second create is refused) is a redraw; anything else
       // fails. Keyring cannot tell the two apart from the refusal, so it re-lists: a now-listed id was a collision.
       try {
