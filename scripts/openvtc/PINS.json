@@ -25,7 +25,10 @@
         "docs/05-design-notes/",
         "vta-sdk/src/protocol/",
         "vta-service/src/messaging/",
-        "vta-service/Cargo.toml"
+        "vta-service/Cargo.toml",
+        "vta-service/src/trust_tasks/room_read.rs",
+        "vta-service/src/operations/room_groups.rs",
+        "vta-service/src/operations/room_groups/"
       ]
     },
     "verifiable-trust-infrastructure-v047": {
