@@ -11,7 +11,7 @@ import { act, render, waitFor } from '@testing-library/react-native'
 import React from 'react'
 
 import { StoreContext } from '../../src'
-import { forgetSavedCommunityNamesRead } from '../../src/modules/trust-tasks/module/savedCommunityNames'
+import { resetSavedCommunityNamesRead } from '../../src/modules/trust-tasks/module/savedCommunityNames'
 import { communityTarget } from '../../src/modules/trust-tasks/module/vtiCommunityLink'
 import Messages from '../../src/screens/Messages'
 import { testIdWithKey } from '../../src/utils/testable'
@@ -85,7 +85,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   // As after a start of the app: no name in memory, and the saved names not read yet.
   communityTarget.clear()
-  forgetSavedCommunityNamesRead(agent)
+  resetSavedCommunityNamesRead(agent)
   ;(useConnections as jest.Mock).mockReturnValue({ records: [], loading: false })
   ;(useBasicMessages as jest.Mock).mockImplementation(() => ({ records: [] }))
   mockRoomRows = [roomRow('r1', FIRST), roomRow('r2', TEST)]

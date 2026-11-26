@@ -12,7 +12,7 @@ import { act, render, renderHook } from '@testing-library/react-native'
 import React from 'react'
 
 import {
-  forgetSavedCommunityNamesRead,
+  resetSavedCommunityNamesRead,
   useSavedCommunityNames,
 } from '../../src/modules/trust-tasks/module/savedCommunityNames'
 import { communityTarget } from '../../src/modules/trust-tasks/module/vtiCommunityLink'
@@ -60,7 +60,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   // As after a start of the app: no name in memory, the saved names not read yet. One is saved on the phone.
   communityTarget.clear()
-  forgetSavedCommunityNamesRead(agent)
+  resetSavedCommunityNamesRead(agent)
   ;(agent.genericRecords.findAllByQuery as jest.Mock).mockImplementation(async (query: { kind?: string }) =>
     query.kind === 'community-name'
       ? [

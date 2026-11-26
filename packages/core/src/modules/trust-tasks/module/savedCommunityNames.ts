@@ -47,8 +47,11 @@ export function loadSavedCommunityNames(agent: Agent): Promise<number> {
   return read
 }
 
-/** For tests: the next call reads again, as after a start of the app. */
-export function forgetSavedCommunityNamesRead(agent: Agent): void {
+/**
+ * For tests: the next call reads again, as after a start of the app. It drops this module's note that the read was
+ * made, which is in memory only; nothing saved on the phone is touched.
+ */
+export function resetSavedCommunityNamesRead(agent: Agent): void {
   reads.delete(agent)
 }
 

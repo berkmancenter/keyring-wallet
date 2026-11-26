@@ -8,7 +8,7 @@ import { act, renderHook } from '@testing-library/react-native'
 import { publishedName } from '../module/communityNameRefresh'
 import { communityLogRef, namesShownLine } from '../module/communityNamesLog'
 import {
-  forgetSavedCommunityNamesRead,
+  resetSavedCommunityNamesRead,
   loadSavedCommunityNames,
   useSavedCommunityNames,
 } from '../module/savedCommunityNames'
@@ -176,7 +176,7 @@ describe('the names saved on the phone are put where the screens read them, once
     expect(await loadSavedCommunityNames(other.agent)).toBe(0)
     expect(other.agent).not.toBe(agent)
     // As after a start of the app: read again.
-    forgetSavedCommunityNamesRead(agent)
+    resetSavedCommunityNamesRead(agent)
     await loadSavedCommunityNames(agent)
     expect(find).toHaveBeenCalledTimes(2)
   })
