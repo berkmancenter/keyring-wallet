@@ -316,6 +316,11 @@ describe('MemoryPicker', () => {
       'ConnectedAgents.MemoryNameTaken',
     ],
     ['the logic says it failed', { ok: false, code: 'failed' } as const, 'ConnectedAgents.MemoryCreateFailed'],
+    [
+      "the owner's VTA holds a create for approval",
+      { ok: false, code: 'heldForApproval' } as const,
+      'ConnectedAgents.MemoryHeldForApproval',
+    ],
   ])('says why when %s, and creates nothing', async (_, result, words) => {
     const tree = show(<Harness onCreate={async () => result} />)
     fireEvent.press(tree.getByTestId(id('MemoryPickerNew')))

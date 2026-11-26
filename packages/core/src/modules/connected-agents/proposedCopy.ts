@@ -33,6 +33,7 @@ export const PROPOSED_COPY: Readonly<Record<string, string>> = {
   MemoryCountWarning: 'P-c',
   MemoryCountFailed: 'P-c',
   PendingMemory: 'seam gap: finding 7 of #1048, a memory not reached yet',
+  MemoryHeldForApproval: "finding 20 of #1060: the owner's approval rule held a create",
   NumberDigitFilled: 'accessibility: §6 says each digit is announced as it is typed, not in which words',
 }
 
