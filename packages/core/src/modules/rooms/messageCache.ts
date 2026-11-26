@@ -71,6 +71,9 @@ export const MSG_CACHE_BODY_MAX = 8 * 1024
 const RECORD_TYPE = 'rooms.msgcache'
 const RECORD_PREFIX = 'keyring.rooms.msgcache.'
 export const MSG_CACHE_JOURNAL_ID = 'keyring.rooms.msgcache.journal'
+/** The posts being written in a room, kept for the length of the write (`keepSend`): one record per identity and room. */
+const SEND_TYPE = 'rooms.msgcache.send'
+const SEND_PREFIX = 'keyring.rooms.msgcache.send.'
 
 /** One post as kept: what the chat draws, never a file's bytes. */
 export interface CachedPost {
@@ -304,7 +307,9 @@ async function coveredBy(agent: CacheWallet, entry: JournalEntry): Promise<Recor
   if (entry.scope === 'community') query.community = entry.h
   if (entry.scope === 'persona') query.persona = entry.h
   if (entry.scope === 'room') query.room = entry.h
-  return agent.genericRecords.findAllByQuery(query)
+  // The posts being written in those rooms go with their copies (`keepSend`): every emptying covers both.
+  const sends = await agent.genericRecords.findAllByQuery({ ...query, type: SEND_TYPE })
+  return [...(await agent.genericRecords.findAllByQuery(query)), ...sends]
 }
 
 async function emptyRecords(agent: CacheWallet, records: RecordLike[]): Promise<number> {
@@ -312,7 +317,8 @@ async function emptyRecords(agent: CacheWallet, records: RecordLike[]): Promise<
   if (due.length === 0) return 0
   // Messages' previews of these rooms come down, and a read of one already out draws nothing, before the first copy is
   // emptied (the review of #1011). A copy that does not say its room takes them all down.
-  const rooms = due.map((record) => record.content?.roomId)
+  // A post being written is no copy: its emptying takes no preview down.
+  const rooms = due.filter((record) => !Array.isArray(record.content?.sends)).map((record) => record.content?.roomId)
   dropRowPreviews(rooms.every(isText) ? rooms : undefined)
   let n = 0
   for (const record of due) {
@@ -563,7 +569,8 @@ export function sweepMessageCache(
     const { entries } = await journalOf(agent)
     for (const entry of entries) n += await apply(agent, entry)
     const records = await agent.genericRecords.findAllByQuery({ type: RECORD_TYPE })
-    if (!(await messageCacheAllowed())) return n + (await emptyRecords(agent, records))
+    const sending = await agent.genericRecords.findAllByQuery({ type: SEND_TYPE })
+    if (!(await messageCacheAllowed())) return n + (await emptyRecords(agent, [...records, ...sending]))
     let members: Memberships | undefined
     try {
       members = typeof current === 'function' ? await current() : current
@@ -587,7 +594,15 @@ export function sweepMessageCache(
       if (c.validUntil && Date.parse(c.validUntil) <= now) return true
       return notRefreshed(c.keptAt, now) || !c.posts.some((p) => !!postOf(p))
     })
-    return n + (await emptyRecords(agent, ended))
+    // A post being written whose membership no longer stands, or kept past the copies' days, goes the same way.
+    const endedSends = sending.filter((record) => {
+      if (record.content?.emptied === true) return false
+      const c = sendsOf(record)
+      if (!c) return true
+      if (standing && !standing.has(`${c.communityDid}\n${c.personaDid}`)) return true
+      return c.sends.every((send) => notRefreshed(send.at, now))
+    })
+    return n + (await emptyRecords(agent, [...ended, ...endedSends]))
   })
 }
 
@@ -638,6 +653,146 @@ export async function emptyGoneRooms(agent: CacheWallet, rooms: readonly ListedR
     await sayCounts(agent, `access gone, ${emptied} emptied`)
   }
   return n
+}
+
+/**
+ * A post being written, kept until its write ends so a relaunch can finish it (IN-813's sibling, #1039's part B): the
+ * phone seals a post for the version it expects the room to give it, and when the room gives another the post is stored
+ * under a seal that does not open until it is sealed and put again. An app that stops between the two leaves it so, and
+ * nothing in memory survives to repair it. Alberto, 11-26: keep the words for the length of the send.
+ *
+ * Kept as the copies are, and under their rules: in the agent's encrypted wallet, only where words may be kept at all
+ * (`messageCacheAllowed`: the switch, and biometric unlock), never for a post carrying a file (its manifest holds the
+ * file's key), and emptied by every emptying that covers its room (left, gone, removed, unlinked, biometrics off, the
+ * kill) and by the start sweep past {@link MSG_CACHE_DAYS}. Emptied, never removed, as the copies are.
+ */
+export interface PendingSend {
+  /** The post's record key. */
+  key: string
+  /** Its words, or a reaction's value: exactly what was sealed. */
+  body: string
+  /** Its record members (`kind`, `inReplyTo`, `writtenAt`, ...): exactly what was sealed. */
+  members: Record<string, unknown>
+  /** The record's version before this write: 0 for a new post. A listing at that version means nothing landed. */
+  before: number
+  /** The first version this write sealed for: a new post lands at it or after. */
+  from: number
+  /** The version its last put was sealed for: a listing there means it landed whole. */
+  sealedFor: number
+  /** When it was first kept (ms). */
+  at: number
+}
+
+/** Where a post is being written: its room, community and the identity that writes it. */
+export interface SendPlace {
+  roomId: string
+  communityDid: string
+  personaDid: string
+}
+
+/** The posts being written, as the rooms service asks for them (`RoomsBackend.sendsInFlight`). */
+export interface SendJournal {
+  /** Keep `send` (or its newer state, by key) before a put: nothing when words may not be kept. */
+  keep(place: SendPlace, send: PendingSend): Promise<void>
+  /** Its write ended, or was settled at a listing: it is no longer kept. */
+  settle(place: SendPlace, key: string): Promise<void>
+  /** The posts kept as being written in this room, as this identity. */
+  left(place: SendPlace): Promise<PendingSend[]>
+}
+
+const sendRecordIdOf = (personaDid: string, roomId: string) => `${SEND_PREFIX}${hashOf(`${personaDid}\n${roomId}`)}`
+
+function sendOf(raw: unknown): PendingSend | undefined {
+  const s = raw as Partial<PendingSend> | undefined
+  if (!s || !isText(s.key) || typeof s.body !== 'string' || !s.members || typeof s.members !== 'object')
+    return undefined
+  const counts = [s.before, s.from, s.sealedFor, s.at]
+  if (!counts.every((n) => typeof n === 'number' && Number.isFinite(n))) return undefined
+  return s as PendingSend
+}
+
+function sendsOf(record: RecordLike | null | undefined): (SendPlace & { sends: PendingSend[] }) | undefined {
+  const c = record?.content
+  if (!c || c.v !== 1 || c.emptied === true || !Array.isArray(c.sends)) return undefined
+  if (!isText(c.personaDid) || !isText(c.roomId) || !isText(c.communityDid)) return undefined
+  return {
+    personaDid: c.personaDid,
+    roomId: c.roomId,
+    communityDid: c.communityDid,
+    sends: c.sends.flatMap((raw) => {
+      const send = sendOf(raw)
+      return send ? [send] : []
+    }),
+  }
+}
+
+/** Writes `sends` as the room's record, or empties it when none is left. */
+async function writeSends(
+  agent: CacheWallet,
+  place: SendPlace,
+  existing: RecordLike | null,
+  sends: PendingSend[]
+): Promise<void> {
+  if (sends.length === 0) {
+    if (existing && existing.content?.emptied !== true) await emptyRecords(agent, [existing])
+    return
+  }
+  const content = { v: 1, ...place, sends }
+  if (existing) {
+    existing.content = content
+    await agent.genericRecords.update(existing)
+  } else
+    await agent.genericRecords.save({
+      id: sendRecordIdOf(place.personaDid, place.roomId),
+      content,
+      tags: {
+        type: SEND_TYPE,
+        community: hashOf(place.communityDid),
+        persona: hashOf(place.personaDid),
+        room: hashOf(place.roomId),
+      },
+    })
+}
+
+/** The send journal over `agent`'s wallet: what the rooms backend hands its service. */
+export function sendJournalOf(agent: unknown): SendJournal | undefined {
+  if (!isCacheWallet(agent)) return undefined
+  return {
+    keep: (place, send) =>
+      inTurn(async () => {
+        if (!(await messageCacheAllowed())) return
+        const { entries } = await journalOf(agent)
+        if (journaled([...entries, ...emptiedThisRun], place)) return
+        const existing = await agent.genericRecords.findById(sendRecordIdOf(place.personaDid, place.roomId))
+        const sends = sendsOf(existing)?.sends ?? []
+        const earlier = sends.find((s) => s.key === send.key)
+        // A post sent again keeps what its first write knew: the version before it, and the first it sealed for.
+        const next = earlier
+          ? { ...send, before: earlier.before, from: Math.min(earlier.from, send.from), at: earlier.at }
+          : send
+        await writeSends(agent, place, existing, [...sends.filter((s) => s.key !== send.key), next])
+      }),
+    settle: (place, key) =>
+      inTurn(async () => {
+        const existing = await agent.genericRecords.findById(sendRecordIdOf(place.personaDid, place.roomId))
+        const kept = sendsOf(existing)
+        if (!kept || !kept.sends.some((s) => s.key === key)) return
+        await writeSends(
+          agent,
+          place,
+          existing,
+          kept.sends.filter((s) => s.key !== key)
+        )
+      }),
+    left: (place) =>
+      inTurn(async () => {
+        if (!(await messageCacheAllowed())) return []
+        const { entries } = await journalOf(agent)
+        if (journaled([...entries, ...emptiedThisRun], place)) return []
+        const kept = sendsOf(await agent.genericRecords.findById(sendRecordIdOf(place.personaDid, place.roomId)))
+        return kept?.sends ?? []
+      }),
+  }
 }
 
 let bound: CacheWallet | undefined

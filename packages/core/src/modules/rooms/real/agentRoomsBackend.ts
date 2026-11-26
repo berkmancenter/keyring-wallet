@@ -26,7 +26,7 @@ import { GenericRecordsTspPeerRevisionStore } from '../../trust-tasks/module/vti
 import { isRoomLiveDeliveryOn } from '../liveDeliverySwitch'
 import { isRoomRecordSendingOn } from '../recordSendingSwitch'
 import { afterLeavingCommunity } from '../roomsLeave'
-import { bindMessageCache, standingMemberships } from '../messageCache'
+import { bindMessageCache, sendJournalOf, standingMemberships } from '../messageCache'
 import { cardStandingOf } from '../../trust-tasks/module/vtiCardStanding'
 
 import type { RoomsBackend, RoomsCommunity, RoomsUploadBackend } from './agentRoomsService'
@@ -255,6 +255,8 @@ export function createAgentRoomsBackend(agent: Agent, options: { mediatorDid?: s
     get recordSending() {
       return isRoomRecordSendingOn()
     },
+    // A post's words, kept in the wallet as the room's copies are and under their rules, for the length of its write.
+    sendsInFlight: sendJournalOf(agent),
     // Read at each arming and each signal, never kept: a release that turns it off has every room polled at the next
     // start (liveDeliverySwitch).
     get liveDelivery() {

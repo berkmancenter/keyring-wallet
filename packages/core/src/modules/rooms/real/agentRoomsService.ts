@@ -39,7 +39,7 @@ import { VtiRefusal } from '../../trust-tasks/module/vtiAgent'
 import { roomRef } from '../roomRef'
 import { ACCEPT_FROM_PREVIEW_MAX_AGE_MS, isAcceptFromPreviewOn } from '../acceptFromPreviewSwitch'
 import { holdsTwoAuthorities, permanentRefusal } from '../postRefusal'
-import { emptyMessageCache, isCacheWallet } from '../messageCache'
+import { emptyMessageCache, isCacheWallet, type SendJournal, type SendPlace } from '../messageCache'
 import { windowOf } from '../listingWindow'
 import { isRoomsNewestFirstOn } from '../newestFirstSwitch'
 import { isRoomsPartialListingOn } from '../partialListingSwitch'
@@ -222,6 +222,11 @@ export interface RoomsBackend {
    * is asked, so a release that turns sending off has it off everywhere; tests set it themselves.
    */
   readonly recordSending?: boolean
+  /**
+   * The posts being written, kept for the length of each write so one an app stopped in the middle of is finished at
+   * the room's next listing after a relaunch (`messageCache.ts` `sendJournalOf`). Absent: nothing is kept, as before.
+   */
+  readonly sendsInFlight?: SendJournal
   /**
    * When the agent last held a rooms task for consent, kept across launches (consentHolds.ts): a task it held is not
    * sent to it again for a day. Absent (a backend with nowhere to keep it): a hold stops that task for this session only.
@@ -425,6 +430,14 @@ const openedKey = (roomId: string, key: string, version: number) => `${roomId}\n
 /** A record in a room, whatever its version: what the room's last listing said its version is. */
 const listedKey = (roomId: string, key: string) => `${roomId}\n${key}`
 
+/** Where a post's words are kept while it is written (`writeSealedOnce`'s `sending`): its room, community and identity. */
+interface SendingWords {
+  place: SendPlace
+}
+
+/** Whether a listing would have shown a record at `version`, had there been one: what it asked, and what came back. */
+type ListingCovers = (version: number) => boolean
+
 /**
  * The most opened records a service keeps. An opened record is a decrypted body, kept in memory only; past this the
  * least recently used goes. Ten rooms of fifty posts each fit.
@@ -513,6 +526,10 @@ export class AgentRoomsService implements RoomsService {
    * Kept through a lock: it says what the host holds, nothing that was read.
    */
   private readonly wrongSeals = new Map<string, number>()
+  /** Posts being written now, by room and key: a listing meanwhile never settles them (`settleLeftSends`). */
+  private readonly sendingNow = new Set<string>()
+  /** Rooms whose kept sends a listing is settling now: one settling at a time per room. */
+  private readonly settlingRooms = new Set<string>()
   /**
    * Which of this phone's identities the agent holds each room's keys as, from its last key list (`rooms/keys/list`
    * 0.2 names the member). A room held as two of them is one the agent cannot pick a member for by itself.
@@ -1181,7 +1198,65 @@ export class AgentRoomsService implements RoomsService {
     const held = this.heads.get(roomId)
     if (parsed.complete && (sinceVersion === undefined || (held && sinceVersion <= held.version)))
       this.noteHead(roomId, parsed.records)
+    // Whole from the start, or from `sinceVersion` on, when it ended; a listing that stopped early decides nothing.
+    this.settleLeftSends(
+      roomId,
+      parsed.records,
+      (v) => parsed.complete && (sinceVersion === undefined || v > sinceVersion)
+    )
     return this.noteListOf(roomId, parsed)
+  }
+
+  /**
+   * The posts an earlier run kept as being written in this room, settled by what this listing shows (Alberto, 11-26,
+   * #1039's part B): an app stopped between a post's two puts leaves it stored under another version's seal, which only
+   * its author can seal again, with its words. Each kept post, unless one is being written now:
+   *
+   * - listed at the version its last put was sealed for: it landed whole;
+   * - listed at the version it had before the write (an edit's), or absent where the listing would show it: nothing
+   *   of it landed, and it is not sent again (an app stopped before it, as before);
+   * - listed at another version: it landed under a wrong seal, and is sealed and put again over itself there;
+   * - absent where the listing could not show it (a window above it, a listing that stopped early): left for a later one.
+   *
+   * Settled once decided, whether or not the repair went through (Alberto's rule). Says one line a kind, never a word.
+   */
+  private settleLeftSends(roomId: string, records: readonly { key: string; version: number }[], covers: ListingCovers) {
+    const journal = this.backend.sendsInFlight
+    if (!journal || this.settlingRooms.has(roomId)) return
+    this.settlingRooms.add(roomId)
+    void this.settleLeft(journal, roomId, records, covers)
+      .catch((e) =>
+        this.backend.warn(`rooms: ${logRef(roomId)} posts left being written were not looked at: ${failureCategory(e)}`)
+      )
+      .finally(() => this.settlingRooms.delete(roomId))
+  }
+
+  private async settleLeft(
+    journal: SendJournal,
+    roomId: string,
+    records: readonly { key: string; version: number }[],
+    covers: ListingCovers
+  ): Promise<void> {
+    const room = await this.requireInRoom(roomId, 'write')
+    const { community, host } = this.hostOf(room, 'write')
+    const place: SendPlace = { roomId, communityDid: community.did, personaDid: community.personaDid }
+    for (const send of await journal.left(place)) {
+      if (this.sendingNow.has(listedKey(roomId, send.key))) continue
+      const listed = records.find((r) => r.key === send.key)?.version
+      if (listed === undefined && !covers(send.from)) continue
+      if (listed !== undefined && listed !== send.sealedFor && listed !== send.before) {
+        try {
+          const note = { title: '', body: send.body, members: send.members as RecordMembers }
+          await this.writeSealed(room, community, host, send.key, listed, note, false)
+          this.backend.warn(`rooms: ${logRef(roomId)} a post left under another version's seal was sealed again`)
+        } catch (e) {
+          this.backend.warn(
+            `rooms: ${logRef(roomId)} a post left under another version's seal was not sealed again: ${failureCategory(e)}`
+          )
+        }
+      }
+      await journal.settle(place, send.key)
+    }
   }
 
   /** The room's newest version as a listing that would show any newer record found it, now. */
@@ -1247,7 +1322,12 @@ export class AgentRoomsService implements RoomsService {
     }
     const parsed = parseBrowse(answer)
     // From the top, newest first: its first rows are the room's newest records, so this is its head now.
-    if (beforeVersion === undefined) this.noteHead(roomId, parsed.records)
+    if (beforeVersion === undefined) {
+      this.noteHead(roomId, parsed.records)
+      // Every record from its lowest row up, or the whole room where it ended there.
+      const lowest = parsed.records.reduce((low, r) => Math.min(low, r.version), Number.POSITIVE_INFINITY)
+      this.settleLeftSends(roomId, parsed.records, (v) => (parsed.complete ? true : v >= lowest))
+    }
     const listing = this.noteListOf(roomId, parsed)
     // Newest version first, whatever order the rows came in; and never more than asked, nor at or above the bound.
     const window = windowOf(listing, size, beforeVersion)
@@ -2542,7 +2622,22 @@ export class AgentRoomsService implements RoomsService {
       members = keptMembers(prior, features, now)
     }
     requirePermitted(members, features)
-    return this.writeSealed(room, community, host, key, expectedVersion, { title: '', body, members }, ownKey)
+    // Its words are kept for the length of the write, so an app stopped in the middle finishes it at the room's next
+    // listing (settleLeftSends). A record write carries no file: a post with one is a note's (writeNote).
+    const sending: SendingWords = {
+      place: { roomId: room.roomId, communityDid: community.did, personaDid: community.personaDid },
+    }
+    return this.writeSealed(
+      room,
+      community,
+      host,
+      key,
+      expectedVersion,
+      { title: '', body, members },
+      ownKey,
+      {},
+      sending
+    )
   }
 
   /** The current version of a record this member wrote: a new version comes only from its author, and keeps what it must. */
@@ -2562,12 +2657,45 @@ export class AgentRoomsService implements RoomsService {
   private async writeSealed(
     ...args: Parameters<AgentRoomsService['writeSealedOnce']>
   ): Promise<{ key: string; version: number }> {
+    const [room, , , key, , , , , sending] = args
+    const sealedKey = listedKey(room.roomId, key)
+    this.sendingNow.add(sealedKey)
     try {
-      return await this.writeSealedOnce(...args)
+      const written = await this.writeSealedOnce(...args)
+      await this.settleSend(sending, key)
+      return written
     } catch (e) {
       this.heldLast = undefined
       this.heads.delete(args[0].roomId)
+      // The write ended. Kept only where it left the post under another version's seal: the room's next listing
+      // finishes it, as a retry here would (wrongSeals).
+      if (!this.wrongSeals.has(sealedKey)) await this.settleSend(sending, key)
       throw e
+    } finally {
+      this.sendingNow.delete(sealedKey)
+    }
+  }
+
+  /** Keeps `send` as being written, where a journal is given; a failure to keep it never stops the write. */
+  private async keepSend(sending: SendingWords | undefined, send: Parameters<SendJournal['keep']>[1]): Promise<void> {
+    const journal = this.backend.sendsInFlight
+    if (!sending || !journal) return
+    try {
+      await journal.keep(sending.place, send)
+    } catch (e) {
+      this.backend.warn(
+        `rooms: ${logRef(sending.place.roomId)} a post being written was not kept: ${failureCategory(e)}`
+      )
+    }
+  }
+
+  private async settleSend(sending: SendingWords | undefined, key: string): Promise<void> {
+    const journal = this.backend.sendsInFlight
+    if (!sending || !journal) return
+    try {
+      await journal.settle(sending.place, key)
+    } catch (e) {
+      this.backend.warn(`rooms: ${logRef(sending.place.roomId)} a post written was not let go: ${failureCategory(e)}`)
     }
   }
 
@@ -2590,7 +2718,9 @@ export class AgentRoomsService implements RoomsService {
     expectedVersion: number,
     note: { title: string; body?: string; file?: FileManifest; members?: RecordMembers },
     ownKey: boolean,
-    options: { blobs?: string[] } = {}
+    options: { blobs?: string[] } = {},
+    /** The post's words, kept for the length of the write (`RoomsBackend.sendsInFlight`): never a file's post. */
+    sending?: SendingWords
   ): Promise<{ key: string; version: number }> {
     // The room's head as a listing found it, while the room is watched and that listing is recent: a change since would
     // have been signalled and read. Else the whole room is listed for it, as before. A wrong guess is a race, below.
@@ -2608,6 +2738,8 @@ export class AgentRoomsService implements RoomsService {
       intended = Math.max(intended, wrong + 1)
     }
     let landed = 0
+    const from = intended
+    const keptAt = this.now()
     for (let attempt = 0; attempt < SEALED_WRITE_ATTEMPTS; attempt++) {
       const unsigned = {
         roomId: room.roomId,
@@ -2631,6 +2763,16 @@ export class AgentRoomsService implements RoomsService {
         })
       )
       if (!sealed) throw new Error(`the agent answered the seal of ${key} with something else`)
+      // Kept before the put, at the version this seal is for: an app stopped after it is finished at the next listing.
+      await this.keepSend(sending, {
+        key,
+        body: note.body ?? '',
+        members: { ...note.members },
+        before: expectedVersion,
+        from,
+        sealedFor: intended,
+        at: keptAt,
+      })
       let answer: unknown
       try {
         answer = await this.put(community, host, {
