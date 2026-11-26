@@ -169,11 +169,24 @@ describe('refused (§7.3), each against a pair that otherwise verifies', () => {
     const { grant, acceptance } = await pair()
     const target = JSON.parse(JSON.stringify(which === 'grant' ? grant : acceptance)) as Record<string, unknown>
     mutate(target)
-    // re-signed, so only the rule under test can refuse it
+    // Re-signed, so the row still pins its own rule if the proof were ever checked before the shape; the order
+    // itself is pinned by 'a credential with both a shape problem and a bad proof is refused for its shape'.
     const resigned = await signer.sign(target as unknown as UnsignedVdc)
     const result = which === 'grant' ? await check(resigned, acceptance) : await check(grant, resigned)
     expect(result).toEqual({ ok: false, reason })
     expect(vdcShapeProblem(resigned, which)).toBe(reason)
+  })
+
+  it('a credential with both a shape problem and a bad proof is refused for its shape', async () => {
+    const { grant, acceptance } = await pair()
+    // not re-signed: its proof no longer matches, and its type has lost DTGCredential
+    const both = { ...grant, type: ['VerifiableCredential', 'DelegationCredential'] }
+    expect(await check(both, acceptance)).toEqual({ ok: false, reason: 'type' })
+    // control: the bad proof alone, paired with an acceptance of that very grant, is refused for its proof
+    const proofOnly = { ...grant, validFrom: '2026-11-25T12:00:01Z' }
+    const itsAcceptance = await issueVdc(buildVdcAcceptance(proofOnly, NOW + 60_000), signer)
+    expect(vdcShapeProblem(proofOnly, 'grant')).toBeUndefined()
+    expect(await check(proofOnly, itsAcceptance)).toEqual({ ok: false, reason: 'grant-proof' })
   })
 
   it('an acceptance whose accepts is a different digest', async () => {
