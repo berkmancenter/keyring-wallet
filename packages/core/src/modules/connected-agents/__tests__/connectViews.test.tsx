@@ -184,7 +184,26 @@ describe('ConnectNumberView', () => {
     fireEvent(field(tree), 'submitEditing')
     expect(onSubmit).toHaveBeenCalledTimes(1)
     expect(onSubmit).toHaveBeenCalledWith('47')
+  })
+
+  // "One try" stands on three layers, and the test above proves only that they hold together: removing any one of
+  // them alone leaves it passing (measured). So each layer a person can reach is asserted on its own here; the third,
+  // the check inside submit, is a backstop that no event reaches while the other two stand.
+  it('locks the field once the number is sent', () => {
+    const tree = show(<ConnectNumberView onSubmit={jest.fn()} onCancel={jest.fn()} />)
+    fireEvent.changeText(field(tree), '47')
+    expect(field(tree).props.editable).toBe(true)
+    fireEvent.press(go(tree))
     expect(field(tree).props.editable).toBe(false)
+  })
+
+  it('disables "Continue" once the number is sent, though every cell is still filled', () => {
+    const tree = show(<ConnectNumberView onSubmit={jest.fn()} onCancel={jest.fn()} />)
+    fireEvent.changeText(field(tree), '47')
+    expect(go(tree).props.accessibilityState.disabled).toBe(false)
+    fireEvent.press(go(tree))
+    expect(field(tree).props.value).toBe('47')
+    expect(go(tree).props.accessibilityState.disabled).toBe(true)
   })
 
   it('cancels', () => {
