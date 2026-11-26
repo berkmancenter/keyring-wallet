@@ -3427,7 +3427,7 @@
     "RowCommunityNeedsUpdate": "Cette communauté doit être mise à jour",
     "RowAgentNeedsUpdate": "Votre agent doit être mis à jour",
     "RowAppNeedsUpdate": "Keyring doit être mis à jour",
-    "RowCannotRead": "Lecture impossible pour l'instant",
+    "RowCannotRead": "Mise à jour nécessaire pour lire",
     "RowNote": "Note : {{title}}",
     "RowFile": "Fichier : {{name}}",
     "RowPost": "Message",

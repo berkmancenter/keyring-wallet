@@ -3469,7 +3469,7 @@
     "RowCommunityNeedsUpdate": "This community needs an update",
     "RowAgentNeedsUpdate": "Your agent needs an update",
     "RowAppNeedsUpdate": "Keyring needs an update",
-    "RowCannotRead": "Can't be read yet",
+    "RowCannotRead": "Needs an update to be read",
     "RowNote": "Note: {{title}}",
     "RowFile": "File: {{name}}",
     "RowPost": "Message",
