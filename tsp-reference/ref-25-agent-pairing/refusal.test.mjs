@@ -38,7 +38,7 @@ test("each recorded refusal reduces to its status and code", () => {
 });
 
 test("the queue refusal carries Retry-After, and a refusal without the header carries none", () => {
-  assert.equal(typeof readRestAnswer(fixtures.queueFull).retryAfter, "number");
+  assert.equal(readRestAnswer(fixtures.queueFull).retryAfter, 30, "the mediator's own header was `retry-after: 30`");
   assert.equal(readRestAnswer(fixtures.anonymous).retryAfter, undefined);
 });
 

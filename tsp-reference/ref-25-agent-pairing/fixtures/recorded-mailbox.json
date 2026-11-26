@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-11-26T04:03:23.710Z",
+  "ranAt": "2026-11-26T07:34:30.765Z",
   "mode": "mailbox",
   "mediatorDid": "did:peer:2.Vz6MksnZoLMVS7WnzpjQuSn8NPkLNLmnarf6PfA58NKbHvXph.Ez6LSsn2LBTey7NY3S8Xx6epuCvR6DY4aYj4HWFM2tFku1o4G.SeyJ0IjoiZG0iLCJzIjpbeyJ1cmkiOiJodHRwOi8vMTI3LjAuMC4xOjcwNjEvbWVkaWF0b3IvdjEiLCJhY2NlcHQiOlsiZGlkY29tbS92MiJdfSx7InVyaSI6IndzOi8vMTI3LjAuMC4xOjcwNjEvbWVkaWF0b3IvdjEvd3MiLCJhY2NlcHQiOlsiZGlkY29tbS92MiJdfV19.SeyJ0IjoiQXV0aGVudGljYXRpb24iLCJzIjoiaHR0cDovLzEyNy4wLjAuMTo3MDYxL21lZGlhdG9yL3YxL2F1dGhlbnRpY2F0ZSIsImlkIjoiI2F1dGgifQ.SeyJ0IjoidHNwIiwicyI6Imh0dHA6Ly8xMjcuMC4wLjE6NzA2MS9tZWRpYXRvci92MSIsImlkIjoiI3RzcCJ9",
   "source": {
@@ -154,7 +154,7 @@
       "refusal": {
         "status": 503,
         "code": "e.p.limits.queue.peer",
-        "retryAfter": "present"
+        "retryAfter": 30
       }
     },
     "second-socket": {
