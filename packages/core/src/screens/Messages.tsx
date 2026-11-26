@@ -1,4 +1,4 @@
-import { useConnections } from '@bifold/react-hooks'
+import { useAgent, useConnections } from '@bifold/react-hooks'
 import { useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
 import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
@@ -29,6 +29,9 @@ import WaitingForYou from '../components/messages/WaitingForYou'
 import { roomTitle } from '../modules/rooms/components/RoomRow'
 import { openInMyAgent } from '../modules/rooms/roomLinks'
 import { useHiddenRoomCount, useRoomRows } from '../modules/rooms/useRoomRows'
+import { namesShownLine } from '../modules/trust-tasks/module/communityNamesLog'
+import { loadSavedCommunityNames } from '../modules/trust-tasks/module/savedCommunityNames'
+import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
 import { communityLabelAloneOf } from '../modules/trust-tasks/screens/communityName'
 import { conversations, isConversationPartner, messageRows, type MessageRow } from '../modules/vrc/contacts/messageRows'
 import { useVrcNameCache } from '../modules/vrc/context/VrcNameCacheProvider'
@@ -107,6 +110,24 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
   )
   // The chips: All, People, then one per community that has a room. Only shown once there is a room to tell apart.
   const chips = useMemo(() => communityChips(roomRows), [roomRows])
+  // A chip is named from the names kept in memory (`communityTarget`). Nothing here put them there: only My Agent read
+  // the names saved on the phone, so after a start of the app every chip read "(no name published yet)" until My Agent
+  // had been opened in that run (IN-814). Messages now reads them itself, whenever it comes into view with a chip to
+  // name; and it redraws when a name is learned, by this read or by any other, while it is on screen.
+  const { agent } = useAgent()
+  const chipDids = useMemo(() => chips.map((c) => c.communityDid).join('\n'), [chips])
+  useSyncExternalStore(communityTarget.subscribe, () =>
+    chips.map((c) => communityTarget.publishedNameOf(c.communityDid) ?? '').join('\n')
+  )
+  useEffect(() => {
+    if (!agent || !isFocused || !chipDids) return
+    const shown = chipDids.split('\n')
+    void loadSavedCommunityNames(agent).then(() => {
+      // Said after the read, so a report tells an unnamed chip whose name is not on the phone from one not loaded.
+      const unnamed = shown.filter((did) => !communityTarget.publishedNameOf(did))
+      agent.config?.logger?.info?.(namesShownLine('Messages', shown, unnamed))
+    })
+  }, [agent, isFocused, chipDids])
   const [picked, setPicked] = useState<MessagesChip>(ALL)
   // A community chip whose last room has gone falls back to All.
   const chip = picked.kind === 'community' && !chips.some((c) => c.communityDid === picked.communityDid) ? ALL : picked
