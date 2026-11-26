@@ -1,8 +1,11 @@
 /**
  * WITNESSED two-wallet VRC exchange on REAL DEVICES (attended), Android-only,
  * with the wallet-to-wallet connection on DIDComm v2 instead of the default
- * v1 connection: both wallets turn on Coordinate Mediation 2.0, and the
- * witness serves v1+v2 so it can reply on whichever carriage it received.
+ * v1 connection: both wallets have the "DIDComm v2" and "wallet mailbox"
+ * settings on (the defaults), so the exchange routes through their mailboxes
+ * at Keyring's mailbox mediator; the witness leg is WITNESS_LEG (v1 by
+ * default, see lib/witness.js), and on "v2" the witness serves v1+v2 so it
+ * can reply on whichever carriage it received.
  * Otherwise identical to run-vrc-exchange-witnessed-android-only-devices.js —
  * same witness, same hardware attestation, same VWC issuance. Flow lives in
  * lib/witnessedExchangeFlow.js (`useDidCommV2: true`) — see that file's
@@ -15,12 +18,13 @@
  * since it also replies to the peer VRC exchange on whichever carriage it
  * arrived on.
  *
- * Physical phones can't reach `10.0.2.2`, so the mediator needs tunnel mode
- * with v2 (`yarn mediator --didcomm-v2`, requires `cloudflared`), and the
- * Android debug APK must be rebuilt (`cd app/android && ./gradlew
- * :app:assembleDebug`) after that mediator run writes app/.env's
- * MEDIATOR_V2_URL — restarting Metro alone does not pick it up (see
- * e2e/README.md and docs/E2E_REAL_DEVICE_FLAKINESS.md).
+ * The build: app/.env must carry MAILBOX_MEDIATOR_DID (the store
+ * configuration; Test and OTA-gate builds write it blank) and a MEDIATOR_URL
+ * the phones can reach (tunnel mode, `yarn mediator` without `--endpoint`,
+ * requires `cloudflared`); then build the Android APK (`cd app/android &&
+ * ./gradlew :app:assembleDebug`), since restarting Metro alone does not pick
+ * up app/.env (see e2e/README.md and docs/E2E_REAL_DEVICE_FLAKINESS.md).
+ * Coordinate Mediation 2.0 and MEDIATOR_V2_URL are gone (#1166).
  *
  * Two PHYSICAL phones are required, not emulators — same reasoning as
  * run-vrc-exchange-witnessed-android-only-devices.js (see e2e/README.md).

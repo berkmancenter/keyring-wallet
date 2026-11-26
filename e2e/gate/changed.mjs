@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 // Which gate legs does a change touch? A fast check for a fix, never the release gate: the legs whose drivers use a
 // testID that a changed file owns. The chain, each step from a file the repo already keeps:
-//   changed file -> the testIDs it owns (e2e/lib/testids.json for bifold's packages/core, testids.app.json for app/)
+//   changed file -> the testIDs it owns (e2e/lib/testids.json for packages/core, testids.app.json for app/)
 //   -> the drivers and page objects that name those testIDs (check-testids' own reference reader)
 //   -> the drivers that import such a page object -> the legs that run those drivers (`node <driver>` in legs/*.sh).
 // A changed file that owns no testID (logic, a client, a store) cannot be mapped: it is listed as unmapped and the
 // answer is "use the full gate" (exit 2). Exit 0 with a selection; 1 when nothing changed maps to any leg.
 //
-//   changed.mjs --files a,b,…            paths from the wallet root (bifold/packages/core/src/…, app/src/…)
-//   changed.mjs --range <a>..<b>          the wallet range; bifold/ is folded into this repository, so its paths arrive
-//                                         in the same diff (a range from before the fold still reads the submodule's
-//                                         own range at its pins; one crossing the fold reads as "all of bifold/ moved")
+//   changed.mjs --files a,b,…            paths from the wallet root (packages/core/src/…, app/src/…)
+//   changed.mjs --range <a>..<b>          the wallet range; the framework is at packages/ in this repository (Phase 2 of
+//                                         docs/plans/single-codebase-plan.md), so its paths arrive in the same diff. A
+//                                         range with an end from before the move (bifold/ a tree, or the submodule's
+//                                         gitlink) reads as "all of the framework moved": the full gate, never nothing
 //   [--json]
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -23,7 +24,7 @@ const e2eDir = path.resolve(here, '..');
 const repo = path.resolve(e2eDir, '..');
 
 const MANIFESTS = [
-  { file: 'lib/testids.json', root: 'bifold/packages/core/' },
+  { file: 'lib/testids.json', root: 'packages/core/' },
   { file: 'lib/testids.app.json', root: 'app/' },
 ];
 
@@ -51,9 +52,10 @@ export function idsOwnedBy(changed, owners) {
     const sibling = f.replace(/\.(tsx?|jsx?)$/, '.ids.ts');
     const os = [owners.get(f), sibling !== f ? owners.get(sibling) : undefined].filter(Boolean);
     if (os.length) { for (const o of os) { o.keys.forEach((k) => keys.add(k)); o.stems.forEach((s) => stems.add(s)); } mapped.push(f); }
-    else if (/^(bifold\/packages\/core\/src|app\/src)\/.*\.(tsx?|jsx?)$/.test(f) && !/\.(test|spec)\.[tj]sx?$/.test(f) && !/\/__tests__\//.test(f)) unmapped.push(f);
-    // A bare `bifold` is changedFiles' mark for a range crossing the fold-in: what moved under bifold/ cannot be told,
-    // so it is unmapped (the full gate), never dropped as a path that owns nothing.
+    else if (/^(packages\/core\/src|app\/src)\/.*\.(tsx?|jsx?)$/.test(f) && !/\.(test|spec)\.[tj]sx?$/.test(f) && !/\/__tests__\//.test(f)) unmapped.push(f);
+    // A bare `bifold` is changedFiles' mark for a range with an end from before the move (the framework at bifold/, as
+    // a tree or the gitlink): what moved cannot be told, so it is unmapped (the full gate), never dropped as a path
+    // that owns nothing.
     else if (f === 'bifold') unmapped.push(f);
   }
   return { keys, stems, mapped, unmapped };
@@ -249,58 +251,43 @@ export function select(changed, { manifests, legsDir, root = e2eDir, top = repo,
 }
 
 /**
- * What `<rev>:bifold` is in the wallet repo: 'commit' (the gitlink, before the fold-in), 'tree' (folded in), null
- * (absent, or no such rev). Read from the tree entry (ls-tree), not `cat-file -t`: a gitlink's commit is not in this
- * repository's objects, so cat-file cannot type it.
+ * Where the framework is at `<rev>` in the wallet repo: 'packages' (a tree at packages/, since the move), 'bifold' (at
+ * bifold/, a tree or the submodule's gitlink: before the move), null (neither, or no such rev). Read from the tree
+ * entries (ls-tree), not `cat-file -t`: a gitlink's commit is not in this repository's objects, so cat-file cannot type it.
  */
-export function bifoldKind(rev, top = repo) {
-  try { return execFileSync('git', ['-C', top, 'ls-tree', rev, '--', 'bifold'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split(/\s+/)[1] || null; } catch { return null; }
+export function layoutAt(rev, top = repo) {
+  const kind = (name) => { try { return execFileSync('git', ['-C', top, 'ls-tree', rev, '--', name], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split(/\s+/)[1] || null; } catch { return null; } };
+  if (kind('bifold')) return 'bifold';
+  return kind('packages') === 'tree' ? 'packages' : null;
 }
 
 /**
- * The files a wallet range changes (linkTrigger.mjs too). Both ends folded (bifold/ a tree): the diff already names
- * bifold/… paths. Both ends gitlinks: plus bifold's own range as bifold/… when its pin moved. One of each, or bifold/
- * absent at one end: the fold itself is in the range, and what moved under bifold/ cannot be told, so the list carries
- * a bare `bifold` (the gitlink path) and the callers take it as "all of bifold/ changed" (idsOwnedBy: unmapped, the
- * full gate; linkTrigger: run the link legs). Never silently empty.
+ * The files a wallet range changes (linkTrigger.mjs too). Both ends with the framework at packages/ (since the move):
+ * the diff names its paths like any other. An end with it at bifold/ (a tree, or the gitlink from before the fold): the
+ * move is in the range, the diff names every framework file twice (gone from bifold/, come to packages/) and says
+ * nothing about what changed, so the list drops those and carries a bare `bifold` instead, which the callers take as
+ * "all of the framework changed" (idsOwnedBy: unmapped, the full gate; linkTrigger: run the link legs). Never silently
+ * empty. Both ends before the move: the same mark (this tool knows the packages/ layout; the tool of that era reads
+ * those ranges).
  */
 export function changedFiles(range, top = repo) {
   const git = (...a) => execFileSync('git', ['-C', top, ...a], { encoding: 'utf8' }).trim();
-  const files = git('diff', '--name-only', range).split('\n').filter(Boolean).filter((f) => f !== 'bifold');
+  const files = git('diff', '--name-only', range).split('\n').filter(Boolean);
   const [a, b] = range.split('..');
-  const ka = bifoldKind(a, top), kb = bifoldKind(b, top);
-  if (ka !== kb) return [...files, 'bifold'];
-  if (ka === 'commit') {
-    const pin = (rev) => { try { return git('rev-parse', `${rev}:bifold`); } catch { return ''; } };
-    const pa = pin(a), pb = pin(b);
-    if (pa && pb && pa !== pb) {
-      // A worktree's bifold/ is empty: BIFOLD_GIT names a bifold clone that has the pins (as pathExists reads it).
-      const bifold = process.env.BIFOLD_GIT || path.join(top, 'bifold');
-      const inner = execFileSync('git', ['-C', bifold, 'diff', '--name-only', `${pa}..${pb}`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-      files.push(...inner.map((f) => `bifold/${f}`));
-    }
-  }
-  return files;
+  const la = layoutAt(a, top), lb = layoutAt(b, top);
+  // A repository with no framework at either end has nothing that moved: its diff is complete.
+  if (la === lb && la !== 'bifold') return files;
+  return [...files.filter((f) => !/^(bifold|packages)(\/|$)/.test(f)), 'bifold'];
 }
 
 /**
- * Does the path exist in the wallet tree (HEAD's tree too: a folded bifold/ is part of it), or, while HEAD still
- * carries the gitlink, in the bifold clone (BIFOLD_GIT, else ./bifold)? null when unknowable.
+ * Does the path exist in the wallet tree (on disk, or in HEAD's tree: the framework at packages/ is part of it)?
+ * Nothing is read elsewhere since the move: a bifold/… path is not in HEAD, so it is a typo (or a path from before the
+ * move), not a logic file. null is kept for a caller that wants "unknowable"; nothing is unknowable here any more.
  */
 export function pathExists(f, top = repo) {
   if (fs.existsSync(path.join(top, f))) return true;
-  const git = (dir, ...a) => { try { execFileSync('git', ['-C', dir, ...a], { stdio: 'ignore' }); return true; } catch { return false; } };
-  if (git(top, 'cat-file', '-e', `HEAD:${f}`)) return true;
-  if (f.startsWith('bifold/') && bifoldKind('HEAD', top) !== 'tree') {
-    const dir = process.env.BIFOLD_GIT || path.join(top, 'bifold');
-    let pin = '';
-    try { pin = execFileSync('git', ['-C', top, 'rev-parse', 'HEAD:bifold'], { encoding: 'utf8' }).trim(); } catch { /* no pin */ }
-    const inner = f.slice('bifold/'.length);
-    if (pin && git(dir, 'cat-file', '-e', `${pin}:${inner}`)) return true;
-    if (git(dir, 'cat-file', '-e', `origin/main:${inner}`)) return true;
-    if (!git(dir, 'rev-parse', '--git-dir') || !fs.existsSync(path.join(dir, '.git'))) return null;
-  }
-  return false;
+  try { execFileSync('git', ['-C', top, 'cat-file', '-e', `HEAD:${f}`], { stdio: 'ignore' }); return true; } catch { return false; }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -308,30 +295,27 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const changed = arg('--files') ? arg('--files').split(',').map((s) => s.trim()).filter(Boolean) : arg('--range') ? changedFiles(arg('--range')) : null;
   if (!changed) { console.error('usage: changed.mjs --files a,b,… | --range <a>..<b> [--json]'); process.exit(64); }
   const manifests = MANIFESTS.filter((m) => fs.existsSync(path.join(e2eDir, m.file))).map((m) => ({ root: m.root, json: JSON.parse(fs.readFileSync(path.join(e2eDir, m.file), 'utf8')) }));
-  // A path that is in neither tree is a typo, not a logic file: say so instead of "use the full gate".
-  const missing = changed.filter((f) => /^(bifold|app)\//.test(f) && pathExists(f) === false);
+  // A path that is not in the tree is a typo, not a logic file: say so instead of "use the full gate". A bifold/… path
+  // is one too, since the move (the framework lives at packages/), and the message says where to look.
+  const missing = changed.filter((f) => /^(bifold|packages|app)\//.test(f) && pathExists(f) === false);
   if (missing.length) {
     if (process.argv.includes('--json')) console.log(JSON.stringify({ legs: [], reasons: {}, mapped: [], unmapped: [], missing, verdict: 'no-such-file' }, null, 2));
-    else console.log(`no such file in the wallet or bifold tree: ${missing.join(', ')}`);
+    else console.log(`no such file in the wallet tree (the framework lives at packages/ since its move): ${missing.join(', ')}`);
     process.exitCode = 2;
   }
-  // The manifest is bifold's at one commit; a file that gained testIDs since reads as unmapped. Compared by its ids (the
-  // manifest carries no commit id): the change's manifest against the synced copy. Folded (bifold/ a tree in the
-  // wallet ref), the manifest is in the wallet ref itself; a gitlink's is in the clone at the pin.
+  // The manifest is core's at one commit; a file that gained testIDs since reads as unmapped. Compared by its ids (the
+  // manifest carries no commit id): the change's manifest, read from the wallet ref itself, against the synced copy.
   let warning = '';
   try {
     const ref = arg('--range') ? arg('--range').split('..')[1] : 'HEAD';
     const o = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 };
-    const folded = bifoldKind(ref) === 'tree';
-    const at = execFileSync('git', ['-C', repo, 'rev-parse', folded ? ref : `${ref}:bifold`], o).trim();
-    const upstream = JSON.parse(folded
-      ? execFileSync('git', ['-C', repo, 'show', `${ref}:bifold/packages/core/testids.json`], o)
-      : execFileSync('git', ['-C', path.join(repo, 'bifold'), 'show', `${at}:packages/core/testids.json`], o));
+    const at = execFileSync('git', ['-C', repo, 'rev-parse', ref], o).trim();
+    const upstream = JSON.parse(execFileSync('git', ['-C', repo, 'show', `${ref}:packages/core/testids.json`], o));
     const { added } = manifestDrift(manifests[0]?.json, upstream);
-    if (added.length) warning = `testids manifest lacks ${added.length} id(s) ${folded ? 'wallet' : 'bifold'} ${at.slice(0, 8)} has, so files owning them read as unmapped (sync: e2e/scripts/sync-testids.sh)`;
+    if (added.length) warning = `testids manifest lacks ${added.length} id(s) wallet ${at.slice(0, 8)} has, so files owning them read as unmapped (sync: e2e/scripts/sync-testids.sh)`;
   } catch {
     // Said, not swallowed: a comparison that cannot run here must not read like one that found nothing.
-    warning = 'testids manifest not compared with the change (no bifold/ at that ref, or its manifest not readable here: a pre-fold pin whose submodule is not checked out or not fetched), so files owning newer ids may read as unmapped';
+    warning = 'testids manifest not compared with the change (no packages/core/testids.json at that ref: a ref from before the move of the framework into packages/, or not fetched here), so files owning newer ids may read as unmapped';
   }
   if (warning) console.error(`warning: ${warning}`);
   if (missing.length) process.exit();

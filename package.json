@@ -12,7 +12,8 @@
   "packageManager": "yarn@4.9.2",
   "workspaces": {
     "packages": [
-      "app"
+      "app",
+      "packages/*"
     ]
   },
   "repository": {
@@ -24,8 +25,7 @@
   },
   "homepage": "https://github.com/berkmancenter/keyring-wallet#readme",
   "scripts": {
-    "preinstall": "node scripts/ensure-bifold-ready.js && npx husky install .husky",
-    "postinstall": "node scripts/fix-portal-symlinks.js",
+    "preinstall": "npx husky install .husky",
     "quickstart": "bash scripts/quickstart.sh",
     "doctor": "bash scripts/quickstart.sh --check",
     "demo:android": "node scripts/demo.js android",
@@ -77,16 +77,38 @@
     "e2e:vrc:witnessed:tsp:android-only": "cd e2e && npm run vrc-exchange:witnessed:tsp:android-only",
     "e2e:vrc:witnessed:android-only:mediator": "cd e2e && npm run vrc-exchange:witnessed:android-only:mediator",
     "e2e:agent:connect": "cd e2e && npm run agent-connect",
-    "e2e:agent:connect:ios": "cd e2e && npm run agent-connect:ios"
+    "e2e:agent:connect:ios": "cd e2e && npm run agent-connect:ios",
+    "build:packages": "yarn workspaces foreach --all --topological-dev --exclude keyring-wallet --exclude keyring-wallet-mobile-app -p run build",
+    "test:packages": "yarn workspaces foreach --all --topological-dev --exclude keyring-wallet --exclude keyring-wallet-mobile-app run test",
+    "typecheck:packages": "yarn workspaces foreach --all --topological-dev --exclude keyring-wallet --exclude keyring-wallet-mobile-app -p run typecheck",
+    "lint:packages": "eslint --color packages",
+    "prettier:packages": "prettier --check --ignore-path packages/.prettierignore 'packages/**/*.+(js|jsx|json|ts|tsx|md|yml|yaml)'"
   },
   "devDependencies": {
     "@commitlint/cli": "~19.8.1",
+    "@eslint/js": "~8.57.1",
+    "@react-native/eslint-config": "~0.81.5",
+    "@types/eslint__js": "~8.42.3",
+    "@typescript-eslint/eslint-plugin": "~7.18.0",
+    "@typescript-eslint/parser": "~7.18.0",
     "commitlint": "~19.8.1",
+    "eslint": "~8.57.1",
+    "eslint-import-resolver-typescript": "~3.6.3",
+    "eslint-plugin-import": "~2.29.1",
+    "eslint-plugin-jest": "~28.8.3",
+    "eslint-plugin-prettier": "~5.2.6",
+    "eslint-plugin-react": "~7.35.2",
+    "eslint-plugin-react-hooks": "~4.6.2",
     "husky": "~9.1.7",
     "patch-package": "^8.0.1",
-    "sharp": "^0.34.5"
+    "prettier": "~3.4.2",
+    "sharp": "^0.34.5",
+    "ts-node": "~10.0.0",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "~8.53.1"
   },
   "resolutions": {
+    "resolve.exports": "2.0.3",
     "@digitalcredentials/jsonld": "9.0.0",
     "rdf-canonize": "5.0.0",
     "tsyringe": "4.8.0",
@@ -107,23 +129,22 @@
     "@animo-id/expo-secure-environment@npm:0.1.5": "patch:@animo-id/expo-secure-environment@npm%3A0.1.5#~/.yarn/patches/@animo-id-expo-secure-environment-npm-0.1.5-3c2a8f1b94.patch",
     "@animo-id/pex@npm:4.1.1-alpha.0": "patch:@animo-id/pex@npm%3A4.1.1-alpha.0#~/.yarn/patches/@animo-id-pex-npm-4.1.1-alpha.0-f29edfffa2.patch",
     "@sphereon/pex@npm:5.0.0-unstable.24": "patch:@sphereon/pex@npm%3A5.0.0-unstable.24#~/.yarn/patches/@sphereon-pex-npm-5.0.0-unstable.24-921df3a8ac.patch",
-    "@bifold/core": "portal:bifold/packages/core",
-    "@bifold/oca": "portal:bifold/packages/oca",
-    "@bifold/react-hooks": "portal:bifold/packages/react-hooks",
-    "@bifold/react-native-attestation": "portal:bifold/packages/react-native-attestation",
-    "@bifold/react-native-locality-peripheral": "portal:bifold/packages/react-native-locality-peripheral",
-    "@bifold/remote-logs": "portal:bifold/packages/remote-logs",
-    "@bifold/verifier": "portal:bifold/packages/verifier",
-    "@bifold/dtg-vocab": "portal:bifold/packages/dtg-vocab",
-    "@bifold/vrc-contexts": "portal:bifold/packages/vrc-contexts",
-    "@bifold/trust-tasks": "portal:bifold/packages/trust-tasks",
     "@openvtc/trust-tasks": "npm:0.27.8",
-    "@bifold/credo-tsp-adapter": "portal:bifold/packages/credo-tsp-adapter",
     "json-canonicalize": "2.0.0",
     "rxjs": "7.8.2",
     "@scure/base@npm:^2.0.0": "patch:@scure/base@npm%3A2.4.0#~/.yarn/patches/@scure-base-npm-2.4.0-a45e841171.patch",
     "@animo-id/pex@npm:^6.1.1": "patch:@animo-id/pex@npm%3A6.1.1#~/.yarn/patches/@animo-id-pex-npm-6.1.1-976fb8ed6b.patch",
-    "@credo-ts/core@npm:0.7.1-pr-2704-20260909134930": "patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch"
+    "@credo-ts/core@npm:0.7.1-pr-2704-20260909134930": "patch:@credo-ts/core@npm%3A0.7.1-pr-2704-20260909134930#~/.yarn/patches/@credo-ts-core-npm-0.7.1-pr-2704-20260909134930-b95d84ab27.patch",
+    "tslib": "2.6.2",
+    "sha.js": "2.4.12",
+    "elliptic": "6.6.1",
+    "react-native-vision-camera": "4.7.3",
+    "@credo-ts/node": "0.7.1-pr-2704-20260909134930",
+    "@sphereon/ssi-types": "0.33.0",
+    "@peculiar/asn1-schema": "2.9.4",
+    "expo": "~54.0.31",
+    "expo-crypto": "~15.0.8",
+    "expo-secure-store": "~15.0.8"
   },
   "dependenciesMeta": {
     "@2060.io/ffi-napi": {

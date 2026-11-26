@@ -49,7 +49,7 @@ interface GetBCAgentModulesOptions {
   txnCache?: { capacity: number; expiryOffsetMs: number; path?: string }
   /** Accept DIDComm v2 beside v1 (didcomm_v2_subtask.md C12): on as shipped. */
   enableDidCommV2?: boolean
-  /** The v2 mailbox (Coordinate Mediation 2.0), needed to mint v2 invitations: off as shipped, and only with v2 on. */
+  /** The wallet mailbox, needed to mint v2 invitations: on as shipped (281.2), and only with v2 on. */
   enableV2Mailbox?: boolean
 }
 

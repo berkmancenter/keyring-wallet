@@ -14,7 +14,7 @@
  *
  * Shape mirrors the LOCAL-spec staging convention already used for
  * `vrc/relationships/witness-share`
- * (`bifold/packages/core/src/modules/trust-tasks/witnessShareSpec.ts`): a
+ * (`packages/core/src/modules/trust-tasks/witnessShareSpec.ts`): a
  * plain TS module exporting `TYPE_URI` / `RESPONSE_TYPE_URI` / `SPEC` /
  * `RESPONSE_SPEC`, with the schema inlined as data rather than generated —
  * this is a demo-owned type, not one staged for upstream submission, so

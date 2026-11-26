@@ -6,9 +6,10 @@
 #   e2e/scripts/build-testflight-android.sh            # → prints the .apk path
 #   TESTFLIGHT_OVERRIDES=<file of KEY=VALUE> …         # e.g. a Farm build
 #
-# A release APK bundles @bifold/core from its built lib/, and a plain
-# assembleRelease keeps a stale JS bundle, so core is built first and the
-# bundle task is forced to run. app/.env is restored whatever happens.
+# A release APK bundles @bifold/core from source (Metro); only the Node-consumed
+# @bifold/trust-tasks needs its build/ first. A plain assembleRelease keeps a
+# stale JS bundle, so the bundle task is forced to run. app/.env is restored
+# whatever happens.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 APP="$ROOT/app"
@@ -34,8 +35,7 @@ for key in VTI_MEDIATOR_DID VTI_COMMUNITY_DID; do
   grep -qE "^${key}=.+" "$APP/.env" || { echo "build-testflight-android: app/.env has no $key — store builds bake it" >&2; exit 1; }
 done
 
-(cd "$ROOT/bifold" && yarn workspace @bifold/core build >/dev/null)
-(cd "$ROOT/bifold/packages/trust-tasks" && yarn build >/dev/null)
+(cd "$ROOT/packages/trust-tasks" && yarn build >/dev/null)
 LOG="$APP/android/build-release.log"
 (cd "$APP/android" && ./gradlew app:createBundleReleaseJsAndAssets --rerun-tasks app:assembleRelease >"$LOG" 2>&1) || {
   echo "build-testflight-android: gradle failed — see $LOG" >&2

@@ -1,0 +1,895 @@
+/**
+ * A room's posts as RoomView shows them: newest first, {@link POSTS_PAGE} at a time, "load older" for the next
+ * page, and a refresh (pull down) that lists the room again. Nothing pushes a post to a phone, so while the room is
+ * `live` (in view, the app in the foreground) it asks every {@link ROOM_POLL_MS} for the records above the newest
+ * version it holds, and catches up at once on coming back. Upstream's browse says a consumer SHOULD NOT poll; the
+ * poll is kept to the room the member is looking at.
+ *
+ * An opening lists the room's newest {@link ROOM_HEAD_WINDOW} records (rooms/newestFirstSwitch; the whole room, off),
+ * and "load older" lists the next ones below the lowest version held once those shown run out. Each shown record is
+ * then read. A read is kept by key and version, so a new listing reads only what is new or changed: a refresh or a
+ * poll that finds nothing new reads nothing and redraws nothing. A record that can't be read stays in its place as
+ * "couldn't be read", never hiding the rest, and is read again with the next listing.
+ *
+ * The agent client sends one task at a time, so a poll is skipped while a listing of the room is still being asked:
+ * it never queues behind itself, and a member's own post waits behind one listing at most.
+ *
+ * A poll that fails says so (`pollFailed`) until a listing succeeds, and `pollNow` asks again at once. Only the change
+ * redraws: a failure repeated while one is already said, or a success while none is, redraws nothing.
+ *
+ * While the agent is being reached again (an unlock reopens its session) neither failure is said, and a listing or a
+ * poll that failed is asked again once the moment a session opens after it was sent (#772, 276.9), not at a tick.
+ *
+ * @module rooms/useRoomPosts
+ */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+
+import { useAgentSession } from './agentSession'
+import { isRecordJson, newestFirst, postOf, type RoomPost, withRepliesToReactions } from './roomPosts'
+import { inertFlags, toInertText } from './inertText'
+import { dropKeptListing, keepListing, keptListing } from './keptListings'
+import {
+  type CachedPost,
+  emptyMessageCache,
+  isCacheWallet,
+  keepRoomPosts,
+  readRoomPosts,
+  readRoomPostsBeforeRoom,
+} from './messageCache'
+import { isRoomsNewestFirstOn, ROOM_HEAD_WINDOW } from './newestFirstSwitch'
+import { logRef } from './roomsLogWords'
+import {
+  RECORD_UNOPENED_REASONS,
+  RoomsRefused,
+  type HostCheck,
+  type Identity,
+  type Note,
+  type NoteList,
+  type NoteSummary,
+  type RecordUnopenedReason,
+  type RoomsService,
+} from './types'
+
+/**
+ * The posts read on opening a room, and on each "Load older". Small on purpose: each is one task for the person's
+ * agent, which the agent client sends one at a time, so a post written just after opening a room waited behind the
+ * whole first page. At 30 the act took 40 s to reach the host on the lab's open room (S0.7, 10-29).
+ */
+export const POSTS_PAGE = 10
+/** How often a room in view asks for new posts. */
+export const ROOM_POLL_MS = 10_000
+/**
+ * How often a room in view asks for new posts while its watch is armed (`RoomsService.roomWatched`): a change comes as
+ * a signal and is read at once, so this is only for a signal lost on the way (a socket that dropped, a host that forgot).
+ */
+export const ROOM_WATCHED_POLL_MS = 120_000
+/** After a poll that failed, the ticks that pass before the next one. */
+export const POLL_SKIPS_AFTER_FAILURE = 2
+
+interface Listing {
+  notes: NoteSummary[]
+  check: HostCheck
+  complete: boolean
+  /** A window: the room holds records below the lowest version here, listed when the posts shown reach them. */
+  older?: boolean
+  /** The version of the last prune this listing already reflects: a full listing that carried it. */
+  pruneSeen?: number
+}
+
+export interface RoomPosts {
+  /** Newest first. Undefined until the first page is read. */
+  posts?: RoomPost[]
+  /** More, older posts can be loaded. */
+  hasOlder: boolean
+  /** The agent's check of the host's answer; a `conflict` is shown above the posts. */
+  check?: HostCheck
+  /** The host's listing stopped early. */
+  incomplete: boolean
+  /** The room could not be listed; what was shown before stays. */
+  failed: boolean
+  refreshing: boolean
+  loadingOlder: boolean
+  loadOlder: () => void
+  refresh: () => void
+  /** The last poll failed. Cleared by the next listing that succeeds; it changes only on that flip. */
+  pollFailed: boolean
+  /** Asks for new posts at once, without waiting out the ticks a failure skips. Nothing while the room isn't polled. */
+  pollNow: () => void
+  /**
+   * The posts drawn are from before this opening: this run's kept listing (keptListings) or the wallet's kept copy
+   * (messageCache), and the room's first listing has not answered yet. Its answer replaces them; its failure takes them
+   * down (posts undefined, `failed`).
+   */
+  unconfirmed: boolean
+  /**
+   * The member's own writes that succeeded and that the posts do not carry yet (pendingRecordWrites `written`). While
+   * any is, a watched room is polled every {@link ROOM_POLL_MS} again, not at {@link ROOM_WATCHED_POLL_MS}: the host
+   * signals the writer's own write too, but never sends a signal twice, so a lost one would leave the member's reaction
+   * gone from the screen, once its overlay ends at PENDING_WRITE_MAX_MS (30 s), until the two-minute poll. Read at each
+   * tick; setting it draws nothing.
+   */
+  awaitWrites: (written: readonly { key: string; version: number }[]) => void
+  /**
+   * The screen drew the posts (its list laid them out): the opening's log line is said now, and only from here, so it
+   * never claims a paint that did not happen. 279.4 said "9 posts shown in 135 ms" while the room screen still showed
+   * only its spinner (YJPT-6WC8).
+   */
+  painted: () => void
+}
+
+/** The newest version a listing holds: a poll asks for the records above it. 0 for an empty room. */
+export const newestVersion = (notes: readonly NoteSummary[]): number =>
+  notes.reduce((newest, note) => Math.max(newest, note.version), 0)
+
+/**
+ * A listing with what a poll found merged in: a record at a higher version replaces its key's entry (a retract is
+ * one), and a new key is added. Undefined when the poll found nothing newer, so nothing is redrawn.
+ */
+export function mergeNewer(listing: Listing, newer: NoteList): { listing: Listing; added: number } | undefined {
+  const byKey = new Map(listing.notes.map((note) => [note.key, note]))
+  let added = 0
+  let changed = false
+  for (const note of newer.notes) {
+    const held = byKey.get(note.key)
+    if (held && held.version >= note.version) continue
+    if (!held) added++
+    byKey.set(note.key, note)
+    changed = true
+  }
+  // A conflict the agent found shows at once. A partial listing can't be compared, so it never clears one; and the
+  // same conflict found again is no change, so a standing one redraws nothing. `HostCheck` is exactly
+  // { verdict, detail }: a field added to it must be compared here too.
+  const sameCheck = newer.check.verdict === listing.check.verdict && newer.check.detail === listing.check.detail
+  const check = newer.check.verdict === 'conflict' && !sameCheck ? newer.check : listing.check
+  if (!changed && check === listing.check) return undefined
+  return {
+    listing: {
+      notes: newestFirst([...byKey.values()]),
+      check,
+      complete: listing.complete && newer.complete,
+      ...(listing.older ? { older: true } : {}),
+      ...(listing.pruneSeen !== undefined ? { pruneSeen: listing.pruneSeen } : {}),
+    },
+    added,
+  }
+}
+
+/** The lowest version a listing holds: the next window is asked below it. */
+export const lowestVersion = (notes: readonly NoteSummary[]): number =>
+  notes.reduce((lowest, note) => Math.min(lowest, note.version), Number.POSITIVE_INFINITY)
+
+/**
+ * A listing with the window below it joined on: a key it already holds keeps the higher version, and `older` is the
+ * window's own, so the room is said to hold nothing more once a window comes back without it. A conflict the window's
+ * check found shows, as a poll's does (mergeNewer).
+ */
+export function withOlder(listing: Listing, older: NoteList): Listing {
+  const byKey = new Map(listing.notes.map((note) => [note.key, note]))
+  for (const note of older.notes) {
+    const held = byKey.get(note.key)
+    if (!held || held.version < note.version) byKey.set(note.key, note)
+  }
+  return {
+    notes: newestFirst([...byKey.values()]),
+    check: older.check.verdict === 'conflict' ? older.check : listing.check,
+    complete: listing.complete && older.complete,
+    ...(older.older ? { older: true } : {}),
+    ...(listing.pruneSeen !== undefined ? { pruneSeen: listing.pruneSeen } : {}),
+  }
+}
+
+/**
+ * The room's newest records, as an opening lists them: a window of `size` while rooms/newestFirstSwitch is on, else the
+ * whole room, asked exactly as before the switch.
+ */
+const listHead = (service: RoomsService, roomId: string, size = ROOM_HEAD_WINDOW): Promise<NoteList> =>
+  isRoomsNewestFirstOn() ? service.listNotes(roomId, { head: size }) : service.listNotes(roomId)
+
+/** A full listing as held: newest first, with the prune it already reflects. */
+const listingOf = (list: NoteList): Listing => ({
+  notes: newestFirst(list.notes),
+  check: list.check,
+  complete: list.complete,
+  ...(list.older ? { older: true } : {}),
+  ...(list.lastPrune ? { pruneSeen: list.lastPrune.version } : {}),
+})
+
+/**
+ * Whether `newer` names a prune past what is held (browse 0.3's reader rule): records it removed never come in a
+ * poll from the newest version held, so only a full listing drops them. The watermark is the newer of the newest
+ * version held and the last prune already applied: a prune that took the newest post leaves the newest version held
+ * below the prune's own, and the posts alone would ask for a full listing on every poll.
+ */
+const prunedPast = (listing: Listing, newer: NoteList): boolean =>
+  !!newer.lastPrune && newer.lastPrune.version > Math.max(newestVersion(listing.notes), listing.pruneSeen ?? 0)
+
+const readKey = (note: NoteSummary) => `${note.key}@${note.version}`
+
+/** The reason a read was refused with, when the agent gave one Keyring knows (`RoomsService.readNote`). */
+const unopenedReason = (e: unknown): RecordUnopenedReason | undefined =>
+  e instanceof RoomsRefused && e.operation === 'readNote'
+    ? RECORD_UNOPENED_REASONS.find((r) => r === e.code)
+    : undefined
+
+/** How long a room's drawn posts settle before they are kept in the wallet (rooms/messageCache). */
+export const MESSAGE_KEEP_DELAY_MS = 2_000
+
+/**
+ * A listing seeded from the wallet's kept posts (rooms/messageCache), with each post's words put where a read would
+ * have put them, so the posts draw at once and nothing is read for them. Marked unverified: the room's listing that
+ * follows replaces it, verdicts and all.
+ */
+function seedOf(posts: readonly CachedPost[], read: Map<string, Note>): Listing {
+  const notes: NoteSummary[] = posts.map((post) => {
+    const summary: NoteSummary = {
+      key: post.key,
+      version: post.version,
+      ...(post.author ? { author: { did: post.author } } : {}),
+      updatedAt: post.writtenAt,
+      status: 'active',
+      pinned: false,
+    }
+    const body = toInertText(post.body)
+    const verdict = post.verdict === 'consistent' || post.verdict === 'conflict' ? post.verdict : 'unverified'
+    read.set(readKey(summary), {
+      ...summary,
+      body,
+      flags: inertFlags(body),
+      check: { verdict, detail: '' },
+      ...(post.kind ? { kind: post.kind } : {}),
+      ...(post.inReplyTo ? { inReplyTo: { key: post.inReplyTo } } : {}),
+      writtenAt: post.writtenAt,
+    })
+    return summary
+  })
+  return { notes: newestFirst(notes), check: { verdict: 'unverified', detail: '' }, complete: false }
+}
+
+/**
+ * A drawn post as kept: only one the member was shown in full, read and not refused, never one on its way, a file, or
+ * a withdrawn one. Its words are the post's own; nothing of a file is kept.
+ */
+function keptOf(post: RoomPost): CachedPost | undefined {
+  const writtenAt = post.writtenAt ?? post.at?.toISOString()
+  // Nor one this client can't show: it has no words, and kept, it would come back as an empty bubble. Nor words that
+  // are a whole signed record (someone pasted one): the copy leaves those out when it is read (messageCache), and what
+  // is written must be what is read back.
+  if (
+    !writtenAt ||
+    post.retracted ||
+    post.unread ||
+    post.refused ||
+    post.delivery ||
+    post.notShown ||
+    post.files.length > 0 ||
+    isRecordJson(String(post.text))
+  )
+    return undefined
+  return {
+    key: post.key,
+    version: post.version,
+    ...(post.kind ? { kind: post.kind } : {}),
+    ...(post.author?.did ? { author: post.author.did } : {}),
+    writtenAt,
+    body: String(post.text),
+    ...(post.inReplyTo?.key ? { inReplyTo: post.inReplyTo.key } : {}),
+  }
+}
+
+/**
+ * A listing, counted in `inFlight` until it settles, even when the call throws before it returns a promise: left
+ * counted, every later poll would be skipped for the life of the screen.
+ */
+function counted(
+  inFlight: { current: number },
+  list: () => Promise<NoteList>,
+  /** Called once no listing is out any more, after what the last one answered has been taken in. */
+  idle?: () => void
+): Promise<NoteList> {
+  let asked: Promise<NoteList>
+  try {
+    asked = list()
+  } catch (e) {
+    asked = Promise.reject(e)
+  }
+  inFlight.current++
+  return asked.finally(() => {
+    inFlight.current--
+    // Later than the caller's own handlers, which are chained on what this returns: the listing is merged first.
+    if (inFlight.current === 0 && idle) setTimeout(idle, 0)
+  })
+}
+
+export function useRoomPosts(
+  service: RoomsService | undefined,
+  roomId: string,
+  actingAs: Identity | undefined,
+  enabled: boolean,
+  live = false,
+  /**
+   * The posts a page is counted in, when the screen draws only some of them: a room's chat leaves its notes out, so
+   * its page is POSTS_PAGE chat posts, and the notes among them are read too. Every post counts when absent.
+   */
+  counts?: (post: RoomPost) => boolean,
+  options: {
+    /**
+     * Keep this room's posts in the wallet, and open on them (rooms/messageCache): the chat of an open, attributed or
+     * private room, by its community and end. Absent for a room of unknown tier, and for every other screen.
+     */
+    messageCache?: { communityDid: string; validUntil?: string }
+    /**
+     * Open on the wallet's kept copy before the room is known (rooms/messageCache `readRoomPostsBeforeRoom`): the
+     * room's chat, while its screen still waits for the first rooms listing to say which identity acts here. Taken
+     * down when the room, once known, acts as another identity or is not kept, and when it cannot be read
+     * (`roomNotRead`). Under the cache's own switch, biometric unlock and checks.
+     */
+    seedBeforeRoom?: boolean
+    /** The room itself could not be read (useRoom `failed`, no room yet): a copy drawn before it is taken down. */
+    roomNotRead?: boolean
+  } = {}
+): RoomPosts {
+  const [listing, setListing] = useState<Listing>()
+  // The room's last listing this run, when one is kept (keptListings): shown at once when the room can be listed, while
+  // its first listing reads behind it. A seed that first listing cannot confirm is dropped.
+  const seeded = useRef<Listing | undefined>(undefined)
+  // Where the seed came from, for the opening's log line: this run's kept listing, or the wallet's kept copy (c0).
+  const seedFrom = useRef<'kept listing' | 'wallet copy' | 'wallet copy, before the room'>('kept listing')
+  // The room's first listing of this opening answered: a kept copy read after it is never shown.
+  const confirmed = useRef(false)
+  const cacheNow = useRef(options.messageCache)
+  cacheNow.current = options.messageCache
+  const actingAsNow = useRef(actingAs)
+  actingAsNow.current = actingAs
+  // The identity and community the copy drawn before the room was known is of (seedBeforeRoom), until the room agrees.
+  const seededBefore = useRef<{ personaDid: string; communityDid: string } | undefined>(undefined)
+  const [drawnBeforeAs, setDrawnBeforeAs] = useState<string>()
+  // A copy drawn before the room, once taken down: never drawn again from a render that still held it.
+  const takenDown = useRef<Listing | undefined>(undefined)
+  // Records read and drawn: `wanted` counted posts, and as many more records as it takes to reach them.
+  const [shown, setShown] = useState(POSTS_PAGE)
+  const wanted = useRef(POSTS_PAGE)
+  const countsNow = useRef(counts)
+  countsNow.current = counts
+  const [posts, setPosts] = useState<RoomPost[]>()
+  // When this room was opened here, and whether the first posts shown since were said: how long a room takes to open
+  // was in no report (11-17). Once per opening, by the room's short ref and a count; never a post's words. Only posts
+  // drawn from a listing read since it opened are its own: the listing held then is another room's, when the room
+  // changes under the same screen, and its posts are drawn again for a moment.
+  const opened = useRef<{ roomId: string; at: number; said: boolean; listing?: Listing }>(undefined)
+  if (opened.current?.roomId !== roomId) {
+    // A kept listing is the room's it was taken for: another room under the same screen may take its own.
+    if (opened.current) seeded.current = undefined
+    opened.current = { roomId, at: Date.now(), said: false, listing: opened.current ? listing : undefined }
+  }
+  /** The posts last drawn, and the listing they were drawn from. */
+  const drawnFrom = useRef<{ posts: RoomPost[]; listing: Listing }>(undefined)
+  const [failed, setFailed] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [generation, setGeneration] = useState(0)
+  const listingNow = useRef(listing)
+  listingNow.current = listing
+  // Listings of this room being asked now (a first read, a refresh, a poll, a window below what is held).
+  const listingsInFlight = useRef(0)
+  // The version the window below what is held was last asked under, and whether it answered: asked once per version.
+  const olderAsked = useRef<{ below: number; settled: boolean } | undefined>(undefined)
+  // Coming back into view catches up at once instead of a tick later.
+  const resumed = useRef(false)
+  // Ticks still to pass after a failed poll. Kept across leaving and coming back, so a member whose agent is failing
+  // doesn't ask again on every return; a listing that succeeds clears them.
+  const skips = useRef(0)
+  // Whether the last poll failed, as said on screen. Mirrored in a ref so that only a flip sets state.
+  const [pollFailed, setPollFailed] = useState(false)
+  const pollFailedNow = useRef(false)
+  const notePoll = useCallback((failedNow: boolean) => {
+    if (pollFailedNow.current === failedNow) return
+    pollFailedNow.current = failedNow
+    setPollFailed(failedNow)
+  }, [])
+  // The poll of the room while it is polled, for `pollNow`.
+  const tickNow = useRef<(() => void) | undefined>(undefined)
+  /**
+   * A signal came while a listing was out, so its tick did not list (probe C, review of #1024). That listing may have
+   * been asked before the change, and a live watch's host signals each change once: it is read once more when no
+   * listing is out (`afterListings`).
+   */
+  const owedSignal = useRef(false)
+  const signalTick = useRef<(() => void) | undefined>(undefined)
+  const afterListings = useCallback(() => {
+    if (!owedSignal.current) return
+    owedSignal.current = false
+    signalTick.current?.()
+  }, [])
+  /** When the last listing of the room was asked: a watched room's poll waits ROOM_WATCHED_POLL_MS from it. */
+  const askedAt = useRef(0)
+  /** The member's own successful writes the posts do not carry yet (awaitWrites): a watched room polls at its old pace. */
+  const awaiting = useRef<readonly { key: string; version: number }[]>([])
+  const awaitWrites = useCallback((written: readonly { key: string; version: number }[]) => {
+    awaiting.current = written
+  }, [])
+  const reads = useRef<{
+    service?: RoomsService
+    roomId: string
+    notes: Map<string, Note>
+    /** Why each record that could not be read was refused, when the agent said. Cleared by a read that succeeds. */
+    unopened: Map<string, RecordUnopenedReason>
+  }>({
+    roomId,
+    notes: new Map(),
+    unopened: new Map(),
+  })
+  if (reads.current.service !== service || reads.current.roomId !== roomId)
+    reads.current = { service, roomId, notes: new Map(), unopened: new Map() }
+  const session = useAgentSession()
+  // The agent session each failed ask was sent on: a session opened since asks again.
+  const openedAt = useRef(session.openedAt)
+  openedAt.current = session.openedAt
+  const listFailedOn = useRef<number | undefined>(undefined)
+  const pollFailedOn = useRef<number | undefined>(undefined)
+
+  // Before the room is known: the wallet's kept copy, drawn by the identity this phone itself says acts in its community
+  // (readRoomPostsBeforeRoom), so a cold start opens on it without waiting for the first rooms listing (279.3: 6 s).
+  const seedBeforeRoom = options.seedBeforeRoom === true
+  useEffect(() => {
+    if (!service || enabled || !seedBeforeRoom || !service.localCommunities) return
+    const wallet = service.runsOn
+    if (!isCacheWallet(wallet) || seeded.current || listingNow.current) return
+    let current = true
+    service
+      .localCommunities()
+      .then((communities) => readRoomPostsBeforeRoom(wallet, roomId, communities))
+      .then(
+        (copy) => {
+          if (!current || !copy || confirmed.current || seeded.current || listingNow.current) return
+          const seed = seedOf(copy.posts, reads.current.notes)
+          seeded.current = seed
+          seedFrom.current = 'wallet copy, before the room'
+          seededBefore.current = { personaDid: copy.room.personaDid, communityDid: copy.room.communityDid }
+          setDrawnBeforeAs(copy.room.personaDid)
+          setListing(seed)
+        },
+        () => undefined
+      )
+    return () => {
+      current = false
+    }
+  }, [service, roomId, enabled, seedBeforeRoom])
+
+  // The room known (it names who acts in it), or not readable: a copy drawn before it stays only when the room can be
+  // listed, acts as the identity the copy was of, in its community, and is kept (messageCache given). Else it comes
+  // down at once, before any listing answers: a room left, one not listable, a private one, another identity's.
+  const roomNotRead = options.roomNotRead === true
+  const cacheCommunity = options.messageCache?.communityDid
+  const knownAs = actingAs?.did
+  useEffect(() => {
+    const before = seededBefore.current
+    if (!before || (knownAs === undefined && !roomNotRead)) return
+    seededBefore.current = undefined
+    const agrees = enabled && !roomNotRead && knownAs === before.personaDid && cacheCommunity === before.communityDid
+    if (agrees) return
+    if (seeded.current && listingNow.current === seeded.current) {
+      takenDown.current = seeded.current
+      seeded.current = undefined
+      setListing(undefined)
+      setPosts(undefined)
+    }
+  }, [enabled, roomNotRead, knownAs, cacheCommunity])
+
+  useEffect(() => {
+    if (!service || !enabled) return
+    let current = true
+    const sentOn = openedAt.current
+    askedAt.current = Date.now()
+    confirmed.current = false
+    if (!seeded.current && (!listingNow.current || listingNow.current === opened.current?.listing)) {
+      const kept = keptListing<Listing>(service, roomId)
+      if (kept) {
+        seeded.current = kept
+        seedFrom.current = 'kept listing'
+        setListing(kept)
+      }
+    }
+    // Else the wallet's kept copy of this room, when there is one (rooms/messageCache): it checks the switch, the
+    // biometric unlock, the identity, the room's end and the journal itself.
+    const wallet = service.runsOn
+    const cache = cacheNow.current
+    const me = actingAsNow.current
+    if (!seeded.current && !listingNow.current && cache && me && isCacheWallet(wallet))
+      readRoomPosts(wallet, me.did, roomId).then(
+        (copy) => {
+          if (!current || !copy || confirmed.current || seeded.current) return
+          const seed = seedOf(copy.posts, reads.current.notes)
+          seeded.current = seed
+          seedFrom.current = 'wallet copy'
+          setListing(seed)
+        },
+        () => undefined
+      )
+    olderAsked.current = undefined
+    counted(listingsInFlight, () => listHead(service, roomId), afterListings).then(
+      (list) => {
+        skips.current = 0
+        if (!current) return
+        confirmed.current = true
+        const full = listingOf(list)
+        keepListing(service, roomId, full)
+        setListing(full)
+        setFailed(false)
+        notePoll(false)
+      },
+      (e: unknown) => {
+        if (!current) return
+        // A kept listing nothing has confirmed is not shown: the room may be left since, or no longer readable.
+        dropKeptListing(service, roomId)
+        // Refused: the wallet's copy goes too, whatever drew it (rooms/messageCache).
+        if (e instanceof RoomsRefused && isCacheWallet(wallet))
+          void emptyMessageCache(wallet, { room: roomId }, 'refused').catch(() => undefined)
+        if (seeded.current && listingNow.current === seeded.current) {
+          seeded.current = undefined
+          setListing(undefined)
+          setPosts(undefined)
+        }
+        listFailedOn.current = sentOn
+        setFailed(true)
+        setRefreshing(false)
+      }
+    )
+    return () => {
+      current = false
+    }
+  }, [service, roomId, enabled, generation, notePoll, afterListings])
+
+  const listed = !!listing
+  // In view and listed: the room's watch is armed from the newest version held (each poll arms it again, above).
+  const newest = listing ? newestVersion(listing.notes) : undefined
+  useEffect(() => {
+    if (!service?.watchRoom || !enabled || !live || newest === undefined) return
+    // On screen: watched live where the room's host allows it (roomWatches), one signal at a time elsewhere.
+    service.watchRoom(roomId, newest, { live: true })
+  }, [service, roomId, enabled, live, newest])
+  // Out of view (another screen, the app left, the room closed): the screen lets go, and the room's one-shot watch is
+  // armed again from the newest version held, which ends a live one. Not in the effect above: that one runs again at
+  // each new post, and letting go there would end the live watch at every message.
+  const newestHeld = useRef(newest)
+  newestHeld.current = newest
+  useEffect(() => {
+    if (!service?.watchRoom || !enabled || !live) return
+    return () => {
+      if (newestHeld.current !== undefined) service.watchRoom?.(roomId, newestHeld.current, { live: false })
+    }
+  }, [service, roomId, enabled, live])
+  useEffect(() => {
+    if (!service || !enabled || !live || !listed) return
+    let current = true
+    // `signalled`: the room's watch said it changed, so this tick reads whatever the watched-room wait says.
+    const tick = (signalled = false) => {
+      // Before anything that skips a tick: a live watch not renewed lapses at its host within two minutes.
+      service.renewRoomWatch?.(roomId)
+      if (skips.current > 0) {
+        skips.current--
+        return
+      }
+      if (listingsInFlight.current > 0) {
+        // A listing out answers what was there when it was asked. A signal is owed a read after it (afterListings).
+        if (signalled) owedSignal.current = true
+        return
+      }
+      // Watched: a change is told and read at once (below), and a timed tick is only the fallback for a signal lost.
+      // The tick a signal starts is never held here: a one-shot watch is spent by its signal, but a live one is not, so
+      // it still reads as watched, and until IN-756 its signal was held like a timed tick and the open room showed the
+      // change only at the two-minute poll (a member left and came back to see a new post). Nor is one held while the
+      // member's own write is still to land (awaitWrites): its overlay ends at 30 s, and a lost signal is never re-sent.
+      if (
+        !signalled &&
+        awaiting.current.length === 0 &&
+        service.roomWatched?.(roomId) &&
+        Date.now() - askedAt.current < ROOM_WATCHED_POLL_MS
+      )
+        return
+      askedAt.current = Date.now()
+      const sentOn = openedAt.current
+      counted(
+        listingsInFlight,
+        () => service.listNotes(roomId, { sinceVersion: newestVersion(listingNow.current?.notes ?? []) }),
+        afterListings
+      ).then(
+        (newer) => {
+          if (current) notePoll(false)
+          const now = listingNow.current
+          if (current && now && prunedPast(now, newer)) {
+            // Pruned past what is held: one full listing replaces it, new posts in this poll included (a window as
+            // large as what is held, newest first, under rooms/newestFirstSwitch). Its failure is the poll's, on the
+            // session it was sent on, so only a session opened since asks again at once.
+            const fullOn = openedAt.current
+            const size = Math.min(1000, Math.max(ROOM_HEAD_WINDOW, now.notes.length))
+            counted(listingsInFlight, () => listHead(service, roomId, size), afterListings).then(
+              (full) => {
+                if (!current) return
+                const replaced = listingOf(full)
+                keepListing(service, roomId, replaced)
+                setListing(replaced)
+              },
+              () => {
+                skips.current = POLL_SKIPS_AFTER_FAILURE
+                pollFailedOn.current = fullOn
+                if (current) notePoll(true)
+              }
+            )
+            return
+          }
+          const merged = current && now ? mergeNewer(now, newer) : undefined
+          // Armed again from what is held now: a signal's watch is spent, and a poll may have moved the room.
+          if (current) service.watchRoom?.(roomId, newestVersion((merged?.listing ?? now)?.notes ?? []))
+          if (!merged) return
+          keepListing(service, roomId, merged.listing)
+          setListing(merged.listing)
+          // New posts go first (the chat draws them at its bottom); the posts already shown stay shown.
+          if (merged.added > 0) setShown((n) => n + merged.added)
+        },
+        () => {
+          // What is shown stays, and the next ticks give the agent room. The first failure is said; more say nothing.
+          skips.current = POLL_SKIPS_AFTER_FAILURE
+          pollFailedOn.current = sentOn
+          if (current) notePoll(true)
+        }
+      )
+    }
+    // No catch-up while a failure's ticks are still owed: they pass first, up to (skips + 1) ticks. "Try again"
+    // (`pollNow`) is the member's way out at once, and a listing that succeeds clears them.
+    if (resumed.current && skips.current === 0) tick()
+    resumed.current = false
+    const timer = setInterval(() => tick(), ROOM_POLL_MS)
+    // Read now, as a signal is: the member's own "Try again" (pollNow), and the agent coming back after a failed poll
+    // (the effect below that watches the session).
+    tickNow.current = () => {
+      skips.current = 0
+      tick(true)
+    }
+    signalTick.current = () => tick(true)
+    // The room's watch said it changed: read it now, once. With a listing already out, the read is owed and goes
+    // when no listing is out (afterListings): that listing may have been asked before the change. Only a one-shot watch
+    // is armed again by what a listing finds, so that a change it missed is signalled again; a live watch's host
+    // signals each change once, and a signal not read is not sent twice.
+    const stopHearing = service.onRoomChanged?.((changed) => {
+      if (changed === roomId) tick(true)
+    })
+    return () => {
+      current = false
+      stopHearing?.()
+      clearInterval(timer)
+      resumed.current = true
+      tickNow.current = undefined
+      signalTick.current = undefined
+      owedSignal.current = false
+    }
+  }, [service, roomId, enabled, live, listed, notePoll, afterListings])
+
+  // Until the room is known, a copy drawn before it is drawn as the identity it was of, so the member's own posts are on
+  // their side from the start and nothing moves when the room arrives.
+  const drawnAs = useMemo(
+    () => actingAs ?? (drawnBeforeAs ? { did: drawnBeforeAs } : undefined),
+    [actingAs, drawnBeforeAs]
+  )
+  useEffect(() => {
+    // A copy taken down (above) is still this render's `listing` when the room's arrival reruns this effect with it.
+    if (!service || !listing || listing === takenDown.current) return
+    let current = true
+    const read = reads.current.notes
+    const unopened = reads.current.unopened
+    const page = listing.notes.slice(0, shown)
+    const postOfSummary = (summary: NoteSummary) => {
+      const post = postOf(read.get(readKey(summary)) ?? summary, drawnAs)
+      const why = post.unread ? unopened.get(readKey(summary)) : undefined
+      return why ? { ...post, unreadWhy: why } : post
+    }
+    const postsOf = (notes: NoteSummary[]) => withRepliesToReactions(notes.map(postOfSummary))
+    const put = (drawn: RoomPost[]) => {
+      drawnFrom.current = { posts: drawn, listing }
+      setPosts(drawn)
+    }
+    const draw = (notes: NoteSummary[]) => put(postsOf(notes))
+    // The window below the lowest version held, joined onto the listing when it answers. True while it is out (the page
+    // waits for it); false once it answered at this same lowest version, so a window that brought nothing lower is never
+    // asked again and the page settles as it is. Its failure ends the load; the next "load older" asks again.
+    const readOlder = (from: Listing): boolean => {
+      const below = lowestVersion(from.notes)
+      if (!Number.isFinite(below)) return false
+      if (olderAsked.current?.below === below) return !olderAsked.current.settled
+      const asked = { below, settled: false }
+      olderAsked.current = asked
+      const askedFor = reads.current
+      counted(
+        listingsInFlight,
+        () => service.listNotes(roomId, { head: ROOM_HEAD_WINDOW, beforeVersion: below }),
+        afterListings
+      ).then(
+        (older) => {
+          asked.settled = true
+          const held = listingNow.current
+          if (reads.current !== askedFor || olderAsked.current !== asked || !held) return
+          const joined = withOlder(held, older)
+          keepListing(service, roomId, joined)
+          setListing(joined)
+        },
+        () => {
+          if (reads.current !== askedFor || olderAsked.current !== asked) return
+          olderAsked.current = undefined
+          setLoadingOlder(false)
+        }
+      )
+      return true
+    }
+    const show = () => {
+      const drawn = postsOf(page)
+      put(drawn)
+      // A page short of the posts it is counted in, with records left, reads on by the shortfall. Only once a page
+      // is read: on a private room a note's title is sealed with its body, so the listing cannot tell one. On an open
+      // room the notes it can tell were never read, so a shortfall round reads only what may be a chat post.
+      const counted = countsNow.current ? drawn.filter(countsNow.current).length : drawn.length
+      if (counted < wanted.current && listing.notes.length > page.length) {
+        setShown(page.length + wanted.current - counted)
+        return
+      }
+      // Every record held is drawn and the posts still fall short: the window below is asked, once per lowest version.
+      if (counted < wanted.current && listing.older && readOlder(listing)) return
+      setRefreshing(false)
+      setLoadingOlder(false)
+    }
+    // A record its listing already shows is not counted is not read for this page: an open room lists a note's title
+    // in cleartext, and the chat leaves notes out (the Notes part reads them for itself). Where a listing carries no
+    // title (attributed and private rooms seal it with the body), each record is read to tell, as before.
+    const leftOut = (summary: NoteSummary) => !!countsNow.current && !countsNow.current(postOf(summary, drawnAs))
+    const ready = (summary: NoteSummary) =>
+      summary.status === 'retracted' || read.has(readKey(summary)) || leftOut(summary)
+    // The posts that can be drawn now: newest first, up to the first one still being read.
+    const readSoFar = () => {
+      const waiting = page.findIndex((summary) => !ready(summary))
+      return waiting === -1 ? page : page.slice(0, waiting)
+    }
+    const unread = page.filter((summary) => !ready(summary))
+    if (unread.length === 0) {
+      show()
+      return
+    }
+    // Each post is drawn as its read lands rather than once every read has: the list grows only at its oldest end
+    // (the top of the chat, drawn bottom up), so nothing shown moves. What was drawn before is not drawn again, and a
+    // read that fails holds the rest until every read has answered; then the page is drawn whole, the failed post
+    // marked as unread.
+    let drawn = readSoFar().length
+    // How many of this round's reads failed, by reason: one log line for the round, never which records.
+    const notOpened: Record<string, number> = {}
+    const keys = unread.map((summary) => summary.key)
+    // Together where the service can (one batch), else one read each, as before; each answer is handled on its own.
+    const answers = service.readNotes?.(roomId, keys) ?? keys.map((key) => service.readNote(roomId, key))
+    const asks = unread.map((summary, i) =>
+      answers[i].then(
+        (note) => {
+          read.set(readKey(summary), note)
+          unopened.delete(readKey(summary))
+          if (!current) return
+          const soFar = readSoFar()
+          if (soFar.length > drawn && soFar.length < page.length) {
+            drawn = soFar.length
+            draw(soFar)
+          }
+        },
+        (e) => {
+          const why = unopenedReason(e)
+          if (why) unopened.set(readKey(summary), why)
+          else unopened.delete(readKey(summary))
+          notOpened[why ?? 'other'] = (notOpened[why ?? 'other'] ?? 0) + 1
+          throw e
+        }
+      )
+    )
+    void Promise.allSettled(asks).then(() => {
+      if (Object.keys(notOpened).length) service.noteUnread?.(roomId, notOpened)
+      if (current) show()
+    })
+    return () => {
+      current = false
+    }
+  }, [service, roomId, listing, shown, drawnAs, afterListings])
+
+  // The opening's line, said only when the screen says it drew the posts (`painted`, from its list's layout), never
+  // when they are set: 279.4 said "9 posts shown in 135 ms" while the room screen still showed its spinner (YJPT-6WC8).
+  const sayOpened = useCallback(() => {
+    const opening = opened.current
+    const from = drawnFrom.current
+    if (!posts || !opening || opening.said || opening.roomId !== roomId) return
+    if (!from || from.posts !== posts || from.listing === opening.listing) return
+    opening.said = true
+    const kept = from.listing === seeded.current ? ` (${seedFrom.current})` : ''
+    service?.note?.(
+      `[Room] ${logRef(roomId)} opened: ${posts.length} posts shown in ${Date.now() - opening.at} ms${kept}`
+    )
+  }, [posts, roomId, service])
+
+  // In view: this room's reads go ahead of the agent's queue (RoomsService.roomInView), until it is not.
+  useEffect(() => {
+    if (!service?.roomInView || !enabled || !live) return
+    service.roomInView(roomId, true)
+    return () => service.roomInView?.(roomId, false)
+  }, [service, roomId, enabled, live])
+
+  // The posts the room's own listing drew, kept in the wallet once they settle (rooms/messageCache): never those drawn
+  // from a kept listing or the kept copy itself, and only the posts the screen counts (the chat's, for the chat).
+  // Every listing the screen reads (its opening, a poll, a refresh, "load older") keeps what it drew.
+  const keepPending = useRef<(() => void) | undefined>(undefined)
+  useEffect(() => {
+    keepPending.current = undefined
+    const cache = cacheNow.current
+    const me = actingAsNow.current
+    const wallet = service?.runsOn
+    if (!cache || !me || !posts || !listing || !isCacheWallet(wallet)) return
+    if (!confirmed.current || listing === seeded.current) return
+    const counted = countsNow.current
+    const kept = posts
+      .filter((post) => !counted || counted(post))
+      .map(keptOf)
+      .filter((post): post is CachedPost => !!post)
+    const keepNow = () => {
+      if (keepPending.current === keepNow) keepPending.current = undefined
+      void keepRoomPosts(
+        wallet,
+        { personaDid: me.did, roomId, communityDid: cache.communityDid, validUntil: cache.validUntil },
+        kept
+      ).catch(() => undefined)
+    }
+    keepPending.current = keepNow
+    const timer = setTimeout(keepNow, MESSAGE_KEEP_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [posts, listing, service, roomId])
+  // Leaving the room (the screen closed, or another room under it) keeps what was drawn at once: waiting for the posts
+  // to settle dropped the keep of a room left within MESSAGE_KEEP_DELAY_MS of its last draw, so a quick look kept
+  // nothing (IN-724). Whatever the keep checks (the switch, biometric unlock, an emptying this run) it still checks.
+  useEffect(
+    () => () => {
+      keepPending.current?.()
+    },
+    [service, roomId]
+  )
+
+  const loadOlder = useCallback(() => {
+    setLoadingOlder(true)
+    wanted.current += POSTS_PAGE
+    setShown((n) => n + POSTS_PAGE)
+  }, [])
+  const refresh = useCallback(() => {
+    setRefreshing(true)
+    wanted.current = POSTS_PAGE
+    setShown(POSTS_PAGE)
+    setGeneration((g) => g + 1)
+  }, [])
+  const pollNow = useCallback(() => tickNow.current?.(), [])
+
+  // The agent is back: a first listing that failed is asked again, else a poll that did. Once per session opened.
+  const back = session.openedAt
+  useEffect(() => {
+    if (back === undefined) return
+    if (failed && !listing && back !== listFailedOn.current) {
+      listFailedOn.current = back
+      setGeneration((g) => g + 1)
+    } else if (pollFailed && back !== pollFailedOn.current && tickNow.current) {
+      pollFailedOn.current = back
+      tickNow.current?.()
+    }
+  }, [back, failed, listing, pollFailed])
+
+  return {
+    posts,
+    hasOlder: !!listing && (listing.notes.length > shown || !!listing.older),
+    check: listing?.check,
+    incomplete: !!listing && !listing.complete,
+    failed: failed && !session.reconnecting,
+    refreshing,
+    loadingOlder,
+    loadOlder,
+    refresh,
+    pollFailed: pollFailed && !session.reconnecting,
+    pollNow,
+    unconfirmed: !!listing && listing === seeded.current,
+    awaitWrites,
+    painted: sayOpened,
+  }
+}

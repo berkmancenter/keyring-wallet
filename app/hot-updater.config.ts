@@ -37,8 +37,8 @@ export default defineConfig({
     // to anything else native, is caught by scripts/release/tier.mjs instead.
     extraSources: {
       android: [
-        '../bifold/packages/react-native-attestation/android',
-        '../bifold/packages/react-native-locality-peripheral/android',
+        '../packages/react-native-attestation/android',
+        '../packages/react-native-locality-peripheral/android',
         // Files, not folders: inside android/ and ios/ the loader's ignore
         // rules filter a listed folder's contents away, so each file is named.
         'android/app/src/main/java/ca/bc/gov/BCWallet/MainApplication.kt',
@@ -49,8 +49,8 @@ export default defineConfig({
         'android/gradle.properties',
       ],
       ios: [
-        '../bifold/packages/react-native-attestation/ios',
-        '../bifold/packages/react-native-locality-peripheral/ios',
+        '../packages/react-native-attestation/ios',
+        '../packages/react-native-locality-peripheral/ios',
         'ios/AriesBifold/AppDelegate.mm',
         'ios/AriesBifold/AppDelegate.h',
         'ios/AriesBifold/main.m',

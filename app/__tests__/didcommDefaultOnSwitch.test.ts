@@ -1,7 +1,7 @@
 /**
- * DIDComm v2 and wallet-to-wallet TSP carriage are on for everyone; the v2 mailbox (needed to mint v2 invitations) is
- * off. The saved opt-outs live under new keys, read with loadSwitch so a saved false counts, and the values a phone
- * saved under the old keys while these were opt-in are ignored.
+ * DIDComm v2, wallet-to-wallet TSP carriage and, from 281.2, the v2 mailbox (needed to mint v2 invitations) are on for
+ * everyone. The saved opt-outs live under new keys, read with loadSwitch so a saved false counts, and the values a
+ * phone saved under the old keys while these were opt-in are ignored.
  */
 import { PersistentStorage, TOKENS } from '@bifold/core'
 import path from 'path'
@@ -27,7 +27,7 @@ jest.mock('../src/utils/logger', () => {
     default: { startEventListeners: jest.fn(), info: log, warn: log, error: log, debug: log, trace: log },
   }
 })
-const bifoldCoreDir = path.resolve(__dirname, '../../bifold/packages/core')
+const bifoldCoreDir = path.resolve(__dirname, '../../packages/core')
 for (const from of [__dirname, bifoldCoreDir]) {
   // eslint-disable-next-line @typescript-eslint/no-var-requires -- the copy that directory resolves
   const i18nModule = require(require.resolve('i18next', { paths: [from] }))
@@ -59,9 +59,9 @@ beforeEach(() => {
 
 afterEach(() => jest.restoreAllMocks())
 
-const AS_SHIPPED = { enableTspCarriage: true, enableDidCommV2: true, enableV2Mailbox: false }
+const AS_SHIPPED = { enableTspCarriage: true, enableDidCommV2: true, enableV2Mailbox: true }
 
-describe('DIDComm v2 and TSP carriage on by default, the v2 mailbox off', () => {
+describe('DIDComm v2, TSP carriage and the v2 mailbox on by default', () => {
   it('the shipped defaults', () => {
     const { enableTspCarriage, enableDidCommV2, enableV2Mailbox } = initialState.developer
     expect({ enableTspCarriage, enableDidCommV2, enableV2Mailbox }).toEqual(AS_SHIPPED)
@@ -76,23 +76,27 @@ describe('DIDComm v2 and TSP carriage on by default, the v2 mailbox off', () => 
     // default that now ships.
     saved.set('EnableTspCarriage', false)
     saved.set('EnableDidCommV2', false)
+    // The mailbox's testers-only key (281.1 and before): a tester who turned it off then is on, like everyone.
+    saved.set('EnableV2Mailbox', false)
     expect(await load()).toEqual(AS_SHIPPED)
   })
 
   it('the old keys are not the new ones', () => {
     expect(BCLocalStorageKeys.EnableTspCarriage).not.toBe('EnableTspCarriage')
     expect(BCLocalStorageKeys.EnableDidCommV2).not.toBe('EnableDidCommV2')
+    expect(BCLocalStorageKeys.EnableV2Mailbox).not.toBe('EnableV2Mailbox')
   })
 
   it('CONTROL: an opt-out saved under the new keys wins on load (a saved false is read, not skipped)', async () => {
     saved.set(BCLocalStorageKeys.EnableTspCarriage, false)
     saved.set(BCLocalStorageKeys.EnableDidCommV2, false)
+    saved.set(BCLocalStorageKeys.EnableV2Mailbox, false)
     expect(await load()).toEqual({ enableTspCarriage: false, enableDidCommV2: false, enableV2Mailbox: false })
   })
 
-  it('a saved v2 mailbox "on" is loaded', async () => {
-    saved.set(BCLocalStorageKeys.EnableV2Mailbox, true)
-    expect(await load()).toEqual({ ...AS_SHIPPED, enableV2Mailbox: true })
+  it('a v2 mailbox "off" saved under its new key is an opt-out and is loaded', async () => {
+    saved.set(BCLocalStorageKeys.EnableV2Mailbox, false)
+    expect(await load()).toEqual({ ...AS_SHIPPED, enableV2Mailbox: false })
   })
 
   it.each([

@@ -209,32 +209,37 @@ keyring-wallet/
 │   ├── src/
 │   ├── android/          # Android project
 │   └── ios/              # iOS project (workspace AriesBifold.xcworkspace)
-├── bifold/               # the framework (was the keyring-bifold submodule; folded in 2026-11)
-│   └── packages/
-│       ├── core/                       # UI, navigation, and the modules below
-│       │   └── src/modules/            #   vrc, trust-tasks, chat, rooms, directory, ...
-│       ├── trust-tasks/                # Trust Task plumbing shared by wallet and witness
-│       ├── credo-tsp-adapter/          # TSP keys and envelopes on Askar
-│       ├── react-native-attestation/   # Secure Enclave / StrongBox attestation
-│       ├── react-native-locality-peripheral/  # Bluetooth role for in-person evidence
-│       ├── vrc-contexts/               # JSON-LD contexts for relationship and witness credentials
-│       ├── dtg-vocab/                  # Verifier accept-list for DTG predicates
-│       ├── witness-server/             # The witness service (Node.js)
-│       ├── mediator-server/            # A local DIDComm mediator for development
-│       ├── vrc-reference/              # Reference implementation and conformance tests
-│       ├── vrc-shared/                 # Server-side helpers (not for the app)
-│       ├── react-hooks/  oca/  verifier/  remote-logs/
+├── packages/             # the framework (was the keyring-bifold submodule; folded in 2026-11), one workspace each
+│   ├── core/                       # UI, navigation, and the modules below
+│   │   └── src/modules/            #   vrc, trust-tasks, chat, rooms, directory, ...
+│   ├── trust-tasks/                # Trust Task plumbing shared by wallet and witness
+│   ├── credo-tsp-adapter/          # TSP keys and envelopes on Askar
+│   ├── react-native-attestation/   # Secure Enclave / StrongBox attestation
+│   ├── react-native-locality-peripheral/  # Bluetooth role for in-person evidence
+│   ├── vrc-contexts/               # JSON-LD contexts for relationship and witness credentials
+│   ├── dtg-vocab/                  # Verifier accept-list for DTG predicates
+│   ├── witness-server/             # The witness service (Node.js)
+│   ├── mediator-server/            # A local DIDComm mediator for development
+│   ├── vrc-reference/              # Reference implementation and conformance tests
+│   ├── vrc-shared/                 # Server-side helpers (not for the app)
+│   ├── react-hooks/  oca/  verifier/  remote-logs/
+│   └── __mocks__/                  # jest mocks shared by the packages
+├── eslint-rules/         # the framework's own lint rules (require-testid)
 ├── e2e/                  # Appium tests on emulators, simulators and phones; the release gate
 ├── deploy/               # Services Keyring runs: OTA update server, push gateway, short links
 ├── tsp-reference/        # Runnable reference steps behind the OpenVTC plan
-├── scripts/              # Install helpers, demo, OTA and release tools
-└── docs/                 # Guides, design notes and plans
+├── scripts/              # Install helpers, demo, OTA and release tools (incl. the framework's CI scripts)
+└── docs/                 # Guides, design notes and plans; docs/framework/ is the framework's
 ```
 
-`app/` is the only Yarn workspace. `@bifold/*` packages resolve to `bifold/packages/*`
-through `portal:` links, so changes under `bifold/packages/` show up in the app
-without a build step during development. `bifold/` is part of this repository
-(it was a git submodule until 2026-11; its history is on the `history/bifold` ref).
+`app/` and every `packages/*` folder are workspaces of one Yarn install. The app
+depends on `@bifold/*` as `workspace:*` packages whose `main` is their source
+(`src/index.ts`), so changes under `packages/` show up in the app without a build
+step, in development and in a release build. Only the Node-side packages
+(`trust-tasks`, `witness-server`, `mediator-server`, `vrc-contexts`, `vrc-shared`,
+`dtg-vocab`, `credo-tsp-adapter`) keep a build (`yarn build:packages` at the root runs
+them all). The framework was a git submodule at `bifold/` until 2026-11; its history is
+on the `history/bifold` ref, where the paths carry that prefix (`bifold/packages/…`).
 
 ## Getting started
 
@@ -260,7 +265,8 @@ cd keyring-wallet
 yarn install
 ```
 
-`yarn install` also installs and builds the framework under `bifold/`.
+One install covers the app and the framework packages under `packages/`; there is
+no second `yarn install` and no build step for the packages the app bundles.
 
 #### Moving an existing checkout to the folded `main`
 
@@ -277,22 +283,34 @@ git -C bifold stash list                         #    stashes live in .git/modul
 git -C bifold branch -r --contains HEAD | head   # 2. is bifold's HEAD on a remote? If this prints nothing:
 #    git -C bifold push origin HEAD:refs/heads/<your-branch>        (or save a patch: git -C bifold diff > /tmp/bifold.patch)
 #    an untracked file you want to keep (a lockfile, a note): copy it out, e.g. cp bifold/<file> /tmp/
-rm -rf bifold                                    # 3. the working folder only; NOT .git/modules/bifold
-git checkout main && git pull                    # 4. bifold/ comes back as part of main
-yarn install                                     # 5. reinstalls and builds the framework (its node_modules went with the folder)
+rm -rf bifold                                    # 3. the working folder only; NOT .git/modules/bifold (and see the note below first)
+git checkout main && git pull                    # 4. the framework comes back as part of main, under packages/
+yarn install                                     # 5. one install for the app and the packages (bifold's own node_modules went with the folder)
 ```
+
+Since Phase 2 of the fold the framework lives at `packages/` (there is no `bifold/`
+folder on `main` at all), so after step 4 the files you knew as
+`bifold/packages/<x>` are `packages/<x>`; the steps are the same.
+
+Before step 3, on a machine where other worktrees borrow this checkout's
+`bifold/node_modules` by symlink (`<worktree>/node_modules -> <this checkout>/bifold/node_modules`
+or `…/bifold/packages/core/node_modules`), step 3 removes their target too and
+they stop resolving `@bifold/*` with no error that names the cause: list them
+first with `find <worktrees> -type l -lname '*<this checkout>/bifold*'`, and expect
+to re-install or re-point each one afterwards.
 
 Afterwards the old repository is still there: `git --git-dir=.git/modules/bifold
 --work-tree=. stash list` and `git --git-dir=.git/modules/bifold --work-tree=. log -1
 <branch>` read it (`--work-tree=.` because the module's own `core.worktree` names the
-folder you removed; on the folded `main` a `bifold/` folder exists again, but this
-works in either state). A change kept there is re-applied with
-`git am -p1 --directory=bifold` (a `format-patch` of the bifold commit) or
-`git apply --directory=bifold` (a plain diff); a stash has no worktree left to
-`stash apply` into, so take it as a patch first:
+folder you removed; this works whether or not that folder exists). A change kept
+there is re-applied with `git am -p2 --directory=packages` (a `format-patch` of the
+bifold commit: its paths are `packages/…`, which `-p2` strips to the package path
+before the directory is prepended) or `git apply -p2 --directory=packages` (a plain
+diff); a stash has no worktree left to `stash apply` into, so take it as a patch first:
 `git --git-dir=.git/modules/bifold --work-tree=. stash show -p stash@{0} > /tmp/bifold-stash.patch`,
-then `git apply --directory=bifold /tmp/bifold-stash.patch`. Rehearsed end to end
-on 2026-11-22 in a disposable clone (companion `2026-11-22-al.md`). A worktree whose
+then `git apply -p2 --directory=packages /tmp/bifold-stash.patch`. Rehearsed end to end
+on 2026-11-22 in a disposable clone against the Phase 1 layout (companion
+`2026-11-22-al.md`; there the form was `git am -p1 --directory=bifold`). A worktree whose
 `bifold/` is an empty, never-initialised folder needs only step 4.
 
 ### The quick way: run a demo
@@ -318,7 +336,7 @@ yarn mediator
 It writes its invitation into `app/.env`. On an emulator or simulator you can skip
 the public tunnel with `--endpoint http://10.0.2.2:3010` (Android) or
 `--endpoint http://localhost:3010` (iOS). See
-[`bifold/packages/mediator-server/README.md`](https://github.com/berkmancenter/keyring-bifold/blob/main/packages/mediator-server/README.md).
+[`packages/mediator-server/README.md`](packages/mediator-server/README.md).
 
 Then build the app:
 
@@ -338,7 +356,7 @@ you name a server for them. A local build talks only to the mediator you started
 ### The witness server
 
 The witness is its own Node.js service. See
-[`bifold/packages/witness-server/README.md`](https://github.com/berkmancenter/keyring-bifold/blob/main/packages/witness-server/README.md).
+[`packages/witness-server/README.md`](packages/witness-server/README.md).
 
 ### Building your own use case
 
@@ -357,7 +375,7 @@ yarn prettier       # formatting check (yarn prettier:fix writes)
 ```
 
 Each framework package has its own suite, for example
-`cd bifold/packages/core && yarn test`.
+`cd packages/core && yarn test`.
 
 End-to-end tests drive real builds with Appium. They need built apps first; see
 [`e2e/README.md`](e2e/README.md).
@@ -432,7 +450,7 @@ We welcome issues and pull requests. Please read
   verified by GitHub.
 - **DCO sign-off.** Add a `Signed-off-by:` line with `git commit -s`; it is the
   message's last line, and it names the commit's own author.
-- **Framework changes** are ordinary pull requests here, under `bifold/packages/…`;
+- **Framework changes** are ordinary pull requests here, under `packages/…`;
   the `keyring-bifold` repository is read-only history.
 
 ## License

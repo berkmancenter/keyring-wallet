@@ -17,29 +17,31 @@
 // handshake is part of the spec itself (that machinery is vta-service's own
 // admin surface, exercised separately by tsp-reference/ref-08).
 //
-// Imports resolve into `bifold/node_modules`/`bifold/packages` by RELATIVE
-// PATH rather than as e2e's own npm dependencies: e2e is deliberately
+// Imports resolve into the root `node_modules` and `packages/trust-tasks` by
+// RELATIVE PATH rather than as e2e's own npm dependencies: e2e is deliberately
 // outside the yarn workspaces (root CLAUDE.md), so it has no ordinary way to
 // depend on `@bifold/trust-tasks` (a workspace-only package) or on the exact
-// PATCHED `@credo-ts/*` versions bifold's own install already resolved
-// (`.yarn/patches/`) without those patches. Reusing bifold's already-correct
-// install avoids silently running against unpatched crypto. Verified these
-// specific paths resolve (Node's exports-aware resolution, `node -e`
+// PATCHED `@credo-ts/*` versions the root install already resolved
+// (`.yarn/patches/`) without those patches. Reusing the repository's one
+// already-correct install avoids silently running against unpatched crypto.
+// `@bifold/trust-tasks` is a Node-consumed package with a `build/` main, so
+// `yarn workspace @bifold/trust-tasks build` must have run first. Verified
+// these specific paths resolve (Node's exports-aware resolution, `node -e`
 // smoke-checks) before relying on them; not otherwise exercised.
 import { randomUUID } from "node:crypto";
 
-import { askarNodeJS as askar } from "../../bifold/node_modules/@openwallet-foundation/askar-nodejs/build/index.js";
-import { Agent } from "../../bifold/node_modules/@credo-ts/core/build/index.mjs";
-import { agentDependencies, DidCommHttpInboundTransport } from "../../bifold/node_modules/@credo-ts/node/build/index.mjs";
-import { AskarModule } from "../../bifold/node_modules/@credo-ts/askar/build/index.mjs";
+import { askarNodeJS as askar } from "../../node_modules/@openwallet-foundation/askar-nodejs/build/index.js";
+import { Agent } from "../../node_modules/@credo-ts/core/build/index.mjs";
+import { agentDependencies, DidCommHttpInboundTransport } from "../../node_modules/@credo-ts/node/build/index.mjs";
+import { AskarModule } from "../../node_modules/@credo-ts/askar/build/index.mjs";
 import {
   DidCommModule,
   DidCommMessageHandlerRegistry,
   DidCommMessageSender,
   DidCommOutboundMessageContext,
   DidCommHttpOutboundTransport,
-} from "../../bifold/node_modules/@credo-ts/didcomm/build/index.mjs";
-import { TrustTaskMessage } from "../../bifold/packages/trust-tasks/build/index.js";
+} from "../../node_modules/@credo-ts/didcomm/build/index.mjs";
+import { TrustTaskMessage } from "../../packages/trust-tasks/build/index.js";
 
 import { startTunnel, assertPortFree } from "./witness.js";
 

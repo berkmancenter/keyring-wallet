@@ -21,7 +21,7 @@ jest.mock('../src/utils/logger', () => {
     default: { startEventListeners: jest.fn(), info: log, warn: log, error: log, debug: log, trace: log },
   }
 })
-const bifoldCoreDir = path.resolve(__dirname, '../../bifold/packages/core')
+const bifoldCoreDir = path.resolve(__dirname, '../../packages/core')
 for (const from of [__dirname, bifoldCoreDir]) {
   // eslint-disable-next-line @typescript-eslint/no-var-requires -- the copy that directory resolves
   const i18nModule = require(require.resolve('i18next', { paths: [from] }))

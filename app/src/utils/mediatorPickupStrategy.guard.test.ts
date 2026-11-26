@@ -3,7 +3,7 @@
  * cannot receive, and no call site may leave the strategy implicit.
  *
  * The twin of the bifold guard in
- * `bifold/packages/witness-server/__tests__/unit/mediatorPickupStrategy.guard.test.ts`.
+ * `packages/witness-server/__tests__/unit/mediatorPickupStrategy.guard.test.ts`.
  * Two guards rather than one because the two trees ship and test separately —
  * bifold is a submodule consumed on its own, so a guard living only up here
  * would not protect it, and one living only down there would not protect

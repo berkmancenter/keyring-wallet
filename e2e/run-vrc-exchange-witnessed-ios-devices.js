@@ -5,8 +5,9 @@
  *
  * Carriage matrix, by environment (didcomm_v2_subtask.md C14 and V2T on devices):
  *   (default)                      DIDComm v1 — the Credo 0.7 hop's device regression (B7)
- *   E2E_DIDCOMM_V2=1               DIDComm v2: both wallets on Coordinate Mediation 2.0,
- *                                  the witness on v1+v2, OOB 2.0 invitations
+ *   E2E_DIDCOMM_V2=1               DIDComm v2: both wallets on their mailboxes (the default
+ *                                  since 282), OOB 2.0 invitations; the witness leg per
+ *                                  WITNESS_LEG (v1 by default, "v2" = the witness on v1+v2)
  *   E2E_DIDCOMM_V2=1 E2E_TSP=1     the TSP envelope over those v2 connections
  *
  * Real devices do hardware attestation, so the hardware-evidence marker is
@@ -18,7 +19,8 @@
  * E2E_IPAD_FIRST=1 swaps them. Both need Developer Mode, Settings →
  * Developer → Enable UI Automation, a passcode + biometrics, and the app
  * built for devices (IOS_DEVICE_APP, see e2e/README.md) against a build
- * whose app/.env matches the carriage (MEDIATOR_V2_URL for v2 runs).
+ * whose app/.env carries MAILBOX_MEDIATOR_DID for v2 runs (the store
+ * configuration; MEDIATOR_V2_URL is gone, #1166).
  *
  * Usage: yarn e2e:vrc:witnessed:ios-devices[:didcomm-v2[:tsp]]
  */

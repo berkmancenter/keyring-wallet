@@ -1,0 +1,3171 @@
+/**
+ * vtiAgent — the wallet's side of a VTI agent, held outside React.
+ *
+ * A VTA or a VTC is reached over one authenticated socket (see
+ * `VtiMediatorTransport`), and that socket has to outlive any one screen: the
+ * agent card, a community and an application all talk to the same session. So
+ * the session lives here, and screens subscribe.
+ *
+ * Two legs share the socket. The **community leg** (`ask`) is DIDComm v2:
+ * a VTC or a VTA reads the plaintext body as a Trust Task document. The
+ * **peer leg** (`send`, applicant ↔ vetter) is either DIDComm v2 or TSP
+ * Rev 3, decided at build time (`vtiTsp.setPeerLegCarriage`); a TSP frame
+ * that arrives is opened whenever the session holds a TSP identity, whatever
+ * the build sends, and is handed to the same inbox as a DIDComm plaintext
+ * would be, so nothing above this controller knows which carriage a document
+ * took.
+ *
+ * @module trust-tasks/module/vtiAgent
+ */
+
+import type { Agent } from '@credo-ts/core'
+import { utils } from '@credo-ts/core'
+import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
+import { tsp, TRUST_TASK_V2_ENVELOPE_TYPE } from '@bifold/trust-tasks'
+import { AppState, DeviceEventEmitter } from 'react-native'
+
+import { signDocumentProof } from '../documentProof'
+import { purposeForDocumentType } from './proofPurpose'
+import { MEMBER_VMC, type MemberVmcReceipt } from './vtiMemberVmc'
+import { GenericRecordsCommunityStore } from './VtiCommunityStore'
+import type { VtiPersona } from './VtiIdentityStore'
+import { ownSessionFor, ownSessionOnceOpen as heldOnceOpen, type OwnSession } from './vtiOwnSessions'
+import {
+  advertisedMediatorDid,
+  advertisedTspMediatorDid,
+  createVtiClientDid,
+  resolveVtiMediator,
+  resolveDidDocumentRetrying,
+  vtiClientIdentityFromDid,
+  vtiClientIdentityFromPersona,
+  VtiMediatorSession,
+  type VtiClientIdentity,
+  type VtiMediatorEndpoints,
+} from './VtiMediatorTransport'
+import {
+  frameForm,
+  getPeerLegCarriage,
+  LOG_PREFIX as TSP_LOG_PREFIX,
+  greetPeerOverTsp,
+  isFreshV1,
+  packTrustTaskForPeer,
+  tspSessionForPersona,
+  unpackTrustTaskFromPeer,
+  type PeerLegCarriage,
+  type PeerRevisionRecord,
+  type TspPeerRevisionStore,
+  type TspSessionIdentity,
+} from './vtiTsp'
+import { communityTarget } from './vtiCommunityLink'
+import { chooseCarriage, type Carriage } from './tspCapability'
+import { GenericRecordsTspProbeStore, runTspProbe, type TspProbeOutcome, type TspProbeStore } from './tspProbe'
+import { fetchWaitingIfBusy } from './vtcBusy'
+import { isAgentsOwnPersona } from './agentOwnIdentity'
+import { didPrefix } from './didPrefix'
+import { PROBLEM_REPORT, problemReportWords } from './problemReportWords'
+import { VTI_JOIN_STATUS_LATE_EVENT } from './communityChanged'
+import { listKeyed, putKeyed } from './keyedRecords'
+import { releaseWarn } from './releaseLog'
+import { isReadReaskOn, VTI_READ_REASK_AFTER_MS } from './readReaskSwitch'
+import { isTspFrameUnopenable } from './tspFrameUnopenable'
+import { httpsLogoUrl } from './communityBrand'
+import { readManifest, type VtiManifest } from './joinManifest'
+import { classifyCredential } from './vtiInbox'
+import { PCS_CHALLENGE_TYPE, pcsChallengeRequest, readPcsChallenge, type PcsChallenge } from './pcsChallenge'
+import { DisclosureNotShown, MalformedDisclosure, disclosureShown } from './directoryDisclosure'
+import {
+  JOIN_MANIFEST_TYPES,
+  joinTaskType,
+  manifestTaskType,
+  manifestWireAfterRefusal,
+  manifestWiresToTry,
+  submitPayload,
+  wireAfterRefusal,
+  type JoinWire,
+  type ManifestWire,
+} from './joinWire'
+
+export type { VtiCriterion, VtiManifest } from './joinManifest'
+
+const TASK_ERROR = 'https://trusttasks.org/spec/trust-task-error/'
+const WITHDRAW = 'https://trusttasks.org/spec/vtc/join-requests/withdraw/0.1'
+const SUPPLEMENT = 'https://trusttasks.org/spec/vtc/join-requests/supplement/0.1'
+const STATUS = 'https://trusttasks.org/spec/vtc/join-requests/status/0.1'
+const SELF_REMOVE = 'https://trusttasks.org/spec/vtc/members/self-remove/0.1'
+const ROOM_MEMBERSHIPS = 'https://trusttasks.org/spec/vtc/rooms/memberships/list/0.1'
+/** A member's room offers there, at each version this client asks (`modules/rooms`, `OFFERS_LIST_TYPES`). */
+const ROOM_OFFERS_LISTS = ['0.4', '0.3', '0.2'].map((v) => `https://trusttasks.org/spec/vtc/rooms/offers/list/${v}`)
+/** The polls reads, at every version `polls/pollTasks` may send. @versionCoverage */
+const ELECTIONS_READS = [
+  'https://trusttasks.org/spec/vtc/elections/list/0.5',
+  'https://trusttasks.org/spec/vtc/elections/list/0.3',
+  'https://trusttasks.org/spec/vtc/elections/show/0.6',
+  'https://trusttasks.org/spec/vtc/elections/show/0.3',
+  'https://trusttasks.org/spec/vtc/elections/show/0.2',
+]
+/*
+ * Every document `ask` sends is signed. `ask` carries only DIDComm and TSP,
+ * and over those a VTC takes a document only when its proof is by its
+ * `issuer` and the issuer is the transport's sender (vti #1739; the spine's
+ * step 3a, vtc-service trust_tasks/mod.rs:401-414), whatever the task's own
+ * spec says about the proof. Before that, only the tasks whose specs declare
+ * the proof REQUIRED (vti #1672) and the vetter profile were signed, and the
+ * join manifest went out unsigned.
+ *
+ * The manifest's proof is only RECOMMENDED, and the spec's privacy analysis is
+ * why Keyring left it off: an unproofed read discloses no applicant
+ * identifier, where a proof "converts an anonymous read into an attributable
+ * one" (vtc/join-requests/manifest/0.2 spec.md:26-28, :326-329). That still
+ * holds for the read that is anonymous, the REST one (`manifestOverRest`),
+ * which stays unsigned. Over DIDComm or TSP the transport has already named
+ * the persona to the community, so the proof discloses nothing more. openvtc
+ * signs every request, the manifest included.
+ */
+
+/**
+ * The community tasks `ask` may send twice: reads, which change nothing, so a
+ * second copy costs the community one more lookup and nothing else.
+ *
+ * - the manifest — `vtc/join-requests/manifest`, the published criteria, at
+ *   each version this wallet speaks (`joinWire`).
+ * - `STATUS` — `vtc/join-requests/status/0.1`, where the applicant's request stands.
+ * - `ROOM_MEMBERSHIPS` — `vtc/rooms/memberships/list/0.1`, the member's rooms there (`modules/rooms`).
+ * - `ROOM_OFFERS_LISTS` — `vtc/rooms/offers/list`, the rooms offered to the member there. Left off until 277.11, so
+ *   read as a write: its answer, heard while another identity held the session, came back every 15 s.
+ * - `ELECTIONS_READS` — `vtc/elections/list` and `show`, at each version polls send, the community's polls (`modules/polls`).
+ *
+ * Everything else `ask` sends changes state and is a WRITE: the submit,
+ * `SUPPLEMENT`, `WITHDRAW`, `SELF_REMOVE` above, and the vetter profile publish
+ * (`vtc/vetting/vetters/profile/0.1`, `VETTING.vettersProfile` in vtiVetting).
+ * A task this list does not name is a write too, so that a task added later is
+ * never re-sent by default. A write the community received and has not yet
+ * answered — a submit it deferred, say — sent again is a second submit, and
+ * reads as `requestAlreadyOpen`.
+ */
+export const VTI_READ_TASKS: ReadonlySet<string> = new Set([
+  ...JOIN_MANIFEST_TYPES,
+  STATUS,
+  ROOM_MEMBERSHIPS,
+  ...ROOM_OFFERS_LISTS,
+  ...ELECTIONS_READS,
+])
+
+/** What a Trust Task's answer adds to its type. */
+const RESPONSE_SUFFIX = '#response'
+
+/** Whether `type` is a read `ask` may send again over DIDComm after TSP silence (see `VTI_READ_TASKS`). */
+export function isVtiReadTask(type: string): boolean {
+  return VTI_READ_TASKS.has(type)
+}
+
+/**
+ * How long an ask whose answer clock ran out keeps waiting for that answer.
+ * A late answer that arrives in that time is kept, and the next identical ask
+ * (or `takeHeldAnswer`) is given it instead of sending again. Modelled on
+ * vtaAgent's `GRANT_HOLD_MS`.
+ */
+export const VTI_ANSWER_HOLD_MS = 60000
+
+/**
+ * For this long after a session opens, a reply that names no thread is not taken as an answer by its type alone
+ * (`askAnswered`), whether or not it names a time: the mediator flushes what it held the moment the socket opens, and
+ * the fixed 2 s wait this replaces kept every such reply from any ask. Sign-in no longer waits this out before an ask
+ * may go; only that one kind of reply does. A reply naming its thread is never held back.
+ */
+export const VTI_BACKLOG_GRACE_MS = 2000
+/** How many answers' ids are remembered as given (`answerFromListener`, 'repeat'): a second copy comes within seconds. */
+const ANSWERS_GIVEN_MAX = 128
+
+/** A task's name without the host and the version: `vtc/join-requests/submit`. */
+const taskName = (type: string) => type.replace(/^https?:\/\/[^/]+\/(spec\/)?/, '').replace(/\/[\d.]+$/, '')
+
+/**
+ * A request that went out and has had no answer yet — not a refusal, and not
+ * proof that the community never got it. A submit the community received and
+ * deferred looks exactly like this until its answer arrives, so a screen should
+ * say the request was sent and is waiting on the community, and should not
+ * invite the person to send it again: an identical ask made within
+ * `VTI_ANSWER_HOLD_MS` waits for this one's answer rather than re-sending it.
+ */
+export class VtiSentNoAnswer extends Error {
+  constructor(
+    /** The Trust Task type that was sent. */
+    readonly taskType: string,
+    /** The request's `threadId` — what the community's answer threads on. Absent when the ask was not recorded. */
+    readonly requestId: string | undefined,
+    /** When it was first sent (ms since the epoch). */
+    readonly sentAt: number | undefined,
+    readonly communityDid?: string
+  ) {
+    super(`vtiAgent: sent ${taskName(taskType)}; the community has not answered yet`)
+    this.name = 'VtiSentNoAnswer'
+  }
+}
+
+/**
+ * How long an ordinary connect keeps the session from a background one (`connect`'s `background`). A vetting step
+ * connects as its persona and then waits on a peer; the rooms polls of a phone in two communities took the session
+ * back as the other persona every 10–20 s, and the step's answers went to the wrong identity (hidden-vetting run,
+ * 10-31).
+ */
+export const VTI_FOREGROUND_CLAIM_MS = 90_000
+
+/**
+ * How many times running a background connect as one identity is refused by that claim alone before the claim gives
+ * it the next turn. A phone in two communities whose polls kept signing in as one identity refused the other's rooms
+ * listing every 30 s for as long as the app was open (34VR-Y58H, 277.8, 11-03). A step's hold, or an ordinary connect
+ * waiting for the session, still refuses it every time: only the claim an ordinary connect leaves behind gives way.
+ */
+export const VTI_TURN_AFTER_REFUSALS = 2
+
+/** How long a hold (`holding`) keeps others waiting when its caller names no time: a stuck hold must not freeze sign-ins. */
+export const VTI_HOLD_MAX_MS = 10 * 60_000
+
+/** How long a background hold, or a listing read's (`holding`'s `listing`), keeps others waiting when its caller names no time. */
+export const VTI_BACKGROUND_HOLD_MAX_MS = 2 * 60_000
+
+/**
+ * A background connect or hold (`connect`'s `background`) that would have taken the session from another of this
+ * phone's identities: one holding it (`holding`), one waiting to, or one an ordinary connect signed in within
+ * `VTI_FOREGROUND_CLAIM_MS`. Nothing was disconnected; the caller tries again later. The message names no DID: a hold
+ * may be a hidden-vetting step's.
+ */
+/**
+ * `askAs` was asked for an identity whose own session is not open: the caller asks the shared way instead.
+ *
+ * THROWN IN ONE PLACE ONLY, before anything is packed or sent (`askAs`, right after the registry lookup). That is what
+ * makes the callers' fallback safe: `agentRoomsBackend.asPersona` asks again the shared way on this error, so a write
+ * is never sent twice only because nothing after a send can throw it. Throwing it from a second place, after a send,
+ * would silently break that.
+ */
+export class VtiNoOwnSession extends Error {
+  constructor(readonly did: string) {
+    super("vtiAgent: this identity's own session is not open")
+    this.name = 'VtiNoOwnSession'
+  }
+}
+
+export class VtiSessionHeld extends Error {
+  constructor(
+    /**
+     * The DID the session is kept for — a hold may be a hidden-vetting step's persona. Never log it, nor `reason`,
+     * beside a community's DID: the pairing ties that persona to a community.
+     */
+    readonly heldAs: string,
+    /** What keeps it, as its holder named it. */
+    readonly reason?: string
+  ) {
+    super(`vtiAgent: the session is kept for another of this phone's identities${reason ? ` (${reason})` : ''}`)
+    // A literal, read by name in vtiPersonaInbox (a class name does not survive minifying).
+    this.name = 'VtiSessionHeld'
+  }
+}
+
+/**
+ * After an identity's sign-in fails, how long a background sign-in (a poll, the persona inbox) leaves that identity
+ * alone: this long after the first failure, doubling with each failure after it, up to `VTI_SIGNIN_REST_MAX_MS`. An
+ * identity whose mediator is down, or whose agent is gone, took 10-26 s per try and blocked every other sign-in behind
+ * it, retried every 30 s from launch (rooms-slow, 11-05). The person's own steps always try; a success ends the rest.
+ */
+export const VTI_SIGNIN_REST_FIRST_MS = 30_000
+export const VTI_SIGNIN_REST_MAX_MS = 6 * 60 * 60 * 1000
+/**
+ * A rest only grows while some other sign-in succeeded this recently: the phone is online, so the failing identity is
+ * the trouble. Offline, every identity fails alike, and none should be left alone for longer than the first step.
+ */
+export const VTI_SIGNIN_ONLINE_WITHIN_MS = 10 * 60 * 1000
+
+/** What is kept of an identity's failed sign-ins, across launches. */
+export interface VtiSignInRest {
+  did: string
+  failedAt: number
+  /** Failures in a row; 0 once it signs in. */
+  count: number
+  /**
+   * The last failure was the identity's agent not found: the borrowed key's agent DID resolved to `notFound` (its DID
+   * log is gone, a 404). Not a time-out, a 5xx or no network, which may pass. While the rest runs, a screen's listing
+   * leaves this identity alone too, not only a background sign-in (11-17: one such identity held every sign-in).
+   */
+  gone?: true
+}
+
+/**
+ * How long one sign-in may hold the phone's one sign-in turn, counted from when its turn starts (not from when it
+ * queued). Above a slow but healthy cold start: a borrowed key waits up to `KEY_FETCH_WAIT_MS` (20 s) for the link and
+ * again for the session, then fetches (11-16: 12.7 s seen). Past it, that sign-in fails and the turn goes to the next.
+ * A trip to the background stops the clock with the app's JS; back in front, a turn already past it ends at once.
+ * 11-17 (ZAF5): one identity whose agent was gone held the turn for 20 minutes and every sign-in waited behind it.
+ */
+export const VTI_SIGNIN_TURN_MS = 60_000
+/**
+ * How long a listing waits for its identity's own session while that session is opening (`ownSessionOnceOpen`). A
+ * launch's first listener listened 11–13 s after it started in 11-17's reports (the borrowed keys are fetched first),
+ * so less than that would fall back mid-open and bring the two-socket fight back.
+ */
+export const VTI_OWN_SESSION_OPENING_WAIT_MS = 15_000
+
+/**
+ * A sign-in that held the turn longer than `VTI_SIGNIN_TURN_MS`: it is let go, and whatever it opens later is closed.
+ * The message names no DID.
+ */
+export class VtiSignInTimedOut extends Error {
+  constructor(readonly afterMs: number) {
+    super(`vtiAgent: the sign-in took over ${Math.round(afterMs / 1000)} s; it was let go so others can sign in`)
+    // A literal, so a caller can read it by name (a class name does not survive minifying).
+    this.name = 'VtiSignInTimedOut'
+  }
+}
+
+/** The borrowed key's agent was not found (its DID log is gone): `KeyCopyUnavailable` naming `notFound`. */
+export const isAgentGone = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error ?? '')
+  return /in-memory copy of .* could not be fetched: .*\bnotFound\b/.test(message)
+}
+
+/**
+ * AppState, read once as the module loads: react-native's export is a lazy getter, and a sign-in that starts late (a
+ * screen gone, a test file torn down) must not require it then (CI on #1095).
+ */
+const appStateAtLoad = AppState
+
+/** One sign-in's claim on the turn: let go when its time runs out, so what it opens after that is closed. */
+interface SignInTicket {
+  abandoned: boolean
+  /** The session the attempt made, once made: stopped the moment the attempt is let go (`signIn`). */
+  session?: { stop(): Promise<void> }
+}
+
+/** When a background sign-in may try this identity again (0: now). */
+export const signInRestUntil = (rest: VtiSignInRest | undefined): number =>
+  !rest || rest.count < 1
+    ? 0
+    : rest.failedAt + Math.min(VTI_SIGNIN_REST_FIRST_MS * 2 ** (rest.count - 1), VTI_SIGNIN_REST_MAX_MS)
+
+const SIGNIN_REST_RECORD = 'keyring/vti-signin-rest'
+const SIGNIN_REST_KIND = 'rest'
+
+/**
+ * A background sign-in refused because this identity's last sign-in failed and its rest has not run out
+ * (`VTI_SIGNIN_REST_FIRST_MS`). Nothing was tried or disconnected. The message names no DID.
+ */
+export class VtiSignInResting extends Error {
+  constructor(readonly until: number) {
+    super(
+      `vtiAgent: this identity's last sign-in failed; background sign-ins try it again from ${new Date(until).toISOString()}`
+    )
+    // A literal, so a caller can read it by name (a class name does not survive minifying).
+    this.name = 'VtiSignInResting'
+  }
+}
+
+/** One hold on the session (`holding`). */
+interface SessionHold {
+  did: string
+  background: boolean
+  /** A screen's listing read (`holding`'s `listing`): a poll waits for it rather than being refused. */
+  listing?: boolean
+  until: number
+  reason?: string
+}
+
+/**
+ * A DIDComm message carrying a Trust Task in the binding envelope, presented
+ * as the task itself: the envelope's `type` swapped for the document's own.
+ * Since vti #1687 a VTC takes Trust Tasks over DIDComm only in the envelope,
+ * and binding §5 has it reply in one too — which it does not yet (it replies
+ * typed as the document), so both shapes have to read the same downstream.
+ */
+export function unwrapBindingEnvelope(plaintext: DidCommV2PlaintextMessage): DidCommV2PlaintextMessage {
+  if (plaintext.type !== TRUST_TASK_V2_ENVELOPE_TYPE) return plaintext
+  const inner = (plaintext.body as { type?: unknown } | undefined)?.type
+  return typeof inner === 'string' && inner ? { ...plaintext, type: inner } : plaintext
+}
+
+/**
+ * A community refusing, in its own terms. `code` is the framework's — e.g.
+ * `taskFailed` for a business-rule conflict such as an application that is
+ * already open — and belongs behind a Details control rather than in the
+ * sentence a person reads.
+ */
+export class VtiRefusal extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    /** The framework's `details`, when the refusal carries any (a consent challenge does). */
+    readonly details?: unknown
+  ) {
+    super(message)
+    this.name = 'VtiRefusal'
+  }
+}
+
+/**
+ * What a join-request refusal means for the applicant, read from its code.
+ *
+ * The codes are declared per task (`vtc/join-requests/withdraw:notFound`,
+ * `…/supplement:alreadyDecided`, `…/supplement:notAwaitingEvidence`), so the
+ * meaning is the part after the colon — never the prose, which a community
+ * may word as it likes. `alreadyDecided` means an outcome stands and the
+ * applicant should be shown it; `notFound` means there is nothing open to act
+ * on; `notAwaitingEvidence` means the request is queued for a decision the
+ * community owes, so supplying more changes nothing.
+ */
+export type JoinRequestRefusal =
+  | 'notFound'
+  | 'alreadyDecided'
+  | 'notAwaitingEvidence'
+  | 'requestAlreadyOpen'
+  // submit/0.3: the community publishes no criteria, so it accepts no applications.
+  | 'notAccepting'
+  // submit/0.3: the criterion named is not one it publishes (any more).
+  | 'criterionUnknown'
+  | 'presentationInvalid'
+  | 'policyUnsatisfied'
+
+const JOIN_REQUEST_REFUSALS: readonly string[] = [
+  'notFound',
+  'alreadyDecided',
+  'notAwaitingEvidence',
+  'requestAlreadyOpen',
+  'notAccepting',
+  'criterionUnknown',
+  'presentationInvalid',
+  'policyUnsatisfied',
+]
+
+/**
+ * Why a community refused a member's request to leave, from its code:
+ * `notMember` — the caller is not (or no longer) a member, so there is nothing
+ * to remove; `lastAdmin` — leaving would leave the community without an admin.
+ */
+export const selfRemoveRefusal = (refusal: unknown): 'notMember' | 'lastAdmin' | undefined => {
+  if (!(refusal instanceof VtiRefusal)) return undefined
+  const reason = refusal.code.split(':').pop() ?? ''
+  if (reason === 'notMember') return 'notMember'
+  if (/last.?admin/i.test(reason)) return 'lastAdmin'
+  return undefined
+}
+
+/** A join request's state, as the community's status task states it (`join-requests/status/0.1`). */
+export interface JoinRequestStatus {
+  requestId?: string
+  status: 'pending' | 'deferred' | 'approved' | 'rejected' | 'withdrawn' | (string & {})
+  /** While `deferred`: what the applicant must supply. */
+  needs?: string[]
+  /** While `deferred`: the evidence to present next. */
+  presentationDefinition?: unknown
+  /** While `rejected`: a stable code, the decider's words when there were any, and when it was decided. */
+  code?: string
+  reason?: string
+  decidedAt?: string
+  /**
+   * While `approved`: whether the community holds this member's acknowledgement
+   * that the membership card arrived. Absent from a community that predates it
+   * (vtc-service before 0.12.0), which does not take `resendCredentials` either.
+   */
+  credentialsDelivered?: boolean
+  /** The answer to `resendCredentials`; absent when it was not asked, or is not supported. */
+  credentialResend?: 'queued' | 'notNeeded' | 'rateLimited'
+  /**
+   * With `rateLimited`: the earliest a re-send is honoured again. The spec has
+   * a community only SHOULD send it, so its absence says nothing more: not that
+   * no more will be honoured.
+   */
+  retryAfter?: string
+}
+
+const CREDENTIAL_RESENDS = ['queued', 'notNeeded', 'rateLimited'] as const
+
+export const joinRequestRefusal = (refusal: unknown): JoinRequestRefusal | undefined => {
+  if (!(refusal instanceof VtiRefusal)) return undefined
+  const reason = refusal.code.split(':').pop() ?? ''
+  return JOIN_REQUEST_REFUSALS.includes(reason) ? (reason as JoinRequestRefusal) : undefined
+}
+
+/**
+ * The applicant's request that is still open, when a submit is refused
+ * because one is (`vtc/join-requests/submit:requestAlreadyOpen`, vti #1592).
+ *
+ * The refusal's `details` names it: `requestId` is what withdraw and supplement
+ * take, and `status` says who the request is waiting on — `deferred` waits on
+ * the applicant (supply what was asked, or withdraw), `pending` on the
+ * community (it will move on its own). A status the client does not know is
+ * passed through as it came, so a screen can still offer withdraw.
+ */
+export interface OpenJoinRequest {
+  requestId: string
+  status: 'pending' | 'deferred' | (string & {})
+}
+
+export const openJoinRequestOf = (refusal: unknown): OpenJoinRequest | undefined => {
+  if (joinRequestRefusal(refusal) !== 'requestAlreadyOpen') return undefined
+  const details = (refusal as VtiRefusal).details as { requestId?: unknown; status?: unknown } | undefined
+  if (typeof details?.requestId !== 'string' || !details.requestId) return undefined
+  return { requestId: details.requestId, status: typeof details.status === 'string' ? details.status : 'pending' }
+}
+
+/**
+ * Whether a refusal says the community does not serve the version of the task
+ * it was asked in — for the join tasks, after every version this wallet speaks
+ * was tried: the community is newer, or older, than this wallet can join.
+ */
+export const isUnsupportedJoinVersion = (refusal: unknown): boolean =>
+  refusal instanceof VtiRefusal && ['unsupportedVersion', 'unsupportedType'].includes(refusal.code)
+
+/** A refusal arrives as a document in its own right, not as a verdict. */
+const refusalOf = (plaintext: DidCommV2PlaintextMessage): VtiRefusal | undefined => {
+  if (!String(plaintext.type ?? '').startsWith(TASK_ERROR)) return undefined
+  const payload = (plaintext.body as { payload?: { code?: string; message?: string; details?: unknown } } | undefined)
+    ?.payload
+  return new VtiRefusal(
+    payload?.code ?? 'unknown',
+    payload?.message ?? 'The community refused the request.',
+    payload?.details
+  )
+}
+
+/**
+ * How long a manifest a join code brought waits for the read it replaces (`manifestFromLink`): long enough for Join
+ * to open after the scan, short enough that a read made later, for any other reason, asks the community.
+ */
+const LINK_MANIFEST_MS = 60_000
+
+/**
+ * Whether an answer naming `named` is about the community `asked`. A did:webvh is the same community wherever it is
+ * hosted: its SCID (the segment after the method) is fixed for its life while the host can move, so two webvh DIDs
+ * with one SCID are one community. Anything else must match exactly.
+ */
+export function sameCommunity(asked: string, named: string): boolean {
+  if (asked === named) return true
+  const scid = (did: string) => (did.startsWith('did:webvh:') ? did.split(':')[2] : undefined)
+  return !!scid(asked) && scid(asked) === scid(named)
+}
+
+/** A DIDComm problem-report, presented as the trust-task-error `refusalOf` reads. */
+const problemReportAsRefusal = (plaintext: DidCommV2PlaintextMessage): DidCommV2PlaintextMessage => {
+  const report = (plaintext.body ?? {}) as { code?: unknown; comment?: unknown }
+  return {
+    ...plaintext,
+    type: `${TASK_ERROR}problem-report`,
+    body: {
+      payload: {
+        code: typeof report.code === 'string' ? report.code : 'problem-report',
+        message: typeof report.comment === 'string' ? report.comment : 'The community could not read the request.',
+      },
+    },
+  }
+}
+
+/** How far the connection has got, in the words the Connecting screen uses. */
+export type VtiAgentStatus = 'disconnected' | 'resolving' | 'authenticating' | 'connected' | 'failed'
+
+export interface VtiAgentState {
+  status: VtiAgentStatus
+  /** The DID this wallet presents to a community — its member identity. */
+  did?: string
+  /**
+   * Whom the session is signing in as, from just before its socket opens until
+   * it is connected (`did` from then on). The mediator drains what waited for
+   * that DID the moment the socket opens, before `did` is set: an inbox reads
+   * this to know whose those messages are (227.1).
+   */
+  signingInAs?: string
+  /** The mediator's host, which is what a person can recognise. */
+  host?: string
+  error?: string
+  /** What this session sends on the peer leg, and whether it can open TSP. */
+  peerLeg?: PeerLegCarriage
+  tspReady?: boolean
+  /** What each peer was observed to speak (diagnostic; never fed back into packing). */
+  peerRevisions?: PeerRevisionRecord[]
+}
+
+/** What a community decided, and what it is still waiting for. */
+export interface VtiVerdict {
+  requestId?: string
+  effect: string
+  needs: string[]
+  /** Everything the verdict carried — an `allow` brings the membership card here. */
+  with?: Record<string, unknown>
+}
+
+type Listener = () => void
+
+/**
+ * One request `ask` sent, until it is answered or its hold runs out.
+ *
+ * Correlated the way the VTC threads its answer, which differs by carriage:
+ * over DIDComm the reply's `thid` is the request MESSAGE's id (vtc-service
+ * `envelope_task_handler`: `thid = msg.id`), over TSP there is no message and
+ * the reply document's `threadId` is the request document's `threadId`
+ * (Trust Tasks SPEC §4.9, which `handle_tsp` returns as-is). `correlation`
+ * holds every id either can carry: the document's `threadId` and `id`, and
+ * each DIDComm message id it was sent under.
+ */
+/** What an ask goes out on: the shared session, or an identity's own (sessions phase B, `askAs`). */
+interface AskVia {
+  /** TSP may carry it only on a carrier that sends frames: the shared session, whose TSP session this controller holds. */
+  carrier: OwnSession & { sendTspFrame?: (bytes: Uint8Array) => Promise<void> }
+  /** Who asks: the document's issuer, and the identity its answer must come back to. */
+  did: string
+  /** Who signs the document: the identity asking, when its signing key is borrowed. */
+  signer?: VtiPersona
+  /** The shared session (`ask`) rather than an identity's own (`askAs`). */
+  shared: boolean
+}
+
+interface AskEntry {
+  /** The request document's `threadId`. */
+  id: string
+  did: string
+  communityDid: string
+  type: string
+  /** The payload as sent, so a repeat of the same ask can be recognised. */
+  payloadKey: string
+  write: boolean
+  correlation: Set<string>
+  /** First send, and the latest one (the stale-redelivery guard reads the latest). */
+  sentAt: number
+  lastSentAt: number
+  /** Callers waiting on it now. */
+  waiters: ((plaintext: DidCommV2PlaintextMessage) => void)[]
+  /** Sent over the shared session (`ask`), not an identity's own (`askAs`): only these go when the shared one does. */
+  shared: boolean
+  /** Set when the answer clock ran out: until then a late answer is kept. */
+  heldUntil?: number
+  /** A late answer, kept for the next caller. */
+  answer?: DidCommV2PlaintextMessage
+  /** Its place among this phone's asks, in the order they were sent: an answered ask with a higher one was sent later. */
+  seq: number
+  /** Sends it once more as a new request (readReaskSwitch.ts). Only a read this session built and sent over DIDComm has one. */
+  reask?: () => Promise<void>
+  /** It was sent a second time: never a third. */
+  reasked?: boolean
+}
+
+/** A trust-task-error's code and words, cut short for a log line that reaches problem reports. */
+export function refusalWordsOf(plaintext: DidCommV2PlaintextMessage): { code: string; message?: string } {
+  const payload = ((plaintext.body as { payload?: unknown } | undefined)?.payload ?? {}) as {
+    code?: unknown
+    message?: unknown
+  }
+  const code = typeof payload.code === 'string' && payload.code ? payload.code : 'unknown'
+  const message =
+    typeof payload.message === 'string' ? payload.message.replace(/\s+/g, ' ').trim().slice(0, 200) : undefined
+  return { code, ...(message ? { message } : {}) }
+}
+
+const hostOf = (endpoint?: string) => {
+  if (!endpoint) return undefined
+  const match = /^[a-z]+:\/\/([^/]+)/i.exec(endpoint)
+  return match?.[1]
+}
+
+/**
+ * The Trust Task families whose messages say something about hidden vetting:
+ * a vetter's attestation, the agent's `vta/pcs/*` engine, and the community's
+ * challenge and hidden-vetting configuration.
+ */
+const HIDDEN_VETTING_TYPE_PREFIXES = [
+  'https://trusttasks.org/spec/vetting/attestation/',
+  'https://trusttasks.org/spec/vta/pcs/',
+  'https://trusttasks.org/spec/vtc/vetting/pcs-challenge/',
+  'https://trusttasks.org/spec/vtc/vetting/hidden/',
+] as const
+
+/**
+ * Whether a message type belongs to hidden vetting, and so is logged by its
+ * type alone, with no DID at all.
+ *
+ * The phone's log leaves the device (remote logs, testers' problem reports).
+ * A line pairing `vetting/attestation` with the DID that sent it names the
+ * applicant's vetter, which is the one thing hidden vetting keeps from
+ * everyone but the applicant; the applicant's own DID beside a `vta/pcs` type
+ * says who applied that way. Answers and refusals (`#response`) are covered by
+ * the same prefixes.
+ */
+export function isHiddenVettingType(type: string): boolean {
+  return HIDDEN_VETTING_TYPE_PREFIXES.some((prefix) => type.startsWith(prefix))
+}
+
+/** How a log line names `did` beside `type`: not at all for hidden vetting (`isHiddenVettingType`). */
+function named(type: string, did: string | undefined, instead: string): string {
+  return isHiddenVettingType(type) ? instead : String(did ?? '')
+}
+
+class VtiAgentController {
+  private state: VtiAgentState = { status: 'disconnected' }
+  private listeners = new Set<Listener>()
+  private session?: VtiMediatorSession
+  /** Run before the session signs in as a DID (see `beforeSignIn`). */
+  private readonly signInGuards = new Set<(did: string) => Promise<void>>()
+  private mediator?: VtiMediatorEndpoints
+  private agent?: Agent
+  /**
+   * The requests in flight, and those whose clock ran out still held for a
+   * late answer, by the request's `threadId`. Each is answered by a message
+   * that threads on it (see `AskEntry`) and whose type is the request's
+   * `#response` or a trust-task-error, or by a DIDComm problem-report threaded
+   * on it. One slot matched by type used to hold them: a status poll asked
+   * during a submit took the submit's slot, and the submit's answer was lost.
+   * Measured on the Eucalyptus train, a community also sends unsolicited
+   * messages right after a verdict — the credentials, over
+   * `credential-exchange/issue` — so "first message after send" is no longer
+   * a reply. Those go to the inbox.
+   */
+  private readonly asks = new Map<string, AskEntry>()
+  /** The next ask's place in the order sent (`AskEntry.seq`). */
+  private askSeq = 0
+  /** By identity and community: the latest-sent ask that community has answered (readReaskSwitch.ts). */
+  private readonly answeredSeq = new Map<string, number>()
+  /** The ids of the answers given to an ask lately ({@link ANSWERS_GIVEN_MAX} at most): a second copy of one is known for what it is. */
+  private readonly answersGiven = new Set<string>()
+  /** How long `ask` waits for an answer when the caller names no time. */
+  answerTimeoutMs = 30000
+  /** How long a read waits before it may be asked once more (readReaskSwitch.ts). A test shortens it. */
+  readReaskAfterMs = VTI_READ_REASK_AFTER_MS
+  /**
+   * How long a join submit waits. A community deciding a join may look up the
+   * applicant's DIDs, and after a DID host's 429 it retries 30 s later
+   * (VTI-69): its answer then lands just past a 30 s clock (7b's R5, 10-06,
+   * 0.2 s late). The longer clock covers one such retry.
+   */
+  submitAnswerTimeoutMs = 60000
+  private inbox: ((plaintext: DidCommV2PlaintextMessage) => void | Promise<void>)[] = []
+  private tsp?: TspSessionIdentity
+  /** The persona this session speaks as, when it is one: its borrowed signing key signs what a spec requires. */
+  private persona?: VtiPersona
+  /**
+   * §4.2: the envelope chosen for each peer, decided once per session and kept.
+   * Deciding per message would let one unreachable peer flap a session between
+   * two envelope formats; the plan asks for a session-scoped choice, logged.
+   */
+  private readonly carriageByPeer = new Map<string, Carriage>()
+  /** When each community was last probed, and how it went (`tspProbe.ts`). */
+  private probeStore?: TspProbeStore
+  /** The probe running now, per community: one at a time each. */
+  private readonly probing = new Map<string, Promise<TspProbeOutcome | 'skipped'>>()
+  /** Every DID that has sent this session something: the evidence a community is up (a probe's "down" vs "silent"). */
+  private readonly heardFrom = new Set<string>()
+  /**
+   * How each peer last reached us, by its DID (the DIDComm sender, the TSP
+   * sender, and the document's issuer). A reply goes back the same way: a
+   * peer that wrote over DIDComm reads DIDComm, whatever its DID document
+   * advertises. Measured 2026-09-24: an openvtc vetter opened a session over
+   * DIDComm from a persona that advertises TSPTransport; Keyring answered with
+   * TSP frames, five times, and the vetter never saw the card.
+   */
+  private readonly inboundCarriage = new Map<string, Carriage>()
+
+  private noteInbound(plaintext: DidCommV2PlaintextMessage, carriage: Carriage, sender?: string): void {
+    const issuer = (unwrapBindingEnvelope(plaintext).body as { issuer?: unknown } | undefined)?.issuer
+    for (const did of [sender, plaintext.from, issuer]) {
+      if (typeof did === 'string' && did.startsWith('did:')) this.inboundCarriage.set(did, carriage)
+    }
+  }
+
+  /** How `peerDid` last reached us, if it has — what a reply to it should use. */
+  /** The TSP version `peerDid` last wrote to us in, as recorded on receipt. */
+  peerRevisionOf(peerDid: string): tsp.TspRevision | undefined {
+    return this.state.peerRevisions?.find((record) => record.vid === peerDid)?.revision
+  }
+
+  inboundCarriageOf(peerDid: string): Carriage | undefined {
+    return this.inboundCarriage.get(peerDid)
+  }
+
+  /**
+   * Can this session START a TSP conversation with a peer it has no
+   * relationship with?
+   *
+   * Holding a TSP identity is necessary and not sufficient. Rev 3 requires an
+   * introduction before any traffic, and a peer that does not get one drops
+   * what follows without answering — so choosing TSP without being able to
+   * form a relationship produces silence, which is strictly worse than the
+   * DIDComm we would otherwise have used. `tsp.CODEC_FORMS_RELATIONSHIPS`
+   * carries that fact from the codec that knows it.
+   */
+  private canInitiateTsp(): boolean {
+    return Boolean(this.tsp) && tsp.CODEC_FORMS_RELATIONSHIPS
+  }
+
+  /**
+   * Relationships this wallet has already opened (§7.2.2), keyed by OUR DID
+   * and the peer's: one invite per pair. The relationship is recorded on the
+   * peer's side on arrival, and a second invite would be a fresh relationship,
+   * not a repeat. Keyed by the pair because the controller reconnects as
+   * different identities — a persona left and a new one made — and a greeting
+   * one identity sent does not introduce another: measured 2026-09-22, a new
+   * persona's join went out over TSP unannounced and the community discarded
+   * it ("no relationship with …"), so the phone heard nothing.
+   */
+  private readonly greeted = new Set<string>()
+
+  /** The mediator this session rides, kept because an invite must be ROUTED
+   *  through it — a mediator refuses direct delivery unless configured for it. */
+  private mediatorDid?: string
+
+  /**
+   * Send the invite that makes a peer willing to accept our traffic, once.
+   *
+   * A failure here is logged and not thrown: the send that follows is what
+   * reports the outcome, and the peer may already know us from an earlier
+   * session, in which case the invite was never needed.
+   */
+  private async ensureGreeted(toDid: string, revision?: tsp.TspRevision): Promise<void> {
+    const session = this.session
+    const did = this.state.did
+    if (!session || !did || !this.tsp || !this.agent) return
+    // Keyed by version too: a peer that moves from Rev 3 to 1.0 needs a 1.0 invite.
+    const pair = `${did} ${toDid} ${revision ?? 'codec'}`
+    if (this.greeted.has(pair)) return
+    this.greeted.add(pair)
+    try {
+      // §5.3.3: a hop list ends at the destination's OWN VID, not its
+      // intermediary's — so the path back to us is our mediator, then us.
+      // Advertising the mediator alone is the Rev 2 shape, and a Rev 3 peer
+      // cannot route an accept over it: the VTC logged "a routed message
+      // requires at least one onward hop" and never answered the invite.
+      // Upstream's own `form_relationship_routed` sends exactly this pair.
+      const route = this.mediatorDid ? [this.mediatorDid, did] : []
+      const invite = await greetPeerOverTsp(this.tsp, did, toDid, route, revision)
+      await session.sendTspFrame(invite.bytes)
+      this.agent.config.logger.info(
+        `${TSP_LOG_PREFIX} greeted ${toDid} with an XRFI invite (${invite.bytes.length} bytes, route ${route.length})`
+      )
+    } catch (error) {
+      this.agent.config.logger.warn(`${TSP_LOG_PREFIX} could not greet ${toDid}: ${error}`)
+    }
+  }
+  private peerRevisionStore?: TspPeerRevisionStore
+
+  /**
+   * Receive what the community sends that is not an answer (credentials,
+   * statements). Return the work that stores it: the mediator is told the
+   * message was taken only once every handler's promise has settled, and a
+   * handler that rejects withholds that, so the message is delivered again.
+   */
+  onInbound(handler: (plaintext: DidCommV2PlaintextMessage) => void | Promise<void>): () => void {
+    this.inbox.push(handler)
+    return () => {
+      this.inbox = this.inbox.filter((h) => h !== handler)
+    }
+  }
+
+  private async deliver(received: DidCommV2PlaintextMessage): Promise<void> {
+    const plaintext = unwrapBindingEnvelope(received)
+    if (typeof plaintext.from === 'string') this.heardFrom.add(plaintext.from)
+    const type = String(plaintext.type ?? '')
+    this.dropExpiredHolds()
+    const entry = this.askAnswered(plaintext)
+    // The type and DID prefixes only: this line reaches testers' problem
+    // reports, so never a body, a card or a whole identifier. A hidden-vetting
+    // message, or a refusal answering a hidden-vetting ask, is said by its type
+    // alone (`isHiddenVettingType`).
+    const hidden = isHiddenVettingType(type) || (entry !== undefined && isHiddenVettingType(entry.type))
+    this.agent?.config?.logger?.info?.(
+      hidden
+        ? `vtiAgent: inbound ${type}`
+        : `vtiAgent: inbound ${type} from ${didPrefix(plaintext.from)} (session ${didPrefix(this.state.did)})`
+    )
+    // A community's refusal, said in the log with its code and words and what
+    // it answers: four refusals of a join reached a tester's report as bare
+    // "inbound trust-task-error" lines (IN-127, 10-06), and nothing said why.
+    if (String(plaintext.type ?? '').startsWith(TASK_ERROR)) {
+      const refusal = refusalWordsOf(plaintext)
+      const who = hidden ? 'the community' : didPrefix(plaintext.from)
+      this.agent?.config?.logger?.warn?.(
+        `vtiAgent: ${who} refused ${entry ? taskName(entry.type) : 'a task'}: ${refusal.code}${
+          refusal.message ? ` — ${refusal.message}` : ''
+        }`
+      )
+    }
+    // A DIDComm problem-report, said with its code, words and the thread it
+    // answers: three reached a tester's report as a bare type (IN-617). Said
+    // through releaseWarn, as the transport says the mediator's own, so it
+    // reaches a report whatever logger the agent has. One threaded on an ask
+    // is that ask's refusal (below), so it is said twice on purpose: here as
+    // received, with its thread, and again by whatever logs the ask's failure.
+    // Any other goes to the inbox, which keeps none of it.
+    if (type === PROBLEM_REPORT) {
+      const who = hidden ? 'the community' : didPrefix(plaintext.from)
+      releaseWarn(
+        `vtiAgent: ${who} sent a problem-report on ${entry ? taskName(entry.type) : 'no request in flight'}: ${problemReportWords(
+          plaintext,
+          { hideDids: hidden }
+        )}`
+      )
+    }
+    if (entry) {
+      this.settle(
+        entry,
+        String(plaintext.type ?? '') === PROBLEM_REPORT ? problemReportAsRefusal(plaintext) : plaintext
+      )
+      return
+    }
+    // Every handler runs, whatever another does: one handler's failure must
+    // not lose the message for the others. Any failure then fails the
+    // delivery, so the session withholds the ack and the message comes back —
+    // which is why a handler must be safe to run twice on one message.
+    const results = await Promise.allSettled(this.inbox.map(async (handler) => handler(plaintext)))
+    const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    if (failed.length > 0) {
+      const reason = failed[0].reason
+      throw new Error(
+        `vtiAgent: ${failed.length} inbound handler(s) failed on ${String(plaintext.type ?? '')}; left on the mediator for redelivery: ${
+          reason instanceof Error ? reason.message : String(reason)
+        }`
+      )
+    }
+  }
+
+  /**
+   * The ask `plaintext` answers, if any.
+   *
+   * By thread first: the reply document's `threadId` (TSP, and the body of a
+   * DIDComm reply — SPEC §4.9 has a response carry the request's), the
+   * DIDComm `thid` (vtc-service threads it on the request message's id) or
+   * `pthid`. A reply that names a thread no ask holds is not an answer — it
+   * belongs to an ask already settled or dropped — and goes to the inbox.
+   *
+   * By type only when the reply names no thread at all. The VTC sends one:
+   * a request body that does not parse is refused with an unrouted
+   * trust-task-error whose `threadId` is null (vtc-service
+   * `trust_tasks/helpers.rs` `body_parse_error_response`), and over TSP there
+   * is no DIDComm `thid` to stand in for it (`handle_tsp` sends the document
+   * bare). Such a reply goes to the oldest ask it could answer, waiting ones
+   * first, and only if it is not older than that ask's send: a reply older
+   * than the request is a re-delivery of a stale message (a poll draining the
+   * queue), never the answer — created_time is seconds. A problem-report is
+   * never matched by type: it answers only the request it threads on.
+   */
+  private askAnswered(plaintext: DidCommV2PlaintextMessage): AskEntry | undefined {
+    const type = String(plaintext.type ?? '')
+    const answersTask = (entry: AskEntry) => type === `${entry.type}#response` || type.startsWith(TASK_ERROR)
+    const threadId = (plaintext.body as { threadId?: unknown } | undefined)?.threadId
+    const threads = [threadId, plaintext.thid, plaintext.pthid].filter(
+      (id): id is string => typeof id === 'string' && id.length > 0
+    )
+    if (threads.length) {
+      for (const entry of this.asks.values()) {
+        if (!threads.some((id) => entry.correlation.has(id))) continue
+        // A refusal at the DIDComm layer — a malformed or unsupported message —
+        // comes as a problem-report threaded on the request (vti #1687 threads
+        // it), never as a Trust Task. Unanswered, it read as "the community did
+        // not answer" and hid the community's own reason; present it as the
+        // refusal it is.
+        if (answersTask(entry) || type === PROBLEM_REPORT) return entry
+      }
+      return undefined
+    }
+    if (type === PROBLEM_REPORT) return undefined
+    // Within the grace after a session opens, no reply naming no thread answers by type, timed or not: what the
+    // mediator flushes then was written before, and a timed one's 5 s slop could still read as fresh (as the fixed wait
+    // this replaces kept every such reply from any ask). A real one that early waits out its ask's clock.
+    const fresh = (entry: AskEntry) =>
+      this.now() - this.openedAt >= VTI_BACKLOG_GRACE_MS &&
+      (typeof plaintext.created_time !== 'number' || plaintext.created_time * 1000 >= entry.lastSentAt - 5000)
+    // By type alone only for this session's own asks: one kept across a switch is another identity's, and a reply naming
+    // no thread can't say it is for that one.
+    const candidates = [...this.asks.values()]
+      .filter((entry) => entry.did === this.state.did && !entry.answer && answersTask(entry) && fresh(entry))
+      .sort((a, b) => a.sentAt - b.sentAt)
+    return candidates.find((entry) => entry.waiters.length) ?? candidates[0]
+  }
+
+  /**
+   * A `#response` a persona's listener heard while the shared session is signed in as another identity. The session
+   * moved on before the answer came, so nothing collects as that persona: left on the mediator, it came back at every
+   * drain (15 s) until the session's next turn as the persona (277.8, SHARED-SESSION-ORPHAN-REPLY).
+   *
+   * - 'answered': the ask it threads on, sent as that persona, is given it, as `deliver` gives it. A refusal threaded
+   *   on such an ask (a `trust-task-error`, or a DIDComm problem-report) answers it too: left on the mediator, the ask
+   *   waited out its clock as "no answer" while the community's reason sat unread, redelivered at every drain (a
+   *   directory lookup over an identity's own session, ZN6C-WNXG, 11-18).
+   * - 'orphan': it threads on no ask, and answers a read (`VTI_READ_TASKS`): nothing waits for it and the read is asked
+   *   again, so it may be dropped.
+   * - 'repeat': an orphan that is the very message an ask was given already, by its id. The shared session takes an
+   *   answer and acknowledges it after; signed in as another identity in between, the acknowledgement never goes, and
+   *   the mediator delivers the message again to that identity's listener (281.2, 23QE-AHW7: a rooms listing answered
+   *   at 05:56:08.5 as the session moved on, heard again at 05:56:10.2). Dropped as an orphan is; only said apart, so
+   *   a report does not read a second copy as an answer that was lost.
+   * - undefined: anything else stays the shared session's. A request, a refusal that threads on no ask this identity
+   *   sent, a reply naming no thread (matched by
+   *   type, which a listener must not guess at), an ask of another identity, or an unclaimed answer to a write, whose
+   *   only copy this may be (276.10: a vetting request taken by a listener was lost).
+   *
+   * Not a pure check, though it reads like one: it lets go of expired holds first, whatever it returns. That is only
+   * time-based housekeeping on the holds.
+   */
+  answerFromListener(did: string, received: DidCommV2PlaintextMessage): 'answered' | 'orphan' | 'repeat' | undefined {
+    const plaintext = unwrapBindingEnvelope(received)
+    const type = String(plaintext.type ?? '')
+    const response = type.endsWith(RESPONSE_SUFFIX)
+    const refusal = type.startsWith(TASK_ERROR) || type === PROBLEM_REPORT
+    if (!response && !refusal) return undefined
+    const threadId = (plaintext.body as { threadId?: unknown } | undefined)?.threadId
+    const threaded = [threadId, plaintext.thid, plaintext.pthid].some((id) => typeof id === 'string' && id.length > 0)
+    if (!threaded) return undefined
+    this.dropExpiredHolds()
+    const entry = this.askAnswered(plaintext)
+    if (entry) {
+      if (entry.did !== did) return undefined
+      // Said as `deliver` says a refusal it receives, with its code: a report then shows why, not only that.
+      if (type.startsWith(TASK_ERROR)) {
+        const words = refusalWordsOf(plaintext)
+        const who = isHiddenVettingType(entry.type) ? 'the community' : didPrefix(plaintext.from)
+        this.agent?.config?.logger?.warn?.(
+          `vtiAgent: ${who} refused ${taskName(entry.type)}: ${words.code}${words.message ? ` — ${words.message}` : ''}`
+        )
+      }
+      this.settle(entry, type === PROBLEM_REPORT ? problemReportAsRefusal(plaintext) : plaintext)
+      return 'answered'
+    }
+    // A refusal that threads on no ask of this phone's is never dropped here: it stays the shared session's.
+    if (!response) return undefined
+    if (!isVtiReadTask(type.slice(0, -RESPONSE_SUFFIX.length))) return undefined
+    return typeof plaintext.id === 'string' && this.answersGiven.has(plaintext.id) ? 'repeat' : 'orphan'
+  }
+
+  /** Hand an answer to whoever waits on the ask, or keep it for the next caller. */
+  private settle(entry: AskEntry, answer: DidCommV2PlaintextMessage): void {
+    this.noteAnswered(entry)
+    if (typeof answer.id === 'string' && answer.id) {
+      // Oldest out first: a Set keeps the order its members were added in.
+      if (this.answersGiven.size >= ANSWERS_GIVEN_MAX)
+        this.answersGiven.delete(this.answersGiven.values().next().value as string)
+      this.answersGiven.add(answer.id)
+    }
+    if (entry.waiters.length) {
+      this.asks.delete(entry.id)
+      for (const resolve of entry.waiters.splice(0)) resolve(answer)
+      return
+    }
+    entry.answer = answer
+    this.agent?.config.logger.info(
+      `vtiAgent: ${named(entry.type, entry.communityDid, 'the community')} answered ${taskName(entry.type)} after its clock ran out — kept for the next caller`
+    )
+    this.listeners.forEach((listener) => listener())
+    // Where a join request stands, answered late: whoever shows it asks again.
+    if (entry.type === STATUS) {
+      try {
+        DeviceEventEmitter.emit(VTI_JOIN_STATUS_LATE_EVENT, { communityDid: entry.communityDid })
+      } catch {
+        // A listener's failure is the listener's.
+      }
+    }
+  }
+
+  private dropExpiredHolds(now = Date.now()): void {
+    for (const [id, entry] of this.asks) {
+      if (entry.heldUntil !== undefined && now >= entry.heldUntil && !entry.waiters.length) this.asks.delete(id)
+    }
+  }
+
+  /**
+   * Wait up to `timeoutMs` for the ask's answer. When the clock runs out the
+   * ask is held for `VTI_ANSWER_HOLD_MS` rather than forgotten: its answer, if
+   * it comes in that time, is kept (`settle`).
+   */
+  private waitFor(entry: AskEntry, timeoutMs: number): Promise<DidCommV2PlaintextMessage | undefined> {
+    if (entry.answer) {
+      this.asks.delete(entry.id)
+      return Promise.resolve(entry.answer)
+    }
+    entry.heldUntil = undefined
+    const began = Date.now()
+    return new Promise((resolve) => {
+      const waiter = (plaintext: DidCommV2PlaintextMessage) => {
+        clearTimeout(timer)
+        resolve(plaintext)
+      }
+      const timer = setTimeout(() => {
+        entry.waiters = entry.waiters.filter((w) => w !== waiter)
+        if (!entry.waiters.length) entry.heldUntil = Date.now() + VTI_ANSWER_HOLD_MS
+        this.sayUnanswered(entry, timeoutMs, Date.now() - began)
+        resolve(undefined)
+      }, timeoutMs)
+      entry.waiters.push(waiter)
+    })
+  }
+
+  /**
+   * An ask's clock ran out with no answer: said once per waiter, with how long the wait really was. A clock runs only
+   * while the app does, so a wait that took longer than its clock was partly spent with the app not running (in the
+   * background, iOS stops the timers): a "30 s" wait read as 69 s in a report, and nothing said why (BC46-XSQD).
+   * The task and DID prefixes only, and no DID at all for hidden vetting.
+   */
+  private sayUnanswered(entry: AskEntry, timeoutMs: number, waitedMs: number): void {
+    const who = isHiddenVettingType(entry.type) ? '' : ` as ${didPrefix(entry.did)}`
+    const over = waitedMs - timeoutMs
+    this.agent?.config?.logger?.warn?.(
+      `vtiAgent: ${taskName(entry.type)} asked${who} over ${entry.shared ? 'the shared session' : 'its own session'} had no answer when its ${timeoutMs} ms clock ran out${
+        over >= 2000 ? `, ${waitedMs} ms after the wait began (the app was not running for about ${over} ms of it)` : ''
+      }${entry.reasked ? '; it had been asked a second time' : ''}`
+    )
+  }
+
+  /**
+   * A community answered `entry`. Kept: the latest-sent ask it has answered, by identity and community. Then any
+   * earlier read of the same identity's to the same community, still unanswered, may be asked again (`maybeReask`).
+   */
+  private noteAnswered(entry: AskEntry): void {
+    const key = `${entry.did}|${entry.communityDid}`
+    if ((this.answeredSeq.get(key) ?? -1) < entry.seq) this.answeredSeq.set(key, entry.seq)
+    if (!isReadReaskOn()) return
+    // Each ask is judged by its own identity and community (`maybeReask`): this answer moves only theirs.
+    for (const other of [...this.asks.values()]) if (other !== entry) this.maybeReask(other)
+  }
+
+  /**
+   * Send a read once more, when it is owed that (readReaskSwitch.ts): it has waited
+   * {@link VTI_READ_REASK_AFTER_MS} with no answer, someone still waits for it, and the same community has answered
+   * an ask this identity sent after it. Looked at when the wait is up and at each answer from that community.
+   */
+  private maybeReask(entry: AskEntry, waitIsUp = false): void {
+    if (!isReadReaskOn() || !entry.reask || entry.reasked || entry.answer || !entry.waiters.length) return
+    if (this.asks.get(entry.id) !== entry) return
+    const waited = Date.now() - entry.sentAt
+    // The wait's own timer says the wait is up: it can fire a millisecond early by the clock, and nothing would look
+    // again if that read as "not yet" (the later answer is already in).
+    if (!waitIsUp && waited < this.readReaskAfterMs) return
+    if ((this.answeredSeq.get(`${entry.did}|${entry.communityDid}`) ?? -1) <= entry.seq) return
+    // The shared session is another identity's now: nothing is sent as this one over it.
+    if (entry.shared && this.state.did !== entry.did) return
+    entry.reasked = true
+    // By prefix, and with no DID at all for hidden vetting, as every line here that reaches a report.
+    const hidden = isHiddenVettingType(entry.type)
+    this.agent?.config?.logger?.warn?.(
+      `vtiAgent: ${taskName(entry.type)} asked${hidden ? '' : ` as ${didPrefix(entry.did)}`} had no answer in ${waited} ms while ${
+        hidden ? 'the community' : didPrefix(entry.communityDid)
+      } answered a later ask: asked once more`
+    )
+    void entry.reask().catch((error: unknown) => {
+      this.agent?.config?.logger?.warn?.(
+        `vtiAgent: ${taskName(entry.type)} could not be asked once more: ${error instanceof Error ? error.name : 'an error'}`
+      )
+    })
+  }
+
+  /**
+   * A late answer to an ask whose clock ran out, if one arrived within
+   * `VTI_ANSWER_HOLD_MS` — taken once. `requestId` narrows it to one request
+   * (`VtiSentNoAnswer.requestId`); without it, the latest held answer to
+   * `type` from that community. An identical `ask` takes it the same way.
+   */
+  takeHeldAnswer(communityDid: string, type: string, requestId?: string): DidCommV2PlaintextMessage | undefined {
+    this.dropExpiredHolds()
+    const held = [...this.asks.values()]
+      .filter(
+        (entry) =>
+          entry.answer &&
+          entry.did === this.state.did &&
+          entry.communityDid === communityDid &&
+          entry.type === type &&
+          (!requestId || entry.id === requestId)
+      )
+      .sort((a, b) => b.sentAt - a.sentAt)[0]
+    if (!held) return undefined
+    this.asks.delete(held.id)
+    return held.answer
+  }
+
+  /**
+   * The answer to a submit that came back unanswered, if it arrives while the
+   * ask is held (`VTI_ANSWER_HOLD_MS`): taken once, as a verdict, the way an
+   * answer in time would have been — a refusal is thrown. Undefined when none
+   * comes in that time. 7b's R5, 10-06: the community answered a join 0.2 s
+   * after the 30 s clock, and the Join screen never learned it.
+   */
+  lateVerdict(sent: VtiSentNoAnswer, holdMs = VTI_ANSWER_HOLD_MS): Promise<VtiVerdict | undefined> {
+    const communityDid = sent.communityDid
+    if (!communityDid || !sent.requestId) return Promise.resolve(undefined)
+    return new Promise((resolve, reject) => {
+      let done = false
+      const finish = (verdict?: VtiVerdict, error?: unknown) => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        unsubscribe()
+        if (error) reject(error)
+        else resolve(verdict)
+      }
+      const look = () => {
+        const answer = this.takeHeldAnswer(communityDid, sent.taskType, sent.requestId)
+        if (!answer) return
+        try {
+          finish(this.verdictOf(answer, communityDid, sent.taskType))
+        } catch (error) {
+          finish(undefined, error)
+        }
+      }
+      const unsubscribe = this.subscribe(look)
+      const timer = setTimeout(() => finish(undefined), holdMs)
+      look()
+    })
+  }
+
+  /**
+   * The error for an `ask` that came back unanswered: the latest such request
+   * of `type` to that community, as `VtiSentNoAnswer`. For callers of `ask`,
+   * which returns undefined on silence.
+   */
+  sentNoAnswer(communityDid: string, type: string): VtiSentNoAnswer {
+    const entry = [...this.asks.values()]
+      .filter((e) => e.communityDid === communityDid && e.type === type && !e.waiters.length)
+      .sort((a, b) => b.sentAt - a.sentAt)[0]
+    return new VtiSentNoAnswer(type, entry?.id, entry?.sentAt, communityDid)
+  }
+
+  getState = (): VtiAgentState => this.state
+
+  subscribe = (listener: Listener): (() => void) => {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  private set(next: Partial<VtiAgentState>) {
+    this.state = { ...this.state, ...next }
+    this.listeners.forEach((listener) => listener())
+  }
+
+  /**
+   * Resolve the mediator a VTI agent advertises, mint this wallet's member DID,
+   * log in and hold the socket. Idempotent while the socket is open.
+   */
+  /**
+   * A community whose TSP endpoint is behind another mediator than ours is
+   * asked over DIDComm from the start. Across two mediators a TSP
+   * relationship has not once completed (VTI-Q15: the Farm to storm's
+   * first-vtc, and the Farm to a Farm Full Stack's own mediator — the invite is
+   * stored for the community and nothing comes back), and waiting out a TSP
+   * timeout first made a first Join look like a hang. On one mediator (the lab)
+   * TSP is kept, and `ask`'s TSP→DIDComm fallback stays as the safety net
+   * for reads (a write is never sent twice; see `VTI_READ_TASKS`).
+   */
+  private async preferDidcommAcrossMediators(communityDid: string): Promise<void> {
+    if (!this.agent || this.carriageByPeer.has(communityDid) || !this.mediatorDid) return
+    const theirs = await advertisedTspMediatorDid(this.agent, communityDid).catch(() => undefined)
+    if (theirs && theirs !== this.mediatorDid) {
+      this.carriageByPeer.set(communityDid, 'didcomm')
+      this.agent.config.logger.info(
+        `${TSP_LOG_PREFIX} ${communityDid} speaks TSP through ${theirs}, not our mediator — using DIDComm (VTI-Q15)`
+      )
+    }
+  }
+
+  /** The connect in flight, so a second caller waits for it instead of racing it. */
+  private connecting?: Promise<void>
+  /** How long one sign-in may hold the turn (`VTI_SIGNIN_TURN_MS`); a test makes it short. */
+  signInTurnMs = VTI_SIGNIN_TURN_MS
+  /** The holds on the session (`holding`), and the ordinary connects waiting for one to end, by DID. */
+  private readonly holds = new Map<symbol, SessionHold>()
+  private readonly foregroundWaiting = new Map<symbol, string>()
+  /** The listing reads waiting for the session (`holding`'s `listing`), by DID: a poll as another identity waits for them. */
+  private readonly listingWaiting = new Map<symbol, string>()
+  private readonly holdWatchers = new Set<() => void>()
+  /** The DID an ordinary connect last signed in as, and until when a background one leaves it (`VTI_FOREGROUND_CLAIM_MS`). */
+  private claim?: { did: string; until: number }
+  /** How many times running each identity's background connect was refused by the claim alone (`VTI_TURN_AFTER_REFUSALS`). */
+  private readonly refusedByClaim = new Map<string, number>()
+  /** For tests: the clock holds and claims are read by. */
+  now: () => number = () => Date.now()
+  /** When the current session's socket opened (`VTI_BACKLOG_GRACE_MS`). */
+  private openedAt = 0
+  /** Each identity's failed sign-ins (`VTI_SIGNIN_REST_FIRST_MS`), kept across launches; read once, on first need. */
+  private readonly rests = new Map<string, VtiSignInRest>()
+  private restsRead?: Promise<void>
+  /** When any identity last signed in (`VTI_SIGNIN_ONLINE_WITHIN_MS`). */
+  private lastSignedInAt?: number
+
+  /** The live holds; one past its time is dropped, and said once. */
+  private liveHolds(): SessionHold[] {
+    const now = this.now()
+    for (const [key, hold] of this.holds)
+      if (hold.until <= now) {
+        this.holds.delete(key)
+        releaseWarn(
+          `vtiAgent: a hold on the session${hold.reason ? ` (${hold.reason})` : ''} ran past its time; sign-ins no longer wait for it`
+        )
+      }
+    return [...this.holds.values()]
+  }
+
+  /**
+   * What stops a connect as `did` from going ahead now: `wait` until the holds named end, `refuse` with
+   * `VtiSessionHeld`, or nothing. Three kinds of caller, in this order of way: a step's (ordinary), a screen's listing
+   * read (`listing`), a poll (`background`).
+   *
+   * - An ordinary connect waits only for another DID's ordinary hold, a listing read's included. A poll's hold gives
+   *   way to it.
+   * - A listing read waits for another DID's hold of any kind, and for an ordinary connect waiting for the session: it
+   *   switches nothing away, and nothing refuses it.
+   * - A background connect is refused by a step's hold, by an ordinary connect waiting, or by the DID an ordinary
+   *   connect signed in as within `VTI_FOREGROUND_CLAIM_MS` (that last only until the same identity has been refused by
+   *   it `VTI_TURN_AFTER_REFUSALS` times running: `byClaim`, then it is its turn). It waits for another DID's listing
+   *   read that holds the session, for one waiting for it when this connect would switch the session, and for another
+   *   DID's poll.
+   *
+   * No DID (a new identity) never switches an open session, so nothing stops it then.
+   */
+  private blockerFor(
+    did: string | undefined,
+    background: boolean,
+    listing = false
+  ): { wait: SessionHold } | { refuse: VtiSessionHeld; byClaim?: true } | undefined {
+    const holds = this.liveHolds().filter((h) => h.did !== did)
+    const ordinary = holds.find((h) => !h.background)
+    const polling = holds.find((h) => h.background)
+    // Waiting for an identity that holds nothing yet: what it waits on ends that wait (`holdsChanged`). Every other wait
+    // here is on a live hold, and so is timed by that hold's `until`; this one gets a clock of its own, so a wake that
+    // never came is re-checked rather than waited on for ever (`holdsMoved`).
+    const waitingFor = (d: string, reason: string): SessionHold => ({
+      did: d,
+      background,
+      until: this.now() + VTI_BACKGROUND_HOLD_MAX_MS,
+      reason,
+    })
+    if (listing) {
+      const held = ordinary ?? polling
+      if (held) return { wait: held }
+      const step = [...this.foregroundWaiting.values()].find((d) => d !== did)
+      return step ? { wait: waitingFor(step, 'an identity is waiting to sign in') } : undefined
+    }
+    if (!background) return ordinary ? { wait: ordinary } : undefined
+    const step = holds.find((h) => !h.background && !h.listing)
+    if (step) return { refuse: new VtiSessionHeld(step.did, step.reason) }
+    const waiting = [...this.foregroundWaiting.values()].find((d) => d !== did)
+    if (waiting) return { refuse: new VtiSessionHeld(waiting, 'an identity is waiting to sign in') }
+    const sessionDid = this.state.did ?? this.state.signingInAs
+    if (
+      this.claim &&
+      this.claim.did !== did &&
+      this.claim.did === sessionDid &&
+      this.claim.until > this.now() &&
+      this.session &&
+      (!did || (this.refusedByClaim.get(did) ?? 0) < VTI_TURN_AFTER_REFUSALS)
+    )
+      return { refuse: new VtiSessionHeld(this.claim.did, 'signed in for a step just now'), byClaim: true }
+    const read = holds.find((h) => h.listing)
+    if (read) return { wait: read }
+    // A listing read waiting goes before a poll that would switch the session; a poll that shares the session as it is
+    // signed in finishes its round first, so a round is not split by a switch there and back. With no session open at
+    // all, a poll would open one rather than switch it, and waits too: the listing read is ahead of it.
+    const reading = [...this.listingWaiting.values()].find((d) => d !== did)
+    if (reading && did && did !== sessionDid) return { wait: waitingFor(reading, 'a listing read is waiting') }
+    return polling ? { wait: polling } : undefined
+  }
+
+  /**
+   * Resolves when a hold or a waiter comes or goes, or when the soonest hold, the claim or `until` (what the caller waits
+   * on, if it is not a hold) runs out of time. With none of those, nothing is timed: `Math.min()` is `Infinity`.
+   */
+  private holdsMoved(until = Infinity): Promise<void> {
+    return new Promise((resolve) => {
+      const claimEnds = this.claim && this.claim.until > this.now() ? [this.claim.until] : []
+      const soonest = Math.min(...this.liveHolds().map((h) => h.until), ...claimEnds, until)
+      const done = () => {
+        if (timer) clearTimeout(timer)
+        this.holdWatchers.delete(done)
+        resolve()
+      }
+      const timer = Number.isFinite(soonest) ? setTimeout(done, Math.max(0, soonest - this.now()) + 1) : undefined
+      this.holdWatchers.add(done)
+    })
+  }
+
+  private holdsChanged(): void {
+    for (const done of [...this.holdWatchers]) done()
+  }
+
+  /**
+   * Resolves once a background connect as `did` would no longer be refused with `VtiSessionHeld`: no ordinary caller
+   * holds the session as another identity or waits for it, and the claim an ordinary connect left has run out. For a
+   * poll refused just now that wants to try again (the rooms screens). Nothing is timed while nobody waits.
+   */
+  async whenFree(did: string): Promise<void> {
+    for (;;) {
+      const blocker = this.blockerFor(did, true)
+      if (!blocker || !('refuse' in blocker)) return
+      await this.holdsMoved()
+    }
+  }
+
+  /**
+   * Keep the session as `persona` while `fn` runs: sign in as it (waiting, like `connect`, for another DID's hold to
+   * end), and let nothing switch the session to another identity until `fn` settles or `maxMs` passes. Holds for the
+   * same DID share the session. `fn` is given the DID held. Never connect as another DID inside `fn`: it would wait
+   * for this hold.
+   *
+   * `background`: a poll's hold (the rooms backend). It gives way to an ordinary caller — refused with
+   * `VtiSessionHeld` when one holds the session or waits for it, and switched away from (its asks fail) when an
+   * ordinary connect comes while it runs — but other polls wait for it, so one persona's asks run together and the
+   * session switches once per persona, not once per ask.
+   *
+   * `claims: false`: an ordinary hold that leaves no claim (`VTI_FOREGROUND_CLAIM_MS`) behind it. A screen's listing
+   * read (the polls) is the person's, so it does not give way while it runs, but it is no step to protect after: each
+   * one renewed the claim, and kept another community's reads from the session while the screen was open (11-03).
+   *
+   * `listing`: a screen's listing read (the polls). It takes its turn, between a step and a poll (`blockerFor`): it
+   * waits for another identity's hold of any kind, a poll's included, so it never switches a rooms listing away
+   * mid-read; and a poll as another identity waits for it rather than being refused. While a polls read held the
+   * session as an ordinary caller, both communities' rooms listings were refused and the list showed neither (rooms
+   * slow, 11-04). It is never refused and leaves no claim; without `maxMs` it keeps others waiting at most
+   * `VTI_BACKGROUND_HOLD_MAX_MS`.
+   */
+  async holding<T>(
+    agent: Agent,
+    mediatorDid: string | undefined,
+    persona: VtiPersona,
+    fn: (did: string) => Promise<T>,
+    opts: {
+      peerRevisionStore?: TspPeerRevisionStore
+      reason?: string
+      maxMs?: number
+      background?: boolean
+      claims?: boolean
+      listing?: boolean
+    } = {}
+  ): Promise<T> {
+    const background = opts.background === true
+    const listing = !background && opts.listing === true
+    const key = Symbol(persona.did)
+    const hold = (): SessionHold => ({
+      did: persona.did,
+      background,
+      ...(listing ? { listing } : {}),
+      until: this.now() + (opts.maxMs ?? (background || listing ? VTI_BACKGROUND_HOLD_MAX_MS : VTI_HOLD_MAX_MS)),
+      reason: opts.reason,
+    })
+    // Taken as the sign-in settles, before any other caller waiting on it runs; if the session was not left as
+    // `persona` by then, sign in again.
+    while (!this.holds.has(key))
+      await this.signIn(
+        agent,
+        mediatorDid,
+        { persona, peerRevisionStore: opts.peerRevisionStore, background, listing },
+        { key, hold },
+        opts.claims !== false && !listing
+      )
+    try {
+      return await fn(persona.did)
+    } finally {
+      this.holds.delete(key)
+      this.holdsChanged()
+    }
+  }
+
+  /**
+   * Throws `VtiSignInResting` while `did`'s rest runs, unless the session is already open as it. A rest can outlive an
+   * open session: `noteSignIn` runs only when a sign-in named a DID, so a connect that named none can leave the session
+   * open as an identity whose rest, kept from an earlier launch, has not run out.
+   */
+  private refuseIfResting(did: string, goneOnly = false): void {
+    if (this.session?.isOpen && this.state.did === did) return
+    const rest = this.rests.get(did)
+    // A screen's listing leaves alone only an identity whose agent is gone: anything else may pass, and a listing the
+    // person is looking at should try it.
+    if (goneOnly && !rest?.gone) return
+    const until = signInRestUntil(rest)
+    if (until > this.now()) throw new VtiSignInResting(until)
+  }
+
+  /** Read the rests kept on this phone, once. One that can't be read leaves none: everything is tried. */
+  private readRests(agent: Agent): Promise<void> {
+    this.restsRead ??= listKeyed<VtiSignInRest>(agent, SIGNIN_REST_RECORD, SIGNIN_REST_KIND)
+      .then((kept) => {
+        for (const rest of kept) if (rest?.did && !this.rests.has(rest.did)) this.rests.set(rest.did, rest)
+      })
+      .catch(() => undefined)
+    return this.restsRead
+  }
+
+  /**
+   * Note how a sign-in as `did` ended. A success ends its rest. A failure starts one, or doubles it while the phone is
+   * online (`VTI_SIGNIN_ONLINE_WITHIN_MS`). Kept on the phone without waiting for the write.
+   */
+  private noteSignIn(agent: Agent, did: string, signedIn: boolean, gone = false): void {
+    const now = this.now()
+    const before = this.rests.get(did)
+    if (signedIn) this.lastSignedInAt = now
+    if (signedIn && !before?.count) return
+    const online = this.lastSignedInAt !== undefined && now - this.lastSignedInAt <= VTI_SIGNIN_ONLINE_WITHIN_MS
+    const count = signedIn ? 0 : online ? (before?.count ?? 0) + 1 : Math.max(before?.count ?? 0, 1)
+    const rest: VtiSignInRest = {
+      did,
+      failedAt: signedIn ? 0 : now,
+      count,
+      ...(!signedIn && gone ? { gone: true } : {}),
+    }
+    this.rests.set(did, rest)
+    if (!signedIn)
+      releaseWarn(
+        `vtiAgent: sign-in as ${didPrefix(did)} failed (${count} in a row); background sign-ins leave it until ${new Date(signInRestUntil(rest)).toISOString()}`
+      )
+    void putKeyed(agent, SIGNIN_REST_RECORD, SIGNIN_REST_KIND, did, rest as unknown as Record<string, unknown>).catch(
+      () => undefined
+    )
+  }
+
+  /** A let-go sign-in's attempt found since that its agent is gone: mark the rest it already started (`gone`). */
+  private markGone(agent: Agent, did: string): void {
+    const rest = this.rests.get(did)
+    if (!rest || rest.gone) return
+    const marked: VtiSignInRest = { ...rest, gone: true }
+    this.rests.set(did, marked)
+    void putKeyed(agent, SIGNIN_REST_RECORD, SIGNIN_REST_KIND, did, marked as unknown as Record<string, unknown>).catch(
+      () => undefined
+    )
+  }
+
+  /** For tests: forget every rest, here and as read from the phone. */
+  // prettier-ignore
+  forgetSignInRestsForTests(): void { // tier-exempt(deletes stored records): its body clears in-memory maps only (rests, restsRead, lastSignedInAt)
+    this.rests.clear()
+    this.restsRead = undefined
+    this.lastSignedInAt = undefined
+  }
+
+  /**
+   * Open (or keep) the session as `identity` or `persona`.
+   *
+   * Serialised: a call made while another is in flight waits for it, then
+   * re-checks — the persona inbox and a join can both ask for the same
+   * persona, and two sockets for one DID end with the mediator closing one
+   * (`w.websocket.duplicate-channel`).
+   *
+   * The mediator is the one the persona's own DID document names, when it
+   * names one; `mediatorDid` is the fallback for an identity that advertises
+   * none (a fresh did:peer) and for a persona whose document cannot be read.
+   */
+  async connect(
+    agent: Agent,
+    mediatorDid: string | undefined,
+    options: {
+      identity?: VtiClientIdentity
+      /**
+       * Connect as a persona: the DIDComm identity is derived from its
+       * borrowed key-agreement key, and — so the peer leg can carry TSP —
+       * its TSP identity from both borrowed keys. Preferred over `identity`
+       * for anything that will talk to a vetter or an applicant.
+       */
+      persona?: VtiPersona
+      /** Where to record what each peer speaks; in memory when absent. */
+      peerRevisionStore?: TspPeerRevisionStore
+      /**
+       * A poll's connect (the rooms backend, a persona inbox's look): it never takes the session from an ordinary
+       * caller — see `holding` and `VTI_FOREGROUND_CLAIM_MS` — and is refused with `VtiSessionHeld` instead, with
+       * nothing disconnected.
+       */
+      background?: boolean
+      /** A screen's listing read (`holding`'s `listing`): waits its turn, never refused, switches no hold away. */
+      listing?: boolean
+    } = {}
+  ): Promise<void> {
+    return this.signIn(agent, mediatorDid, options)
+  }
+
+  /** `connect`, and when `take` is given, the hold taken in the same step the sign-in settles in (`holding`). */
+  private async signIn(
+    agent: Agent,
+    mediatorDid: string | undefined,
+    options: Parameters<VtiAgentController['connect']>[2] = {},
+    take?: { key: symbol; hold: () => SessionHold },
+    claims = true
+  ): Promise<void> {
+    const wantedDid = options.persona?.did ?? options.identity?.did
+    const background = options.background === true
+    const listing = !background && options.listing === true
+    const waiter = Symbol(wantedDid ?? 'new identity')
+    let saidWaiting = false
+    // A background sign-in leaves alone an identity whose last sign-in failed, until its rest runs out: refused before
+    // it queues, and again once the sign-in it queued behind settles (which may have been that identity failing).
+    // A listing leaves alone an identity whose agent is gone, while its rest runs (VtiSignInRest.gone).
+    if ((background || listing) && wantedDid) {
+      await this.readRests(agent)
+      this.refuseIfResting(wantedDid, listing)
+    }
+    try {
+      for (;;) {
+        if (this.connecting) releaseWarn('vtiAgent: connect waits for an earlier sign-in to settle')
+        while (this.connecting) await this.connecting.catch(() => undefined)
+        // Checked after the earlier sign-in settles, and nothing awaited between this and `connecting` being set.
+        if ((background || listing) && wantedDid) this.refuseIfResting(wantedDid, listing)
+        const blocker = this.blockerFor(wantedDid, background, listing)
+        if (!blocker) break
+        if ('refuse' in blocker) {
+          if ('byClaim' in blocker && wantedDid)
+            this.refusedByClaim.set(wantedDid, (this.refusedByClaim.get(wantedDid) ?? 0) + 1)
+          throw blocker.refuse
+        }
+        if (!saidWaiting) {
+          saidWaiting = true
+          releaseWarn(
+            `vtiAgent: connect waits for a hold on the session${blocker.wait.reason ? ` (${blocker.wait.reason})` : ''} to end`
+          )
+        }
+        // A step waiting refuses polls as another identity; a listing read waiting makes them wait instead.
+        const waitingIn = listing ? this.listingWaiting : this.foregroundWaiting
+        if (!background && wantedDid && !waitingIn.has(waiter)) {
+          waitingIn.set(waiter, wantedDid)
+          this.holdsChanged()
+        }
+        await this.holdsMoved(blocker.wait.until)
+      }
+    } finally {
+      // `listing` is fixed for the call, so the waiter is in one map at most and `||` skips nothing.
+      if (this.foregroundWaiting.delete(waiter) || this.listingWaiting.delete(waiter)) this.holdsChanged()
+    }
+    const ticket: SignInTicket = { abandoned: false }
+    const attempt = this.connectNow(agent, mediatorDid, options, ticket)
+    // Let go after VTI_SIGNIN_TURN_MS, counted from here, when the turn starts: the next sign-in need not wait on one
+    // that hangs (11-17). Measured by the wall clock: a timer pauses with the app's JS in the background, so the time
+    // away is also checked when the app comes back to the front (a2, #1022).
+    //
+    // Letting go releases the TURN for whoever waits behind; it never rejects this caller from the timer. The attempt
+    // runs on, writes nothing more, and closes whatever it opens (`ticket`), so its caller hears VtiSignInTimedOut if
+    // it ever settles, else its own failure. A rejection fired from the timer would reach a caller that may be long
+    // gone (a screen unmounted, a test file torn down), as an unhandled rejection (CI on #1095).
+    const turnStart = this.now()
+    let releaseTurn = () => undefined as void
+    const released = new Promise<void>((resolve) => (releaseTurn = resolve))
+    // The turn others wait on: the attempt settling, or its limit, whichever comes first. It never rejects.
+    const turn: Promise<void> = Promise.race([
+      attempt.then(
+        () => undefined,
+        () => undefined
+      ),
+      released,
+    ])
+    const expire = () => {
+      if (ticket.abandoned) return
+      ticket.abandoned = true
+      // The socket is closed now, half-open or not: stop() closes whatever socket the session holds and makes it final
+      // (a stopped session never reopens), so a socket the OS kept alive does not hold the DID's one mediator slot.
+      // connectNow stops it again if its open was already under way (belt and braces).
+      // Only this attempt's own session object: never by DID, so an identity's own session (vtiOwnSessions, sessions
+      // phase B) that an ask is using is never touched here.
+      void ticket.session?.stop().catch(() => undefined)
+      const timedOut = new VtiSignInTimedOut(this.signInTurnMs)
+      releaseWarn(`vtiAgent: sign-in as ${wantedDid ? didPrefix(wantedDid) : '(new identity)'}: ${timedOut.message}`)
+      if (this.connecting === turn) {
+        this.set({ status: 'failed', signingInAs: undefined, error: timedOut.message })
+        this.connecting = undefined
+      }
+      // Rests as a failure does, from now: the identity is let go whether or not its attempt ever settles.
+      if (wantedDid) this.noteSignIn(agent, wantedDid, false)
+      releaseTurn()
+    }
+    const timer = setTimeout(expire, this.signInTurnMs)
+    // Where the runtime allows it (Node, for tests), a pending limit never keeps the process alive on its own.
+    ;(timer as unknown as { unref?: () => void }).unref?.()
+    let back: { remove(): void } | undefined
+    try {
+      back = appStateAtLoad.addEventListener('change', (next) => {
+        if (next === 'active' && this.now() - turnStart >= this.signInTurnMs) expire()
+      })
+    } catch {
+      // Without the app's state the timer alone lets the turn go.
+    }
+    this.connecting = turn
+    try {
+      await attempt
+    } catch (error) {
+      // Let go: its failure was noted when it was let go; a gone agent found since still marks the rest.
+      if (wantedDid && !ticket.abandoned) this.noteSignIn(agent, wantedDid, false, isAgentGone(error))
+      else if (wantedDid && isAgentGone(error)) this.markGone(agent, wantedDid)
+      throw error
+    } finally {
+      clearTimeout(timer)
+      back?.remove()
+      if (this.connecting === turn) this.connecting = undefined
+    }
+    if (wantedDid) this.noteSignIn(agent, wantedDid, true)
+    if (!background && wantedDid && claims) {
+      // Nobody else's refusals are cleared here, by a renewal or by a new claim: the count is the waiter's, and another
+      // claim only makes the wait longer. It starts afresh when that identity gets through, below.
+      this.claim = { did: wantedDid, until: this.now() + VTI_FOREGROUND_CLAIM_MS }
+    }
+    // Its turn came, or it was never refused: counted afresh from here.
+    if (wantedDid) this.refusedByClaim.delete(wantedDid)
+    // Nothing awaited since the attempt settled: a caller that waited on it sees this hold when it looks.
+    if (take && this.state.did === wantedDid && this.isConnected) {
+      this.holds.set(take.key, take.hold())
+      this.holdsChanged()
+    }
+  }
+
+  private async connectNow(
+    agent: Agent,
+    configuredMediatorDid: string | undefined,
+    options: {
+      identity?: VtiClientIdentity
+      persona?: VtiPersona
+      peerRevisionStore?: TspPeerRevisionStore
+      probeStore?: TspProbeStore
+    },
+    ticket?: SignInTicket
+  ): Promise<void> {
+    this.agent = agent
+    // Let go of (`signIn`'s time limit): nothing more is written here, and a session it opens is closed.
+    const letGo = () => {
+      if (ticket?.abandoned) throw new VtiSignInTimedOut(this.signInTurnMs)
+    }
+    const wantedDid = options.persona?.did ?? options.identity?.did
+    if (this.session?.isOpen && (!wantedDid || wantedDid === this.state.did)) return
+    if (this.session) await this.disconnect()
+    // Each step of a sign-in, timed, in the Release log: the 227 gate's Farm run
+    // stopped between the persona's document and its mediator's, and nothing
+    // said so (releaseLog).
+    const t0 = Date.now()
+    const step = (what: string) =>
+      releaseWarn(
+        `vtiAgent: connect ${wantedDid ? didPrefix(wantedDid) : '(new identity)'} +${Date.now() - t0} ms: ${what}`
+      )
+    try {
+      this.set({ status: 'resolving', error: undefined })
+      step('resolving')
+      const own = options.persona
+        ? await advertisedMediatorDid(agent, options.persona.did).catch((error) => {
+            step(
+              `the persona's document gave no mediator (${error instanceof Error ? error.message : String(error)}); using the configured one`
+            )
+            return undefined
+          })
+        : undefined
+      const mediatorDid = own ?? configuredMediatorDid
+      step(`mediator ${mediatorDid ? didPrefix(mediatorDid) : 'none'} (${own ? "the persona's own" : 'configured'})`)
+      if (!mediatorDid) throw new Error('vtiAgent: no mediator — the persona names none and none is configured')
+      if (own && configuredMediatorDid && own !== configuredMediatorDid) {
+        agent.config.logger.info(
+          `vtiAgent: ${options.persona?.did} is reached through its own mediator ${own}, not the configured one`
+        )
+      }
+      const mediator = await resolveVtiMediator(agent, mediatorDid)
+      letGo()
+      step(`mediator resolved: ws ${mediator.wsEndpoint}, auth ${mediator.authEndpoint}`)
+      this.mediator = mediator
+      this.mediatorDid = mediatorDid
+      this.set({ status: 'authenticating', host: hostOf(mediator.wsEndpoint) })
+
+      // Under §2.4 B the identity a community sees is a persona the VTA minted
+      // and whose key the phone borrowed; the phone-minted did:peer is what the
+      // proof-of-transport used, and stays as the fallback when no persona is given.
+      let identity = options.identity
+      let tspSession: TspSessionIdentity | undefined
+      if (options.persona) {
+        // Signed in as the agent, the phone takes its inbox from it (agentOwnIdentity).
+        if (isAgentsOwnPersona(options.persona))
+          throw new Error("vtiAgent: the persona is its agent's own DID; the phone never signs in as its agent")
+        const kaKmsKeyId = options.persona.kmsKeyIds?.keyAgreement
+        if (!kaKmsKeyId) throw new Error('vtiAgent: the persona has no borrowed key-agreement key')
+        identity = await vtiClientIdentityFromPersona(agent, options.persona.did, kaKmsKeyId)
+        // A persona without a borrowed signing key can still ride DIDComm; it
+        // just cannot sign a TSP frame, and says so in the state.
+        if (options.persona.kmsKeyIds?.signing) {
+          tspSession = await tspSessionForPersona(agent, options.persona)
+        }
+      }
+      identity ??= await vtiClientIdentityFromDid(agent, await createVtiClientDid(agent, mediator))
+      letGo()
+      const did = identity.did
+      this.tsp = tspSession
+      this.persona = options.persona
+      this.peerRevisionStore = options.peerRevisionStore ?? this.peerRevisionStore
+      this.probeStore = options.probeStore ?? this.probeStore ?? new GenericRecordsTspProbeStore(agent)
+      let first = true
+      const firstMessage = () => {
+        if (first) step('first message on the session')
+        first = false
+      }
+      const session = new VtiMediatorSession(agent, identity, mediator, {
+        onError: (error) => this.set({ error: error.message }),
+        onMessage: (plaintext) => {
+          firstMessage()
+          this.noteInbound(plaintext, 'didcomm')
+          return this.deliver(plaintext)
+        },
+        ...(tspSession
+          ? {
+              onTspFrame: (bytes: Uint8Array) => {
+                firstMessage()
+                return this.receiveTspFrame(bytes, did)
+              },
+            }
+          : {}),
+      })
+      if (ticket) ticket.session = session
+      // Whatever else holds a connection for this DID lets go first: a mediator
+      // keeps one live connection per DID (vtiIdentityListeners).
+      for (const guard of [...this.signInGuards]) await guard(did).catch(() => undefined)
+      letGo()
+      step(`signing in as ${didPrefix(did)} (challenge, then the socket)`)
+      this.set({ signingInAs: did })
+      await session.start()
+      // Let go while the socket opened: the mediator keeps one live connection per DID, so this one is closed, never
+      // kept beside whatever signed in since.
+      if (ticket?.abandoned) {
+        await session.stop().catch(() => undefined)
+        throw new VtiSignInTimedOut(this.signInTurnMs)
+      }
+      step('socket open')
+      // No pause here for the backlog the mediator flushes on live delivery: every message goes through `deliver`
+      // whenever it comes, and an answer reaches its ask by its thread id (`askAnswered`). The one reply that could be
+      // mistaken for a fresh answer — one naming no thread and no time — is not matched by type for
+      // `VTI_BACKLOG_GRACE_MS` after this. The fixed 2 s this used to wait for every sign-in (2.002-2.030 s on 35 of
+      // 36 sign-ins, 277.12) delayed each one, several in a row at launch.
+      // Everything awaited is read BEFORE the commit below, so a let-go cannot land between this session becoming the
+      // live one and the state saying so (ac, #1095: it stopped the live session and then said connected).
+      const peerRevisions =
+        (await this.peerRevisionStore?.list().catch(() => undefined)) ?? this.state.peerRevisions ?? []
+      if (ticket?.abandoned) {
+        await session.stop().catch(() => undefined)
+        throw new VtiSignInTimedOut(this.signInTurnMs)
+      }
+      // The commit: no await from here to `connected`.
+      this.openedAt = this.now()
+      this.session = session
+      const peerLeg = getPeerLegCarriage()
+      if (peerLeg === 'tsp' && !tspSession) {
+        agent.config.logger.warn(
+          `${TSP_LOG_PREFIX} peer leg is wired for TSP but this session has no TSP identity; sending DIDComm`
+        )
+      }
+      this.set({
+        status: 'connected',
+        did,
+        signingInAs: undefined,
+        peerLeg: peerLeg === 'tsp' && tspSession ? 'tsp' : 'didcomm',
+        tspReady: Boolean(tspSession),
+        peerRevisions,
+      })
+      step('connected')
+    } catch (error) {
+      step(`failed: ${error instanceof Error ? error.message : String(error)}`)
+      // Let go: the turn and the state are the next sign-in's now; `signIn` already said this one failed.
+      if (ticket?.abandoned) throw error
+      this.set({
+        status: 'failed',
+        signingInAs: undefined,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      throw error
+    }
+  }
+
+  async disconnect(): Promise<void> {
+    await this.session?.stop()
+    this.session = undefined
+    // What this session asked can no longer be answered on it, but its answer can still come: a switch to another
+    // identity leaves that identity's listener hearing it (`answerFromListener`). So an ask a caller still waits on stays
+    // until the caller's own clock ends. Cleared, the answer was dropped as answering nothing and the caller waited out
+    // its clock for it (277.11). Nothing else of this session's stays.
+    //
+    // An ask an identity sends over its own session is not this session's, and a sign-in as another identity must not
+    // take it. Between being recorded and its caller starting to wait it has no waiter (it is still being built and
+    // sent), and cleared then, its answer was dropped as answering nothing and it waited out its clock (GXT8-STDZ,
+    // 11-17: three communities' own-session listings, sent 13 ms before the shared session signed in as another).
+    for (const [id, entry] of this.asks) if (entry.shared && !entry.waiters.length) this.asks.delete(id)
+    this.tsp = undefined
+    this.persona = undefined
+    this.set({
+      status: 'disconnected',
+      did: undefined,
+      signingInAs: undefined,
+      error: undefined,
+      peerLeg: undefined,
+      tspReady: undefined,
+    })
+  }
+
+  /**
+   * The last agent went: a failed sign-in, or a session's error, is no longer
+   * anything to report. Nothing else moves, so a sign-in running or a session
+   * still open stays as it is.
+   */
+  clearFailure(): void {
+    this.set(this.state.status === 'failed' ? { status: 'disconnected', error: undefined } : { error: undefined })
+  }
+
+  /**
+   * A TSP frame from the socket: open it as the persona, record the revision
+   * the peer spoke, and deliver the Trust Task exactly as a DIDComm plaintext
+   * would be. Throwing here withholds the acknowledgement, so a frame this
+   * wallet could not open stays on the mediator rather than being lost.
+   */
+  private async receiveTspFrame(bytes: Uint8Array, myDid: string): Promise<void> {
+    const tspSession = this.tsp
+    const agent = this.agent
+    if (!tspSession || !agent) throw new Error(`${TSP_LOG_PREFIX} no TSP identity on this session`)
+    let result: Awaited<ReturnType<typeof unpackTrustTaskFromPeer>>
+    try {
+      result = await unpackTrustTaskFromPeer(tspSession, bytes, myDid)
+    } catch (e) {
+      // Release-visible: a frame this persona cannot open is withheld from the
+      // mediator (the rethrow below) and nothing else says so. The sender is
+      // inside the frame, so only the error can name it.
+      const error = e as Error
+      releaseWarn(
+        `${TSP_LOG_PREFIX} TSP frame to ${didPrefix(myDid)} not opened (${error?.name ?? 'Error'}: ${String(error?.message ?? e).slice(0, 160)}); ${frameForm(bytes)} frame, ${bytes.length} bytes, ${isTspFrameUnopenable(e) ? `dropped: it can never be opened here (${e.reason})` : 'left on the mediator'}`
+      )
+      throw e
+    }
+    if (!result) {
+      // Acknowledged and dropped: the sender counts it delivered and does not
+      // fall back to DIDComm, so a Release build has to show it.
+      releaseWarn(
+        `${TSP_LOG_PREFIX} TSP frame to ${didPrefix(myDid)} opened but carried no Trust Task envelope; ignored (${frameForm(bytes)} frame, ${bytes.length} bytes)`
+      )
+      return
+    }
+    const { plaintext, unpacked } = result
+    const peeked = tsp.peekRevision(bytes)
+    const record = await this.peerRevisionStore
+      ?.observe(unpacked.sender, unpacked.revision, peeked.minor)
+      .catch(() => undefined)
+    // A hidden-vetting message is said by its type alone (`isHiddenVettingType`).
+    agent.config.logger.info(
+      isHiddenVettingType(String(plaintext.type ?? ''))
+        ? `${TSP_LOG_PREFIX} received ${unpacked.revision} ${frameForm(bytes)} frame (${bytes.length} bytes, type ${plaintext.type})`
+        : `${TSP_LOG_PREFIX} received ${unpacked.revision} ${frameForm(bytes)} frame from ${unpacked.sender} (${bytes.length} bytes, type ${plaintext.type})`
+    )
+    if (record) {
+      const others = (this.state.peerRevisions ?? []).filter((r) => r.vid !== record.vid)
+      this.set({ peerRevisions: [...others, record] })
+    }
+    this.noteInbound(plaintext, 'tsp', unpacked.sender)
+    await this.deliver(plaintext)
+  }
+
+  get isConnected(): boolean {
+    return this.session?.isOpen === true
+  }
+
+  /** Back in the foreground: the session asks its mediator for something, and reopens if nothing comes back. */
+  checkAlive(): void {
+    this.session?.checkAlive()
+  }
+
+  /**
+   * Run `guard` before every sign-in, with the DID about to sign in, and wait
+   * for it: a listener holding its own connection for that DID closes it first.
+   * Returns the function that removes the guard.
+   */
+  beforeSignIn(guard: (did: string) => Promise<void>): () => void {
+    this.signInGuards.add(guard)
+    return () => {
+      this.signInGuards.delete(guard)
+    }
+  }
+
+  /** The DID this session presents. */
+  get did(): string | undefined {
+    return this.state.did
+  }
+
+  /** What this session will put on the wire for the next `send`. */
+  get peerLeg(): PeerLegCarriage {
+    return this.state.peerLeg ?? 'didcomm'
+  }
+
+  /**
+   * Send one Trust Task document to a peer without waiting — the reply, if
+   * any, reaches the inbox threaded on the document's id. For the peer path
+   * (applicant ↔ vetter) where a human answers minutes later. The document is
+   * signed by the caller when the spec requires it (every vetting task does).
+   *
+   * On a build wired for TSP the document travels as a TSP Rev 3 direct
+   * message in the Trust Tasks TSP binding envelope; otherwise as a DIDComm
+   * v2 plaintext. The reply comes back the way the peer's build sends.
+   */
+  async send(
+    toDid: string,
+    type: string,
+    document: Record<string, unknown>,
+    options: { thid?: string; expiresInSec?: number } = {}
+  ): Promise<void> {
+    const session = this.session
+    const did = this.state.did
+    if (!session || !did) throw new Error('vtiAgent: not connected')
+    // Two ways to end up on TSP for a peer leg, and they are not the same
+    // thing. `peerLeg` is OUR setting — the wallet-to-wallet carriage toggle,
+    // used where the peer is another wallet whose did:peer document advertises
+    // no transports at all, so there is nothing to read. §4.2's rule applies to
+    // a peer that publishes a document: if it advertises TSPTransport and we
+    // hold a TSP identity, we speak TSP whether or not the toggle is on.
+    //
+    // Both apply only when we start the conversation. A peer that has already
+    // written to us is answered the way it wrote (`inboundCarriage`).
+    const inbound = this.inboundCarriage.get(toDid)
+    // A peer that publishes a document is decided by the per-peer rule, where
+    // TSP means TSP 1.0 (cutover plan §6.2); the wallet-to-wallet toggle keeps
+    // the codec's version.
+    const byRule =
+      inbound === undefined && this.peerLeg !== 'tsp' && this.agent
+        ? (await chooseCarriage(this.agent, toDid, this.canInitiateTsp(), {
+            decided: this.carriageByPeer,
+            freshV1: async (peer) => isFreshV1(await this.peerRevisionStore?.get(peer)),
+          })) === 'tsp'
+        : false
+    const capable = inbound !== undefined ? inbound === 'tsp' : this.peerLeg === 'tsp' || byRule
+    if (capable && this.tsp && this.agent) {
+      // Answering a peer that wrote to us over TSP: answer in the version it
+      // wrote in, as recorded on receipt. A peer the rule chose TSP for gets
+      // TSP 1.0; the wallet-to-wallet toggle keeps the codec's version.
+      const revision = inbound === 'tsp' ? this.peerRevisionOf(toDid) : byRule ? 'v1' : undefined
+      await this.ensureGreeted(toDid, revision)
+      const packed = await packTrustTaskForPeer(
+        this.tsp,
+        did,
+        toDid,
+        {
+          ...document,
+          type: String(document.type ?? type),
+        },
+        revision
+      )
+      await session.sendTspFrame(packed.bytes)
+      this.agent.config.logger.info(
+        `${TSP_LOG_PREFIX} sent ${packed.revision} ${frameForm(packed.bytes)} frame to ${named(type, toDid, 'a peer')} (${packed.bytes.length} bytes, type ${type})`
+      )
+      return
+    }
+    const now = Math.floor(Date.now() / 1000)
+    await session.sendTo(toDid, {
+      id: `urn:uuid:${utils.uuid()}`,
+      typ: 'application/didcomm-plain+json',
+      type,
+      from: did,
+      to: [toDid],
+      ...(options.thid ? { thid: options.thid } : {}),
+      created_time: now,
+      expires_time: now + (options.expiresInSec ?? 900),
+      body: document,
+    })
+  }
+
+  /**
+   * Send one Trust Task document and wait for the community's answer. The VTC
+   * reads the DIDComm body as a whole document where a VTA takes a bare
+   * payload — measured in `tsp-reference/ref-20`.
+   *
+   * Undefined means the request WAS sent and nothing answered it in time (a
+   * failure to send throws); `sentNoAnswer` names it for the caller. The ask
+   * is then held for `VTI_ANSWER_HOLD_MS`: an answer arriving in that time is
+   * kept, and the same ask made again — same session, community, task and
+   * payload — takes that answer, or, for a write, waits on the request already
+   * sent rather than sending a second one.
+   *
+   * `prepared` is a document someone else completed — the person's agent,
+   * through `rooms/keys/act` — sent as it is, in place of the one this session
+   * would build and sign.
+   */
+  async ask(
+    communityDid: string,
+    type: string,
+    payload: Record<string, unknown>,
+    timeoutMs = this.answerTimeoutMs,
+    prepared?: Record<string, unknown>
+  ): Promise<DidCommV2PlaintextMessage | undefined> {
+    const session = this.session
+    const did = this.state.did
+    if (!session || !did) throw new Error('vtiAgent: not connected')
+    // Said per ask, as an ask over an identity's own session is (`askAs`): a report then shows that it went out, and
+    // as which identity. Without it an ask that got no answer could not be told from one never sent (BC46-XSQD).
+    this.agent?.config?.logger?.info?.(
+      isHiddenVettingType(type)
+        ? `vtiAgent: ${taskName(type)} asked over the shared session`
+        : `vtiAgent: ${taskName(type)} asked as ${didPrefix(did)} over the shared session`
+    )
+    return this.askOn(
+      { carrier: session, did, signer: this.persona, shared: true },
+      communityDid,
+      type,
+      payload,
+      timeoutMs,
+      prepared
+    )
+  }
+
+  /**
+   * Whether `did` has a session of its own open now: the listener every identity the shared session is not signed in as
+   * holds (vtiIdentityListeners). Sessions phase B asks over it, as that identity, with no switch of the shared session.
+   */
+  ownSessionOpen(did: string): boolean {
+    return did !== this.state.did && ownSessionFor(did) !== undefined
+  }
+
+  /**
+   * `ownSessionOpen`, after waiting up to `maxMs` for a listener of `did`'s that is opening now. For listings only
+   * (rooms, polls): nothing is opening → no wait, and the caller asks the shared way exactly as before. The wait and
+   * how it ended are said once, so a report shows which path a launch's first listings took.
+   */
+  async ownSessionOnceOpen(did: string, maxMs = VTI_OWN_SESSION_OPENING_WAIT_MS): Promise<boolean> {
+    if (did === this.state.did) return false
+    if (ownSessionFor(did)) return true
+    const t0 = Date.now()
+    // Asked again after the wait: the shared session may have signed in as this identity meanwhile, and its own session
+    // used then would be a second socket for the DID.
+    const open = (await heldOnceOpen(did, maxMs)) !== undefined && did !== this.state.did
+    const waited = Date.now() - t0
+    if (open || waited >= 50)
+      releaseWarn(
+        `vtiAgent: a listing as ${didPrefix(did)} waited ${waited} ms for its own session: ${open ? 'open' : 'not open, asked the shared way'}`
+      )
+    return open
+  }
+
+  /**
+   * `ask`, as `persona`, over that identity's own session (`ownSessionOpen`) rather than the shared one: no sign-in, no
+   * hold, nothing taken from a step holding the shared session as another identity. Its answer comes back on the same
+   * session and is given to this ask by `answerFromListener`, which matches the identity. DIDComm only for now: the TSP
+   * session a listener opens frames with is its own, and nothing here packs with it yet.
+   */
+  async askAs(
+    persona: VtiPersona,
+    communityDid: string,
+    type: string,
+    payload: Record<string, unknown>,
+    timeoutMs = this.answerTimeoutMs,
+    prepared?: Record<string, unknown>
+  ): Promise<DidCommV2PlaintextMessage | undefined> {
+    const own = persona.did === this.state.did ? undefined : ownSessionFor(persona.did)
+    if (!own) throw new VtiNoOwnSession(persona.did)
+    // Said per ask, as the shared session's connects are: a report shows which path each one took (sessions B A/B).
+    this.agent?.config.logger.info(
+      `vtiAgent: ${taskName(type)} asked as ${didPrefix(persona.did)} over its own session (no sign-in)`
+    )
+    return this.askOn(
+      { carrier: own, did: persona.did, signer: persona, shared: false },
+      communityDid,
+      type,
+      payload,
+      timeoutMs,
+      prepared
+    )
+  }
+
+  /** `communityTask`, as `persona`, over its own session (`askAs`). */
+  async communityTaskAs(
+    persona: VtiPersona,
+    communityDid: string,
+    type: string,
+    payload: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    return this.answerOf(communityDid, type, await this.askAs(persona, communityDid, type, payload))
+  }
+
+  /** `sendCompleted`, as `persona`, over its own session (`askAs`). */
+  async sendCompletedAs(
+    persona: VtiPersona,
+    recipientDid: string,
+    document: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    const type = typeof document.type === 'string' ? document.type : ''
+    const payload = (document.payload ?? {}) as Record<string, unknown>
+    if (!type) throw new Error('vtiAgent: a completed document names no type')
+    return this.answerOf(
+      recipientDid,
+      type,
+      await this.askAs(persona, recipientDid, type, payload, undefined, document)
+    )
+  }
+
+  private async askOn(
+    via: AskVia,
+    communityDid: string,
+    type: string,
+    payload: Record<string, unknown>,
+    timeoutMs: number,
+    prepared?: Record<string, unknown>
+  ): Promise<DidCommV2PlaintextMessage | undefined> {
+    const { did } = via
+    this.dropExpiredHolds()
+
+    const write = !isVtiReadTask(type)
+    const payloadKey = JSON.stringify(payload)
+    const earlier = [...this.asks.values()].find(
+      (e) => e.did === did && e.communityDid === communityDid && e.type === type && e.payloadKey === payloadKey
+    )
+    if (earlier?.answer) return this.waitFor(earlier, timeoutMs)
+    if (earlier && write) {
+      this.agent?.config.logger.info(
+        `vtiAgent: ${taskName(type)} was already sent to ${named(type, communityDid, 'the community')} and is unanswered — waiting on it, not sending it again`
+      )
+      return this.waitFor(earlier, timeoutMs)
+    }
+
+    const threadId = `urn:uuid:${utils.uuid()}`
+    // Registered before anything is sent, so an answer that comes back at once
+    // finds it, and an identical write asked meanwhile waits on this one.
+    const entry: AskEntry = {
+      id: threadId,
+      did,
+      communityDid,
+      type,
+      payloadKey,
+      write,
+      correlation: new Set([threadId]),
+      sentAt: Date.now(),
+      lastSentAt: Date.now(),
+      waiters: [],
+      shared: via.shared,
+      seq: this.askSeq++,
+    }
+    this.asks.set(threadId, entry)
+    try {
+      return await this.sendAsk(via, entry, payload, timeoutMs, prepared)
+    } catch (error) {
+      // Nothing to hold for a request that did not go out.
+      this.asks.delete(threadId)
+      throw error
+    }
+  }
+
+  /** `ask`'s sending half: one document, over TSP or DIDComm, and the wait for its answer. */
+  private async sendAsk(
+    via: AskVia,
+    entry: AskEntry,
+    payload: Record<string, unknown>,
+    timeoutMs: number,
+    prepared?: Record<string, unknown>
+  ): Promise<DidCommV2PlaintextMessage | undefined> {
+    const { communityDid, type, write, id: threadId } = entry
+    const { carrier, did } = via
+    // One document for either carriage, addressed and dated as the framework
+    // requires (`issuer`, `recipient`, `issuedAt`), and signed as the persona
+    // when the task's specification declares the proof REQUIRED.
+    const document = prepared ?? (await this.taskDocument(communityDid, type, payload, threadId, via))
+    entry.correlation.add(String(document.id))
+    // A reply threads on the request document's `threadId` (SPEC §4.9); a prepared document may carry its own.
+    if (prepared && typeof prepared.threadId === 'string') entry.correlation.add(prepared.threadId)
+    entry.sentAt = entry.lastSentAt = Date.now()
+
+    // §4.2 on the ecosystem leg. Unlike `send()` there is no toggle here on
+    // purpose: a community publishes a resolvable document, so its own
+    // advertisement is the whole answer and a local flag could only contradict
+    // it. The reply arrives through `deliver()` either way — `receiveTspFrame`
+    // presents an opened TSP envelope as the same plaintext shape — so nothing
+    // downstream of `ask` needs to know which envelope carried it.
+    if (this.agent && this.tsp && carrier.sendTspFrame) {
+      await this.preferDidcommAcrossMediators(communityDid)
+      const carriage = await chooseCarriage(this.agent, communityDid, this.canInitiateTsp(), {
+        decided: this.carriageByPeer,
+        freshV1: async (peer) => isFreshV1(await this.peerRevisionStore?.get(peer)),
+        onProbeWanted: (peer, serviceId) => this.startCommunityProbe(peer, serviceId),
+      })
+      if (carriage === 'tsp') {
+        // To an upstream service TSP means TSP 1.0 (cutover plan §6.2).
+        await this.ensureGreeted(communityDid, 'v1')
+        const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, document, 'v1')
+        await carrier.sendTspFrame(packed.bytes)
+        this.agent.config.logger.info(
+          `${TSP_LOG_PREFIX} asked ${named(type, communityDid, 'the community')} ${type} over ${packed.revision} ${frameForm(packed.bytes)} (${packed.bytes.length} bytes)`
+        )
+        const viaTsp = await this.waitFor(entry, timeoutMs)
+        if (viaTsp) return viaTsp
+        // A community can advertise TSPTransport and not answer it — measured
+        // on the VTA Farm's first-vtc (VTI-Q15): its mediator stores the frame
+        // and nothing comes back. Keep DIDComm for this community for the rest
+        // of the session, and mark its TSP 1.0 record stale so the next
+        // session decides afresh (cutover plan §6.2, change 2).
+        this.carriageByPeer.set(communityDid, 'didcomm')
+        await this.peerRevisionStore?.markStale(communityDid).catch(() => undefined)
+        // A write is not sent again: silence is not proof the community did not
+        // get it — a submit it received and deferred is silent until it
+        // answers — and a second copy is a second submit (`requestAlreadyOpen`)
+        // or a second withdraw. It stays held for its late answer.
+        if (write) {
+          this.agent.config.logger.warn(
+            `${TSP_LOG_PREFIX} ${named(type, communityDid, 'the community')} did not answer ${type} over TSP in ${timeoutMs}ms — a write, so not sent again over DIDComm`
+          )
+          return undefined
+        }
+        // A read is asked once more over DIDComm.
+        this.agent.config.logger.warn(
+          `${TSP_LOG_PREFIX} ${named(type, communityDid, 'the community')} did not answer ${type} over TSP in ${timeoutMs}ms — asking over DIDComm`
+        )
+      }
+    }
+
+    // Over DIDComm a Trust Task rides the binding envelope — its `type` is the
+    // envelope's, the document is the body. A VTC refuses the task typed as
+    // itself since vti #1687 (VTI-42), and served the envelope before it.
+    const now = Math.floor(Date.now() / 1000)
+    const messageId = `urn:uuid:${utils.uuid()}`
+    // The VTC threads its DIDComm reply, and any problem-report, on this id.
+    entry.correlation.add(messageId)
+    entry.lastSentAt = Date.now()
+    await carrier.sendTo(communityDid, {
+      id: messageId,
+      typ: 'application/didcomm-plain+json',
+      type: TRUST_TASK_V2_ENVELOPE_TYPE,
+      from: did,
+      to: [communityDid],
+      thid: threadId,
+      created_time: now,
+      expires_time: now + 300,
+      body: document,
+    })
+    // A read this session built may be asked once more if the community answers a later ask and not this one
+    // (readReaskSwitch.ts): as a new request with its own thread, so the community sees an ordinary ask and not the
+    // same document twice, and either answer is this ask's. Never a write, and never a document prepared elsewhere.
+    if (!write && !prepared && isReadReaskOn()) {
+      entry.reask = async () => {
+        const again = `urn:uuid:${utils.uuid()}`
+        entry.correlation.add(again)
+        const second = await this.taskDocument(communityDid, type, payload, again, via)
+        entry.correlation.add(String(second.id))
+        const at = Math.floor(Date.now() / 1000)
+        const id = `urn:uuid:${utils.uuid()}`
+        entry.correlation.add(id)
+        entry.lastSentAt = Date.now()
+        await carrier.sendTo(communityDid, {
+          id,
+          typ: 'application/didcomm-plain+json',
+          type: TRUST_TASK_V2_ENVELOPE_TYPE,
+          from: did,
+          to: [communityDid],
+          thid: again,
+          created_time: at,
+          expires_time: at + 300,
+          body: second,
+        })
+      }
+      const timer = setTimeout(() => this.maybeReask(entry, true), this.readReaskAfterMs)
+      // The wait holds nothing open: a process with nothing else to do may end.
+      ;(timer as unknown as { unref?: () => void }).unref?.()
+    }
+    return this.waitFor(entry, timeoutMs)
+  }
+
+  /**
+   * The Trust Task document `ask` sends: from this session's DID to the
+   * community, dated, and signed with the persona's borrowed key under the
+   * verification method its DID document names, exactly as a vetting task is
+   * signed (see the note after the task URIs at the top of this file for why
+   * every one is). A VTC
+   * checks that the proof's key belongs to the document's `issuer`, so the
+   * issuer is the persona and nothing else.
+   *
+   * A session that is not a persona (a phone-minted did:peer) has no key a
+   * community could resolve, and a persona without a borrowed signing key
+   * cannot sign: either sends the document unsigned and says so, because an
+   * older community still accepts it and a current one refuses it with
+   * `proofRequired` — an answer the caller already surfaces — rather than
+   * the wallet failing silently before asking. The manifest a fresh phone
+   * reads before it has a persona goes over REST first (`fetchManifest`).
+   */
+  /** The probe of `communityDid` in flight, if any — for tests and for a caller that wants to wait for it. */
+  probeOf(communityDid: string): Promise<TspProbeOutcome | 'skipped'> | undefined {
+    return this.probing.get(communityDid)
+  }
+
+  /** Start the background TSP 1.0 probe of a community (cutover plan §6.2), unless one is running. */
+  private startCommunityProbe(communityDid: string, serviceId?: string): void {
+    if (this.probing.has(communityDid) || !this.probeStore) return
+    const run = this.probeCommunity(communityDid, serviceId, this.probeStore).finally(() => {
+      this.probing.delete(communityDid)
+    })
+    this.probing.set(communityDid, run)
+  }
+
+  /**
+   * One TSP 1.0 probe of a community: an `XRFI` invite and the newest manifest
+   * read, sent beside the session's DIDComm asks. The read goes in as an ask
+   * entry of its own, so its answer is matched like any other and taken by
+   * nothing else; the entry is dropped when the probe ends. Answered, the rest
+   * of the session speaks TSP 1.0 to the community.
+   */
+  private async probeCommunity(
+    communityDid: string,
+    serviceId: string | undefined,
+    store: TspProbeStore
+  ): Promise<TspProbeOutcome | 'skipped'> {
+    const agent = this.agent
+    if (!agent) return 'skipped'
+    const threadId = `urn:uuid:${utils.uuid()}`
+    let entry: AskEntry | undefined
+    try {
+      return await runTspProbe({
+        did: communityDid,
+        serviceId,
+        store,
+        logger: agent.config.logger,
+        send: async () => {
+          const session = this.session
+          const did = this.state.did
+          if (!session || !did || !this.tsp) throw new Error('not connected over TSP')
+          const type = manifestTaskType(manifestWiresToTry()[0])
+          entry = {
+            id: threadId,
+            did,
+            communityDid,
+            type,
+            payloadKey: `probe:${threadId}`,
+            write: false,
+            correlation: new Set([threadId]),
+            sentAt: Date.now(),
+            lastSentAt: Date.now(),
+            waiters: [],
+            shared: true,
+            seq: this.askSeq++,
+          }
+          this.asks.set(threadId, entry)
+          const document = await this.taskDocument(communityDid, type, {}, threadId)
+          entry.correlation.add(String(document.id))
+          await this.ensureGreeted(communityDid, 'v1')
+          const packed = await packTrustTaskForPeer(this.tsp, did, communityDid, document, 'v1')
+          await session.sendTspFrame(packed.bytes)
+        },
+        waitForAnswer: async (timeoutMs) => (entry ? (await this.waitFor(entry, timeoutMs)) !== undefined : false),
+        peerAnsweredOtherwise: () => this.heardFrom.has(communityDid),
+        onAnswered: () => this.carriageByPeer.set(communityDid, 'tsp'),
+      })
+    } finally {
+      this.asks.delete(threadId)
+    }
+  }
+
+  private async taskDocument(
+    communityDid: string,
+    type: string,
+    payload: Record<string, unknown>,
+    threadId: string,
+    via: Pick<AskVia, 'did' | 'signer'> = { did: this.state.did ?? '', signer: this.persona }
+  ): Promise<Record<string, unknown>> {
+    const document: Record<string, unknown> = {
+      id: `urn:uuid:${utils.uuid()}`,
+      type,
+      threadId,
+      issuer: via.did,
+      recipient: communityDid,
+      issuedAt: new Date().toISOString(),
+      payload,
+    }
+    const persona = via.signer
+    const agent = this.agent
+    if (!agent || !persona || persona.did !== via.did || !persona.kmsKeyIds?.signing) {
+      agent?.config.logger.warn(`vtiAgent: ${type} needs a proof and this session cannot sign one; sending it unsigned`)
+      return document
+    }
+    return signDocumentProof(agent, document, persona.did, {
+      kmsKeyId: persona.kmsKeyIds.signing,
+      verificationMethodId: persona.vtaKeyIds.signing,
+      proofPurpose: purposeForDocumentType(type),
+    })
+  }
+
+  /**
+   * What a community asks of an applicant, in its own words.
+   *
+   * `agent` is the caller's: a phone that has opened no community session yet
+   * — a fresh one on its first Join — has given this controller none, and
+   * without one the REST read below was skipped, so the manifest (and the
+   * name the community publishes) could not be read before a session existed,
+   * the one moment the REST read is for (Farm gate, 2026-09-23).
+   */
+  async fetchManifest(communityDid: string, agent?: Agent, prefer?: JoinWire): Promise<VtiManifest> {
+    const withAgent = agent ?? this.agent
+    // A manifest a join code brought, checked as the community's own: it serves this one read (`manifestFromLink`).
+    // Not a read made for a version (`prefer`): that one follows a refusal, and asks the community.
+    const brought = prefer ? undefined : this.broughtByLink.get(communityDid)
+    if (brought) {
+      this.broughtByLink.delete(communityDid)
+      if (Date.now() - brought.at < LINK_MANIFEST_MS) return brought.manifest
+    }
+    // Packing to the community resolves its document; warm that resolution
+    // patiently so a tunnel's rate limit does not surface as a failed send.
+    if (withAgent) await resolveDidDocumentRetrying(withAgent, communityDid)
+    // The version is the community's to state (`joinWire`). The newest is
+    // asked first every time, so a community that has moved up is read at its
+    // newest (manifest/0.4 carries the directory statement); `prefer` puts a
+    // criteria version first, for a submit refused as unsupported. A version
+    // the community refuses as unsupported is never asked again in this read,
+    // over either carriage.
+    const order = manifestWiresToTry(prefer)
+    const refused: ManifestWire[] = []
+    let wire: ManifestWire | undefined = order[0]
+    // A community answers the join manifest over REST with no session at all
+    // (`POST {VTCRest}/v1/trust-tasks`), which is how an applicant can read
+    // what is asked of them on a first join — before any channel exists — and
+    // the fast path when one does. A community may switch that off, and a
+    // wallet with a live session can always ask over DIDComm, so a failure
+    // here is not an error: it falls through.
+    while (wire) {
+      const overRest = await this.manifestOverRest(communityDid, withAgent, wire)
+      if (!overRest) break
+      if ('manifest' in overRest) return this.learnManifest(communityDid, withAgent, overRest.manifest)
+      refused.push(wire)
+      wire = manifestWireAfterRefusal(overRest.unsupported, refused, order)
+      // It serves no version this wallet speaks, and said so: asking again
+      // over DIDComm would only be told the same.
+      if (!wire) throw overRest.unsupported
+    }
+    while (wire) {
+      const type = manifestTaskType(wire)
+      const answer = await this.ask(communityDid, type, {})
+      // Each unanswered ask names its task and request (`VtiSentNoAnswer`):
+      // three callers used to share one sentence, and a failed join could not
+      // say which request went unanswered.
+      if (!answer) throw this.sentNoAnswer(communityDid, type)
+      const refusal = refusalOf(answer)
+      if (!refusal) {
+        const payload = (answer.body as { payload?: VtiManifest } | undefined)?.payload
+        return this.learnManifest(communityDid, withAgent, readManifest(payload, wire))
+      }
+      refused.push(wire)
+      wire = manifestWireAfterRefusal(refusal, refused, order)
+      if (!wire) throw refusal
+    }
+    // Unreachable: the loop above returns or throws while a version is left.
+    throw new Error('vtiAgent: no version of the join manifest left to ask')
+  }
+
+  /**
+   * A manifest that was read: the version it came in is the one this community
+   * is asked in next, and its name is learned. Reading the manifest is how the
+   * app learns what a community calls itself; teaching the target here rather
+   * than at each screen means a published name cannot be missed by whichever
+   * screen happened to fetch.
+   *
+   * A manifest carries a name only when the operator has set branding, which a
+   * fresh community has not. Its public profile has a `name` of its own, so
+   * without branding that is read instead — in the background, since a screen
+   * that subscribes to `communityTarget` picks the name up whenever it lands.
+   */
+  /**
+   * The last manifest each community answered with, this run, by who asked: what a screen can show before it reads
+   * again. Kept in memory only. Keyed by the asker too, because a community MAY tailor its criteria to the caller
+   * (vtc/join-requests/manifest/0.3: "A community MAY tailor the criteria to the caller, but the default is its
+   * public join policy"): an answer given to one identity is never shown as another's.
+   */
+  private manifests = new Map<string, VtiManifest>()
+  private manifestKey = (communityDid: string) => `${communityDid}|${this.state.did ?? ''}`
+
+  /** The manifest `communityDid` last answered the current identity with, this run, if it has. Read offline. */
+  lastManifest(communityDid: string): VtiManifest | undefined {
+    return this.manifests.get(this.manifestKey(communityDid))
+  }
+
+  /**
+   * Manifests that came attached to a join code (joinLink), by community, each waiting for the one read it replaces.
+   * In memory only.
+   */
+  private broughtByLink = new Map<string, { manifest: VtiManifest; at: number }>()
+
+  /**
+   * A join code brought `communityDid`'s manifest with it, and the caller has checked it is the community's own and
+   * current (`attachedManifest`: its proof under the community's DID). It is learned as a read is, so the name the
+   * community publishes shows at once, and it serves the next `fetchManifest` in place of asking again: once, and
+   * only for a short while. Every read after that asks the community. It is the community's public answer, the one
+   * it gives an asker it does not know.
+   */
+  manifestFromLink(communityDid: string, agent: Agent | undefined, manifest: VtiManifest): void {
+    this.broughtByLink.set(communityDid, {
+      manifest: this.learnManifest(communityDid, agent, manifest),
+      at: Date.now(),
+    })
+  }
+
+  private learnManifest(communityDid: string, agent: Agent | undefined, manifest: VtiManifest): VtiManifest {
+    // An answer that names another community is that community's: nothing in it (name, look) is learned for this
+    // one. Communities can share a host, and a pass took another community's colour that way (272).
+    const answeredFor = manifest.communityDid
+    if (answeredFor && !sameCommunity(communityDid, answeredFor)) {
+      ;(agent ?? this.agent)?.config.logger.warn(
+        `vtiAgent: a manifest asked of ${communityDid} named ${answeredFor}; nothing learned from it`
+      )
+      return manifest
+    }
+    this.manifests.set(this.manifestKey(communityDid), manifest)
+    const branded = manifest.branding?.displayName?.trim()
+    // How its cards look. An answer that names this community is kept even when it gives nothing, so the Wallet
+    // knows it has none (communityBrand.ts). One that names no community only adds a look: it never clears a kept
+    // one, since nothing shows it is this community's. Where the profile is about to be read and may give the logo,
+    // the look is kept once that answers: kept now, it would say "no logo" until then, on every read.
+    const gives = !!(manifest.branding?.accentColor || manifest.branding?.logoUrl)
+    const keepLook = !!answeredFor || gives
+    if (keepLook && (branded || httpsLogoUrl(manifest.branding?.logoUrl))) {
+      rememberCommunityBrand(agent, communityDid, {
+        accentColor: manifest.branding?.accentColor,
+        logoUrl: manifest.branding?.logoUrl,
+      })
+    }
+    if (branded) {
+      communityTarget.publishedName(communityDid, branded)
+      rememberCommunityName(agent, communityDid, branded)
+    } else {
+      this.profileNameRead = this.learnProfileName(communityDid, agent, manifest.branding, keepLook)
+    }
+    return manifest
+  }
+
+  /** The last public-profile read `learnManifest` started, for a caller (a test) to wait on. */
+  profileNameRead: Promise<void> = Promise.resolve()
+
+  /**
+   * The name a community gives itself in its public profile, learned as its
+   * published name. Read from the same `VTCRest` endpoint as the manifest; a
+   * community with no profile, an empty name or no reachable endpoint is
+   * simply left unnamed.
+   */
+  private async learnProfileName(
+    communityDid: string,
+    agent: Agent | undefined,
+    branding?: VtiManifest['branding'],
+    keepLook = false
+  ): Promise<void> {
+    if (!agent) return
+    let profile: Awaited<ReturnType<typeof readPublicProfile>>
+    try {
+      const doc = await agent.dids.resolveDidDocument(communityDid)
+      const service = doc.service?.find((s) => s.type === 'VTCRest')
+      const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
+      if (base) profile = await readPublicProfile(base, communityDid)
+    } catch {
+      // Only the name and the profile's logo are lost: the community is shown as unnamed.
+    }
+    // The manifest's look, which waited for this read when it gave no logo: with the profile's logo, if it has one.
+    const manifestLogo = httpsLogoUrl(branding?.logoUrl)
+    if (!manifestLogo && (keepLook || profile?.logoUrl)) {
+      rememberCommunityBrand(agent, communityDid, {
+        accentColor: branding?.accentColor,
+        logoUrl: profile?.logoUrl,
+      })
+    }
+    const name = profile?.name
+    if (!name) return
+    communityTarget.publishedName(communityDid, name)
+    rememberCommunityName(agent, communityDid, name)
+  }
+
+  /**
+   * The manifest over the community's REST endpoint, which its DID document
+   * advertises as a `VTCRest` service. Communities minted before vti #1615
+   * publish it without the API's version prefix (VTI-15) and later ones with
+   * it, so `/v1` is added only when it is missing.
+   *
+   * A community that does not serve the version asked says so in an error
+   * document — with a failing status (422 from vtc-service 0.49.0), so the body
+   * is read whatever the status — and that refusal is returned, because it
+   * says which version to ask in. Undefined for anything else that is not a
+   * usable manifest — a community that has turned the public read off, a
+   * network that is not there, any other error document — so the caller can
+   * fall back to asking over DIDComm.
+   */
+  private async manifestOverRest(
+    communityDid: string,
+    agent: Agent | undefined,
+    wire: ManifestWire
+  ): Promise<{ manifest: VtiManifest } | { unsupported: VtiRefusal } | undefined> {
+    if (!agent) return undefined
+    try {
+      const doc = await agent.dids.resolveDidDocument(communityDid)
+      const service = doc.service?.find((s) => s.type === 'VTCRest')
+      const base = typeof service?.serviceEndpoint === 'string' ? service.serviceEndpoint : undefined
+      if (!base) return undefined
+      const now = new Date().toISOString()
+      // A busy community (429) or a coalesced connection (421) is tried once more;
+      // a manifest that still cannot be read falls back to DIDComm below.
+      const response = await fetchWaitingIfBusy(
+        fetch,
+        vtcRestUrl(base, 'trust-tasks'),
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            id: `urn:uuid:${utils.uuid()}`,
+            type: manifestTaskType(wire),
+            threadId: `urn:uuid:${utils.uuid()}`,
+            payload: {},
+            issuer: this.state.did ?? communityDid,
+            recipient: communityDid,
+            issuedAt: now,
+          }),
+        },
+        undefined,
+        3_000
+      )
+      const body = (await response.json()) as
+        | { type?: string; payload?: VtiManifest & { code?: string; message?: string; details?: unknown } }
+        | undefined
+      if (String(body?.type ?? '').startsWith(TASK_ERROR)) {
+        const refusal = new VtiRefusal(
+          body?.payload?.code ?? 'unknown',
+          body?.payload?.message ?? 'The community refused the request.',
+          body?.payload?.details
+        )
+        return isUnsupportedJoinVersion(refusal) ? { unsupported: refusal } : undefined
+      }
+      if (!response.ok) return undefined
+      if (!body?.payload?.criteria) return undefined
+      const manifest = readManifest(body.payload, wire)
+      // Another community answered at this host (communities can share one): its criteria are not this one's.
+      // Asked over DIDComm instead, which is addressed to this community.
+      if (manifest.communityDid && !sameCommunity(communityDid, manifest.communityDid)) {
+        agent.config.logger.warn(
+          `vtiAgent: the manifest read over REST for ${communityDid} named ${manifest.communityDid}; asking over DIDComm`
+        )
+        return undefined
+      }
+      return { manifest }
+    } catch (e) {
+      // A directory statement that cannot be shown stops the join here: read
+      // again over DIDComm it would say the same.
+      if (e instanceof MalformedDisclosure) throw e
+      return undefined
+    }
+  }
+
+  /** The verdict a submit or a supplement carries — deliberately the same shape. */
+  private verdictOf(answer: DidCommV2PlaintextMessage | undefined, communityDid: string, type: string): VtiVerdict {
+    if (!answer) throw this.sentNoAnswer(communityDid, type)
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    const payload = (
+      answer.body as
+        | {
+            payload?: {
+              requestId?: string
+              verdict?: { effect?: string; with?: { needs?: string[] } & Record<string, unknown> }
+            }
+          }
+        | undefined
+    )?.payload
+    return {
+      requestId: payload?.requestId,
+      effect: payload?.verdict?.effect ?? 'unstated',
+      needs: payload?.verdict?.with?.needs ?? [],
+      with: payload?.verdict?.with,
+    }
+  }
+
+  /**
+   * Ask the community for the challenge a hidden-vetting proof must bind
+   * (`vtc/vetting/pcs-challenge/0.1`), the same path as the join submit.
+   *
+   * Mutating: the community replaces any challenge it had open for this
+   * applicant, so a proof built on an earlier one is no longer accepted. Ask
+   * immediately before proving, and never send it twice for one proof — the
+   * task is not in `VTI_READ_TASKS`, so `ask` never re-sends it, and an
+   * identical request still in flight is waited on rather than sent again.
+   *
+   * A challenge is never taken from the answer hold, though: an answered one
+   * may already have been spent by a submit, and the community refuses a spent
+   * challenge (`challengeAlreadyUsed`). Every call that is not joining a
+   * request in flight asks the community anew.
+   *
+   * Throws the community's refusal as a `VtiRefusal` (`notHiddenVetting` when
+   * it publishes no hidden-vetting criterion), `VtiSentNoAnswer` on silence,
+   * and an `Error` naming what was wrong with an answer it cannot use.
+   */
+  async fetchChallenge(communityDid: string, options: { criterionId?: string } = {}): Promise<PcsChallenge> {
+    const did = this.state.did
+    for (const [id, entry] of this.asks) {
+      if (entry.did === did && entry.communityDid === communityDid && entry.type === PCS_CHALLENGE_TYPE && entry.answer)
+        this.asks.delete(id)
+    }
+    const answer = await this.ask(communityDid, PCS_CHALLENGE_TYPE, pcsChallengeRequest(options.criterionId))
+    if (!answer) throw this.sentNoAnswer(communityDid, PCS_CHALLENGE_TYPE)
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    const read = readPcsChallenge((answer.body as { payload?: unknown } | undefined)?.payload)
+    if ('problem' in read) throw new Error(`vtiAgent: ${communityDid}'s challenge cannot be used: ${read.detail}`)
+    return read.challenge
+  }
+
+  private presentation(credentials?: unknown[]) {
+    return {
+      '@context': ['https://www.w3.org/ns/credentials/v2'],
+      type: ['VerifiablePresentation'],
+      holder: this.state.did,
+      verifiableCredential: credentials ?? [],
+    }
+  }
+
+  /**
+   * Answer a deferral in place (`vtc/join-requests/supplement/0.1`) rather
+   * than submitting again, which a community refuses while a request is open
+   * (VTI-04). The presentation REPLACES the one on the request — the community
+   * evaluates this one alone — so it must carry every statement, not only the
+   * ones gathered since. Refusals surface as `VtiRefusal`; read them with
+   * `joinRequestRefusal`.
+   */
+  async supplement(
+    communityDid: string,
+    options: { credentials?: unknown[]; requestId?: string; requirementsDigest?: string } = {}
+  ): Promise<VtiVerdict> {
+    const answer = await this.ask(communityDid, SUPPLEMENT, {
+      vp: this.presentation(options.credentials),
+      ...(options.requestId ? { requestId: options.requestId } : {}),
+      ...(options.requirementsDigest ? { extensions: { requirementsDigest: options.requirementsDigest } } : {}),
+    })
+    return this.verdictOf(answer, communityDid, SUPPLEMENT)
+  }
+
+  /**
+   * Ask where the applicant's own join request stands
+   * (`vtc/join-requests/status/0.1`) — a read, never a resubmit. The id is
+   * optional: without it the community resolves the request from who signs the
+   * poll, which is how a request whose first answer was lost is found again.
+   * Undefined when the community holds no such request (`notFound`); other
+   * refusals surface as `VtiRefusal`.
+   *
+   * `resendCredentials` asks the community to deliver again the cards it
+   * already issued for an approved request. Its schema refuses unknown
+   * members, so a community that predates the field refuses the whole poll:
+   * set it only after this community's own answer said `credentialsDelivered:
+   * false` (vtiJoin `askForCardIfOwed`).
+   */
+  async status(
+    communityDid: string,
+    options: { requestId?: string; resendCredentials?: boolean; as?: VtiPersona } = {}
+  ): Promise<JoinRequestStatus | undefined> {
+    const asked = {
+      ...(options.requestId ? { requestId: options.requestId } : {}),
+      ...(options.resendCredentials ? { resendCredentials: true } : {}),
+    }
+    // `as`: over that identity's own session (`askAs`: no sign-in, nothing taken from the shared session), for a look
+    // nobody asked for (vtiJoinWatch). Throws `VtiNoOwnSession` when it has none. Without it, exactly as before.
+    const answer = options.as
+      ? await this.askAs(options.as, communityDid, STATUS, asked)
+      : await this.ask(communityDid, STATUS, asked)
+    if (!answer) throw this.sentNoAnswer(communityDid, STATUS)
+    const refusal = refusalOf(answer)
+    if (refusal) {
+      if (joinRequestRefusal(refusal) === 'notFound') return undefined
+      throw refusal
+    }
+    const payload = ((answer.body as { payload?: Record<string, unknown> } | undefined)?.payload ?? {}) as Record<
+      string,
+      unknown
+    >
+    const text = (v: unknown) => (typeof v === 'string' && v ? v : undefined)
+    const status = text(payload.status)
+    if (!status) throw new Error('vtiAgent: the status answer names no status')
+    return {
+      requestId: text(payload.requestId),
+      status,
+      ...(Array.isArray(payload.needs)
+        ? { needs: payload.needs.filter((n): n is string => typeof n === 'string') }
+        : {}),
+      ...(payload.presentationDefinition !== undefined
+        ? { presentationDefinition: payload.presentationDefinition }
+        : {}),
+      // The refusal members mean a decision was taken: only ever with `rejected`.
+      ...(status === 'rejected'
+        ? { code: text(payload.code), reason: text(payload.reason), decidedAt: text(payload.decidedAt) }
+        : {}),
+      // The delivery members mean the request was approved: only ever with `approved`.
+      ...(status === 'approved' && typeof payload.credentialsDelivered === 'boolean'
+        ? { credentialsDelivered: payload.credentialsDelivered }
+        : {}),
+      ...(status === 'approved' &&
+      CREDENTIAL_RESENDS.includes(payload.credentialResend as (typeof CREDENTIAL_RESENDS)[number])
+        ? { credentialResend: payload.credentialResend as (typeof CREDENTIAL_RESENDS)[number] }
+        : {}),
+      ...(status === 'approved' && text(payload.retryAfter) ? { retryAfter: text(payload.retryAfter) } : {}),
+    }
+  }
+
+  /**
+   * Send one Trust Task to the community as the connected persona and return
+   * its answer's payload. For tasks with no wrapper of their own here — the
+   * rooms tasks (`modules/rooms`). Refusals surface as `VtiRefusal`.
+   */
+  async communityTask(
+    communityDid: string,
+    type: string,
+    payload: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    return this.answerOf(communityDid, type, await this.ask(communityDid, type, payload))
+  }
+
+  /**
+   * Send a Trust Task document the person's agent completed (`rooms/keys/act`)
+   * to `recipientDid` unchanged, over this session, and return its answer's
+   * payload. The document is the agent's: its issuer, presentation and proof
+   * are never touched here. Refusals surface as `VtiRefusal`.
+   */
+  async sendCompleted(recipientDid: string, document: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const type = typeof document.type === 'string' ? document.type : ''
+    const payload = (document.payload ?? {}) as Record<string, unknown>
+    if (!type) throw new Error('vtiAgent: a completed document names no type')
+    return this.answerOf(recipientDid, type, await this.ask(recipientDid, type, payload, undefined, document))
+  }
+
+  private answerOf(
+    communityDid: string,
+    type: string,
+    answer: DidCommV2PlaintextMessage | undefined
+  ): Record<string, unknown> {
+    if (!answer) throw this.sentNoAnswer(communityDid, type)
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    return ((answer.body as { payload?: Record<string, unknown> } | undefined)?.payload ?? {}) as Record<
+      string,
+      unknown
+    >
+  }
+
+  /**
+   * Leave the community (`vtc/members/self-remove/0.1`, proof required). The
+   * caller is the only target. `disposition` chooses what the community keeps
+   * — `purge` erases the member's record, `tombstone` keeps a marker with no
+   * personal data — and omitting it uses the community's default; the answer
+   * says which was applied. Refusals surface as `VtiRefusal`; read them with
+   * `selfRemoveRefusal`.
+   */
+  async selfRemove(
+    communityDid: string,
+    options: { disposition?: 'purge' | 'tombstone' } = {}
+  ): Promise<{ did?: string; disposition: 'purge' | 'tombstone' | 'historical' | (string & {}); removed: boolean }> {
+    const answer = await this.ask(
+      communityDid,
+      SELF_REMOVE,
+      options.disposition ? { disposition: options.disposition } : {}
+    )
+    if (!answer) throw this.sentNoAnswer(communityDid, SELF_REMOVE)
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    const payload = (answer.body as { payload?: { did?: string; disposition?: string; removed?: boolean } } | undefined)
+      ?.payload
+    return {
+      did: payload?.did,
+      disposition: payload?.disposition ?? options.disposition ?? 'policydefault',
+      removed: payload?.removed !== false,
+    }
+  }
+
+  /**
+   * Deliver the member's acknowledgement of its membership
+   * (`vtc/members/vmc/0.1`, `vtiMemberVmc`), closing the approved join request
+   * `requestId` when there is one, and return the community's receipt. Throws
+   * the community's refusal (subjectMismatch, notAMember, invalidCredential,
+   * requestNotFound/NotApproved/ApplicantMismatch), or that nothing answered.
+   */
+  async sendMemberVmc(
+    communityDid: string,
+    vc: Record<string, unknown>,
+    requestId?: string
+  ): Promise<MemberVmcReceipt> {
+    const answer = await this.ask(communityDid, MEMBER_VMC, requestId ? { vc, requestId } : { vc })
+    if (!answer) throw this.sentNoAnswer(communityDid, MEMBER_VMC)
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    return ((answer.body as { payload?: MemberVmcReceipt } | undefined)?.payload ?? {}) as MemberVmcReceipt
+  }
+
+  /**
+   * Close the applicant's own open request (`vtc/join-requests/withdraw/0.1`),
+   * which frees them to apply again. The id is optional by design: without it
+   * the community resolves the request from who is asking.
+   */
+  async withdraw(
+    communityDid: string,
+    options: { requestId?: string; reason?: string } = {}
+  ): Promise<{ requestId?: string; status: string }> {
+    const answer = await this.ask(communityDid, WITHDRAW, {
+      ...(options.requestId ? { requestId: options.requestId } : {}),
+      ...(options.reason ? { reason: options.reason } : {}),
+    })
+    if (!answer) throw this.sentNoAnswer(communityDid, WITHDRAW)
+    const refusal = refusalOf(answer)
+    if (refusal) throw refusal
+    const payload = (answer.body as { payload?: { requestId?: string; status?: string } } | undefined)?.payload
+    return { requestId: payload?.requestId, status: payload?.status ?? 'withdrawn' }
+  }
+
+  /**
+   * Apply. With no credentials in hand the honest presentation is an empty one:
+   * the community answers `requestMore` naming what it still needs, rather than
+   * the wallet guessing at requirements it cannot yet meet.
+   *
+   * `registryConsent` is the person's answer to "list me in the community's
+   * public member directory" (VTI-Q14): the community publishes a member only
+   * while it is true (vti #1682, #1691). Off unless the person turned it on.
+   *
+   * Submitted in the version the manifest was read in (`joinWire`). A refusal
+   * surfaces as `VtiRefusal`: read it with `joinRequestRefusal`, and with
+   * `isUnsupportedJoinVersion` for a community that serves no version of
+   * submit this wallet speaks.
+   */
+  async apply(
+    communityDid: string,
+    manifest: VtiManifest,
+    options: {
+      credentials?: unknown[]
+      requirementsDigest?: string
+      registryConsent?: boolean
+      /**
+       * The `statementDigest` of the directory statement the person was shown
+       * (manifest/0.4). Where the manifest carries one, nothing is sent
+       * unless it is this exact statement (`DisclosureNotShown`).
+       */
+      disclosureSeen?: string
+      /**
+       * A hidden-vetting submission: the `vta/pcs/prove` answer, sent verbatim
+       * as `extensions.hiddenVetting`. The presentation then carries **no**
+       * vetting statements — the community counts the proof instead of named
+       * statements, and refuses a hidden-criterion submission that carries no
+       * proof rather than counting statements (vtc-service vetting/pcs.rs), so
+       * a submission with both would name the vetters the proof keeps hidden.
+       */
+      hiddenVetting?: Record<string, unknown>
+    } = {}
+  ): Promise<VtiVerdict> {
+    let current = manifest
+    const refused: JoinWire[] = []
+    for (;;) {
+      // Never under a statement the person was not shown, including one read
+      // again below after a version refusal.
+      if (!disclosureShown(current, options.disclosureSeen)) {
+        throw new DisclosureNotShown(current.directoryDisclosure!.statementDigest)
+      }
+      const wire = current.wire ?? '0.2'
+      const type = joinTaskType('submit', wire)
+      // Which criterion the submission is made under. An application gathered
+      // against a criterion names that criterion's digest: with more than one
+      // criterion an absent digest can mean gathering against one and being
+      // judged against another (at 0.2 `select_criterion` reads the digest and
+      // records `applicant_digest_matches: false` when it is absent, which the
+      // community's policy may weigh; at 0.3 `criterion` is what governs).
+      // Without one, a 0.2 submit falls back to the manifest's own digest, as
+      // it always did, and a 0.3 submit names none — an invitation included,
+      // as openvtc does (#412): the community then decides it under the first
+      // criterion, in its published order, that the submission meets.
+      const criterion = options.requirementsDigest ?? (wire === '0.2' ? current.requirementsDigest : undefined)
+      const hidden = options.hiddenVetting
+      const credentials = hidden ? withoutVettingStatements(options.credentials) : options.credentials
+      if (hidden && credentials?.length !== options.credentials?.length) {
+        this.agent?.config.logger.info(
+          `vtiAgent: hidden-vetting submit: ${
+            (options.credentials?.length ?? 0) - (credentials?.length ?? 0)
+          } vetting statement(s) left out of the presentation; the proof stands for them`
+        )
+      }
+      // The presentation is unsigned: the community takes the holder from the
+      // sealed envelope's sender (VTI-9), so what matters is that the
+      // credentials inside name that same DID as their subject.
+      const answer = await this.ask(
+        communityDid,
+        type,
+        submitPayload(wire, {
+          vp: this.presentation(credentials),
+          registryConsent: options.registryConsent === true,
+          criterion,
+          ...(hidden ? { extensions: { hiddenVetting: hidden } } : {}),
+        }),
+        this.submitAnswerTimeoutMs
+      )
+      const refusal = answer ? refusalOf(answer) : undefined
+      refused.push(wire)
+      // The community does not serve this version of submit — it moved between
+      // the manifest read and now. It refuses that at dispatch, before any
+      // handler runs, so this submit was NOT taken and asking in the version it
+      // serves is the first submit, not a second. (Silence is no such proof,
+      // and is never answered with a resend — nor is any other refusal:
+      // `criterionUnknown`, say, goes to the caller, whose application was
+      // gathered for that criterion.) What it asks is read again in that
+      // version first: the criteria are that version's.
+      const other = wireAfterRefusal(refusal, 'submit', refused)
+      if (refusal && other) {
+        this.agent?.config.logger.warn(
+          `vtiAgent: ${communityDid} does not serve ${taskName(type)}/${wire} (${refusal.code}); reading its criteria again and submitting at ${other}`
+        )
+        current = await this.fetchManifest(communityDid, undefined, other)
+        // The manifest and the submit disagree on the version: nothing safe is left to try.
+        if ((current.wire ?? '0.2') !== other) throw refusal
+        continue
+      }
+      return this.verdictOf(answer, communityDid, type)
+    }
+  }
+}
+
+export const vtiAgent = new VtiAgentController()
+
+/** The credentials, less any vetter's vetting statement (a community's own identity check stays). */
+function withoutVettingStatements(credentials?: unknown[]): unknown[] | undefined {
+  return credentials?.filter(
+    (c) =>
+      !(c && typeof c === 'object' && classifyCredential(c as Record<string, unknown>).kind === 'vetting-statement')
+  )
+}
+
+/** Keep a community's published name for the next launch; a failure only costs the name. */
+function rememberCommunityName(agent: Agent | undefined, communityDid: string, name?: string): void {
+  if (!agent || !name?.trim()) return
+  void new GenericRecordsCommunityStore(agent).saveCommunityName(communityDid, name).catch(() => undefined)
+}
+
+/** Keep how a community's cards look for the next launch; a failure only costs the look (the DID's colour is used). */
+function rememberCommunityBrand(
+  agent: Agent | undefined,
+  communityDid: string,
+  brand: { accentColor?: unknown; logoUrl?: unknown }
+): void {
+  if (!agent) return
+  void new GenericRecordsCommunityStore(agent).saveCommunityBrand(communityDid, brand).catch(() => undefined)
+}
+
+/**
+ * A path under a community's REST API, from the `VTCRest` endpoint its DID
+ * document advertises: with or without the `/v1` prefix (vti #1615 added it to
+ * newly minted communities; older ones omit it), never doubled.
+ */
+export function vtcRestUrl(base: string, path: string): string {
+  const root = base.replace(/\/+$/, '')
+  return `${/\/v1$/.test(root) ? root : `${root}/v1`}/${path.replace(/^\/+/, '')}`
+}
+
+/**
+ * The `name` a community's public profile gives it — `GET
+ * {VTCRest}/community/public-profile`, unauthenticated and Trust-Task-exempt
+ * (vtc-service `routes/community/profile.rs`, `PublicCommunityProfile`).
+ *
+ * Undefined unless the profile is answered, is about this very community
+ * (`communityDid`: communities share hosts, and one service must not name
+ * another), and has a non-empty name — a community's profile is created with
+ * an empty one (`CommunityProfile::new(did, "")` at bootstrap).
+ */
+export async function readPublicProfileName(
+  base: string,
+  communityDid: string,
+  doFetch: typeof fetch = fetch
+): Promise<string | undefined> {
+  return (await readPublicProfile(base, communityDid, doFetch))?.name
+}
+
+/**
+ * A community's public profile (see {@link readPublicProfileName}): its `name`, and its `logo_url` when that is an
+ * https address (vtc-service `PublicCommunityProfile`). Undefined unless the profile is answered and is about this
+ * very community.
+ */
+export async function readPublicProfile(
+  base: string,
+  communityDid: string,
+  doFetch: typeof fetch = fetch
+): Promise<{ name?: string; logoUrl?: string } | undefined> {
+  try {
+    const response = await fetchWaitingIfBusy(
+      doFetch,
+      vtcRestUrl(base, 'community/public-profile'),
+      { method: 'GET', headers: { accept: 'application/json' } },
+      undefined,
+      3_000
+    )
+    if (!response.ok) return undefined
+    const body = (await response.json()) as { communityDid?: unknown; name?: unknown; logo_url?: unknown } | undefined
+    if (body?.communityDid !== communityDid) return undefined
+    return {
+      name: typeof body.name === 'string' ? body.name.trim() || undefined : undefined,
+      logoUrl: httpsLogoUrl(body.logo_url),
+    }
+  } catch {
+    return undefined
+  }
+}

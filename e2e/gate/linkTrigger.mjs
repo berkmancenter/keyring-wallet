@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Whether tonight's nightly runs the link legs (linkwait, linkfail, pnmlink). W1 of
 // docs/plans/farm-test-footprint-plan.md (IN-560): they leave the nightly's fixed list and run only when
-//   (a) a change touches linking: a path rule on last night's pin to tonight's, bifold/ paths included (changed.mjs
+//   (a) a change touches linking: a path rule on last night's pin to tonight's, packages/ paths included (changed.mjs
 //       maps diffs only through testIDs, so VtaClient.ts and vtaAgent.ts come back "unmapped");
 //   (b) a runner VTA's or pnm's version changed: the VTA's `info.version` from <url>/openapi.json, and the sha256 of
 //       each pnm file the gate's wrapper can run;
@@ -23,14 +23,14 @@ import { changedFiles } from './changed.mjs';
 
 /** The link code: the app's link screens and clients, and the harness that drives a link. Tests never count. */
 export const LINK_PATHS = [
-  /^bifold\/packages\/core\/src\/modules\/trust-tasks\/screens\/(VtaLink|AgentCreate|MyAgent)[^/]*\.tsx?$/,
-  /^bifold\/packages\/core\/src\/modules\/trust-tasks\/screens\/linkFailureWords\.ts$/,
-  /^bifold\/packages\/core\/src\/modules\/trust-tasks\/module\/(VtaClient|vtaAgent|VtaLinkStore)\.ts$/,
-  /^bifold\/packages\/core\/src\/navigators\/MyAgentStack\.tsx$/,
+  /^packages\/core\/src\/modules\/trust-tasks\/screens\/(VtaLink|AgentCreate|MyAgent)[^/]*\.tsx?$/,
+  /^packages\/core\/src\/modules\/trust-tasks\/screens\/linkFailureWords\.ts$/,
+  /^packages\/core\/src\/modules\/trust-tasks\/module\/(VtaClient|vtaAgent|VtaLinkStore)\.ts$/,
+  /^packages\/core\/src\/navigators\/MyAgentStack\.tsx$/,
   // The whole trust-tasks package: VtaClient.ts signs the whoAmI probe and every sendTask document with it
   // (signDocumentProof, signCompactJws, tsp), so a change there changes what every link sends. #974 changed
   // documentProof.ts inside the 278.7 pin bump, which this rule first read as NO (ac on #874).
-  /^bifold\/packages\/trust-tasks\/src\//,
+  /^packages\/trust-tasks\/src\//,
   /^e2e\/run-vta-link\.js$/,
   /^e2e\/lib\/aclCleanup\.js$/,
   /^e2e\/lib\/pages\/link\.js$/,
@@ -63,17 +63,18 @@ export function decide({ files, rangeKnown = true, rangeWhy = 'no last nightly p
 
 /**
  * The range's files for decide(). A range is known only as <a>..<b> with both sides: no range, a bare pin or a half
- * range is "no last nightly pin". One that cannot be read, or that crosses the bifold fold-in (changed.mjs marks it
- * with a bare `bifold`: what moved under bifold/ cannot be told), is unknown too, and an unknown range runs.
+ * range is "no last nightly pin". One that cannot be read, or that reaches back before the move of the framework into
+ * packages/ (changed.mjs marks it with a bare `bifold`: what moved cannot be told), is unknown too, and an unknown
+ * range runs.
  */
 export function rangeFiles(range, top) {
   let files = [], rangeKnown = /^[^.\s]+\.\.[^.\s]+$/.test(range ?? ''), rangeWhy;
   if (rangeKnown) {
     try { files = changedFiles(range, top); } catch (e) {
       rangeKnown = false;
-      rangeWhy = `the range ${range} could not be read (${String(e.message).split('\n')[0].slice(0, 120)}; a pre-fold range with an empty bifold/ in a worktree needs BIFOLD_GIT)`;
+      rangeWhy = `the range ${range} could not be read (${String(e.message).split('\n')[0].slice(0, 120)})`;
     }
-    if (files.includes('bifold')) { rangeKnown = false; rangeWhy = `the range ${range} crosses the bifold fold-in (a gitlink at one end, a tree at the other): what moved under bifold/ cannot be read`; }
+    if (files.includes('bifold')) { rangeKnown = false; rangeWhy = `the range ${range} reaches back before the move of the framework into packages/ (bifold/ at one end): what moved cannot be read`; }
   }
   return { files, rangeKnown, rangeWhy };
 }
