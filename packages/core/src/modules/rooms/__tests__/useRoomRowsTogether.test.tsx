@@ -195,6 +195,33 @@ describe('rooms read together, each met for the first time', () => {
     const kept = JSON.parse((await AsyncStorage.getItem(ROOMS_SEEN_KEY)) ?? '{}')
     expect(Object.keys(kept)).toHaveLength(3)
   })
+
+  test('a reset forgets a write still out: the next run writes its first mark at once, not behind it', async () => {
+    const real = AsyncStorage.setItem.bind(AsyncStorage)
+    const seenWrites: string[] = []
+    jest.spyOn(AsyncStorage, 'setItem').mockImplementation(async (key: string, value: string) => {
+      if (key !== ROOMS_SEEN_KEY) return real(key, value)
+      seenWrites.push(value)
+      // The first run's write never ends.
+      if (seenWrites.length === 1) await new Promise<void>(() => undefined)
+      return real(key, value)
+    })
+    const first = rooms(['a'])
+    const poll = renderHook(() => useRoomRowsPoll(first.service, true))
+    await flush()
+    await first.answer('a')
+    await flush()
+    expect(seenWrites).toHaveLength(1)
+    poll.unmount()
+
+    resetRoomRows()
+    const next = rooms(['b'])
+    await mount(next.service)
+    await next.answer('b')
+    await flush()
+    expect(seenWrites).toHaveLength(2)
+    expect(Object.keys(JSON.parse(seenWrites[1]))).toHaveLength(1)
+  })
 })
 
 describe('switched off (rooms/rowsTogetherSwitch), every room is read one after another as listed, as before', () => {
