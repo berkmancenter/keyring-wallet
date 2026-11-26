@@ -20,14 +20,14 @@
       "receiver": {
         "did": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "expectedIssuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "document": {
         "type": "keyring/chat/1.0",
         "id": "urn:uuid:00000000-0000-4000-8000-000000000001",
         "issuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "recipient": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
-        "issuedAt": "2026-11-26T17:59:00Z",
+        "issuedAt": "2026-11-20T11:59:00Z",
         "payload": {
           "version": "1.0",
           "profile": "keyring.chat/1",
@@ -41,10 +41,10 @@
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-26T17:59:00Z",
+          "created": "2026-11-20T11:59:00Z",
           "verificationMethod": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA#z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
           "proofPurpose": "assertionMethod",
-          "proofValue": "z292dFCsJSUEJPtuDsGUK2DJdNEkJLzHPGzCj2ZNjWXx4CDUPFVYb8uqPJgN56yd8qmmzrhLTKXjYbonhwcjyQ7cj"
+          "proofValue": "z3RqmxJuaAz8hpGPyKPEKd6kwmKAHWq7UsD5s7bkpW1u1XmsP3b3nof8tPCuXYkqogebD9tmHp5p11vcQa8d5UkbN"
         }
       },
       "expect": "accept"
@@ -54,14 +54,14 @@
       "receiver": {
         "did": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "expectedIssuer": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "document": {
         "type": "keyring/chat/1.0",
         "id": "urn:uuid:00000000-0000-4000-8000-000000000002",
         "issuer": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "recipient": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "issuedAt": "2026-11-26T17:59:00Z",
+        "issuedAt": "2026-11-20T11:59:00Z",
         "payload": {
           "version": "1.0",
           "profile": "keyring.chat/1",
@@ -75,10 +75,10 @@
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-26T17:59:00Z",
+          "created": "2026-11-20T11:59:00Z",
           "verificationMethod": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6#z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
           "proofPurpose": "assertionMethod",
-          "proofValue": "z4A7z8ckqm3oHQarJG5iV3ARLuMmWS1fTmcPGtwP1xjNuZsa6oe8iBjmbYWhnXLLQVXBas34TwJqdgsvNwwVc7yqa"
+          "proofValue": "z5B4oYZttduQToitkZxEMJT3WwD81AJX6keSpGhhFSkTdFUJgD3J5yDF2JGzBHgKACvUddMctZsJZznu3RegVLxNw"
         }
       },
       "expect": "accept"
@@ -88,14 +88,14 @@
       "receiver": {
         "did": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "expectedIssuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "document": {
         "type": "keyring/agent/settings/1.0",
         "id": "urn:uuid:00000000-0000-4000-8000-000000000003",
         "issuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "recipient": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
-        "issuedAt": "2026-11-26T17:59:00Z",
+        "issuedAt": "2026-11-20T11:59:00Z",
         "payload": {
           "version": "1.0",
           "answersOthers": false,
@@ -105,10 +105,10 @@
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-26T17:59:00Z",
+          "created": "2026-11-20T11:59:00Z",
           "verificationMethod": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA#z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
           "proofPurpose": "assertionMethod",
-          "proofValue": "z2eMwN5jCaQFxxSp1DTPcMDGjFLRYdDHJd3DCkzKpngsHEPbk65GjyYGWJZ4iyEfNiMatPiNUSYWVGGLnmNP6BgpD"
+          "proofValue": "z5PS2xuxHV6AARRN1QRTseEFAYU9CuA3qoN1AcMHwaie8WAZJYmiauYVXdyamfAz71Gw8VanMZZiFChAJGwB6BEh7"
         }
       },
       "expect": "accept"
@@ -118,14 +118,14 @@
       "receiver": {
         "did": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "expectedIssuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "document": {
         "type": "keyring/agent/room-offer/1.0",
         "id": "urn:uuid:00000000-0000-4000-8000-000000000004",
         "issuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "recipient": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
-        "issuedAt": "2026-11-26T17:59:00Z",
+        "issuedAt": "2026-11-20T11:59:00Z",
         "payload": {
           "version": "1.0",
           "roomId": "did:webvh:QmRoom:rooms.example",
@@ -139,10 +139,10 @@
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-26T17:59:00Z",
+          "created": "2026-11-20T11:59:00Z",
           "verificationMethod": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA#z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
           "proofPurpose": "assertionMethod",
-          "proofValue": "z3fvEqZK22iWuAeF5HZtysD6Q5W3r3Fns5XxKbCpGeBGqrWBMP6XcV2Kao2kEytdYrWUEn6tBqELbuVaDFgY2zxKa"
+          "proofValue": "z5gY9iW9XoJctFAtPWxYFxo7Ao26rhzNXaPDwPi76bMiHqC7GzVvZUJGZ6mkgVHRH8YxTGfgfE6BbwsJ9f3Na3pwr"
         }
       },
       "expect": "accept"
@@ -152,25 +152,25 @@
       "receiver": {
         "did": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "expectedIssuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "document": {
         "type": "keyring/agent/revoked/1.0",
         "id": "urn:uuid:00000000-0000-4000-8000-000000000005",
         "issuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "recipient": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
-        "issuedAt": "2026-11-26T17:59:00Z",
+        "issuedAt": "2026-11-20T11:59:00Z",
         "payload": {
           "version": "1.0",
-          "revokedAt": "2026-11-26T17:58:00Z"
+          "revokedAt": "2026-11-20T11:58:00Z"
         },
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-26T17:59:00Z",
+          "created": "2026-11-20T11:59:00Z",
           "verificationMethod": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA#z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
           "proofPurpose": "assertionMethod",
-          "proofValue": "z3SZWiSB53rNcz98MkXSfWzb8RqBeaYW1csazSa26zKevqnSmxUGpGeoziZ6fYaFqE7JHvKdNtqxj9bNTPfumzyGS"
+          "proofValue": "z5EAmCs8fEHALXbuYnHEqxFXusfvpDiLmKzNvCaxpcHbMfDJhqJBpZyrhGJn66MWpAbUFbhhx8f2ZTuSr77D6AcsL"
         }
       },
       "expect": "accept"
@@ -180,14 +180,14 @@
       "receiver": {
         "did": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "expectedIssuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "document": {
         "type": "keyring/agent/vdc-grant/1.0",
         "id": "urn:uuid:00000000-0000-4000-8000-000000000006",
         "issuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "recipient": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
-        "issuedAt": "2026-11-26T17:59:00Z",
+        "issuedAt": "2026-11-20T11:59:00Z",
         "payload": {
           "version": "1.0",
           "vdc": {
@@ -197,10 +197,10 @@
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-26T17:59:00Z",
+          "created": "2026-11-20T11:59:00Z",
           "verificationMethod": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA#z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
           "proofPurpose": "assertionMethod",
-          "proofValue": "z4NuhmAj1vAs9nKhxv8mNwaCg9nnAwS1JSxY1mi5pBvHdvVhkSLd7piE1Nb815aaape6z1vsuP77uvfNhvPn4jK3e"
+          "proofValue": "z28BdLZu3yKHLFFzD8p5LD3WeTSNRFr3oafGZfAV7EfeJbws7GArwHbAiTnsqdgNx8FHRvjVK39L3Wi8CZrtrZwdR"
         }
       },
       "expect": "accept"
@@ -210,14 +210,14 @@
       "receiver": {
         "did": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "expectedIssuer": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "document": {
         "type": "keyring/agent/vdc-acceptance/1.0",
         "id": "urn:uuid:00000000-0000-4000-8000-000000000007",
         "issuer": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "recipient": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "issuedAt": "2026-11-26T17:59:00Z",
+        "issuedAt": "2026-11-20T11:59:00Z",
         "payload": {
           "version": "1.0",
           "vdc": {
@@ -227,10 +227,10 @@
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-26T17:59:00Z",
+          "created": "2026-11-20T11:59:00Z",
           "verificationMethod": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6#z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
           "proofPurpose": "assertionMethod",
-          "proofValue": "z2Ui6jyy4yWu4DGuHD9mRpyrsecVPr9pGVfau8mWcRCAWKMuMrn7s3JN4t3osmC4tZV8fxu5vGqWrAKUMCrHT4Gzm"
+          "proofValue": "z7Yr2mziEs2qZCtMQsV5w2cNYyfcigkhxaoPRwVoPQcfPysuHnt9CCJnWqp6echsDrCd8gFVYrDiUCT1cnXYzLgp"
         }
       },
       "expect": "accept"
@@ -240,25 +240,25 @@
       "receiver": {
         "did": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "expectedIssuer": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "document": {
         "type": "keyring/agent/heartbeat/1.0",
         "id": "urn:uuid:00000000-0000-4000-8000-000000000008",
         "issuer": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "recipient": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "issuedAt": "2026-11-26T17:59:00Z",
+        "issuedAt": "2026-11-20T11:59:00Z",
         "payload": {
           "version": "1.0",
-          "at": "2026-11-26T17:59:00Z"
+          "at": "2026-11-20T11:59:00Z"
         },
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-26T17:59:00Z",
+          "created": "2026-11-20T11:59:00Z",
           "verificationMethod": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6#z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
           "proofPurpose": "assertionMethod",
-          "proofValue": "z4L23X1rn5HME1Ygf4RAEesAqZB5xNyGXhH7ZVGuQw9psKEYL7vmzVncwVGQQxi1Sg6yQ6tBeSUwwuyhu7ybT5dGN"
+          "proofValue": "z5bvKj7JYV4V9eAdmrqzvsL3YE81F887kUgLTGnnEJGdRKfuvmHdUyrJjKtQNs8XwGNdvmdXVU1DX3ys6ojguxMLm"
         }
       },
       "expect": "accept"
@@ -270,7 +270,7 @@
       "receiver": {
         "did": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "expectedIssuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "seenIds": [],
       "lastApplied": {},
@@ -279,7 +279,7 @@
         "id": "urn:uuid:00000000-0000-4000-8000-000000000201",
         "issuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "recipient": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
-        "issuedAt": "2026-11-19T17:00:00Z",
+        "issuedAt": "2026-11-13T11:00:00Z",
         "payload": {
           "version": "1.0",
           "profile": "keyring.chat/1",
@@ -293,10 +293,10 @@
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-19T17:00:00Z",
+          "created": "2026-11-13T11:00:00Z",
           "verificationMethod": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA#z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
           "proofPurpose": "assertionMethod",
-          "proofValue": "zwdgNhvB1JZKQrAFwVewwMFwMtYpqX8z1ai81V2SU52KtpTz5ckoQaPw1Q35cVD7GBB552Rcp5ZbpKSZNycSqjHE"
+          "proofValue": "z4H78MyqTp4X25qZWF1LBaAKQPq6oeHKj5XWUSxEyyywZqYLjaRiYsPLQpopDg93rkkemULHVW2by6aZFvvMwvA4r"
         }
       },
       "expect": "refuse",
@@ -307,7 +307,7 @@
       "receiver": {
         "did": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "expectedIssuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "seenIds": [],
       "lastApplied": {},
@@ -316,7 +316,7 @@
         "id": "urn:uuid:00000000-0000-4000-8000-000000000202",
         "issuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "recipient": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
-        "issuedAt": "2026-11-26T18:10:00Z",
+        "issuedAt": "2026-11-20T12:10:00Z",
         "payload": {
           "version": "1.0",
           "profile": "keyring.chat/1",
@@ -330,10 +330,10 @@
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-26T18:10:00Z",
+          "created": "2026-11-20T12:10:00Z",
           "verificationMethod": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA#z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
           "proofPurpose": "assertionMethod",
-          "proofValue": "zySwoXD9MzSwozzYG6ZxNnHmaoHf5bupHYeBSbDyzCZZBX1SDjLAuaNZnF2T4n4yBCoTi8zH6RfsV4JavGCbmkfy"
+          "proofValue": "z2tpyTrootDQbdyHbDLaANnHmzWhfVXaJkBYm48CPrzSgiZHQhEPck31wsP6JD9AGCASWXEESqq2ucRxgnJvtjTN3"
         }
       },
       "expect": "refuse",
@@ -344,7 +344,7 @@
       "receiver": {
         "did": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "expectedIssuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "seenIds": [
         "urn:uuid:00000000-0000-4000-8000-000000000001"
@@ -355,7 +355,7 @@
         "id": "urn:uuid:00000000-0000-4000-8000-000000000001",
         "issuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "recipient": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
-        "issuedAt": "2026-11-26T17:59:00Z",
+        "issuedAt": "2026-11-20T11:59:00Z",
         "payload": {
           "version": "1.0",
           "profile": "keyring.chat/1",
@@ -369,10 +369,10 @@
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-26T17:59:00Z",
+          "created": "2026-11-20T11:59:00Z",
           "verificationMethod": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA#z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
           "proofPurpose": "assertionMethod",
-          "proofValue": "z292dFCsJSUEJPtuDsGUK2DJdNEkJLzHPGzCj2ZNjWXx4CDUPFVYb8uqPJgN56yd8qmmzrhLTKXjYbonhwcjyQ7cj"
+          "proofValue": "z3RqmxJuaAz8hpGPyKPEKd6kwmKAHWq7UsD5s7bkpW1u1XmsP3b3nof8tPCuXYkqogebD9tmHp5p11vcQa8d5UkbN"
         }
       },
       "expect": "refuse",
@@ -383,7 +383,7 @@
       "receiver": {
         "did": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "expectedIssuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "seenIds": [],
       "lastApplied": {},
@@ -392,7 +392,7 @@
         "id": "urn:uuid:00000000-0000-4000-8000-000000000203",
         "issuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "recipient": "did:key:z6MkiCYBdNEg4Mi2tLFFt2RXjDZbechGkR4UbYu1ZL7JqFYh",
-        "issuedAt": "2026-11-26T17:59:00Z",
+        "issuedAt": "2026-11-20T11:59:00Z",
         "payload": {
           "version": "1.0",
           "profile": "keyring.chat/1",
@@ -406,10 +406,10 @@
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-26T17:59:00Z",
+          "created": "2026-11-20T11:59:00Z",
           "verificationMethod": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA#z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
           "proofPurpose": "assertionMethod",
-          "proofValue": "z5hxEEKwcHrv6Q5c1SEDBwEzTCaJggHXRAnwTJKdxagoESVkesjhPpSmfLxdd6rALyp7xgBCsBAxxSsZTj2SPQMdw"
+          "proofValue": "z2BWx6ewjuAfSo7YDo2Sbpia8LwbrcPqsx6Wv585KvLNHuavec1s9BmSTWSBb4K223RDsyZjnRtx2J2N1aAxwSKYN"
         }
       },
       "expect": "refuse",
@@ -420,7 +420,7 @@
       "receiver": {
         "did": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "expectedIssuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "seenIds": [],
       "lastApplied": {},
@@ -429,7 +429,7 @@
         "id": "urn:uuid:00000000-0000-4000-8000-000000000001",
         "issuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "recipient": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
-        "issuedAt": "2026-11-26T17:59:00Z",
+        "issuedAt": "2026-11-20T11:59:00Z",
         "payload": {
           "version": "1.0",
           "profile": "keyring.chat/1",
@@ -443,10 +443,10 @@
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-26T17:59:00Z",
+          "created": "2026-11-20T11:59:00Z",
           "verificationMethod": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA#z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
           "proofPurpose": "assertionMethod",
-          "proofValue": "z292dFCsJSUEJPtuDsGUK2DJdNEkJLzHPGzCj2ZNjWXx4CDUPFVYb8uqPJgN56yd8qmmzrhLTKXjYbonhwcjyQ7cj"
+          "proofValue": "z3RqmxJuaAz8hpGPyKPEKd6kwmKAHWq7UsD5s7bkpW1u1XmsP3b3nof8tPCuXYkqogebD9tmHp5p11vcQa8d5UkbN"
         }
       },
       "expect": "refuse",
@@ -457,20 +457,20 @@
       "receiver": {
         "did": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
         "expectedIssuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
-        "now": "2026-11-26T18:00:00Z"
+        "now": "2026-11-20T12:00:00Z"
       },
       "seenIds": [
         "urn:uuid:00000000-0000-4000-8000-000000000101"
       ],
       "lastApplied": {
-        "keyring/agent/settings/1.0": "2026-11-26T17:59:00Z"
+        "keyring/agent/settings/1.0": "2026-11-20T11:59:00Z"
       },
       "document": {
         "type": "keyring/agent/settings/1.0",
         "id": "urn:uuid:00000000-0000-4000-8000-000000000102",
         "issuer": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
         "recipient": "did:key:z6MkmuVtF44v2X8h53qdjng8hRgRVsnFH4m14z5uwE4NuPe6",
-        "issuedAt": "2026-11-26T17:30:00Z",
+        "issuedAt": "2026-11-20T11:30:00Z",
         "payload": {
           "version": "1.0",
           "answersOthers": false,
@@ -480,10 +480,10 @@
         "proof": {
           "type": "DataIntegrityProof",
           "cryptosuite": "eddsa-jcs-2022",
-          "created": "2026-11-26T17:30:00Z",
+          "created": "2026-11-20T11:30:00Z",
           "verificationMethod": "did:key:z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA#z6MkmYfXi4nM8PKsWHzYSta1cwf4pXwXwFWjc8SpqEoRC8XA",
           "proofPurpose": "assertionMethod",
-          "proofValue": "zkb8nj6LNtUana2KbpQbms3gDZqwjDzNtcsX7dQZg4xFuepGHgH6debUfGbbKW5RT53bJd8vPujdoowjmwAQ4wLR"
+          "proofValue": "z5bogXpEmuX6vcEiPJYF9zeUTaSh9p18MCVfAWACa53jvYPj1hmPRtwzPp2iWqe52qZjKTnrpXP4FpzZmMFpQJdqY"
         }
       },
       "expect": "refuse",

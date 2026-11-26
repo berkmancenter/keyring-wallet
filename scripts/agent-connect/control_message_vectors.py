@@ -170,11 +170,14 @@ KEYS = {name: seed(name) for name in ("chatDid", "agentDid", "otherAgentDid")}
 DIDS = {name: did_key(secret_to_public(s)) for name, s in KEYS.items()}
 PUBS = {name: secret_to_public(s) for name, s in KEYS.items()}
 
-NOW = "2026-11-26T18:00:00Z"
-ISSUED = "2026-11-26T17:59:00Z"
-STALE = "2026-11-19T17:00:00Z"  # 7 days and 1 hour behind NOW
-AHEAD = "2026-11-26T18:10:00Z"  # 10 minutes ahead of NOW
-EARLIER = "2026-11-26T17:30:00Z"
+# The receiver's clock, pinned in the past: a verifier that also checks a proof's `created` against its own wall clock
+# (affinidi-data-integrity does, with a skew) must never see one of these as ahead of it, or a test over this file would
+# pass or fail by the hour it runs. Only the vectors' own `receiver.now` makes "ahead" and "stale" what they are.
+NOW = "2026-11-20T12:00:00Z"
+ISSUED = "2026-11-20T11:59:00Z"
+STALE = "2026-11-13T11:00:00Z"  # 7 days and 1 hour behind NOW
+AHEAD = "2026-11-20T12:10:00Z"  # 10 minutes ahead of NOW
+EARLIER = "2026-11-20T11:30:00Z"
 
 
 def signed(sender, recipient, type_, payload, doc_id, issued=ISSUED):
@@ -219,12 +222,12 @@ VALID = [
     ("room offer", TO_AGENT, "keyring/agent/room-offer/1.0",
      {"roomId": "did:webvh:QmRoom:rooms.example", "hostDid": "did:webvh:QmHost:community.example",
       "tier": "attributed", "handleToMention": "notes-helper-qvi7", "contexts": ["keyring-memory-abcde12345"]}),
-    ("revoked", TO_AGENT, "keyring/agent/revoked/1.0", {"revokedAt": "2026-11-26T17:58:00Z"}),
+    ("revoked", TO_AGENT, "keyring/agent/revoked/1.0", {"revokedAt": "2026-11-20T11:58:00Z"}),
     ("grant credential", TO_AGENT, "keyring/agent/vdc-grant/1.0",
      {"vdc": {"note": "the signed grant VC goes here; its own rules are vdc.ts's"}}),
     ("acceptance credential", TO_KEYRING, "keyring/agent/vdc-acceptance/1.0",
      {"vdc": {"note": "the acceptance VC signed by the agent's key goes here; its own rules are vdc.ts's"}}),
-    ("heartbeat", TO_KEYRING, "keyring/agent/heartbeat/1.0", {"at": "2026-11-26T17:59:00Z"}),
+    ("heartbeat", TO_KEYRING, "keyring/agent/heartbeat/1.0", {"at": "2026-11-20T11:59:00Z"}),
 ]
 
 
