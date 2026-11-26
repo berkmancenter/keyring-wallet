@@ -1,0 +1,91 @@
+{
+  "source": {
+    "repository": "OpenVTC/verifiable-trust-infrastructure",
+    "commit": "4e5861d95b799c0910e92a81bec6af17d1578e2d",
+    "version": "0.87.0",
+    "profile": "debug"
+  },
+  "personaDocument": {
+    "@context": [
+      "https://www.w3.org/ns/did/v1",
+      "https://www.w3.org/ns/cid/v1"
+    ],
+    "alsoKnownAs": [
+      "did:scid:vh:1:QmbfEswJYxdsMtLxSCSwrQJbcdz7Syjq7DP7SwWPpqQxTv?src=localhost%3A8161/personas/keyring-persona-hwhfnrnrt6"
+    ],
+    "assertionMethod": [
+      "did:webvh:QmbfEswJYxdsMtLxSCSwrQJbcdz7Syjq7DP7SwWPpqQxTv:localhost%3A8161:personas:keyring-persona-hwhfnrnrt6#key-0"
+    ],
+    "authentication": [
+      "did:webvh:QmbfEswJYxdsMtLxSCSwrQJbcdz7Syjq7DP7SwWPpqQxTv:localhost%3A8161:personas:keyring-persona-hwhfnrnrt6#key-0"
+    ],
+    "id": "did:webvh:QmbfEswJYxdsMtLxSCSwrQJbcdz7Syjq7DP7SwWPpqQxTv:localhost%3A8161:personas:keyring-persona-hwhfnrnrt6",
+    "keyAgreement": [
+      "did:webvh:QmbfEswJYxdsMtLxSCSwrQJbcdz7Syjq7DP7SwWPpqQxTv:localhost%3A8161:personas:keyring-persona-hwhfnrnrt6#key-1"
+    ],
+    "service": [
+      {
+        "id": "did:webvh:QmbfEswJYxdsMtLxSCSwrQJbcdz7Syjq7DP7SwWPpqQxTv:localhost%3A8161:personas:keyring-persona-hwhfnrnrt6#files",
+        "serviceEndpoint": "http://localhost:8161/personas/keyring-persona-hwhfnrnrt6",
+        "type": "relativeRef"
+      },
+      {
+        "@context": "https://identity.foundation/linked-vp/contexts/v1",
+        "id": "did:webvh:QmbfEswJYxdsMtLxSCSwrQJbcdz7Syjq7DP7SwWPpqQxTv:localhost%3A8161:personas:keyring-persona-hwhfnrnrt6#whois",
+        "serviceEndpoint": "http://localhost:8161/personas/keyring-persona-hwhfnrnrt6/whois.vp",
+        "type": "LinkedVerifiablePresentation"
+      }
+    ],
+    "verificationMethod": [
+      {
+        "controller": "did:webvh:QmbfEswJYxdsMtLxSCSwrQJbcdz7Syjq7DP7SwWPpqQxTv:localhost%3A8161:personas:keyring-persona-hwhfnrnrt6",
+        "id": "did:webvh:QmbfEswJYxdsMtLxSCSwrQJbcdz7Syjq7DP7SwWPpqQxTv:localhost%3A8161:personas:keyring-persona-hwhfnrnrt6#key-0",
+        "publicKeyMultibase": "z6Mkng7T7VwvAGNDdEyqa7o2nGXFCu9LWR6LNN8DKJAN7Ykc",
+        "type": "Multikey"
+      },
+      {
+        "controller": "did:webvh:QmbfEswJYxdsMtLxSCSwrQJbcdz7Syjq7DP7SwWPpqQxTv:localhost%3A8161:personas:keyring-persona-hwhfnrnrt6",
+        "id": "did:webvh:QmbfEswJYxdsMtLxSCSwrQJbcdz7Syjq7DP7SwWPpqQxTv:localhost%3A8161:personas:keyring-persona-hwhfnrnrt6#key-1",
+        "publicKeyMultibase": "z6LSbjhGJ2sbLcRmxbxc4auWQ8hE1e5pD4HvZfVqTP5sytYt",
+        "type": "Multikey"
+      }
+    ]
+  },
+  "credential": {
+    "@context": [
+      "https://www.w3.org/ns/credentials/v2",
+      "https://registry.trustoverip.org/dtg/context/v1"
+    ],
+    "credentialSubject": {
+      "delegation": {
+        "scope": [
+          "keyring.agent.chat",
+          "keyring.agent.memory"
+        ]
+      },
+      "id": "did:key:z6MkqfzA2yP1ZK5CqRwdaY2sfkB8jGzTZ9E2L7KUp9vPTgZb"
+    },
+    "id": "urn:uuid:cc42a52b-9f80-4480-856c-aaa19ce3ccac",
+    "issuer": "did:webvh:QmbfEswJYxdsMtLxSCSwrQJbcdz7Syjq7DP7SwWPpqQxTv:localhost%3A8161:personas:keyring-persona-hwhfnrnrt6",
+    "issuerScope": "directed",
+    "proof": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        "https://registry.trustoverip.org/dtg/context/v1"
+      ],
+      "created": "2026-11-26T07:04:23Z",
+      "cryptosuite": "eddsa-jcs-2022",
+      "proofPurpose": "assertionMethod",
+      "proofValue": "z2yQ8CoJe6kvgKXrT9z64B8Q5Cs7B1FEabra1eGu69GD9nTE5CeXLW9MqLQv1NhJYxnpqEUwsYsoUkzEg7gkECQ8G",
+      "type": "DataIntegrityProof",
+      "verificationMethod": "did:webvh:QmbfEswJYxdsMtLxSCSwrQJbcdz7Syjq7DP7SwWPpqQxTv:localhost%3A8161:personas:keyring-persona-hwhfnrnrt6#key-0"
+    },
+    "type": [
+      "VerifiableCredential",
+      "DTGCredential",
+      "DelegationCredential"
+    ],
+    "validFrom": "2026-11-26T07:04:23Z",
+    "validUntil": "2026-12-03T07:04:23Z"
+  }
+}

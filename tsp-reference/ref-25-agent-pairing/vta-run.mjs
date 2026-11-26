@@ -17,7 +17,9 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ed25519 } from "@noble/curves/ed25519.js";
+import canonicalize from "canonicalize";
 import { identityFromSeed, mintIdentity } from "./identity.mjs";
+import { keyOfMethod, listedUnder, secure, verify } from "./proof.mjs";
 import { call, signIn, trySignIn } from "./vta.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
@@ -96,7 +98,8 @@ async function swap(party) {
 }
 
 const cases = [];
-const add = (id, title, fn) => cases.push({ id, title, fn });
+/** `needs` names the task versions a case uses beyond the two every case needs (see the run, below). */
+const add = (id, title, fn, needs = []) => cases.push({ id, title, fn, needs });
 
 add("p1-administrator", "0.1(p) item 1: who the seeded administrator is", async () => {
   const who = await call(A, "auth/whoami/0.1");
@@ -333,24 +336,151 @@ add("p7-two-identities", "0.1(p) item 7: two identities, two memories, each reac
   };
 });
 
+/** A persona as Keyring makes one: a context, and a `did:webvh` the VTA mints and holds the keys of. */
+async function newPersona() {
+  const contextId = `keyring-persona-${uniq()}`;
+  const context = await call(A, "vta/contexts/create/1.0", { id: contextId, name: "Persona" });
+  if (!context.ok) throw new Error(`could not create the persona's context: ${code(context)}`);
+  // No `serverId`: nothing hosts the log, and the VTA reads the DID's document from the log it holds.
+  const created = await call(A, "vta/webvh/dids/create/1.2", { contextId, url: `${lab.baseUrl.replace("127.0.0.1", "localhost")}/personas/${contextId}`, setPrimary: true });
+  return { contextId, created, did: created.payload.did, document: created.payload.didDocument, signingKeyId: created.payload.signingKeyId, agreementKeyId: created.payload.kaKeyId };
+}
+
+const wireTime = (date = new Date()) => date.toISOString().replace(/\.\d{3}Z$/, "Z");
+const DTG_CONTEXT = ["https://www.w3.org/ns/credentials/v2", "https://registry.trustoverip.org/dtg/context/v1"];
+
+/** The grant of agent-connect-plan.md section 3.4, unsigned: the persona delegates to the agent for 7 days. */
+const delegationGrant = (personaDid, agentDid, from = new Date()) => ({
+  "@context": DTG_CONTEXT,
+  id: `urn:uuid:${crypto.randomUUID()}`,
+  type: ["VerifiableCredential", "DTGCredential", "DelegationCredential"],
+  issuer: personaDid,
+  issuerScope: "directed",
+  validFrom: wireTime(from),
+  validUntil: wireTime(new Date(from.getTime() + 7 * 86400e3)),
+  credentialSubject: { id: agentDid, delegation: { scope: ["keyring.agent.chat", "keyring.agent.memory"] } },
+});
+
+add(
+  "f-sign-as-persona",
+  "0.1(f): which VTA task signs a W3C credential as the persona, who may call it, and what the other candidate issues",
+  async () => {
+    const persona = await newPersona();
+    if (!persona.created.ok) return { createThePersona: code(persona.created) };
+    const other = await newPersona();
+    const agentKey = mintIdentity();
+    const grant = delegationGrant(persona.did, agentKey.did);
+    const sign = (session, payload) => call(session, "keys/sign-document/0.1", payload);
+    const signed = await sign(A, { keyId: persona.signingKeyId, document: grant });
+    const secured = signed.payload.document;
+    const method = signed.payload.proof?.verificationMethod;
+    const key = keyOfMethod(persona.document, method);
+    const { proof: _proof, ...returned } = secured ?? {};
+    if (record && signed.ok && !existsSync(sampleFile())) {
+      writeFileSync(sampleFile(), `${JSON.stringify({ source: lab.source, personaDocument: persona.document, credential: secured }, null, 2)}\n`);
+    }
+
+    // The agent's own entries: what section 3.3 grants it, the same with the persona's context added, and two
+    // that carry the signing capability itself. Each is asked to sign as the persona with the persona's key.
+    const memory = await newContext();
+    const asked = async (options) => {
+      const party = await newParty(options);
+      return code(await sign(party.session, { keyId: persona.signingKeyId, document: delegationGrant(persona.did, party.identity.did) }));
+    };
+
+    // The other candidate: the VTA issues a credential itself from claims.
+    const issued = await call(A, "vta/credentials/issue/0.2", { holder: agentKey.did, claims: { delegation: { scope: ["keyring.agent.chat"] } }, credentialType: "DelegationCredential", validitySeconds: 3600 });
+    const credential = issued.payload.credential ?? {};
+
+    // The acceptance is the agent's own: signed here with its key, never by a VTA.
+    const acceptance = secure(
+      { ...delegationGrant(agentKey.did, persona.did), credentialSubject: { id: persona.did, delegation: { accepts: "a digest" } } },
+      { verificationMethod: agentKey.authVm, edSecret: agentKey.edSecret, created: wireTime() },
+    );
+
+    return {
+      thePersona: {
+        create: code(persona.created),
+        method: persona.created.payload.didMethod,
+        hostedByNoServer: persona.created.payload.serverless === true,
+        signingKeyIsItsFirstMethod: persona.signingKeyId === `${persona.did}#key-0`,
+      },
+      signTheGrantAsThePersona: code(signed),
+      signerIsThePersona: signed.payload.signerDid === persona.did,
+      proof: signed.ok
+        ? {
+            cryptosuite: secured.proof.cryptosuite,
+            proofPurpose: secured.proof.proofPurpose,
+            methodIsThePersonasSigningKey: method === persona.signingKeyId,
+            listedUnderAssertionMethod: listedUnder(persona.document, "assertionMethod", method),
+            carriesTheDocumentsContext: JSON.stringify(secured.proof["@context"]) === JSON.stringify(DTG_CONTEXT),
+          }
+        : undefined,
+      everyMemberReturnedAsSent: canonicalize(returned) === canonicalize(grant),
+      verifiesWithTheKeyInThePersonasDocument: Boolean(key) && verify(secured, key),
+      // Controls: the same check must fail on a changed credential and with another persona's key.
+      verifiesAfterOneScopeIsAdded: Boolean(key) && verify({ ...secured, credentialSubject: { ...secured?.credentialSubject, delegation: { scope: ["keyring.agent.chat", "keyring.agent.memory", "more"] } } }, key),
+      verifiesWithAnotherPersonasKey: verify(secured, keyOfMethod(other.document, other.signingKeyId) ?? new Uint8Array(32)),
+      alsoSigns: {
+        issuerAsAnObjectWithAnId: code(await sign(A, { keyId: persona.signingKeyId, document: { ...grant, issuer: { id: persona.did } } })),
+        underAuthentication: code(await sign(A, { keyId: persona.signingKeyId, document: grant, proofPurpose: "authentication" })),
+      },
+      refuses: {
+        anotherPersonaAsIssuer: code(await sign(A, { keyId: persona.signingKeyId, document: { ...grant, issuer: other.did } })),
+        aDidKeyAsIssuer: code(await sign(A, { keyId: persona.signingKeyId, document: { ...grant, issuer: mintIdentity().did } })),
+        noIssuer: code(await sign(A, { keyId: persona.signingKeyId, document: (({ issuer: _issuer, ...rest }) => rest)(grant) })),
+        aDocumentThatHasAProof: code(await sign(A, { keyId: persona.signingKeyId, document: secured })),
+        thePersonasAgreementKey: code(await sign(A, { keyId: persona.agreementKeyId, document: grant })),
+        aKeyNobodyHolds: code(await sign(A, { keyId: `${persona.did}#key-9`, document: grant })),
+      },
+      theAgentAskedToSignAsThePersona: {
+        withItsMemoryEntry: await asked({ contexts: [memory] }),
+        withThePersonasContextAdded: await asked({ contexts: [persona.contextId, memory] }),
+        withTheSigningCapabilityListed: await asked({ contexts: [persona.contextId], capabilities: ["sign-document"] }),
+        withEveryCapabilityAnApplicationHas: await asked({ contexts: [persona.contextId], capabilities: "ceiling" }),
+      },
+      credentialsIssue: {
+        answer: code(issued),
+        issuerIsThePersona: credential.issuer === persona.did,
+        issuerIsTheVta: credential.issuer === lab.vtaDid,
+        type: credential.type,
+        context: credential["@context"],
+        hasIssuerScope: "issuerScope" in credential,
+      },
+      theAgentsAcceptance: { signedByItsOwnKey: verify(acceptance, agentKey.edPublic), verifiesWithThePersonasKey: Boolean(key) && verify(acceptance, key) },
+    };
+  },
+  ["keys/sign-document/0.1", "vta/webvh/dids/create/1.2", "vta/credentials/issue/0.2"],
+);
+
 // ───────────────────────────────────────────────────────────────── the run
 
 const needed = ["acl/grant/0.3", "vta/memory/put/0.3"];
-const missing = [];
-for (const path of needed) {
-  const family = path.slice(0, path.lastIndexOf("/"));
-  const probe = await call(A, `${family}/0.0`);
-  const served = (probe.payload?.details?.servedVersions ?? []).map((uri) => uri.split("/").pop());
-  if (!served.includes(path.split("/").pop())) missing.push(`${path} is not served (it serves ${served.join(", ") || "no version"})`);
+const asked = new Map();
+/** Why `path` cannot be used on this VTA, or `undefined` when it serves that version. Asked once per task. */
+async function notServed(path) {
+  if (!asked.has(path)) {
+    const family = path.slice(0, path.lastIndexOf("/"));
+    const probe = await call(A, `${family}/0.0`);
+    const served = (probe.payload?.details?.servedVersions ?? []).map((uri) => uri.split("/").pop());
+    asked.set(path, served.includes(path.split("/").pop()) ? undefined : `${path} is not served (it serves ${served.join(", ") || "no version"})`);
+  }
+  return asked.get(path);
 }
+const missingFor = async (paths) => (await Promise.all(paths.map(notServed))).filter(Boolean);
 
 const file = `${here}fixtures/vta-cases-${lab.source.version}.json`;
+/** One credential the VTA signed as a persona, kept so `proof.test.mjs` checks it with no VTA running. Written once. */
+function sampleFile() {
+  return `${here}fixtures/vta-signed-as-persona-${lab.source.version}.json`;
+}
 const recorded = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")).cases : {};
 console.log(`vta ${lab.source.version} at ${lab.source.commit.slice(0, 9)}, binary sha256 ${lab.binarySha256.slice(0, 16)}…`);
 const rows = [];
 for (const item of cases) {
   if (only && !only.includes(item.id)) continue;
   let observed;
+  const missing = await missingFor([...needed, ...item.needs]);
   if (missing.length) observed = { notRunnable: missing };
   else {
     try {
