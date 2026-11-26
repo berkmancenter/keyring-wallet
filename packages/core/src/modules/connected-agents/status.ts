@@ -14,7 +14,9 @@ export type Reachability = { reachable: boolean } | undefined
  * The status a record shows at `now`, or undefined for a pairing still in progress (it is not a row).
  *
  * An active temporary entry past its `expiresAt` is "Expired" even before Keyring has written that state, and that
- * wins over "Not connected right now": the owner's next step is a new pairing either way (#1060 finding 12).
+ * wins over "Not connected right now". That is the plan's own rule, not a ranking chosen here: §7 item 24 ("a temporary
+ * agent past its expiry is "Expired""), and §3.10's row "ACL entry expires | … The list says "Expired"". "Not connected
+ * right now" is about the session not running (§3.12), a separate condition, so where both hold the row says "Expired".
  */
 export function statusOf(record: AgentConnection, now: number, reach?: Reachability): AgentStatus | undefined {
   switch (record.state) {

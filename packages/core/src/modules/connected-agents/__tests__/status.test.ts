@@ -27,7 +27,7 @@ describe('statusOf: what a stored connection shows (§6)', () => {
     expect(statusOf(record, FIXTURE_NOW)).toBe('expired')
   })
 
-  it('Expired wins over Not connected right now', () => {
+  it('Expired wins over Not connected right now (§7 item 24, §3.10 "ACL entry expires")', () => {
     const record = agentRecord({ expiresAt: new Date(FIXTURE_NOW - HOUR).toISOString() })
     expect(statusOf(record, FIXTURE_NOW, { reachable: false })).toBe('expired')
   })
