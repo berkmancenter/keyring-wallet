@@ -26,6 +26,22 @@
  * such a row says only that it can't be read yet, and the log line repeats the versions named without saying which
  * was which.
  *
+ * Two limits of what is claimed, so a wrong row is not taken for a new bug:
+ *
+ * `servedVersions` is a hint, not the whole list (trust-tasks `taskVersions.ts`, its header). An agent builds it
+ * from its dispatch table, and some agents also answer OLDER versions the table does not list (vta-service v0.60.0
+ * to v0.66.0, for `device/*` and `vault/*`). That cannot turn the side round here. The version asked for was
+ * refused, so it is not served. An unlisted version is older than the listed ones it is rewritten to. So where
+ * every listed version is older than the one asked for, every served one is; and where every listed version is
+ * newer, updating the one that asked still gets it answered, whatever older version is also served.
+ *
+ * `unsupportedType` says only that the one asked serves no version of the task, which has two causes the refusal
+ * cannot tell apart: it never had the task (it is behind, which is what the row says, as the rooms listing reads a
+ * community that answers so), or it has dropped the task (it is ahead, and the row then names the wrong side).
+ * Likewise the member's own agent answering `unsupportedType` is named as the one behind, when it may be Keyring
+ * asking for a task the agent has yet to gain or has retired. There are no versions to compare, so this is a guess
+ * from the code and from who refused; it is right for a host or an agent older than rooms, the case seen.
+ *
  * @module rooms/readNotComing
  */
 import { refusalCode } from './real/wire'

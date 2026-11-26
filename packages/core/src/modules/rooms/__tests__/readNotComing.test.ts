@@ -73,6 +73,15 @@ describe('who needs the update, where the refusal says it in details that mean i
     expect(readNotComing(byAgent('0.9', ['0.10']))).toBe('appNeedsUpdate')
   })
 
+  test('the served list is a hint: an agent that also answers an older version it does not list is still the one behind', () => {
+    // vta-service v0.60.0 to v0.66.0: a refusal of device/list 0.3 names only 0.1, while 0.2 is answered too.
+    const hinted = refusal('unsupportedVersion', 'unsupported version', {
+      requestedType: `${SPEC}device/list/0.3`,
+      servedVersions: [`${SPEC}device/list/0.1`],
+    })
+    expect(readNotComing(hinted)).toBe('agentNeedsUpdate')
+  })
+
   test('a task the one asked does not serve at all: that one is behind', () => {
     expect(readNotComing(byHost('unsupportedType', 'unknown task'))).toBe('communityNeedsUpdate')
     expect(readNotComing(refusal('unsupportedType', 'unknown task'))).toBe('agentNeedsUpdate')
