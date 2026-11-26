@@ -4025,6 +4025,7 @@
     "ContainsOtherMemories": "Contém outras memórias",
     "MemoryNameTaken": "Você já tem uma memória com esse nome.",
     "MemoryCreateFailed": "Não foi possível criar a memória. Tente de novo.",
+    "MemoryChangeFailed": "Essa alteração não foi concluída, então nada mudou.",
     "MemoryHeldForApproval": "Seu VTA pede aprovação antes de criar uma memória, então esta não foi criada.",
     "ScanTitle": "Escaneie o código no seu terminal",
     "PasteLinkInstead": "Colar o link em vez disso",
