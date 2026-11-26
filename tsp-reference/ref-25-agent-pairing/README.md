@@ -130,8 +130,11 @@ holds it to that producer's own test vector.
 - **An agent that asks for nothing writes no `_scope`.** The member is never present with an empty value. A purpose
   with no capability is an ask and is written with empty letters (`~personalisation`).
 - **The link carries no duration for the grant.** `_exp` is the code's own deadline.
-- **This form carries purposes as short names of letters and digits, and cannot carry a purpose IRI.** `.` separates
-  the names and an IRI contains it, so `encodeScope` refuses a purpose that is not such a name; a test holds that.
+- **This form carries a purpose as a registered name, and cannot carry a purpose IRI.** The specification lets a
+  purpose in an ACL entry be either (`specs/acl/_shared/0.3/acl-entry.schema.json`, `$defs.Purpose`, at the pin
+  `2a66a0351`: a lowerCamelCase name of at most 64 characters, or an absolute IRI). So the link can ask for a
+  strict subset of what an entry can hold. `.` separates the names here and an IRI contains it, so `encodeScope`
+  refuses a purpose that is not a registered name by that schema's own pattern; a test holds that.
   Separately, two IRIs of about 60 characters each would pass the 251-byte limit whatever the separator (that part
   is arithmetic, not measured).
 - A `did:peer:2` cannot be the `_from` of a link at this limit.

@@ -44,8 +44,13 @@ export function oobLink({ linkHost = LINK_HOST, serviceDid, requestId, deadline,
  * room present, `o` room open) and the purposes as their names, separated by
  * `.`: `rw~assist.recall`. A link is not private, so nothing here is secret.
  */
-/** A purpose as the link can carry it: a short name of letters and digits. Never an IRI. */
-const PURPOSE_NAME = /^[A-Za-z0-9]+$/;
+/**
+ * A purpose as the link can carry it: a registered name, in the specification's own pattern for one (`$defs.Purpose`,
+ * first alternative, in `specs/acl/_shared/0.3/acl-entry.schema.json` of the Trust Tasks repository at the pin,
+ * 2a66a0351; the VTAs of the lab vendor the same two patterns). That schema's second alternative, an absolute IRI,
+ * is a purpose an ACL entry can hold and this link cannot carry.
+ */
+const PURPOSE_NAME = /^[a-z][a-zA-Z0-9]{0,63}$/;
 const CAPABILITY_LETTER = { "memory-read": "r", "memory-write": "w", "room-present": "p", "room-open": "o" };
 
 export function encodeScope({ capabilities = [], purposes = [] }) {

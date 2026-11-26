@@ -183,10 +183,13 @@ test("a purpose the form cannot carry is refused when the link is built, never w
   // `.` separates purposes, so an IRI would read back as several names that are not purposes.
   const iri = "https://registry.example/purpose/personalisation/1";
   assert.throws(() => encodeScope({ capabilities: ["memory-read"], purposes: [iri] }), /cannot carry/);
-  for (const name of ["a.b", "a~b", "a&b", "a=b", "a b", ""]) {
+  // The other refusals are the specification's pattern for a registered name (acl-entry.schema.json 0.3,
+  // `$defs.Purpose`): a lower-case first letter, letters and digits, 64 characters at most.
+  for (const name of ["a.b", "a~b", "a&b", "a=b", "a b", "", "Personalisation", "not-a-purpose", "9lives", "a".repeat(65)]) {
     assert.throws(() => encodeScope({ capabilities: [], purposes: [name] }), /cannot carry/, JSON.stringify(name));
   }
   // What the refusal prevents: split on the separator, the IRI is not one purpose.
   assert.notDeepEqual(decodeScope(`r~${iri}`).purposes, [iri]);
   assert.equal(encodeScope({ capabilities: [], purposes: ["taskExecution"] }), "~taskExecution");
+  assert.equal(encodeScope({ capabilities: [], purposes: ["a".repeat(64)] }), `~${"a".repeat(64)}`);
 });
