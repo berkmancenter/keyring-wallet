@@ -132,7 +132,7 @@ describe('vtaVdcSigner: the grant signed as the persona with keys/sign-document/
 
 describe('the vendored keys/sign-document schema still matches the registry', () => {
   // Left to the formatter (not in packages/.prettierignore), so compared as JSON. Runs where the registry clone is
-  // found; registryPath() looks one level too high since the fold, which is its own fix.
+  // found (registryPath); CI has none and skips.
   const maybe = registryPath() ? it : it.skip
 
   maybe('the same JSON as the commit PROVENANCE names', () => {
