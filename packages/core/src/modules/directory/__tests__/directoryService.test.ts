@@ -409,7 +409,7 @@ describe('another member’s card', () => {
 
   it('reads a room author’s card by DID, the whole card and not just the name', async () => {
     const { service, communityTask } = setup((type) =>
-      type === DIRECTORY_TASK.query ? { subject: 'did:key:ana', fields: FIELDS } : DEFS
+      type === DIRECTORY_TASK.query02 ? { subject: 'did:key:ana', fields: FIELDS } : DEFS
     )
     expect((await service.memberCardByDid(COMMUNITY, 'did:key:ana'))?.name).toBe('Ana Lopez')
     expect(communityTask.mock.calls[0][2]).toEqual({ subject: 'did:key:ana' })

@@ -286,7 +286,7 @@ describe("the badges row on another member's card", () => {
     expect(tree.queryByTestId(id(BadgesIds.memberRow))).toBeNull()
   })
 
-  test('a card opened by DID has no entry: no row, and no wall is asked for', async () => {
+  test('a card with no entry (by DID, from a community before query 0.2): no row, and no wall is asked for', async () => {
     const fake = inject(createFakeBadgeService({ wall }))
     const asked = jest.spyOn(fake, 'wall')
     const tree = row(undefined)
