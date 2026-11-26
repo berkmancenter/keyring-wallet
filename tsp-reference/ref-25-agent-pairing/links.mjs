@@ -44,6 +44,8 @@ export function oobLink({ linkHost = LINK_HOST, serviceDid, requestId, deadline,
  * room present, `o` room open) and the purposes as their names, separated by
  * `.`: `rw~assist.recall`. A link is not private, so nothing here is secret.
  */
+/** A purpose as the link can carry it: a short name of letters and digits. Never an IRI. */
+const PURPOSE_NAME = /^[A-Za-z0-9]+$/;
 const CAPABILITY_LETTER = { "memory-read": "r", "memory-write": "w", "room-present": "p", "room-open": "o" };
 
 export function encodeScope({ capabilities = [], purposes = [] }) {
@@ -52,6 +54,10 @@ export function encodeScope({ capabilities = [], purposes = [] }) {
     if (!letter) throw new Error(`unknown capability ${c}`);
     return letter;
   });
+  for (const purpose of purposes) {
+    // `.` separates the names and `~` the two halves, so a name holding either would read back as something else.
+    if (!PURPOSE_NAME.test(purpose)) throw new Error(`a purpose the link cannot carry: ${purpose}`);
+  }
   return purposes.length ? `${letters.join("")}~${purposes.join(".")}` : letters.join("");
 }
 

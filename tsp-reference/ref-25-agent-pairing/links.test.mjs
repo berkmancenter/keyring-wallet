@@ -174,7 +174,19 @@ test("the purposes the rung measures are the ones Keyring grants", () => {
     "utf8",
   );
   const line = source.match(/export const AGENT_PURPOSES = \[([^\]]*)\] as const/);
-  assert.ok(line, "pairing.ts no longer declares AGENT_PURPOSES on one line");
+  assert.ok(line, "pairing.ts no longer declares AGENT_PURPOSES as a bracketed `as const` list");
   const names = [...line[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(names, AGENT_PURPOSES);
+});
+
+test("a purpose the form cannot carry is refused when the link is built, never written wrongly", () => {
+  // `.` separates purposes, so an IRI would read back as several names that are not purposes.
+  const iri = "https://registry.example/purpose/personalisation/1";
+  assert.throws(() => encodeScope({ capabilities: ["memory-read"], purposes: [iri] }), /cannot carry/);
+  for (const name of ["a.b", "a~b", "a&b", "a=b", "a b", ""]) {
+    assert.throws(() => encodeScope({ capabilities: [], purposes: [name] }), /cannot carry/, JSON.stringify(name));
+  }
+  // What the refusal prevents: split on the separator, the IRI is not one purpose.
+  assert.notDeepEqual(decodeScope(`r~${iri}`).purposes, [iri]);
+  assert.equal(encodeScope({ capabilities: [], purposes: ["taskExecution"] }), "~taskExecution");
 });

@@ -41,7 +41,7 @@ node scripts/openvtc/setup-external.mjs                  # once, at the reposito
 
 cd tsp-reference/ref-25-agent-pairing
 npm install
-npm test                                # 80 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, and the recordings
+npm test                                # 81 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, and the recordings
 lab/mediator.sh up mailbox              # or: open, deny
 npm start                               # every case for that mode, against the recorded result
 lab/mediator.sh down
@@ -130,8 +130,10 @@ holds it to that producer's own test vector.
 - **An agent that asks for nothing writes no `_scope`.** The member is never present with an empty value. A purpose
   with no capability is an ask and is written with empty letters (`~personalisation`).
 - **The link carries no duration for the grant.** `_exp` is the code's own deadline.
-- **This form fits because the purposes are short names.** It cannot carry purpose IRIs: `.` separates the names
-  and an IRI contains it, and two IRIs of about 60 characters would pass the limit (arithmetic, not measured).
+- **This form carries purposes as short names of letters and digits, and cannot carry a purpose IRI.** `.` separates
+  the names and an IRI contains it, so `encodeScope` refuses a purpose that is not such a name; a test holds that.
+  Separately, two IRIs of about 60 characters each would pass the 251-byte limit whatever the separator (that part
+  is arithmetic, not measured).
 - A `did:peer:2` cannot be the `_from` of a link at this limit.
 
 ## The plan's tables are held to the recordings
