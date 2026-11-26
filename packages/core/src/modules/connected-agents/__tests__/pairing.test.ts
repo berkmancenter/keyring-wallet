@@ -512,6 +512,17 @@ describe('a grant that reports contexts the owner did not choose', () => {
     })
   })
 
+  it('an empty list of granted contexts is refused too, here and not later at step 10', async () => {
+    const t = setup()
+    await toApproval(t)
+    t.transport.grantAnswer = { ok: true, subject: K_T, grantedContexts: [] }
+    expect(await t.machine.approve()).toEqual({
+      phase: 'failed',
+      reason: 'grant-refused',
+      cleanup: { vtaDid: VTA, subject: K_T },
+    })
+  })
+
   it('control: a subset of the choice is taken', async () => {
     const t = setup()
     await toApproval(t)

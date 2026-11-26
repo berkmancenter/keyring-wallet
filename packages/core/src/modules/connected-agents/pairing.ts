@@ -502,8 +502,12 @@ export class PairingMachine {
       if (granted.refused === 'unreachable') return this.fail('vta-unreachable')
       return this.fail('grant-refused')
     }
-    // What the grant wrote must be some of what the owner chose: nothing the VTA answers widens the entry past Approve.
-    if (granted.grantedContexts && !granted.grantedContexts.every((c) => scope.contexts.includes(c))) {
+    // What the grant wrote must be some of what the owner chose, and not nothing: nothing the VTA answers widens the
+    // entry past Approve, and an empty list would pass `every` vacuously.
+    if (
+      granted.grantedContexts &&
+      (granted.grantedContexts.length === 0 || !granted.grantedContexts.every((c) => scope.contexts.includes(c)))
+    ) {
       const subject = granted.subject ?? s.subject
       return this.fail('grant-refused', subject ? { cleanup: { vtaDid: s.vtaDid, subject } } : {})
     }
