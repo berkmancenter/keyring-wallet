@@ -33,8 +33,7 @@ export const PROPOSED_COPY: Readonly<Record<string, string>> = {
   MemoryCountWarning: 'P-c',
   MemoryCountFailed: 'P-c',
   PendingMemory: 'seam gap: finding 7 of #1048, a memory not reached yet',
-  NumberDigitEmpty: 'accessibility: §6 says each digit is announced, not in which words',
-  NumberDigitFilled: 'accessibility: as above',
+  NumberDigitFilled: 'accessibility: §6 says each digit is announced as it is typed, not in which words',
 }
 
 /**
