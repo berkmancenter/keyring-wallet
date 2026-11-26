@@ -15,6 +15,11 @@
 #
 # Then commit DIST.json in a PR. The conformance job refuses a binary whose
 # sha256, VTI pin or source digest (digest.mjs) does not match.
+# The builds are not bit-reproducible: build paths leak into the binary, so an
+# unchanged checker rebuilt in another checkout gets a new sha256 under the same
+# source digest and pin. The source digest identifies the source, not the binary;
+# nothing ties a published binary to its source but whoever ran this script
+# (README, "What this does and does not prove").
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -91,7 +96,7 @@ done
 
 {
   echo "{"
-  echo "  \"note\": \"Prebuilt checkers for bifold's VTI conformance job. Written by build.sh; do not edit by hand. Rebuild after a VTI pin bump or a change to either checker's sources.\","
+  echo "  \"note\": \"Prebuilt checkers for bifold's VTI conformance job. Written by build.sh; do not edit by hand. Rebuild after a VTI pin bump or a change to either checker's sources. Not bit-reproducible: sourceDigest identifies the source, not the binary.\","
   echo "  \"release\": \"$tag\","
   echo "  \"builtAt\": \"$(date -u +%FT%TZ)\","
   echo "  \"rustc\": \"$(rustc --version)\","
