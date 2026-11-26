@@ -380,6 +380,14 @@ export interface SealedRecord {
   epoch: number
 }
 
+/**
+ * The agent's sealed form of a record, as a put sends it: ciphertext, nonce and epoch, and no `version`. With no
+ * `version` stored, a reader's agent since vta-service 0.75.0 (VTI #2452) opens the record at its own version and then
+ * at each earlier one (`rooms/keys/read`, `Search::Earlier`), so a post a version race stored past the version it was
+ * sealed for still opens there (agentRoomsService `HEAD_FRESH_MS`). A put that sent `version` would have to send the
+ * version the body was sealed for, never the record's own: the agent then opens it at exactly that one. Read at
+ * source (VTI 0.75.0 through main, `rooms/_shared` `SealedRecord.version`), not measured on a phone.
+ */
 export function parseSealed(payload: unknown): SealedRecord | undefined {
   const s = obj(obj(payload)?.sealed)
   const ciphertext = str(s?.ciphertext)
