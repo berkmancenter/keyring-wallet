@@ -1,23 +1,25 @@
 /**
- * Step 7.10's screens and words (docs/plans/agent-connect-plan.md §6, §3.9): the Revoke sheet says "up to 4 hours"
- * and never that it is instant, and its "Revoke" runs `revokeAgentConnection`; the Revoke incomplete and Revoke not
- * confirmed lines with "Try again"; and no locale file says "instant".
+ * Step 7.10's sheet and words (docs/plans/agent-connect-plan.md §6, §3.9; canvas frame 19): the Revoke sheet as a view
+ * whose "Revoke" calls `onRevoke` and shows what it came to; the Revoke incomplete and Revoke not confirmed lines with
+ * "Try again"; the "up to 4 hours" body; and no locale file says "instant".
+ *
+ * The test translation answers the key, not the English (`__mocks__/react-i18next.ts`), so the screens are checked by
+ * key and testID, as the module's other suites do; the English of the five keys is checked once against the locale
+ * file.
  */
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import { readdirSync, readFileSync } from 'fs'
 import path from 'path'
 import React from 'react'
+import { StyleSheet } from 'react-native'
 
-import type {
-  RevokableConnection,
-  RevokeConnectionStore,
-  RevokeDeps,
-  RevokeVta,
-} from '../../src/modules/connected-agents/revoke'
-import RevokeAgentSheet from '../../src/screens/RevokeAgentSheet'
-import RevokeOutcomeNotice from '../../src/screens/RevokeOutcomeNotice'
-import { testIdWithKey } from '../../src/utils/testable'
-import { BasicAppContext } from '../helpers/app'
+import { BasicAppContext } from '../../../../__tests__/helpers/app'
+import en from '../../../localization/en/en.json'
+import { testIdWithKey } from '../../../utils/testable'
+import RevokeOutcomeNotice, { RevokeViewOutcome } from '../components/RevokeOutcomeNotice'
+import { AGENT_COLORS } from '../components/agentStyle'
+import { RevokableConnection, RevokeConnectionStore, RevokeDeps, RevokeVta, revokeAgentConnection } from '../revoke'
+import RevokeAgentSheet from '../screens/RevokeAgentSheet'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 jest.mock('react-native-keychain', () => ({ ACCESS_CONTROL: {}, ACCESSIBLE: {}, STORAGE_TYPE: {} }))
@@ -25,136 +27,178 @@ jest.mock('react-native-keychain', () => ({ ACCESS_CONTROL: {}, ACCESSIBLE: {}, 
 const id = (key: string) => testIdWithKey(key)
 const show = (node: React.ReactElement) => render(<BasicAppContext>{node}</BasicAppContext>)
 
-const AGENT = { id: 'did:key:z6MkAgent', name: 'Notes helper' }
-
-/** An in-memory store with one active record, and a VTA whose listing is set per test. */
-function fakes() {
-  const records = new Map<string, RevokableConnection>([
-    [
-      AGENT.id,
-      { id: AGENT.id, name: AGENT.name, agentDid: AGENT.id, deviceId: 'dev-1', state: 'active', keyChanged: false },
-    ],
-  ])
-  const store: RevokeConnectionStore = {
-    list: async () => [...records.values()].map((r) => ({ ...r })),
-    get: async (key) => (records.has(key) ? { ...(records.get(key) as RevokableConnection) } : undefined),
-    put: async (record) => {
-      records.set(record.id, { ...record })
-    },
-    remove: async (key) => {
-      records.delete(key)
-    },
-  }
-  const findAgentEntries = jest.fn<ReturnType<RevokeVta['findAgentEntries']>, []>(async () => ({
-    complete: true,
-    matches: [],
-  }))
-  const revokeSubject = jest.fn(async () => undefined)
-  const vta = { findAgentEntries, revokeSubject } as unknown as RevokeVta
-  const deps: RevokeDeps = { store, vta, now: () => Date.parse('2026-11-26T12:00:00Z') }
-  return { records, deps, findAgentEntries, revokeSubject }
-}
+const NAME = 'Notes helper'
+const answers = (o: RevokeViewOutcome) => jest.fn(async () => o)
 
 describe('RevokeAgentSheet', () => {
   it('names the agent and, with rooms, the 4-hour tail', () => {
-    const view = show(<RevokeAgentSheet agent={AGENT} inRooms deps={fakes().deps} onKeep={jest.fn()} />)
-    expect(view.getByText('Revoke "Notes helper"?')).toBeTruthy()
-    const body = view.getByTestId(id('RevokeAgentBody'))
-    expect(body).toHaveTextContent(
-      'It loses access to your memory and rooms. A room permission it already holds can work for up to 4 hours. Past messages stay.'
-    )
-    expect(body).toHaveTextContent(/up to 4 hours/)
+    const view = show(<RevokeAgentSheet name={NAME} hasRooms onRevoke={answers({ kind: 'revoked' })} onKeep={jest.fn()} />)
+    expect(view.getByText('ConnectedAgents.RevokeTitle')).toBeTruthy()
+    expect(view.getByTestId(id('RevokeAgentBody'))).toHaveTextContent('ConnectedAgents.RevokeBody', { exact: true })
   })
 
   it("without rooms (P0) shows §6's no-room form", () => {
-    const view = show(<RevokeAgentSheet agent={AGENT} inRooms={false} deps={fakes().deps} onKeep={jest.fn()} />)
-    expect(view.getByTestId(id('RevokeAgentBody'))).toHaveTextContent(
-      'It loses access to your memory. Past messages stay.'
+    const view = show(
+      <RevokeAgentSheet name={NAME} hasRooms={false} onRevoke={answers({ kind: 'revoked' })} onKeep={jest.fn()} />
     )
+    expect(view.getByTestId(id('RevokeAgentBody'))).toHaveTextContent('ConnectedAgents.RevokeBodyNoRooms', {
+      exact: true,
+    })
   })
 
-  it('"Keep" closes and sends nothing', () => {
-    const f = fakes()
+  it('the P0 sheet has no "Also delete what it remembered" row (P2, step 7.18): only Revoke and Keep', () => {
+    const view = show(
+      <RevokeAgentSheet name={NAME} hasRooms={false} onRevoke={answers({ kind: 'revoked' })} onKeep={jest.fn()} />
+    )
+    expect(view.queryByRole('checkbox')).toBeNull()
+    expect(view.queryByText(/delete|remember/i)).toBeNull()
+    expect(view.getAllByRole('button').map((b) => b.props.testID)).toEqual([
+      id('RevokeAgentConfirm'),
+      id('RevokeAgentKeep'),
+    ])
+  })
+
+  it('looks like canvas frame 19: Revoke filled in the danger red, Keep outlined in purple', () => {
+    const view = show(<RevokeAgentSheet name={NAME} hasRooms onRevoke={answers({ kind: 'revoked' })} onKeep={jest.fn()} />)
+    const revoke = StyleSheet.flatten(view.getByTestId(id('RevokeAgentConfirm')).props.style)
+    const keep = StyleSheet.flatten(view.getByTestId(id('RevokeAgentKeep')).props.style)
+    expect(revoke).toMatchObject({ backgroundColor: AGENT_COLORS.danger })
+    expect(revoke.borderWidth ?? 0).toBe(0)
+    expect(keep).toMatchObject({ backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: AGENT_COLORS.primary })
+  })
+
+  it('"Keep" closes and runs nothing', () => {
+    const onRevoke = answers({ kind: 'revoked' })
     const onKeep = jest.fn()
-    const view = show(<RevokeAgentSheet agent={AGENT} inRooms deps={f.deps} onKeep={onKeep} />)
+    const view = show(<RevokeAgentSheet name={NAME} hasRooms onRevoke={onRevoke} onKeep={onKeep} />)
     fireEvent.press(view.getByTestId(id('RevokeAgentKeep')))
     expect(onKeep).toHaveBeenCalledTimes(1)
-    expect(f.findAgentEntries).not.toHaveBeenCalled()
-    expect(f.records.get(AGENT.id)?.state).toBe('active')
+    expect(onRevoke).not.toHaveBeenCalled()
   })
 
-  it('"Revoke" runs revokeAgentConnection: revoked once a full listing shows no entry', async () => {
-    const f = fakes()
-    const onOutcome = jest.fn()
-    const view = show(<RevokeAgentSheet agent={AGENT} inRooms deps={f.deps} onKeep={jest.fn()} onOutcome={onOutcome} />)
+  it('"Revoke" calls onRevoke once; revoked shows no notice', async () => {
+    const onRevoke = answers({ kind: 'revoked' })
+    const view = show(<RevokeAgentSheet name={NAME} hasRooms onRevoke={onRevoke} onKeep={jest.fn()} />)
     await act(async () => {
       fireEvent.press(view.getByTestId(id('RevokeAgentConfirm')))
     })
-    await waitFor(() => expect(onOutcome).toHaveBeenCalledWith({ kind: 'revoked' }))
-    expect(f.findAgentEntries).toHaveBeenCalledWith({ deviceId: 'dev-1', subject: AGENT.id })
-    expect(f.records.get(AGENT.id)?.state).toBe('revoked')
+    expect(onRevoke).toHaveBeenCalledTimes(1)
     expect(view.queryByTestId(id('RevokeOutcomeNotice'))).toBeNull()
   })
 
-  it('Revoke incomplete: "still connected", and "Try again" runs it again', async () => {
-    const f = fakes()
-    f.findAgentEntries.mockRejectedValueOnce(new Error('the VTA did not answer'))
-    const onOutcome = jest.fn()
-    const view = show(<RevokeAgentSheet agent={AGENT} inRooms deps={f.deps} onKeep={jest.fn()} onOutcome={onOutcome} />)
+  it('Revoke incomplete: the unreachable line, and "Try again" runs it again', async () => {
+    const onRevoke = jest
+      .fn<Promise<RevokeViewOutcome>, []>()
+      .mockResolvedValueOnce({ kind: 'unreachable' })
+      .mockResolvedValueOnce({ kind: 'revoked' })
+    const view = show(<RevokeAgentSheet name={NAME} hasRooms onRevoke={onRevoke} onKeep={jest.fn()} />)
     await act(async () => {
       fireEvent.press(view.getByTestId(id('RevokeAgentConfirm')))
     })
-    await waitFor(() =>
-      expect(view.getByText('We couldn\'t reach your VTA, so "Notes helper" is still connected.')).toBeTruthy()
-    )
-    expect(f.records.get(AGENT.id)?.state).toBe('revoking')
+    await waitFor(() => expect(view.getByText('ConnectedAgents.RevokeUnreachable')).toBeTruthy())
+    expect(view.getByText('ConnectedAgents.StatusRevokeNotConfirmed')).toBeTruthy()
     await act(async () => {
       fireEvent.press(view.getByTestId(id('RevokeTryAgain')))
     })
-    await waitFor(() => expect(onOutcome).toHaveBeenLastCalledWith({ kind: 'revoked' }))
-    expect(f.records.get(AGENT.id)?.state).toBe('revoked')
+    expect(onRevoke).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(view.queryByTestId(id('RevokeOutcomeNotice'))).toBeNull())
   })
 
-  it('Revoke not confirmed: a partial listing is not proof', async () => {
-    const f = fakes()
-    f.findAgentEntries.mockResolvedValue({ complete: false, matches: [] })
-    const view = show(<RevokeAgentSheet agent={AGENT} inRooms deps={f.deps} onKeep={jest.fn()} />)
+  it('Revoke not confirmed: "may still have access", with "Try again"', async () => {
+    const view = show(
+      <RevokeAgentSheet name={NAME} hasRooms onRevoke={answers({ kind: 'notConfirmed' })} onKeep={jest.fn()} />
+    )
     await act(async () => {
       fireEvent.press(view.getByTestId(id('RevokeAgentConfirm')))
     })
-    await waitFor(() =>
-      expect(view.getByText('"Notes helper" may still have access. Keyring will check again.')).toBeTruthy()
+    await waitFor(() => expect(view.getByText('ConnectedAgents.RevokeNotConfirmedBody')).toBeTruthy())
+    expect(view.getByText('ConnectedAgents.StatusRevokeNotConfirmed')).toBeTruthy()
+    expect(view.queryByText('ConnectedAgents.RevokeUnreachable')).toBeNull()
+    expect(view.getByTestId(id('RevokeTryAgain'))).toBeTruthy()
+  })
+
+  it('a revoke that throws (no record, or a state with no revoke) leaves the sheet as it was', async () => {
+    const onRevoke = jest.fn(async (): Promise<RevokeViewOutcome> => {
+      throw new Error('cannot be revoked')
+    })
+    const view = show(<RevokeAgentSheet name={NAME} hasRooms onRevoke={onRevoke} onKeep={jest.fn()} />)
+    await act(async () => {
+      fireEvent.press(view.getByTestId(id('RevokeAgentConfirm')))
+    })
+    expect(onRevoke).toHaveBeenCalledTimes(1)
+    expect(view.queryByTestId(id('RevokeOutcomeNotice'))).toBeNull()
+    expect(view.getByTestId(id('RevokeAgentConfirm')).props.accessibilityState).toMatchObject({ disabled: false })
+  })
+
+  it("takes revokeAgentConnection's outcome as it is (what the wiring PR will pass)", async () => {
+    // The view does not import revoke.ts; this checks the two fit, over an in-memory store and a fake VTA.
+    const records = new Map<string, RevokableConnection>([
+      ['a', { id: 'a', name: NAME, agentDid: 'a', deviceId: 'dev-1', state: 'active', keyChanged: false }],
+    ])
+    const store: RevokeConnectionStore = {
+      list: async () => [...records.values()].map((r) => ({ ...r })),
+      get: async (key) => (records.has(key) ? { ...(records.get(key) as RevokableConnection) } : undefined),
+      put: async (record) => {
+        records.set(record.id, { ...record })
+      },
+      remove: async (key) => {
+        records.delete(key)
+      },
+    }
+    const findAgentEntries = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('the VTA did not answer'))
+      .mockResolvedValue({ complete: true, matches: [] })
+    const deps: RevokeDeps = { store, vta: { findAgentEntries, revokeSubject: jest.fn() } as unknown as RevokeVta }
+    const view = show(
+      <RevokeAgentSheet name={NAME} hasRooms onRevoke={() => revokeAgentConnection(deps, 'a')} onKeep={jest.fn()} />
     )
-    expect(view.getByText('Revoke not confirmed')).toBeTruthy()
-    expect(f.records.get(AGENT.id)?.state).toBe('revoking')
+    await act(async () => {
+      fireEvent.press(view.getByTestId(id('RevokeAgentConfirm')))
+    })
+    await waitFor(() => expect(view.getByText('ConnectedAgents.RevokeUnreachable')).toBeTruthy())
+    expect(records.get('a')?.state).toBe('revoking')
+    await act(async () => {
+      fireEvent.press(view.getByTestId(id('RevokeTryAgain')))
+    })
+    await waitFor(() => expect(records.get('a')?.state).toBe('revoked'))
+    expect(view.queryByTestId(id('RevokeOutcomeNotice'))).toBeNull()
   })
 })
 
 describe('RevokeOutcomeNotice', () => {
   it('not confirmed: the status, "may still have access" and Try again', () => {
     const onTryAgain = jest.fn()
-    const view = show(
-      <RevokeOutcomeNotice
-        name="Notes helper"
-        outcome={{ kind: 'notConfirmed', reason: 'partialListing' }}
-        onTryAgain={onTryAgain}
-      />
-    )
-    expect(view.getByText('Revoke not confirmed')).toBeTruthy()
-    expect(view.getByText('"Notes helper" may still have access. Keyring will check again.')).toBeTruthy()
+    const view = show(<RevokeOutcomeNotice name={NAME} outcome={{ kind: 'notConfirmed' }} onTryAgain={onTryAgain} />)
+    expect(view.getByText('ConnectedAgents.StatusRevokeNotConfirmed')).toBeTruthy()
+    expect(view.getByText('ConnectedAgents.RevokeNotConfirmedBody')).toBeTruthy()
     fireEvent.press(view.getByTestId(id('RevokeTryAgain')))
     expect(onTryAgain).toHaveBeenCalledTimes(1)
   })
 
-  it('unreachable: "still connected"', () => {
-    const view = show(<RevokeOutcomeNotice name="Notes helper" outcome={{ kind: 'unreachable' }} />)
-    expect(view.getByText('We couldn\'t reach your VTA, so "Notes helper" is still connected.')).toBeTruthy()
+  it('unreachable: "still connected", and no Try again without a handler', () => {
+    const view = show(<RevokeOutcomeNotice name={NAME} outcome={{ kind: 'unreachable' }} />)
+    expect(view.getByText('ConnectedAgents.RevokeUnreachable')).toBeTruthy()
     expect(view.queryByTestId(id('RevokeTryAgain'))).toBeNull()
   })
 
   it('revoked: nothing', () => {
-    const view = show(<RevokeOutcomeNotice name="Notes helper" outcome={{ kind: 'revoked' }} />)
+    const view = show(<RevokeOutcomeNotice name={NAME} outcome={{ kind: 'revoked' }} />)
     expect(view.queryByTestId(id('RevokeOutcomeNotice'))).toBeNull()
+  })
+})
+
+describe("the five keys' English (§6)", () => {
+  const words = (en as unknown as { ConnectedAgents: Record<string, string> }).ConnectedAgents
+
+  it('says "up to 4 hours" with rooms, the no-room form without, and the two not-confirmed lines', () => {
+    expect(words.RevokeTitle).toBe('Revoke "{{name}}"?')
+    expect(words.RevokeBody).toBe(
+      'It loses access to your memory and rooms. A room permission it already holds can work for up to 4 hours. Past messages stay.'
+    )
+    expect(words.RevokeBodyNoRooms).toBe('It loses access to your memory. Past messages stay.')
+    expect(words.RevokeUnreachable).toBe('We couldn\'t reach your VTA, so "{{name}}" is still connected.')
+    expect(words.RevokeNotConfirmedBody).toBe('"{{name}}" may still have access. Keyring will check again.')
   })
 })
 
@@ -168,7 +212,7 @@ describe('no locale file says "instant" (§6, step 7.10)', () => {
     'fr/fr.json': /\binstantan/i,
     'pt-br/pt-br.json': /\binstant[aâ]ne/i,
   }
-  const dir = path.resolve(__dirname, '../../src/localization')
+  const dir = path.resolve(__dirname, '../../../localization')
   const files = readdirSync(dir, { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .flatMap((d) => readdirSync(path.join(dir, d.name)).map((f) => path.join(dir, d.name, f)))
