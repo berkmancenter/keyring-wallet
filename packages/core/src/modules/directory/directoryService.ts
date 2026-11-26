@@ -134,13 +134,20 @@ export class AgentDirectoryService implements DirectoryService {
       type = first === DIRECTORY_TASK.query02 ? DIRECTORY_TASK.query : DIRECTORY_TASK.query02
       answer = await this.queryCard(communityDid, type, payload)
     }
+    // Kept for the run: a community that upgrades to 0.2 while the app runs is asked 0.1, which it still serves, until
+    // the next start, and its authors' cards show no badges till then.
     this.queryVersion.set(communityDid, type)
     const card = await this.cardOf(communityDid, queryFields(answer, memberDid))
     const entryId = type === DIRECTORY_TASK.query02 ? queryEntryId(answer, memberDid) : undefined
     return card && entryId ? { ...card, entryId } : card
   }
 
-  /** A `query` answer at `type`; undefined for "no such member" and "not shown to you", one answer by design. */
+  /**
+   * A `query` answer at `type`; undefined for "no such member" and "not shown to you", one answer by design.
+   *
+   * `notFound` is an answer, never a reason to step down a version: at 0.2 it can mean the member is withheld from
+   * this caller, and asking 0.1 then would ask an older version for what the newer one refused.
+   */
   private async queryCard(communityDid: string, type: string, payload: Record<string, unknown>): Promise<unknown> {
     try {
       return await this.ask('showMember', communityDid, type, payload)
