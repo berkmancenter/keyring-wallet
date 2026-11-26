@@ -52,7 +52,7 @@ export class AgentConnectionStore {
   /**
    * Read, change and write one record as a single step, so two writers cannot lose each other's change (the driver's
    * VDC grant and step 7.10's reconcile both write records at app start). Undefined when there is no record. A change
-   * that returns the record it was given writes nothing.
+   * that returns the very record it was given writes nothing (compared by reference, as in `upsert`).
    */
   public update(
     id: string,
@@ -65,6 +65,10 @@ export class AgentConnectionStore {
    * As `update`, and also when there is no record: `decide` sees the record as it is under the lock (or undefined) and
    * returns what to write. Returning the record it was given, or undefined, writes nothing. Resolves to the record as
    * it stands afterwards.
+   *
+   * The comparison is by reference, not by value: a callback that returns a copy (`{ ...current }`) with nothing
+   * changed still writes. A caller whose change may be empty (7.10's reconcile when the key has not moved) returns
+   * `current` itself to write nothing, and a caller comparing outcomes compares against the object it returned.
    */
   public upsert(
     id: string,
