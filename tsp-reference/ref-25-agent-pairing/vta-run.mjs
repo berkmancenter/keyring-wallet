@@ -20,6 +20,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import canonicalize from "canonicalize";
 import { identityFromSeed, mintIdentity } from "./identity.mjs";
 import { keyOfMethod, listedUnder, secure, verify } from "./proof.mjs";
+import { recorder } from "./record.mjs";
 import { call, signIn, trySignIn } from "./vta.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
@@ -327,6 +328,64 @@ add("p7-two-identities", "0.1(p) item 7: two identities, two memories, each reac
   return {
     first: { own: code(await put(first.session, one)), theOthers: code(await get(first.session, two)) },
     second: { own: code(await put(second.session, two)), theOthers: code(await get(second.session, one)) },
+  };
+});
+
+add("pairing-readback", "step 7.5, the fallback: the entry Keyring grants a throwaway key, as Keyring reads it back after the agent registers and swaps its key; and a widening", async () => {
+  const [first, second] = [await newContext("Work notes"), await newContext("Travel")];
+  const expiresAt = inFourHours();
+  const options = { purposes: ["personalisation", "taskExecution"], expiresAt, label: "notes-helper" };
+
+  // Keyring grants the throwaway key both memories. The agent signs in with it, registers, and moves to its own key.
+  const throwaway = mintIdentity();
+  const sent = entryFor(throwaway.did, { ...options, contexts: [first, second] });
+  const granted = await call(A, "acl/grant/0.3", { entry: sent });
+  if (!granted.ok) return { grant: code(granted) };
+  const asThrowaway = { identity: throwaway, session: await signIn({ ...at, identity: throwaway }) };
+  const registered = await registerAgent(asThrowaway.session);
+  const deviceId = registered.payload.binding?.deviceId;
+  const swapped = await swap(asThrowaway);
+  const agentKey = swapped.party?.identity.did;
+
+  // Keyring reads back: the device by its id, then the entry under the key the device names, two ways.
+  const device = deviceId ? await deviceOf(deviceId) : undefined;
+  const entry = device ? await entryOf(device.consumerDid) : undefined;
+  const shown = device ? await call(A, "acl/show/0.3", { subject: device.consumerDid }) : undefined;
+  const read = recorder({ "first memory": first, "second memory": second, "the throwaway key": throwaway.did, "the agent's key": agentKey, "the administrator": admin.did, "the expiry sent": expiresAt, "the device": deviceId });
+
+  // The widening: an entry with one memory, widened to two from the entry as read back, and the same update again.
+  const narrow = mintIdentity();
+  const one = await call(A, "acl/grant/0.3", { entry: entryFor(narrow.did, { ...options, contexts: [first] }) });
+  const before = await entryOf(narrow.did);
+  const widen = { subject: narrow.did, act: { scope: "contexts", contexts: [...(before?.act?.contexts ?? []), second] } };
+  const update = await call(A, "acl/update/0.3", widen);
+  const after = await entryOf(narrow.did);
+  const again = await call(A, "acl/update/0.3", widen);
+  const afterAgain = await entryOf(narrow.did);
+  const widened = one.ok ? await signIn({ ...at, identity: narrow }) : undefined;
+  const wide = recorder({ "first memory": first, "second memory": second, "the agent's key": narrow.did, "the administrator": admin.did, "the expiry sent": expiresAt });
+
+  return {
+    grant: code(granted),
+    entrySent: read(sent),
+    theAgent: { register: code(registered), swap: code(swapped.answer), theNewKeySignsIn: Boolean(swapped.party) },
+    readBack: {
+      // The device as `device/list` gives it, without the two times a registration stamps.
+      device: device ? read((({ lastSeenAt: _seen, registeredAt: _registered, ...rest }) => rest)(device)) : "not found by its deviceId",
+      anEntryUnderTheThrowawayKey: Boolean(await entryOf(throwaway.did)),
+      entryFromAclList: read(entry) ?? "none under the key the device names",
+      entryFromAclShow: shown?.ok ? read(shown.payload.entry) : code(shown ?? { ok: false, status: "not asked" }),
+    },
+    widening: {
+      grantWithOne: code(one),
+      entryBefore: wide(before),
+      update: code(update),
+      entryInTheUpdatesAnswer: wide(update.payload?.entry),
+      entryAfter: wide(after),
+      theSameUpdateAgain: code(again),
+      entryAfterTheSecond: wide(afterAgain),
+      onANewSession: widened ? { first: code(await put(widened, first)), second: code(await put(widened, second)) } : undefined,
+    },
   };
 });
 

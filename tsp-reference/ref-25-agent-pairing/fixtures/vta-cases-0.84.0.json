@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-11-26T08:03:38.259Z",
+  "recordedAt": "2026-11-26T09:14:57.799Z",
   "source": {
     "repository": "OpenVTC/verifiable-trust-infrastructure",
     "commit": "97fda98130047ca8ff4c0af1b60116d558968d2a",
@@ -187,6 +187,313 @@
       "second": {
         "own": "ok",
         "theOthers": "vta/memory/get:contextForbidden"
+      }
+    },
+    "pairing-readback": {
+      "grant": "ok",
+      "entrySent": {
+        "subject": "<the throwaway key>",
+        "role": "application",
+        "act": {
+          "scope": "contexts",
+          "contexts": [
+            "<first memory>",
+            "<second memory>"
+          ]
+        },
+        "keys": {
+          "scope": "none"
+        },
+        "capabilities": {
+          "scope": "listed",
+          "grants": [
+            {
+              "capability": "memory-read"
+            },
+            {
+              "capability": "memory-write"
+            }
+          ]
+        },
+        "purposes": {
+          "scope": "listed",
+          "purposes": [
+            "personalisation",
+            "taskExecution"
+          ]
+        },
+        "label": "notes-helper",
+        "expiresAt": "<the expiry sent>"
+      },
+      "theAgent": {
+        "register": "ok",
+        "swap": "ok",
+        "theNewKeySignsIn": true
+      },
+      "readBack": {
+        "device": {
+          "capabilities": [
+            "memoryRead",
+            "memoryWrite"
+          ],
+          "consumerDid": "<the agent's key>",
+          "consumerKind": {
+            "kind": "service",
+            "serviceKind": "aiAgent"
+          },
+          "deviceId": "<the device>",
+          "displayName": "ref-25 agent",
+          "pushCapable": false
+        },
+        "anEntryUnderTheThrowawayKey": false,
+        "entryFromAclList": {
+          "act": {
+            "contexts": [
+              "<first memory>",
+              "<second memory>"
+            ],
+            "scope": "contexts"
+          },
+          "approve": {
+            "scope": "none"
+          },
+          "capabilities": {
+            "grants": [
+              {
+                "capability": "memory-read"
+              },
+              {
+                "capability": "memory-write"
+              }
+            ],
+            "scope": "listed"
+          },
+          "createdAt": "<time 1>",
+          "createdBy": "<the administrator>",
+          "delegatedBy": "<the administrator>",
+          "expiresAt": "<the expiry sent>",
+          "keys": {
+            "scope": "none"
+          },
+          "label": "notes-helper",
+          "purposes": {
+            "purposes": [
+              "personalisation",
+              "taskExecution"
+            ],
+            "scope": "listed"
+          },
+          "role": "application",
+          "subject": "<the agent's key>"
+        },
+        "entryFromAclShow": {
+          "act": {
+            "contexts": [
+              "<first memory>",
+              "<second memory>"
+            ],
+            "scope": "contexts"
+          },
+          "approve": {
+            "scope": "none"
+          },
+          "capabilities": {
+            "grants": [
+              {
+                "capability": "memory-read"
+              },
+              {
+                "capability": "memory-write"
+              }
+            ],
+            "scope": "listed"
+          },
+          "createdAt": "<time 1>",
+          "createdBy": "<the administrator>",
+          "delegatedBy": "<the administrator>",
+          "expiresAt": "<the expiry sent>",
+          "keys": {
+            "scope": "none"
+          },
+          "label": "notes-helper",
+          "purposes": {
+            "purposes": [
+              "personalisation",
+              "taskExecution"
+            ],
+            "scope": "listed"
+          },
+          "role": "application",
+          "subject": "<the agent's key>"
+        }
+      },
+      "widening": {
+        "grantWithOne": "ok",
+        "entryBefore": {
+          "act": {
+            "contexts": [
+              "<first memory>"
+            ],
+            "scope": "contexts"
+          },
+          "approve": {
+            "scope": "none"
+          },
+          "capabilities": {
+            "grants": [
+              {
+                "capability": "memory-read"
+              },
+              {
+                "capability": "memory-write"
+              }
+            ],
+            "scope": "listed"
+          },
+          "createdAt": "<time 1>",
+          "createdBy": "<the administrator>",
+          "delegatedBy": "<the administrator>",
+          "expiresAt": "<the expiry sent>",
+          "keys": {
+            "scope": "none"
+          },
+          "label": "notes-helper",
+          "purposes": {
+            "purposes": [
+              "personalisation",
+              "taskExecution"
+            ],
+            "scope": "listed"
+          },
+          "role": "application",
+          "subject": "<the agent's key>"
+        },
+        "update": "ok",
+        "entryInTheUpdatesAnswer": {
+          "act": {
+            "contexts": [
+              "<first memory>",
+              "<second memory>"
+            ],
+            "scope": "contexts"
+          },
+          "approve": {
+            "scope": "none"
+          },
+          "capabilities": {
+            "grants": [
+              {
+                "capability": "memory-read"
+              },
+              {
+                "capability": "memory-write"
+              }
+            ],
+            "scope": "listed"
+          },
+          "createdAt": "<time 1>",
+          "createdBy": "<the administrator>",
+          "delegatedBy": "<the administrator>",
+          "expiresAt": "<the expiry sent>",
+          "keys": {
+            "scope": "none"
+          },
+          "label": "notes-helper",
+          "purposes": {
+            "purposes": [
+              "personalisation",
+              "taskExecution"
+            ],
+            "scope": "listed"
+          },
+          "role": "application",
+          "subject": "<the agent's key>"
+        },
+        "entryAfter": {
+          "act": {
+            "contexts": [
+              "<first memory>",
+              "<second memory>"
+            ],
+            "scope": "contexts"
+          },
+          "approve": {
+            "scope": "none"
+          },
+          "capabilities": {
+            "grants": [
+              {
+                "capability": "memory-read"
+              },
+              {
+                "capability": "memory-write"
+              }
+            ],
+            "scope": "listed"
+          },
+          "createdAt": "<time 1>",
+          "createdBy": "<the administrator>",
+          "delegatedBy": "<the administrator>",
+          "expiresAt": "<the expiry sent>",
+          "keys": {
+            "scope": "none"
+          },
+          "label": "notes-helper",
+          "purposes": {
+            "purposes": [
+              "personalisation",
+              "taskExecution"
+            ],
+            "scope": "listed"
+          },
+          "role": "application",
+          "subject": "<the agent's key>"
+        },
+        "theSameUpdateAgain": "ok",
+        "entryAfterTheSecond": {
+          "act": {
+            "contexts": [
+              "<first memory>",
+              "<second memory>"
+            ],
+            "scope": "contexts"
+          },
+          "approve": {
+            "scope": "none"
+          },
+          "capabilities": {
+            "grants": [
+              {
+                "capability": "memory-read"
+              },
+              {
+                "capability": "memory-write"
+              }
+            ],
+            "scope": "listed"
+          },
+          "createdAt": "<time 1>",
+          "createdBy": "<the administrator>",
+          "delegatedBy": "<the administrator>",
+          "expiresAt": "<the expiry sent>",
+          "keys": {
+            "scope": "none"
+          },
+          "label": "notes-helper",
+          "purposes": {
+            "purposes": [
+              "personalisation",
+              "taskExecution"
+            ],
+            "scope": "listed"
+          },
+          "role": "application",
+          "subject": "<the agent's key>"
+        },
+        "onANewSession": {
+          "first": "ok",
+          "second": "ok"
+        }
       }
     },
     "f-sign-as-persona": {
