@@ -3,9 +3,10 @@
  * entry written at `acl/grant` 0.3, its contexts narrowed through `acl/revoke` 0.3 and widened through `acl/update`
  * 0.3, never stepping down to 0.1 or 0.2, and `device/list` read to its last page.
  *
- * Every payload sent, and every answer the fake VTA gives, is validated against the specification's own schemas at
- * the pin (`fixtures/acl-schemas-0.3`, `dtgwg-trust-tasks-tf` 2a66a0351), so neither side of a test can take a shape
- * the VTA would not.
+ * Every payload sent, and every answer the fake VTA gives, at a version the fixtures carry, is validated against the
+ * specification's own schemas at the pin (`fixtures/acl-schemas-0.3`, `dtgwg-trust-tasks-tf` 2a66a0351): `acl/grant`,
+ * `acl/update` and `acl/revoke` 0.3, `acl/list` 0.4, `device/list` 0.3 and 0.2. So neither side of a test can take a
+ * shape the VTA would not. A refusal the fake throws is not a payload and is not checked.
  */
 import Ajv from 'ajv/dist/2020'
 import { readFileSync } from 'fs'
@@ -46,7 +47,9 @@ function schemas() {
     [VTA_TASK.aclGrant03]: 'acl-grant-0.3.payload.schema.json',
     [VTA_TASK.aclUpdate03]: 'acl-update-0.3.payload.schema.json',
     [VTA_TASK.aclRevoke03]: 'acl-revoke-0.3.payload.schema.json',
+    [VTA_TASK.aclList04]: 'acl-list-0.4.payload.schema.json',
     'https://trusttasks.org/spec/device/list/0.3': 'device-list-0.3.payload.schema.json',
+    'https://trusttasks.org/spec/device/list/0.2': 'device-list-0.2.payload.schema.json',
   }
   for (const file of Object.values(payloads)) ajv.addSchema(read(file))
   const request = (type: string) => {
@@ -243,6 +246,22 @@ describe('narrowOrWidenCapabilities: narrow through acl/revoke 0.3, widen throug
     ])
   })
 
+  it('a half-applied change: the narrowing stays, and only a retry computed from the entry as it now is goes through', async () => {
+    // the revoke lands, the update is refused
+    const failing = withVta((type, payload) =>
+      type === VTA_TASK.aclRevoke03 ? answerFor(['a'])(type, payload) : new VtiRefusal('forbidden', 'no')
+    )
+    const change = { subject: K_A, act: { from: ['a', 'b'], to: ['a', 'c'] } }
+    await expect(failing.vta.narrowOrWidenCapabilities(change)).rejects.toMatchObject({ code: 'forbidden' })
+    expect(failing.sent.map((s) => s.type)).toEqual([VTA_TASK.aclRevoke03, VTA_TASK.aclUpdate03])
+    // the same change again would ask to narrow to what the entry already holds, which acl/revoke 0.3 refuses
+    expect(agentAccessWrites(change)[0]).toMatchObject({ type: VTA_TASK.aclRevoke03 })
+    // control: computed from the entry as it now holds (['a']), the retry is the widening alone
+    expect(agentAccessWrites({ ...change, act: { from: ['a'], to: ['a', 'c'] } })).toEqual([
+      { type: VTA_TASK.aclUpdate03, payload: { subject: K_A, act: { scope: 'contexts', contexts: ['a', 'c'] } } },
+    ])
+  })
+
   it('nothing to change sends nothing', async () => {
     const { vta, sent } = withVta(answerFor(['a']))
     await expect(vta.narrowOrWidenCapabilities({ subject: K_A, act: { from: ['a'], to: ['a'] } })).rejects.toThrow(
@@ -375,7 +394,8 @@ describe('entryKind and findAgentEntries: found by deviceId after the subject ch
     ])
     const found = await paged.vta.findAgentEntries({ deviceId: 'dev-1' })
     expect(found).toMatchObject({ complete: true, matches: [{ entry: { subject: K_B } }] })
-    const cut = vtaAfterSwap([{ entries: [wireEntry(OTHER, ['z'])], truncated: true }])
+    // acl/list 0.4 says "more" only with nextCursor; a cursor given twice cannot be continued
+    const cut = vtaAfterSwap([{ entries: [wireEntry(OTHER, ['z'])], nextCursor: 'again' }])
     expect((await cut.vta.findAgentEntries({ deviceId: 'dev-1' })).complete).toBe(false)
   })
 })

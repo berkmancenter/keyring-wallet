@@ -706,6 +706,7 @@ export function agentGrantPayload(grant: AgentGrant): Record<string, unknown> {
 /** A change to an agent's entry: its contexts (from what the entry holds to what it should), its capabilities. */
 export type AgentAccessChange = {
   subject: string
+  /** `from` is what the entry holds now, read from the VTA just before the call, never what an earlier call started from. */
   act?: { from: readonly string[]; to: readonly string[] }
   /** The capability set wanted, replacing the entry's (either way). */
   capabilities?: readonly string[]
@@ -2695,6 +2696,11 @@ export class VtaClient {
   /**
    * Change an agent's contexts or capabilities (§3.15 "Change memories", §3.6 a room add): the writes of
    * {@link agentAccessWrites}, narrowing first, at 0.3 only. Answers the entry after the last write.
+   *
+   * Not atomic. If a later write fails after the narrowing landed, the call throws and the entry is left narrowed.
+   * A retry must re-read the entry ({@link findAgentEntries}) and compute `act.from` from what it holds now: the same
+   * change again would ask `acl/revoke` 0.3 to narrow to what the entry already holds, which it refuses ("MUST be
+   * strictly narrower than the stored act scope").
    */
   async narrowOrWidenCapabilities(change: AgentAccessChange): Promise<VtaAclEntry> {
     const writes = agentAccessWrites(change)
