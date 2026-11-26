@@ -17,11 +17,15 @@
  * 3. The agent is told over the chat, best effort, on the one run that confirms step 1. Not relied on.
  * 4. The record goes from `revoking` to `revoked` only once a full listing no longer shows the entry.
  *
- * **What it writes.** Of the `AgentConnection` record (§3.11), exactly `state`, `lastReconciledAt` and `keyChanged`,
- * always as get, change, put. `keyChanged` is written by the reconcile alone, and only to `true`, when it finds the
- * agent's `deviceId` under a subject other than `agentDid` (the plan's 7.10 acceptance: "the app-start reconcile
- * records a changed key"); it also reports it ({@link ReconcileResult}). Nothing here sets it back to `false`, and
- * the new subject itself is not stored: `agentDid` and the chat stay as they were.
+ * **What it writes.** Of the `AgentConnection` record (§3.11), exactly `state`, `lastReconciledAt`, `keyChanged` and
+ * `agentDid`, always as get, change, put. `keyChanged` and `agentDid` are written by the reconcile alone, when it finds
+ * the agent's `deviceId` under a subject other than `agentDid` (§3.9: "it records the new subject, sets
+ * `keyChanged`"; the plan's 7.10 acceptance: "the app-start reconcile records a changed key"): `agentDid` becomes the
+ * new subject and `keyChanged` becomes `true`, in the same get, change, put as `lastReconciledAt`. It also reports it
+ * ({@link ReconcileResult}). Nothing here sets `keyChanged` back to `false`. The record's `id` (its first key, and the
+ * store's key), `chatDid`, `chatConnectionId` and `handle` are never written: the chat is not moved.
+ *
+ * Revoke always works from the stored `agentDid` as the agent's current key, together with the `deviceId`.
  *
  * **The store.** Step 7.7's `AgentConnectionStore` (`list`, `get`, `put`, `remove`; no partial update) is in #1065,
  * not merged yet. Until it is, this module names the members it uses ({@link RevokableConnection}) and that store's
@@ -44,13 +48,17 @@ export const REVOKABLE_FROM: readonly RevokableState[] = ['active', 'expired']
 
 /**
  * The members of step 7.7's `AgentConnection` this step uses. A record carries more; every other member is kept as it
- * is, since each write re-reads the record and changes only `state`, `lastReconciledAt` and `keyChanged`.
+ * is, since each write re-reads the record and changes only `state`, `lastReconciledAt`, `keyChanged` and
+ * `agentDid`. In particular `id`, `chatDid`, `chatConnectionId` and `handle` are never written.
  */
 export type RevokableConnection = {
-  /** The record's key (7.7 keys it by the agent's DID). */
+  /** The record's key (7.7 keys it by the agent's first DID). Never changed here, even when `agentDid` is. */
   id: string
   name: string
-  /** The DID the agent was paired with. Never moved here: the chat stays on it (§3.9). */
+  /**
+   * The agent's current key: the DID it was paired with, until the reconcile finds its `deviceId` under another
+   * subject and records that one here (§3.9). Revoke uses it as the current key. The chat is not moved with it.
+   */
   agentDid: string
   /** Set by `device/register`, copied by every `acl/swap-key`: what the agent is found by. */
   deviceId: string
@@ -191,10 +199,11 @@ async function runRevoke<C extends RevokableConnection>(deps: RevokeDeps<C>, id:
 }
 
 /** The only members this step writes. `keyChanged` only ever to `true`. */
-type Written = { state?: RevokableState; lastReconciledAt?: string; keyChanged?: true }
+type Written = { state?: RevokableState; lastReconciledAt?: string; keyChanged?: true; agentDid?: string }
 
 /**
- * Get, change `state`, `lastReconciledAt` and `keyChanged` only, put: a member another step wrote meanwhile is kept.
+ * Get, change `state`, `lastReconciledAt`, `keyChanged` and `agentDid` only, put: a member another step wrote
+ * meanwhile is kept.
  */
 async function write<C extends RevokableConnection>(
   store: RevokeConnectionStore<C>,
@@ -206,12 +215,16 @@ async function write<C extends RevokableConnection>(
   const next: C = { ...current }
   if (changes.state !== undefined) next.state = changes.state
   if (changes.lastReconciledAt !== undefined) next.lastReconciledAt = changes.lastReconciledAt
+  if (changes.agentDid !== undefined) next.agentDid = changes.agentDid
+  // `keyChanged` is set-only in 7.10: it is only ever written `true`, and nothing in 7.10 clears it. Clearing it (for
+  // example once the owner has seen the change) is left to the record's owner (step 7.7).
   if (changes.keyChanged) next.keyChanged = true
   await store.put(next)
 }
 
 /**
- * What the reconcile found for one record. A `keyChanged` result is also written to the record (`keyChanged: true`).
+ * What the reconcile found for one record. A `keyChanged` result is also written to the record (`agentDid` is
+ * the new subject, `keyChanged: true`).
  * `gone` is reported, not written: it would be a state change outside Revoke's two (§3.9), so the record's owner
  * (step 7.7) decides what it shows.
  */
@@ -229,10 +242,10 @@ export type ReconcileResult =
  * The reconcile at app start, and on opening the list or the details (§3.9), for every record not `revoked`:
  * - `revoking`: the revoke runs again, and the record becomes `revoked` once a full listing shows no entry;
  * - `active` or `expired`: one full listing, stamped as `lastReconciledAt`. The agent's `deviceId` under a subject
- *   other than `agentDid` is recorded as `keyChanged: true`, in the same get, change, put as the stamp, and reported
- *   as `keyChanged` (""<name>" changed its key. Revoke it if you did not expect that."); `agentDid` and the chat are
- *   not moved, since a rotation Keyring did not witness proves nothing about who holds the new key. No entry at all
- *   is reported as `gone`.
+ *   other than `agentDid` is recorded as the new `agentDid` and `keyChanged: true`, in the same get, change, put as
+ *   the stamp, and reported as `keyChanged` (""<name>" changed its key. Revoke it if you did not expect that."). The
+ *   record's `id` and the chat (`chatDid`, `chatConnectionId`, `handle`) are not moved, since a rotation Keyring did
+ *   not witness proves nothing about who holds the new key. No entry at all is reported as `gone`.
  * `pairing` and `notFinished` records are the pairing's (§3.10) and are left alone. One record at a time.
  */
 export async function reconcileAgents<C extends RevokableConnection>(
@@ -260,9 +273,13 @@ export async function reconcileAgents<C extends RevokableConnection>(
       continue
     }
     const moved = found.matches.find((m) => m.deviceId === record.deviceId && m.entry.subject !== record.agentDid)
-    // One get, change, put: the stamp and, when the key changed, `keyChanged: true`.
+    // One get, change, put: the stamp and, when the key changed, the new subject as `agentDid` and `keyChanged: true`.
     const changes: Written = { lastReconciledAt: iso(now()) }
-    if (moved) changes.keyChanged = true
+    if (moved) {
+      changes.agentDid = moved.entry.subject
+      // Set-only in 7.10: nothing in 7.10 clears `keyChanged`; clearing it is left to the record's owner (step 7.7).
+      changes.keyChanged = true
+    }
     await write(deps.store, record.id, changes)
     if (moved) results.push({ id: record.id, kind: 'keyChanged', subject: moved.entry.subject })
     else if (found.matches.length === 0) results.push({ id: record.id, kind: 'gone' })
