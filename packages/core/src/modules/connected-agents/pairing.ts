@@ -323,6 +323,10 @@ const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.l
 /**
  * Whether a rotated entry kept everything the grant set (§3.10: "Rotation lost `expiresAt`, capabilities or kind").
  * Which members `acl/swap-key` actually keeps is measured in step 0.1(c); this check holds whatever it finds.
+ *
+ * Every comparison is exact set equality, and that is load-bearing: on the `deviceEnrol` path the machine checks the
+ * entry against the contexts the grant wrote, a narrower set than chosen (§7.5). Loosened to containment ("kept at
+ * least these"), that narrowing would let an entry with extra contexts through.
  */
 export function entryKeptLimits(entry: ListedEntry, scope: AgentAclScope): boolean {
   if (entry.consumerKind !== AI_AGENT_KIND) return false
@@ -497,6 +501,11 @@ export class PairingMachine {
       if (granted.refused === 'expired') return this.set({ phase: 'expired' })
       if (granted.refused === 'unreachable') return this.fail('vta-unreachable')
       return this.fail('grant-refused')
+    }
+    // What the grant wrote must be some of what the owner chose: nothing the VTA answers widens the entry past Approve.
+    if (granted.grantedContexts && !granted.grantedContexts.every((c) => scope.contexts.includes(c))) {
+      const subject = granted.subject ?? s.subject
+      return this.fail('grant-refused', subject ? { cleanup: { vtaDid: s.vtaDid, subject } } : {})
     }
     return this.set({
       phase: 'awaitingEnrolment',

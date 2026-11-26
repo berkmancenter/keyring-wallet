@@ -80,6 +80,8 @@ interface Survey {
   problems: Problem[]
   /** Family to the files (relative to src) holding a ladder for it. */
   ladders: Map<string, Set<string>>
+  /** Every version marked `version-draft`, as `family/version`, with the marker's reason. */
+  drafts: { version: string; reason: string; file: string }[]
 }
 
 const byVersion = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true })
@@ -173,12 +175,29 @@ function survey(extra: Map<string, string> = new Map()): Survey {
     const lines = sf.text.split('\n')
     return marker.test(lines[line]) || (line > 0 && /^\s*\/\//.test(lines[line - 1]) && marker.test(lines[line - 1]))
   }
+  /** The reason a `version-draft` marker gives, on the literal's line or the comment line above. */
+  const draftReason = (node: ts.Node) => {
+    const sf = node.getSourceFile()
+    const line = sf.getLineAndCharacterOfPosition(node.getStart()).line
+    const lines = sf.text.split('\n')
+    const m = /version-draft:[ \t]*(.*)$/.exec(DRAFT.test(lines[line]) ? lines[line] : lines[line - 1])
+    return m ? m[1].trim() : ''
+  }
+  const drafts: Survey['drafts'] = []
   const known = new Map<string, Set<string>>()
   for (const sf of files) {
     walk(sf, (n) => {
       if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateExpression(n)) {
         // A draft's version, marked with a reason, is not one every site of its family must reach.
-        if (markedByAt(n, DRAFT)) return
+        if (markedByAt(n, DRAFT)) {
+          for (const [family, version] of versionsOf(n))
+            drafts.push({
+              version: `${family}/${version}`,
+              reason: draftReason(n),
+              file: path.relative(SRC, n.getSourceFile().fileName),
+            })
+          return
+        }
         for (const [family, version] of versionsOf(n)) known.set(family, (known.get(family) ?? new Set()).add(version))
       }
     })
@@ -283,7 +302,7 @@ function survey(extra: Map<string, string> = new Map()): Survey {
   for (const [family, versions] of known)
     if (versions.size > 1 && !seen.has(family))
       problems.push({ file: '', line: 0, family, kind: 'never seen', versions: [...versions].sort(byVersion) })
-  return { known, problems, ladders }
+  return { known, problems, ladders, drafts }
 }
 
 // Each a small module of its own, in families no real code uses, so each rule is shown failing and passing.
@@ -341,6 +360,24 @@ describe('every family Keyring knows at more than one version is sent from a lad
 
   it("finds nothing in core's src", () => {
     expect(found.problems.filter((p) => !inFixtures(p)).map(shown)).toEqual([])
+  })
+
+  // Each version marked `version-draft` in core's src, and the open upstream pull request whose draft defines it. A
+  // marker on any other version fails here until it is argued for in this list, so the hatch is a reviewed diff, not a
+  // comment; and each marker's reason must name its draft.
+  const EXPECTED_DRAFTS: Record<string, string> = {
+    'auth/oob/claim/0.3': '#1386',
+    'auth/oob/prove/0.4': '#1386',
+    'auth/oob/identify/0.2': '#1386',
+    'auth/oob/grant/0.4': '#1386',
+    'auth/oob/respond/0.4': '#1386',
+  }
+
+  it("the versions marked as a draft's are exactly the expected ones, each naming its draft", () => {
+    const marked = found.drafts.filter((d) => !d.file.startsWith('__versionLadderGuard__'))
+    expect([...new Set(marked.map((d) => d.version))].sort()).toEqual(Object.keys(EXPECTED_DRAFTS).sort())
+    for (const d of marked)
+      expect([d.version, d.reason.includes(EXPECTED_DRAFTS[d.version])]).toEqual([d.version, true])
   })
 
   it('holds the floor: each fixed family is known, and laddered in its own file', () => {

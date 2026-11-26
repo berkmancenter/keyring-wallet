@@ -500,6 +500,26 @@ describe('the P0 fallback: scan the agent did:key, then acl/grant', () => {
   })
 })
 
+describe('a grant that reports contexts the owner did not choose', () => {
+  it('is refused, with the entry named for removal', async () => {
+    const t = setup()
+    await toApproval(t)
+    t.transport.grantAnswer = { ok: true, subject: K_T, grantedContexts: ['keyring-memory-zzzzzzzzzz'] }
+    expect(await t.machine.approve()).toEqual({
+      phase: 'failed',
+      reason: 'grant-refused',
+      cleanup: { vtaDid: VTA, subject: K_T },
+    })
+  })
+
+  it('control: a subset of the choice is taken', async () => {
+    const t = setup()
+    await toApproval(t)
+    t.transport.grantAnswer = { ok: true, subject: K_T, grantedContexts: ['keyring-memory-abcdefghij'] }
+    expect((await t.machine.approve()).phase).toBe('awaitingEnrolment')
+  })
+})
+
 describe('step 10: the entry as the VTA lists it', () => {
   async function granted() {
     const t = setup()
