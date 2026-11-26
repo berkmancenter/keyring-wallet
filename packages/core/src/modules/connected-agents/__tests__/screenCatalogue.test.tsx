@@ -1,7 +1,11 @@
 /**
  * Agent connect, the screen catalogue: every P0 state in e2e/lib/agent-connect-screens.json is drawn from props
- * (fixtures/screenStates.tsx), its steps taken, and checked to show exactly the words the manifest lists, with its
- * marker on screen and its canvas frame and kit mockup on disk. A failure names the state and its frame.
+ * (fixtures/screenStates.tsx), its steps taken, and checked to show exactly the translated words the manifest lists
+ * (not literal content: see shownKeys), with its marker on screen and its canvas frame and kit mockup on disk. A
+ * failure names the state and its frame.
+ *
+ * The manifest is a curated list of the states chosen for the catalogue. Its agreement with the drawings, which this
+ * checks both ways, is not coverage of every state the screens have.
  *
  * This is a check on words and states before the emulator walk of step 7.11, not 7.11's evidence: that is the
  * screenshot pairs on the emulator and the simulator. The walk reads the same manifest.
@@ -28,6 +32,7 @@ type ScreenState = {
   noFrame?: string
   kit: string | null
   words: string[]
+  noWords?: string
   frameOnly?: Array<{ what: string; why: string }>
   appOnly?: Array<{ what: string; why: string }>
 }
@@ -37,7 +42,11 @@ const ROOT = path.resolve(__dirname, '../../../../../..')
 const MANIFEST: Manifest = JSON.parse(readFileSync(path.join(ROOT, 'e2e/lib/agent-connect-screens.json'), 'utf8'))
 const id = (key: string) => testIdWithKey(key)
 
-/** Every "Section.Key" string in the rendered tree, in order, once each: the words a state shows. */
+/**
+ * Every "Section.Key" string in the rendered tree, in order, once each: the translated words a state shows (the test
+ * i18n returns keys). It checks words, not literal content: a name, a digit or the "7 / 64" counter is not collected,
+ * so a wrong counter or a wrong name passes here.
+ */
 const shownKeys = (node: unknown, out: string[] = []): string[] => {
   if (node == null) return out
   if (typeof node === 'string') {
@@ -75,13 +84,16 @@ describe('agent connect screen catalogue (a check on words, not 7.11 evidence)',
     expect(new Set(listed).size).toBe(listed.length)
   })
 
-  it('names a frame and a kit mockup that exist, or says why a state has no frame', () => {
+  it('names a frame and a kit mockup that exist, or says why a state has no frame or no words', () => {
     const problems = MANIFEST.states.flatMap((s) => {
       const out: string[] = []
       if (s.frame && !existsSync(path.join(ROOT, MANIFEST.canvas, s.frame))) out.push(`${s.id}: no frame ${s.frame}`)
       if (s.kit && !existsSync(path.join(ROOT, MANIFEST.kit, s.kit))) out.push(`${s.id}: no kit mockup ${s.kit}`)
       if (!s.frame && !s.noFrame) out.push(`${s.id}: no frame and no reason`)
       if (s.frame && s.noFrame) out.push(`${s.id}: a frame and a no-frame reason`)
+      // An empty word list makes the words check vacuous for that state, so it must say why.
+      if (s.words.length === 0 && !s.noWords) out.push(`${s.id}: no words and no reason`)
+      if (s.words.length > 0 && s.noWords) out.push(`${s.id}: words and a no-words reason`)
       return out
     })
     expect(problems).toEqual([])

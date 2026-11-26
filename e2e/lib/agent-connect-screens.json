@@ -1,5 +1,5 @@
 {
-  "about": "Every P0 screen state of agent connect step 7.7 (docs/plans/agent-connect-plan.md §6, step 7.11): its on-screen marker (a testID key), the steps that reach it from that screen, its canvas frame and kit mockup, the words it shows (localization keys), and every difference from its frame with its reason. Plain data: the jest catalogue (packages/core/src/modules/connected-agents/__tests__/screenCatalogue.test.tsx) checks each view renders exactly these words; the emulator walk of step 7.11 reads the same file. This is a check on words and states, not 7.11's evidence: that is the screenshot pairs.",
+  "about": "Every P0 screen state of agent connect step 7.7 (docs/plans/agent-connect-plan.md §6, step 7.11): its on-screen marker (a testID key), the steps that reach it from that screen, its canvas frame and kit mockup, the words it shows (localization keys), and every difference from its frame with its reason. Plain data: the jest catalogue (packages/core/src/modules/connected-agents/__tests__/screenCatalogue.test.tsx) checks each view renders exactly these words; the emulator walk of step 7.11 reads the same file. It is a curated list of the states chosen for the catalogue: the catalogue checks that this list and its drawings agree, which is not coverage of every state the screens have. A check on words and states, not step 7.11's evidence, which is the screenshot pairs.",
   "canvas": "docs/plans/agent-connect-plan/canvas/",
   "kit": "docs/plans/agent-connect-plan/mockups/",
   "states": [
@@ -59,7 +59,8 @@
       "frame": null,
       "noFrame": "a wait before the guard answers; no words",
       "kit": null,
-      "words": []
+      "words": [],
+      "noWords": "a wait while the guard answers: a spinner with no words, by design; only its marker is checked"
     },
     {
       "id": "connect-not-administrator",
