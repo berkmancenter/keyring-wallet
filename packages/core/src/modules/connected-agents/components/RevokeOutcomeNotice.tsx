@@ -3,15 +3,21 @@ import { useTranslation } from 'react-i18next'
 import { StyleSheet, TouchableOpacity, View } from 'react-native'
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 
-import { ThemedText } from '../components/texts/ThemedText'
-import { AGENT_COLORS } from '../modules/connected-agents/components/agentStyle'
-import type { RevokeOutcome } from '../modules/connected-agents/revoke'
-import { testIdWithKey } from '../utils/testable'
+import { ThemedText } from '../../../components/texts/ThemedText'
+import { testIdWithKey } from '../../../utils/testable'
+
+import { AGENT_COLORS } from './agentStyle'
+
+/**
+ * What a revoke came to, as the views show it. `revokeAgentConnection`'s `RevokeOutcome` (revoke.ts) fits it as it
+ * is; the views name only the kinds they draw, so they do not import revoke.ts (the revoke is wired by the caller).
+ */
+export type RevokeViewOutcome = { kind: 'revoked' } | { kind: 'notConfirmed' } | { kind: 'unreachable' }
 
 export interface RevokeOutcomeNoticeProps {
   name: string
   /** What the last revoke came to. `revoked` draws nothing. */
-  outcome: RevokeOutcome
+  outcome: RevokeViewOutcome
   /** "Try again": runs the revoke again. Left out, no button. */
   onTryAgain?: () => void
 }
@@ -24,6 +30,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   head: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  words: { flex: 1 },
   title: { fontFamily: 'SourceSans3-Bold', fontSize: 17, lineHeight: 23, color: AGENT_COLORS.warnText },
   line: { fontFamily: 'SourceSans3-Regular', fontSize: 17, lineHeight: 23, color: AGENT_COLORS.warnText },
   button: {
@@ -37,10 +44,11 @@ const styles = StyleSheet.create({
 })
 
 /**
- * The agent details' line while a revoke is not confirmed (§6, §3.9): "Revoke not confirmed" with ""<name>" may still
- * have access. Keyring will check again." when the VTA answered but a full listing did not show the agent gone, or
- * "We couldn't reach your VTA, so "<name>" is still connected." when nothing answered; "Try again" in both. Announced
- * by its text (an alert), not by colour.
+ * The line a revoke that is not confirmed leaves (§6, §3.9; canvas frame 17): "Revoke not confirmed" with
+ * `ConnectedAgents.RevokeNotConfirmedBody` (""<name>" may still have access. Keyring will check again.") when the VTA
+ * answered but no full listing showed the agent gone, or `ConnectedAgents.RevokeUnreachable` ("We couldn't reach your
+ * VTA, so "<name>" is still connected.") when nothing answered; "Try again" in both. Announced by its text (an
+ * alert), not by colour. A view: it never runs the revoke itself.
  */
 const RevokeOutcomeNotice: React.FC<RevokeOutcomeNoticeProps> = ({ name, outcome, onTryAgain }) => {
   const { t } = useTranslation()
@@ -53,7 +61,7 @@ const RevokeOutcomeNotice: React.FC<RevokeOutcomeNoticeProps> = ({ name, outcome
     <View style={styles.box} testID={testIdWithKey('RevokeOutcomeNotice')} accessibilityRole="alert">
       <View style={styles.head}>
         <Icon name="alert-outline" size={24} color={AGENT_COLORS.warnText} accessibilityElementsHidden />
-        <View style={{ flex: 1 }}>
+        <View style={styles.words}>
           <ThemedText style={styles.title}>{t('ConnectedAgents.StatusRevokeNotConfirmed')}</ThemedText>
           <ThemedText style={styles.line}>{line}</ThemedText>
         </View>
