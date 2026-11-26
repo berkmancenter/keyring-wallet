@@ -100,6 +100,40 @@ describe('connectedAgentsServices', () => {
   })
 })
 
+describe('a memory create an approval rule holds (#1060 finding 20)', () => {
+  it("is heldForApproval with the client's own consent classifier; any other refusal is failed", async () => {
+    const { VtiRefusal } = jest.requireActual('../../trust-tasks/module/vtiAgent') as {
+      VtiRefusal: new (code: string, message: string, details?: unknown) => Error
+    }
+    const run = async (refusal: Error) => {
+      const { session } = fakeSession('did:peer:2.admin')
+      const wrapped: VtaSession = {
+        ...session,
+        withAgentSession: async (a, did, use) =>
+          session.withAgentSession(a, did, (client) =>
+            use(
+              new Proxy(client, {
+                get: (target, method: string) =>
+                  method === 'createContext'
+                    ? async () => {
+                        throw refusal
+                      }
+                    : (target as Record<string, unknown>)[method],
+              })
+            )
+          ),
+      }
+      return connectedAgentsServices(agent(), VTA, wrapped, async () => []).createMemory('Travel')
+    }
+    const held = new VtiRefusal('auth:consent_required', 'held', {
+      reason: 'auth:consent_required',
+      consentRequests: [],
+    })
+    expect(await run(held)).toEqual({ ok: false, code: 'heldForApproval' })
+    expect(await run(new VtiRefusal('permissionDenied', 'no'))).toEqual({ ok: false, code: 'failed' })
+  })
+})
+
 describe('administratorSigner (§7.5): the phone signs as its administrator DID', () => {
   it("signs as the session's manager DID, read at each signature, so a rotated key is followed", async () => {
     let manager: string | undefined = 'did:peer:2.first'

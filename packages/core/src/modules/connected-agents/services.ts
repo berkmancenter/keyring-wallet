@@ -10,7 +10,7 @@ import type { Agent } from '@credo-ts/core'
 
 import { signDocumentProof, verifyDocumentProof } from '../trust-tasks/documentProof'
 import { getKeyed, putKeyed } from '../trust-tasks/module/keyedRecords'
-import type { VtaClient } from '../trust-tasks/module/VtaClient'
+import { consentPendingOf, type VtaClient } from '../trust-tasks/module/VtaClient'
 import type { AgentAccessPort } from './carriage'
 import type { AdministratorSigner } from './deviceEnrolDraft'
 import type { ConnectedAgentsServices } from './ConnectedAgentsProvider'
@@ -91,7 +91,7 @@ export function connectedAgentsServices(
         (await memory.listContexts()).filter((c) => typeof c.name === 'string').map((c) => [c.id, c.name as string])
       ),
     pickerMemories: () => pickerMemories(memory),
-    createMemory: (name) => createMemory(memory, name, randomBytes),
+    createMemory: (name) => createMemory(memory, name, randomBytes, (error) => consentPendingOf(error) !== undefined),
     countMemory: (contextId) => countMemory(memory, contextId),
     lastCount: async (agentId, contextId) =>
       (await getKeyed<{ count?: number }>(agent, COUNT_RECORD_TYPE, COUNT_KIND, `${agentId}|${contextId}`))?.count,
