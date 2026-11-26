@@ -8,15 +8,20 @@
  *   a start-up apply, and a remote or build-time switch each has to reach the setter. Or the flag's initial value not
  *   being the literal `false`, which catches a default read from an environment value or a build constant.
  * - **Revoke wired:** `connected-agents` exports `revokeAgentConnection` from a file that reaches the VTA's revoke
- *   (`.revokeSubject(` or an `acl/revoke` task), so a no-op export is not enough, and a file outside `connected-agents`
- *   calls it (the Revoke sheet).
+ *   (`.revokeSubject(` or an `acl/revoke` task), so a no-op export is not enough; and a ROUTED file outside
+ *   `connected-agents` calls it: the wiring that mounts the Revoke sheet, which itself is a view taking `onRevoke`. A
+ *   caller counts only if a navigator file (one registering `.Screen` elements or creating a navigator) is it, imports
+ *   it, or imports a file that imports it, so an unrouted file calling it does not satisfy the gate.
  * - **The acceptance wired:** a file that handles `keyring/agent/vdc-acceptance/1.0` also calls `verifyVdcPair`.
  *
  * It reads code by name: a refactor that renames the setter or these actions must update the names here, and the
  * failure message says so. **What it cannot see:**
  * - a setter reached from outside `packages/core/src` and `app/src` (another package, native code);
  * - one reached by a computed name (`module['set' + name]`);
- * - the module's state changed by anything but its setter and its initialiser.
+ * - the module's state changed by anything but its setter and its initialiser;
+ * - a caller more than two imports below a navigator file (a deeper one does not count: put the call in the routed
+ *   container rather than loosen this);
+ * - imports matched by file name, not resolved paths: two files of one name are not told apart.
  *
  * None of these exists today; a new way of turning the flag on must come through the setter or be added here.
  */
@@ -33,6 +38,38 @@ const REVOKE_CALL = /\brevokeAgentConnection\s*\(/
 const REVOKE_REACHES_VTA = /\.revokeSubject\s*\(|acl\/revoke\//
 const ACCEPTANCE_TYPE = 'keyring/agent/vdc-acceptance/1.0'
 
+const NAVIGATOR = /\.Screen\b|create(?:Native)?StackNavigator\s*\(|createBottomTabNavigator\s*\(/
+
+/** The file names a source imports (the last segment of each specifier, without extension). */
+const importedNames = (text: string): Set<string> =>
+  new Set(
+    [...text.matchAll(/(?:from\s+|require\(\s*|import\(\s*)['"]([^'"]+)['"]/g)].map((m) =>
+      (m[1].split('/').pop() ?? '').replace(/\.(tsx?|jsx?)$/, '')
+    )
+  )
+
+const baseName = (path: string) => (path.split(sep).pop() ?? '').replace(/\.tsx?$/, '')
+
+/** The files a navigator reaches within two imports: navigators, what they import, and what those import. */
+function routed(code: SourceFile[]): Set<string> {
+  const byName = new Map<string, SourceFile[]>()
+  for (const f of code) byName.set(baseName(f.path), [...(byName.get(baseName(f.path)) ?? []), f])
+  let frontier = code.filter((f) => NAVIGATOR.test(f.text))
+  const reached = new Set(frontier.map((f) => f.path))
+  for (let hop = 0; hop < 2; hop++) {
+    const next: SourceFile[] = []
+    for (const f of frontier)
+      for (const name of importedNames(f.text))
+        for (const g of byName.get(name) ?? [])
+          if (!reached.has(g.path)) {
+            reached.add(g.path)
+            next.push(g)
+          }
+    frontier = next
+  }
+  return reached
+}
+
 const isTest = (path: string) => path.split(sep).includes('__tests__') || /\.test\.tsx?$/.test(path)
 const inModule = (path: string) => path.includes(`connected-agents${sep}`)
 
@@ -45,13 +82,18 @@ export function releaseGate(files: SourceFile[]): { flagReachable: boolean; miss
   const flagReachable = setterCalls.length > 0 || defaultOn
   const revokeWired =
     code.some((f) => inModule(f.path) && REVOKE_EXPORT.test(f.text) && REVOKE_REACHES_VTA.test(f.text)) &&
-    code.some((f) => !inModule(f.path) && REVOKE_CALL.test(f.text))
+    (() => {
+      const reach = routed(code)
+      return code.some((f) => !inModule(f.path) && REVOKE_CALL.test(f.text) && reach.has(f.path))
+    })()
   const acceptanceWired = code.some((f) => f.text.includes(ACCEPTANCE_TYPE) && /\bverifyVdcPair\s*\(/.test(f.text))
   const missing = flagReachable
     ? [
         ...(revokeWired
           ? []
-          : ['Revoke (step 7.10): revokeAgentConnection exported and called outside connected-agents']),
+          : [
+              'Revoke (step 7.10): revokeAgentConnection exported, and called from routed wiring outside connected-agents',
+            ]),
         ...(acceptanceWired
           ? []
           : [`the chat's VDC acceptance (step 7.9): ${ACCEPTANCE_TYPE} handled with verifyVdcPair`]),
@@ -114,8 +156,12 @@ describe('control: the gate bites', () => {
     text: 'export async function revokeAgentConnection(id: string) { await client.revokeSubject(id) }',
   }
   const revokeSheet: SourceFile = {
-    path: join('/r', 'packages', 'core', 'src', 'screens', 'RevokeAgent.tsx'),
-    text: 'onPress={() => revokeAgentConnection(agent.id)}',
+    path: join('/r', 'packages', 'core', 'src', 'screens', 'AgentDetailsContainer.tsx'),
+    text: '<AgentDetailsView onRevoke={() => revokeAgentConnection(agent.id)} />',
+  }
+  const navigator: SourceFile = {
+    path: join('/r', 'packages', 'core', 'src', 'navigators', 'MyAgentStack.tsx'),
+    text: 'import AgentDetailsContainer from \'../screens/AgentDetailsContainer\'\n<Stack.Screen name="AgentDetails" component={AgentDetailsContainer} />',
   }
   const acceptance: SourceFile = {
     path: join('/r', 'packages', 'core', 'src', 'modules', 'connected-agents', 'chatControl.ts'),
@@ -141,7 +187,7 @@ describe('control: the gate bites', () => {
   })
 
   it('with both wired, the setting may exist', () => {
-    expect(releaseGate([flag, devRow, revokeExport, revokeSheet, acceptance]).missing).toEqual([])
+    expect(releaseGate([flag, devRow, revokeExport, revokeSheet, navigator, acceptance]).missing).toEqual([])
   })
 
   it('an aliased import of the setter makes the flag reachable, though no call names it', () => {
@@ -161,7 +207,37 @@ describe('control: the gate bites', () => {
 
   it('a no-op revokeAgentConnection, called from a screen but reaching no revoke, is not wired', () => {
     const noop = { ...revokeExport, text: 'export async function revokeAgentConnection(id: string) {}' }
-    expect(releaseGate([flag, devRow, noop, revokeSheet, acceptance]).missing).toEqual([
+    expect(releaseGate([flag, devRow, noop, revokeSheet, navigator, acceptance]).missing).toEqual([
+      expect.stringMatching(/Revoke \(step 7\.10\)/),
+    ])
+  })
+
+  it('an unrouted caller of revokeAgentConnection does not satisfy the gate', () => {
+    expect(releaseGate([flag, devRow, revokeExport, revokeSheet, acceptance]).missing).toEqual([
+      expect.stringMatching(/Revoke \(step 7\.10\)/),
+    ])
+  })
+
+  it('a caller one import below the routed screen counts; three imports down does not', () => {
+    const screen: SourceFile = {
+      path: join('/r', 'packages', 'core', 'src', 'screens', 'AgentDetailsScreen.tsx'),
+      text: "import AgentRevoke from './AgentRevoke'",
+    }
+    const container: SourceFile = {
+      path: join('/r', 'packages', 'core', 'src', 'screens', 'AgentRevoke.tsx'),
+      text: 'export default () => <Sheet onRevoke={() => revokeAgentConnection(id)} />',
+    }
+    const nav: SourceFile = {
+      ...navigator,
+      text: "import AgentDetailsScreen from '../screens/AgentDetailsScreen'\n<Stack.Screen component={AgentDetailsScreen} />",
+    }
+    expect(releaseGate([flag, devRow, revokeExport, screen, container, nav, acceptance]).missing).toEqual([])
+    const middle: SourceFile = {
+      path: join('/r', 'packages', 'core', 'src', 'screens', 'Middle.tsx'),
+      text: "import AgentRevoke from './AgentRevoke'",
+    }
+    const deeper: SourceFile = { ...screen, text: "import Middle from './Middle'" }
+    expect(releaseGate([flag, devRow, revokeExport, deeper, middle, container, nav, acceptance]).missing).toEqual([
       expect.stringMatching(/Revoke \(step 7\.10\)/),
     ])
   })
