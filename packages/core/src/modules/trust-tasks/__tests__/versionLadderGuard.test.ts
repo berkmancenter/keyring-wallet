@@ -19,6 +19,10 @@
  *   heartbeat). It is not a ladder and does not say what is sent: it may hold more than the ladder (the read lane holds
  *   rooms/keys/browse 0.2, which nothing sends), a send inside one is outside a ladder, and it never meets the FLOOR.
  * - Every such family is seen at least once. One sent in a shape this cannot see fails rather than passing unseen.
+ * - A version only an open upstream draft defines carries `// version-draft: <reason>` on the line of its literal or a
+ *   comment line just above: it does not count toward its family's newest, so a ladder that serves the accepted
+ *   versions is not told to reach a draft's (agent connect's `auth/oob` `deviceEnrol`, draft #1386, beside sign-in's
+ *   `login`). Sending it still needs `version-pinned` with a reason. A bare marker does not count.
  *
  * "Newest" is the newest version named anywhere in core's src, so a version added for one call site is the one
  * every other site of that family must now reach. Values are resolved through TypeScript's own symbols: constants,
@@ -35,6 +39,7 @@ const URI = /^https:\/\/trusttasks\.org\/spec\/(.+)\/(\d+\.\d+)$/
 // a marker that ends the statement before.
 const PINNED = /\/\/[ \t]*version-pinned:[ \t]*\S/
 const SET = /\/\/[ \t]*version-set:[ \t]*\S/
+const DRAFT = /\/\/[ \t]*version-draft:[ \t]*\S/
 const TAG = 'versionLadder'
 const COVERAGE = 'versionCoverage'
 
@@ -75,6 +80,8 @@ interface Survey {
   problems: Problem[]
   /** Family to the files (relative to src) holding a ladder for it. */
   ladders: Map<string, Set<string>>
+  /** Every version marked `version-draft`, as `family/version`, with the marker's reason. */
+  drafts: { version: string; reason: string; file: string }[]
 }
 
 const byVersion = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true })
@@ -161,10 +168,36 @@ function survey(extra: Map<string, string> = new Map()): Survey {
       return m ? [[m[1], m[2]] as [string, string]] : []
     })
 
+  /** Whether `node`'s line, or a comment line just above it, carries `marker` (as `markedBy` below). */
+  const markedByAt = (node: ts.Node, marker: RegExp) => {
+    const sf = node.getSourceFile()
+    const line = sf.getLineAndCharacterOfPosition(node.getStart()).line
+    const lines = sf.text.split('\n')
+    return marker.test(lines[line]) || (line > 0 && /^\s*\/\//.test(lines[line - 1]) && marker.test(lines[line - 1]))
+  }
+  /** The reason a `version-draft` marker gives, on the literal's line or the comment line above. */
+  const draftReason = (node: ts.Node) => {
+    const sf = node.getSourceFile()
+    const line = sf.getLineAndCharacterOfPosition(node.getStart()).line
+    const lines = sf.text.split('\n')
+    const m = /version-draft:[ \t]*(.*)$/.exec(DRAFT.test(lines[line]) ? lines[line] : lines[line - 1])
+    return m ? m[1].trim() : ''
+  }
+  const drafts: Survey['drafts'] = []
   const known = new Map<string, Set<string>>()
   for (const sf of files) {
     walk(sf, (n) => {
       if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateExpression(n)) {
+        // A draft's version, marked with a reason, is not one every site of its family must reach.
+        if (markedByAt(n, DRAFT)) {
+          for (const [family, version] of versionsOf(n))
+            drafts.push({
+              version: `${family}/${version}`,
+              reason: draftReason(n),
+              file: path.relative(SRC, n.getSourceFile().fileName),
+            })
+          return
+        }
         for (const [family, version] of versionsOf(n)) known.set(family, (known.get(family) ?? new Set()).add(version))
       }
     })
@@ -269,7 +302,7 @@ function survey(extra: Map<string, string> = new Map()): Survey {
   for (const [family, versions] of known)
     if (versions.size > 1 && !seen.has(family))
       problems.push({ file: '', line: 0, family, kind: 'never seen', versions: [...versions].sort(byVersion) })
-  return { known, problems, ladders }
+  return { known, problems, ladders, drafts }
 }
 
 // Each a small module of its own, in families no real code uses, so each rule is shown failing and passing.
@@ -296,6 +329,16 @@ const FIXTURES = new Map<string, string>([
     fixture('markers'),
     `${SEND}const P = { p1: \`\${SPEC}guard/pin/0.1\`, p2: \`\${SPEC}guard/pin/0.2\` }\nexport const why = () => send(P.p1) // version-pinned: the fixture's host serves 0.1 only\nexport const bare = () => send(P.p1) // version-pinned:\n// version-set: the versions this fixture reads\nexport const READS = [P.p1, P.p2]\nexport const UNSAID = [P.p2, P.p1]\nexport const doc = { type: P.p1 }\n`,
   ],
+  // A draft's version, marked with a reason: it does not count toward newest, so the accepted ladder passes; its send
+  // still needs a pin. The same with a bare marker: it counts, and the ladder never reaches the newest.
+  [
+    fixture('draft'),
+    `${SEND}declare function ask(name: string, types: string[]): Promise<unknown>\nconst D = {\n  d1: \`\${SPEC}guard/draft/0.1\`,\n  d2: \`\${SPEC}guard/draft/0.2\`,\n  // version-draft: only an open upstream draft defines it\n  d3: \`\${SPEC}guard/draft/0.3\`,\n}\n/** @versionLadder guard/draft */\nexport const accepted = () => ask('draft', [D.d2, D.d1])\n// version-pinned: only the draft defines 0.3\nexport const drafted = () => send(D.d3)\n`,
+  ],
+  [
+    fixture('draftBare'),
+    `${SEND}declare function ask(name: string, types: string[]): Promise<unknown>\nconst E = {\n  e1: \`\${SPEC}guard/draftbare/0.1\`,\n  e2: \`\${SPEC}guard/draftbare/0.2\`,\n  // version-draft:\n  e3: \`\${SPEC}guard/draftbare/0.3\`,\n}\n/** @versionLadder guard/draftbare */\nexport const stale = () => ask('bare', [E.e2, E.e1])\n`,
+  ],
   // A coverage set: newest first passes, an old one fails, and a send inside one is not in a ladder.
   [
     fixture('coverage'),
@@ -317,6 +360,24 @@ describe('every family Keyring knows at more than one version is sent from a lad
 
   it("finds nothing in core's src", () => {
     expect(found.problems.filter((p) => !inFixtures(p)).map(shown)).toEqual([])
+  })
+
+  // Each version marked `version-draft` in core's src, and the open upstream pull request whose draft defines it. A
+  // marker on any other version fails here until it is argued for in this list, so the hatch is a reviewed diff, not a
+  // comment; and each marker's reason must name its draft.
+  const EXPECTED_DRAFTS: Record<string, string> = {
+    'auth/oob/claim/0.3': '#1386',
+    'auth/oob/prove/0.4': '#1386',
+    'auth/oob/identify/0.2': '#1386',
+    'auth/oob/grant/0.4': '#1386',
+    'auth/oob/respond/0.4': '#1386',
+  }
+
+  it("the versions marked as a draft's are exactly the expected ones, each naming its draft", () => {
+    const marked = found.drafts.filter((d) => !d.file.startsWith('__versionLadderGuard__'))
+    expect([...new Set(marked.map((d) => d.version))].sort()).toEqual(Object.keys(EXPECTED_DRAFTS).sort())
+    for (const d of marked)
+      expect([d.version, d.reason.includes(EXPECTED_DRAFTS[d.version])]).toEqual([d.version, true])
   })
 
   it('holds the floor: each fixed family is known, and laddered in its own file', () => {
@@ -349,6 +410,8 @@ describe('every family Keyring knows at more than one version is sent from a lad
         'untaggedLet guard/let sent outside a ladder',
         'tagged guard/order not newest first',
         'tagged guard/stale never reaches the newest',
+        'draftBare guard/draftbare never reaches the newest',
+        'draftBare guard/draftbare not newest first',
         'tagged guard/typo names a family Keyring does not know',
         'coverage guard/cover sent outside a ladder',
         'coverage guard/coverold not newest first',

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/acl/grant/0.3",
+  "title": "ACL Grant 0.3 — payload",
+  "description": "Add a subject to an access-control list. The entry states its act scope explicitly (`act`), and may carry an approve scope, a narrowed or additive capability set, and the capabilities it may approve. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, proof) are owned by the framework — SPEC §6.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["entry"],
+  "properties": {
+    "entry": {
+      "description": "The AclEntry the producer wants the maintainer to hold for the subject (intent). `act`, `keys` and `capabilities` are REQUIRED and explicit; `approve` and `approveCapabilities` are optional, and absent means none. Maintainer-populated members (`createdAt`, `createdBy`, `updatedAt`, `updatedBy`, `delegatedBy`) are ignored if a producer supplies them; the response carries the realized entry.",
+      "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/AclEntry"
+    },
+    "reason": {
+      "type": "string",
+      "maxLength": 1024,
+      "description": "Optional human-readable rationale, recorded with the grant."
+    },
+    "ext": {
+      "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+      "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "ACL Grant 0.3 — response payload",
+      "description": "The success response to an acl/grant/0.3 request. Carried in a Trust Task document whose type is https://trusttasks.org/spec/acl/grant/0.3#response.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry"],
+      "properties": {
+        "entry": {
+          "description": "The canonical AclEntry the maintainer now holds for the subject, including the maintainer-populated provenance (`createdAt`, `createdBy`, `delegatedBy`).",
+          "$ref": "../../_shared/0.3/acl-entry.schema.json#/$defs/AclEntry"
+        },
+        "ext": {
+          "$ref": "../../../_framework/0.4/framework.schema.json#/$defs/Ext",
+          "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+        }
+      }
+    }
+  }
+}

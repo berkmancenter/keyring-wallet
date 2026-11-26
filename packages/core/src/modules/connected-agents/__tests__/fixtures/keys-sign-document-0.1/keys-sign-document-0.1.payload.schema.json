@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/keys/sign-document/0.1",
+  "title": "Keys — Sign Document — payload",
+  "description": "A request for a W3C Data Integrity proof (`eddsa-jcs-2022`) over a JSON document, made with a key the custodian already holds, named by `keyId`. The document names its own signer — an `issuer` or a `controller` — and the custodian signs only as that DID, only with a key that DID's document lists under the requested proof purpose. The custodian canonicalises the document (RFC 8785), builds the proof configuration and the signing input itself; the producer never supplies bytes to sign. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, proof) are owned by the framework — SPEC §6.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["keyId", "document"],
+  "properties": {
+    "keyId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identifier of the key to sign with, as `keys/show` describes it. The key MUST be `active`, `ed25519`, and a verification method of the DID the document names as its issuer or controller."
+    },
+    "document": {
+      "type": "object",
+      "description": "The JSON document to secure — a verifiable credential, a Trust Task document, or another document that names its own signer. It MUST NOT carry `proof`, and MUST carry `issuer` (a DID, or an object whose `id` is a DID) or `controller` (a DID, or an array holding exactly one DID), every one present naming the DID the key belongs to. The custodian checks these rules itself (`proofPresent`, `documentInvalid`, `issuerMismatch`) rather than the schema, because the document is carried whole and every member is signed as given: a typed document would drop the members it does not name. The custodian serialises the whole object with RFC 8785."
+    },
+    "proofPurpose": {
+      "type": "string",
+      "enum": ["assertionMethod", "authentication"],
+      "description": "The verification relationship the proof is made under, carried verbatim into the proof (W3C Data Integrity). The key MUST be listed under this relationship in the signer DID's document. Absent means `assertionMethod`, which is what a credential's issuer signs under; `authentication` is for a document the DID presents as itself, such as a Trust Task document. Externally owned, carried verbatim."
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "description": "The proof's `created` value (an XML Schema dateTimeStamp, as Data Integrity requires). Absent means the custodian's own clock at signing. When present, the custodian refuses a value outside its acceptance window around its own clock with `keys:invalidArgument`: the key's signature dates the proof, so the producer cannot back- or forward-date it."
+    },
+    "challenge": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "description": "A challenge the proof's verifier issued, copied into the proof's `challenge` member verbatim (W3C Data Integrity). Absent means the proof carries none. The custodian does not interpret it."
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "description": "The security domain the proof is restricted to, copied into the proof's `domain` member verbatim (W3C Data Integrity). Absent means the proof carries none. The custodian does not interpret it."
+    },
+    "ext": {
+      "$ref": "../../../_framework/0.1/framework.schema.json#/$defs/Ext",
+      "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+    }
+  },
+  "$defs": {
+    "Did": {
+      "type": "string",
+      "minLength": 7,
+      "maxLength": 2048,
+      "pattern": "^did:[a-z0-9]+:[A-Za-z0-9._:%-]*[A-Za-z0-9._%-]$",
+      "description": "A DID (W3C DID Core §3.1) — never a DID URL: no path, query or fragment."
+    },
+    "Proof": {
+      "title": "Data Integrity proof",
+      "description": "The proof the custodian made: a W3C `DataIntegrityProof` under the `eddsa-jcs-2022` cryptosuite. Member names and values are Data Integrity's, carried verbatim.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "cryptosuite", "created", "verificationMethod", "proofPurpose", "proofValue"],
+      "properties": {
+        "@context": {
+          "description": "The document's own `@context`, copied into the proof configuration as `eddsa-jcs-2022` requires when the document has one; absent otherwise.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "minItems": 1
+            }
+          ]
+        },
+        "type": {
+          "type": "string",
+          "const": "DataIntegrityProof"
+        },
+        "cryptosuite": {
+          "type": "string",
+          "enum": ["eddsa-jcs-2022"],
+          "description": "The only cryptosuite this version defines."
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "verificationMethod": {
+          "type": "string",
+          "pattern": "^did:[a-z0-9]+:[^#\\s]+#[^\\s]+$",
+          "description": "The DID URL of the key's verification method in the signer DID's document, chosen by the custodian."
+        },
+        "proofPurpose": {
+          "type": "string",
+          "enum": ["assertionMethod", "authentication"]
+        },
+        "challenge": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "proofValue": {
+          "type": "string",
+          "pattern": "^z[1-9A-HJ-NP-Za-km-z]+$",
+          "description": "The Ed25519 signature, base58btc multibase-encoded."
+        }
+      }
+    },
+    "Response": {
+      "$anchor": "response",
+      "title": "Keys — Sign Document — response payload",
+      "description": "The success response to a keys/sign-document request. Carried in a Trust Task document whose type is https://trusttasks.org/spec/keys/sign-document/0.1#response. Failures use trust-task-error, not this shape.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keyId", "signerDid", "document", "proof"],
+      "properties": {
+        "keyId": {
+          "type": "string",
+          "description": "The key that produced the proof. Echoed so a response separated from its request is still attributable."
+        },
+        "signerDid": {
+          "$ref": "#/$defs/Did",
+          "description": "The DID the document was signed as — the one its `issuer` or `controller` names, and the DID a verifier resolves the proof's verification method against."
+        },
+        "document": {
+          "type": "object",
+          "description": "The request's document, unchanged, with `proof` added. Every other member is exactly as the producer sent it."
+        },
+        "proof": {
+          "$ref": "#/$defs/Proof",
+          "description": "The proof the custodian attached to `document`, returned on its own so a producer need not dig it out."
+        },
+        "ext": {
+          "$ref": "../../../_framework/0.1/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

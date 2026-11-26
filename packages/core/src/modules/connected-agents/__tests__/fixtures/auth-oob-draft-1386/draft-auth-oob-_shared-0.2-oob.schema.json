@@ -1,0 +1,305 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/auth/oob/_shared/0.2/oob",
+  "title": "Auth — shared out-of-band request definitions",
+  "description": "Shared types for the auth/oob/* family: a starter asks a service to open a request, and an approver decides it on another device. Defined once so request, claim, prove, identify, respond, grant, redeem and cancel describe the same handle, keys, closed lists and disclosure records. Version 0.2 adds the purpose `deviceEnrol` and the three records it needs: `EnrolClient`, `RequestedScope` and `AclScope`. The family rules are in CONVENTIONS.md beside this file. Not itself a Trust Task specification (the `_shared` folder is skipped by the registry build and the codegen).",
+  "$defs": {
+    "OobPurpose": {
+      "title": "OobPurpose",
+      "type": "string",
+      "enum": ["login", "deviceEnrol"],
+      "description": "What the request is for. A CLOSED list: each purpose has a fixed row in CONVENTIONS.md §3 stating what is revealed at each step, what the grant contains, what redeem returns and the window lengths. Version 0.2 defines `login` and `deviceEnrol`; version 0.1 defined `login` only. `stepUp` is a reserved name; adding a purpose is a new version of this component and of every task that references it, never an in-place edit. Named `OobPurpose` from 0.2, where 0.1 named it `Purpose`, so that it cannot be confused with the ACL family's `Purpose` (what content is used for), which the 0.2 scope records reference; the values on the wire are unchanged."
+    },
+    "Mode": {
+      "title": "Mode",
+      "type": "string",
+      "enum": ["scan"],
+      "description": "How the request reaches the approver. A CLOSED list. Version 0.1 defines `scan`: the starter shows a trigger link (as a QR code that is also a clickable link, TRIGGER-LINK.md) and the approver's wallet reads it. `code` (a typed code of at least 8 characters, under strict rate limits) and `push` (sent to the approver's enrolled devices) are reserved names."
+    },
+    "RequestId": {
+      "title": "RequestId",
+      "type": "string",
+      "minLength": 22,
+      "maxLength": 43,
+      "pattern": "^[A-Za-z0-9_-]{22,43}$",
+      "description": "The service-generated handle of one request: 16 to 32 bytes from a cryptographically secure random source, written as unpadded base64url (22 to 43 characters; 16 bytes, 22 characters, is RECOMMENDED). It is also the nonce of the exchange, so the family needs no separate challenge, and it is the `_id` of the trigger link (VTI-LNK-033). Compared as a string. It confers no authority on its holder."
+    },
+    "OobKey": {
+      "title": "OobKey",
+      "type": "string",
+      "minLength": 48,
+      "maxLength": 64,
+      "pattern": "^did:key:z6Mk[1-9A-HJ-NP-Za-km-z]+$",
+      "description": "A starter key (`K_b`) or an approver lock key (`K_a`), as an Ed25519 `did:key` (`z6Mk…`) generated for this one request and used nowhere else. Ed25519 only: a service refuses any other key type with `auth/oob:keyUnsupported` before parsing beyond the multicodec prefix."
+    },
+    "MatchNumber": {
+      "title": "MatchNumber",
+      "type": "string",
+      "pattern": "^([0-9]{2}|[0-9]{4})$",
+      "description": "The number the service chooses at claim, shows only to the starter (through redeem), and the approver enters from the starter's screen: two digits for `login`, four digits for `deviceEnrol` (from 0.2; 0.1 allowed two only). A string so that a leading zero survives. A service MUST use the length its purpose sets, and MUST refuse an entered number of the other length as a mismatch."
+    },
+    "Origin": {
+      "title": "Origin",
+      "type": "string",
+      "minLength": 9,
+      "maxLength": 2048,
+      "pattern": "^https://[^/?#\\s]+$",
+      "description": "A web origin (`https://host[:port]`, no path, no trailing slash). For `login`, the origin of the portal where the starter runs, which is the origin of the `serviceEndpoint` of the service's `SignInPortal` service in its DID document. For `deviceEnrol`, the origin of the `serviceEndpoint` of the service's `TrustTaskHTTPS` service in its DID document: the VTA endpoint the starter opened the request at."
+    },
+    "Service": {
+      "title": "Service",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["did", "name"],
+      "properties": {
+        "did": {
+          "type": "string",
+          "pattern": "^did:",
+          "minLength": 5,
+          "maxLength": 2048,
+          "description": "The service's DID: the `recipient` of every request in the family, and the `_from` of the trigger link. For `deviceEnrol`, the DID of the VTA the client is enrolled at."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The name the service calls itself. Supplied by the service: an approver shows the name from its OWN records and flags a difference from this one (VTI-LNK-104); it never shows this value as the community's name on its own authority."
+        }
+      },
+      "description": "Who the service says it is."
+    },
+    "SameNetwork": {
+      "title": "SameNetwork",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "const": "unknown"
+        }
+      ],
+      "description": "Whether the starter's request and the approver's prove came from the same egress network, as the service saw them: `true`, `false`, or the string `unknown` when the service cannot tell. The service compares addresses; it never discloses them."
+    },
+    "Requester": {
+      "title": "Requester",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location", "browser", "os", "createdAt", "sameNetwork"],
+      "properties": {
+        "location": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "City and country of the starter's connection, from a local lookup with no third-party call, or the literal `unknown`. Never an IP address."
+        },
+        "browser": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Browser family of the starter (e.g. `Chrome`), never the full User-Agent; `unknown` when it cannot be told."
+        },
+        "os": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "Operating system family of the starter (e.g. `macOS`); `unknown` when it cannot be told."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the service accepted the starter's auth/oob/request."
+        },
+        "sameNetwork": {
+          "$ref": "#/$defs/SameNetwork"
+        }
+      },
+      "description": "What the service reports about where the request came from. Revealed only in the step 2 response, to the lock holder, after a membership and number proof. Reported by the service, signed by it, and a heuristic: a relaying attacker controls what is observed."
+    },
+    "TaskFamily": {
+      "title": "TaskFamily",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*(/[a-z][a-z0-9]*(-[a-z0-9]+)*)*$",
+      "description": "A family of Trust Tasks, named by a slug prefix of whole segments (SPEC §6.1 grammar): `vtc/directory` names every task whose slug is `vtc/directory` or begins `vtc/directory/`, at any version. A prefix matches on segment boundaries only, so `vtc/dir` names nothing under `vtc/directory`."
+    },
+    "SigningScope": {
+      "title": "SigningScope",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/TaskFamily"
+      },
+      "description": "The task families a `login` grant lets the starter key sign documents for, as the approving DID, for the session the grant arms (auth/oob/grant/0.2). Offered by the service in step 2, copied unchanged into the grant, and bounded further by the exclusions auth/oob/grant/0.2 states. Absent means the starter key signs nothing beyond the family's own tasks."
+    },
+    "EnrolClient": {
+      "title": "EnrolClient",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["consumerKind", "displayName"],
+      "properties": {
+        "consumerKind": {
+          "$ref": "../../../../device/_shared/0.2/device-binding.schema.json#/$defs/ConsumerKind",
+          "description": "What kind of client asks to be enrolled, in the device family's own terms: a `companion` (`browser`, `mobile`, `desktop`) or a `service` (`mediator`, `aiAgent`, `daemon`). Self-asserted by the starter. The grant repeats it, and the VTA holds it beside the ACL entry the enrolment creates (CONVENTIONS §7 A9)."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The name the client gives itself (e.g. `Research agent on laptop`). Self-asserted and untrusted wherever rendered: an approver shows it as the client's own claim, never as a name the service vouches for."
+        }
+      },
+      "description": "Who asks to be enrolled, as the client states it in an auth/oob/request for `deviceEnrol`. Revealed only in step 2, to the lock holder, after an admin identity and number proof."
+    },
+    "RequestedScope": {
+      "title": "RequestedScope",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilities", "purposes", "keys", "maxLifetimeDays"],
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../../../../acl/_shared/0.3/acl-entry.schema.json#/$defs/CapabilityRef"
+          },
+          "description": "The most capabilities the client asks to hold, in the VTA's capability registry. Empty asks for none. A grant may hold these or fewer, never others."
+        },
+        "purposes": {
+          "$ref": "../../../../acl/_shared/0.3/acl-entry.schema.json#/$defs/PurposeScope",
+          "description": "The most purposes the client asks to use content it reads for. A grant may name these or fewer; `any` here lets the approver choose any purpose except `modelTraining`, which is granted only by naming it. A wallet shows `any` to the person as any purpose (CONVENTIONS.md §7 A14)."
+        },
+        "keys": {
+          "$ref": "../../../../acl/_shared/0.3/acl-entry.schema.json#/$defs/KeyScope",
+          "description": "The most keys the client asks to invoke the VTA's signing oracle on: `none`, or `listed`. Never `all` for `deviceEnrol` (CONVENTIONS.md §7 A14). A grant may name these or fewer."
+        },
+        "maxLifetimeDays": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 365,
+          "description": "The longest the client asks the enrolment to last, in days from the grant's `issuedAt`. The grant's `aclScope.expiresAt` may be earlier, never later. There is no unbounded enrolment."
+        }
+      },
+      "not": {
+        "properties": {
+          "keys": {
+            "properties": {
+              "scope": {
+                "const": "all"
+              }
+            },
+            "required": ["scope"]
+          }
+        },
+        "required": ["keys"]
+      },
+      "description": "The ceiling a client asks to be enrolled under, stated in an auth/oob/request for `deviceEnrol` and repeated in step 2. It is a ceiling, not a grant: the approver chooses the scope (`AclScope`) and the service refuses a grant that exceeds this. Where the client may act (the contexts) is not part of the ceiling; the approver chooses it."
+    },
+    "AclScope": {
+      "title": "AclScope",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contexts", "role", "capabilities", "purposes", "keys", "expiresAt", "consumerKind"],
+      "properties": {
+        "contexts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "../../../../acl/_shared/0.3/acl-entry.schema.json#/$defs/ContextPath"
+          },
+          "description": "Where the client may act: the entry's act scope is `{\"scope\": \"contexts\", \"contexts\": [...]}` with exactly these. Chosen by the approver among the contexts it may itself grant in. Exactly one in this version; never `all`."
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The entry's role, in the VTA's own role vocabulary: a ceiling on the capabilities, as in the ACL family. Chosen by the approver; the VTA refuses a role it does not allow for an enrolled client or the approver could not confer."
+        },
+        "capabilities": {
+          "$ref": "../../../../acl/_shared/0.3/acl-entry.schema.json#/$defs/CapabilityScope",
+          "description": "The capabilities the entry holds: `none`, or `listed` with every grant covered by the request's `capabilities` and none `additive`. `ceiling` is never valid here, because it would let the role, not the approver, decide; the schema refuses both `ceiling` and an `additive: true` grant (CONVENTIONS.md §7 A8)."
+        },
+        "purposes": {
+          "$ref": "../../../../acl/_shared/0.3/acl-entry.schema.json#/$defs/PurposeScope",
+          "description": "The entry's purpose scope: within the request's `purposes`."
+        },
+        "keys": {
+          "$ref": "../../../../acl/_shared/0.3/acl-entry.schema.json#/$defs/KeyScope",
+          "description": "The entry's key scope: `none`, or `listed` within the request's `keys`, and intersected with the act scope as the ACL family defines. Never `all` (CONVENTIONS.md §7 A14)."
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the entry stops conferring authority, as an RFC 3339 date-time: no later than the grant's `issuedAt` plus the request's `maxLifetimeDays`, checked at respond within the service's clock skew. Always present: an enrolment never lasts indefinitely."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The entry's label, chosen by the approver; absent, the VTA uses the client's `displayName`. Confers nothing."
+        },
+        "consumerKind": {
+          "$ref": "../../../../device/_shared/0.2/device-binding.schema.json#/$defs/ConsumerKind",
+          "description": "The request's `client.consumerKind`, unchanged. Repeated so that the signed grant states the kind of client the approver enrolled. The ACL entry has no such member: the VTA holds it beside the entry, and reads it when the client later sends device/register (auth/oob/redeem/0.3 service item 6, CONVENTIONS.md §7 A9)."
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "properties": {
+              "capabilities": {
+                "properties": {
+                  "scope": {
+                    "const": "ceiling"
+                  }
+                },
+                "required": ["scope"]
+              }
+            },
+            "required": ["capabilities"]
+          },
+          {
+            "properties": {
+              "capabilities": {
+                "properties": {
+                  "grants": {
+                    "contains": {
+                      "properties": {
+                        "additive": {
+                          "const": true
+                        }
+                      },
+                      "required": ["additive"]
+                    }
+                  }
+                },
+                "required": ["grants"]
+              }
+            },
+            "required": ["capabilities"]
+          },
+          {
+            "properties": {
+              "keys": {
+                "properties": {
+                  "scope": {
+                    "const": "all"
+                  }
+                },
+                "required": ["scope"]
+              }
+            },
+            "required": ["keys"]
+          }
+        ]
+      },
+      "description": "The access a `deviceEnrol` grant lets the VTA write into its ACL for the starter key, chosen by the approver within the request's `RequestedScope`. Every member except `consumerKind` maps onto one member of the ACL entry (acl/_shared/0.3) the VTA creates; `consumerKind` is held by the VTA beside the entry, not in it. The entry never carries `approve` or `approveCapabilities` authority."
+    }
+  }
+}

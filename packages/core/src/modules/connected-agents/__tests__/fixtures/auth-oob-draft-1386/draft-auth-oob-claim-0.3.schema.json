@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/auth/oob/claim/0.3",
+  "title": "Auth — OOB Claim — payload",
+  "description": "An approver claims a pending out-of-band request, locking it to a throwaway Ed25519 key (`K_a`) generated for this one exchange. The document is the first request of a trigger-link exchange (VTI-LNK-054): issued and signed by `K_a`, addressed to the service, and carrying the request's handle both here and as the envelope's `parentThreadId`. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, parentThreadId, proof) are owned by the framework — SPEC §6.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["requestId"],
+  "properties": {
+    "requestId": {
+      "$ref": "../../_shared/0.2/oob.schema.json#/$defs/RequestId",
+      "description": "The handle read from the trigger link's `_id`. MUST equal the document's `parentThreadId`."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "Auth — OOB Claim — response payload (step 1)",
+      "description": "Step 1 of the disclosure ladder, signed by the service's assertionMethod key: who the service is, where the request will be used and for what, and when the decision window closes. It MUST contain nothing about the starter.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requestId", "service", "origin", "purpose", "decisionClosesAt"],
+      "properties": {
+        "requestId": {
+          "$ref": "../../_shared/0.2/oob.schema.json#/$defs/RequestId"
+        },
+        "service": {
+          "$ref": "../../_shared/0.2/oob.schema.json#/$defs/Service"
+        },
+        "origin": {
+          "$ref": "../../_shared/0.2/oob.schema.json#/$defs/Origin"
+        },
+        "purpose": {
+          "$ref": "../../_shared/0.2/oob.schema.json#/$defs/OobPurpose"
+        },
+        "decisionClosesAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the decision window, started by the claim, closes, as an RFC 3339 date-time. Prove, respond and redeem must all complete before it. At most 180 s after the claim; 120 s RECOMMENDED."
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext"
+        }
+      }
+    }
+  }
+}

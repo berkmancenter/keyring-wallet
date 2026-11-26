@@ -17,6 +17,8 @@
  * @module trust-tasks/module/triggerLink
  */
 
+import { isAgentConnectEnabled } from '../../connected-agents/agentConnectFlag'
+
 import { isSharedConnectEnabled, isSharedConnectLabelEnabled } from './sharedConnectFlag'
 
 /**
@@ -78,6 +80,8 @@ export type TriggerFlow = {
   maxLinkLength?: number
   /** The furthest `_exp` may lie ahead of now, in seconds. Beyond it (plus skew) the link is refused `exp-too-far`. */
   maxLifetimeSeconds?: number
+  /** A link budget in UTF-8 bytes (the producer limit for a QR at level M). Over it the link is `too-long`. */
+  maxLinkBytes?: number
 }
 
 export type TriggerConfig = {
@@ -133,6 +137,47 @@ export const SHARED_CONNECT_TRIGGER_FLOW: TriggerFlow = {
 }
 
 /**
+ * Agent connect's P0 fallback (docs/plans/agent-connect-plan.md §3.2): the agent's session shows its throwaway
+ * `did:key` `K_t` as `_from`. The type URI is Keyring's proposal (ledger AC-16), not registered; read only behind
+ * the agent-connect developer flag.
+ */
+export const AGENT_CONNECT_FLOW = `https://${TRIGGER_LINK_HOST}/vti/flow/agent-connect`
+
+/** The producer limit for a link shown as a QR at level M (VTI-LNK-081), in bytes: the fallback link is held to it. */
+export const AGENT_CONNECT_MAX_LINK_BYTES = 251
+
+/** The one lifetime agent connect uses for a code (VTI-LNK-100): 5 minutes. */
+export const AGENT_CONNECT_MAX_LIFETIME_SECONDS = 300
+
+/**
+ * The fallback flow, as this reader takes it: a `did:key` contact, an expiry required and at most 5 minutes ahead,
+ * at most 251 bytes, a draft 0.1. Not carried through by the scanner (`implemented: false`): only the connect
+ * screen reads it, inside "Connect an agent" (step 7.7). The VTA's own `auth/oob` link is the sign-in flow and is
+ * not held to the byte limit here: TODO(0.1(h)) once its length with a real VTA DID is measured.
+ */
+export const AGENT_CONNECT_TRIGGER_FLOW: TriggerFlow = {
+  flow: 'agent-connect',
+  typeBase: AGENT_CONNECT_FLOW,
+  status: 'draft',
+  expRequired: true,
+  allowedVidTypes: ['did:key'],
+  supported: { '0': [1] },
+  implemented: false,
+  maxLinkBytes: AGENT_CONNECT_MAX_LINK_BYTES,
+  maxLifetimeSeconds: AGENT_CONNECT_MAX_LIFETIME_SECONDS,
+}
+
+/** A string's length in UTF-8 bytes, counted without an encoder. */
+export function utf8ByteLength(text: string): number {
+  let bytes = 0
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) as number
+    bytes += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4
+  }
+  return bytes
+}
+
+/**
  * What Keyring reads. Sign-in is the one flow it carries through; an agent
  * claim is known, so it is read and then answered `update` rather than
  * "can't be used". `keyring:` is the app's own scheme, which `isTriggerLink`
@@ -172,8 +217,12 @@ export const KEYRING_TRIGGER_CONFIG: TriggerConfig = {
  * off the flow is unknown and its links are answered `update`, as before.
  */
 export function activeTriggerConfig(): TriggerConfig {
-  if (!isSharedConnectEnabled()) return KEYRING_TRIGGER_CONFIG
-  return { ...KEYRING_TRIGGER_CONFIG, flows: [...(KEYRING_TRIGGER_CONFIG.flows ?? []), SHARED_CONNECT_TRIGGER_FLOW] }
+  const extra = [
+    ...(isSharedConnectEnabled() ? [SHARED_CONNECT_TRIGGER_FLOW] : []),
+    ...(isAgentConnectEnabled() ? [AGENT_CONNECT_TRIGGER_FLOW] : []),
+  ]
+  if (extra.length === 0) return KEYRING_TRIGGER_CONFIG
+  return { ...KEYRING_TRIGGER_CONFIG, flows: [...(KEYRING_TRIGGER_CONFIG.flows ?? []), ...extra] }
 }
 
 export type TriggerAccept = {
@@ -565,6 +614,7 @@ export function readTrigger(
     }
     if (!versionAccepted(flow, type.major, type.minor)) return reject('unsupported-version')
     if (flow.maxLinkLength !== undefined && [...text].length > flow.maxLinkLength) return reject('too-long')
+    if (flow.maxLinkBytes !== undefined && utf8ByteLength(text) > flow.maxLinkBytes) return reject('too-long')
     task = { uri: type.uri, major: type.major, minor: type.minor }
   }
 
