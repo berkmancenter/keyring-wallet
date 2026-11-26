@@ -237,6 +237,7 @@ describe('the auth/oob path, step by step', () => {
         purposes: ['personalisation', 'taskExecution'],
         expiresAt: new Date(T0 + TEMPORARY_GRANT_MS).toISOString(),
         grantType: 'temporary',
+        contextsToAdd: [],
       },
     })
   })
@@ -496,6 +497,37 @@ describe('the P0 fallback: scan the agent did:key, then acl/grant', () => {
     const t = setup({ ownVta: undefined })
     await t.machine.start(choice())
     expect(await t.machine.scan(fallbackLink())).toEqual({ phase: 'failed', reason: 'vta-unreachable' })
+  })
+})
+
+describe('a grant that reports contexts the owner did not choose', () => {
+  it('is refused, with the entry named for removal', async () => {
+    const t = setup()
+    await toApproval(t)
+    t.transport.grantAnswer = { ok: true, subject: K_T, grantedContexts: ['keyring-memory-zzzzzzzzzz'] }
+    expect(await t.machine.approve()).toEqual({
+      phase: 'failed',
+      reason: 'grant-refused',
+      cleanup: { vtaDid: VTA, subject: K_T },
+    })
+  })
+
+  it('an empty list of granted contexts is refused too, here and not later at step 10', async () => {
+    const t = setup()
+    await toApproval(t)
+    t.transport.grantAnswer = { ok: true, subject: K_T, grantedContexts: [] }
+    expect(await t.machine.approve()).toEqual({
+      phase: 'failed',
+      reason: 'grant-refused',
+      cleanup: { vtaDid: VTA, subject: K_T },
+    })
+  })
+
+  it('control: a subset of the choice is taken', async () => {
+    const t = setup()
+    await toApproval(t)
+    t.transport.grantAnswer = { ok: true, subject: K_T, grantedContexts: ['keyring-memory-abcdefghij'] }
+    expect((await t.machine.approve()).phase).toBe('awaitingEnrolment')
   })
 })
 

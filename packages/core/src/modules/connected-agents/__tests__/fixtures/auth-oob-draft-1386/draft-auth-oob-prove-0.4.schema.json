@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/auth/oob/prove/0.4",
+  "title": "Auth — OOB Prove — payload",
+  "description": "The lock holder proves membership and the number on the starter's screen by carrying a signed auth/oob/identify document, and gets back the service-signed step 2. Issued and signed by the lock key `K_a`. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, parentThreadId, proof) are owned by the framework — SPEC §6.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["identify"],
+  "properties": {
+    "identify": {
+      "type": "object",
+      "description": "A complete, signed auth/oob/identify/0.2 Trust Task document, issued by the approving DID and signed by its VTA for `authentication`. The service verifies it as a document in its own right — envelope, proof and payload against that specification's schema — over the members exactly as received: its proof covers every member, so it is deliberately an open object here rather than a typed one a binding could narrow."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext"
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "Auth — OOB Prove — response payload (step 2)",
+      "description": "Step 2 of the disclosure ladder, signed by the service's assertionMethod key: the step 1 members unchanged, plus the starter's key, where the request came from, which DID was identified and, optionally, the task families the starter key would sign for. The SHA-256 of its JCS canonical form, proof included, is the grant's `contextDigest`. For `deviceEnrol`, step 2 also names the client and the scope ceiling it asks for, and never offers a signing scope.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestId",
+        "service",
+        "origin",
+        "purpose",
+        "decisionClosesAt",
+        "sessionKey",
+        "requester",
+        "identifiedAs"
+      ],
+      "properties": {
+        "requestId": {
+          "$ref": "../../_shared/0.2/oob.schema.json#/$defs/RequestId"
+        },
+        "service": {
+          "$ref": "../../_shared/0.2/oob.schema.json#/$defs/Service"
+        },
+        "origin": {
+          "$ref": "../../_shared/0.2/oob.schema.json#/$defs/Origin"
+        },
+        "purpose": {
+          "$ref": "../../_shared/0.2/oob.schema.json#/$defs/OobPurpose"
+        },
+        "decisionClosesAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Unchanged from step 1 (auth/oob/claim/0.3): when the decision window closes, as an RFC 3339 date-time."
+        },
+        "sessionKey": {
+          "$ref": "../../_shared/0.2/oob.schema.json#/$defs/OobKey",
+          "description": "The starter key `K_b`. For `login`, the key a grant would let act as the identified DID; for `deviceEnrol`, the key a grant would make the subject of a new ACL entry."
+        },
+        "requester": {
+          "$ref": "../../_shared/0.2/oob.schema.json#/$defs/Requester"
+        },
+        "identifiedAs": {
+          "type": "string",
+          "pattern": "^did:",
+          "minLength": 5,
+          "maxLength": 2048,
+          "description": "The DID that issued the verified identify document. A grant must come from this DID. For `deviceEnrol`, an administrator of the VTA."
+        },
+        "signingScope": {
+          "$ref": "../../_shared/0.2/oob.schema.json#/$defs/SigningScope",
+          "description": "The task families the service offers to let the starter key sign for, as `identifiedAs`, for the session a grant would arm (auth/oob/grant/0.4). Fixed by the service for the surface at `origin`. Absent: the grant delegates no signing. `login` only: MUST be absent for `deviceEnrol`."
+        },
+        "client": {
+          "$ref": "../../_shared/0.2/oob.schema.json#/$defs/EnrolClient",
+          "description": "For `deviceEnrol` only, and then REQUIRED: the client the request names, as auth/oob/request/0.3 carried it. Self-asserted by the client."
+        },
+        "requestedScope": {
+          "$ref": "../../_shared/0.2/oob.schema.json#/$defs/RequestedScope",
+          "description": "For `deviceEnrol` only, and then REQUIRED: the ceiling the request asks for, as auth/oob/request/0.3 carried it, unchanged. The grant chooses within it."
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/Ext"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "purpose": {
+              "const": "login",
+              "description": "Selects the `login` shape."
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": ["client"]
+              },
+              {
+                "required": ["requestedScope"]
+              }
+            ]
+          }
+        },
+        {
+          "properties": {
+            "purpose": {
+              "const": "deviceEnrol",
+              "description": "Selects the `deviceEnrol` shape."
+            }
+          },
+          "required": ["client", "requestedScope"],
+          "not": {
+            "required": ["signingScope"]
+          }
+        }
+      ]
+    }
+  }
+}

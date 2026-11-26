@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/auth/oob/identify/0.2",
+  "title": "Auth — OOB Identify — payload",
+  "description": "A member's DID states that it holds the lock on one out-of-band request and can see the starter's screen. Issued by the approving DID and signed by its VTA for `authentication`; never sent on its own, only carried inside auth/oob/prove. Closed: additionalProperties false and no `ext`, so a VTA that signs it without user verification signs exactly these three members and nothing else. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, proof) are owned by the framework — SPEC §6.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["requestId", "approverKey", "enteredNumber"],
+  "properties": {
+    "requestId": {
+      "$ref": "../../_shared/0.2/oob.schema.json#/$defs/RequestId",
+      "description": "The request being proved for. MUST equal the requestId of the prove that carries this document."
+    },
+    "approverKey": {
+      "$ref": "../../_shared/0.2/oob.schema.json#/$defs/OobKey",
+      "description": "The lock key `K_a`. MUST equal the issuer of the prove that carries this document, so the document cannot be re-wrapped by another device."
+    },
+    "enteredNumber": {
+      "$ref": "../../_shared/0.2/oob.schema.json#/$defs/MatchNumber",
+      "description": "The number shown on the starter's screen — two digits for `login`, four for `deviceEnrol` — as entered."
+    }
+  }
+}

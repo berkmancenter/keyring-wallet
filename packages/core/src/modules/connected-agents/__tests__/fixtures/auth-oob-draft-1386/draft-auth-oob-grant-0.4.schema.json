@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/auth/oob/grant/0.4",
+  "title": "Auth — OOB Grant — payload",
+  "description": "The member's decision on one out-of-band request, as an attestation. For `login`: \"let this starter key act as me at this origin until sessionEndsAt, having seen this context\" — and, where the grant carries `signingScope`, \"and sign documents of these task families as me for that session\". For `deviceEnrol`: \"let this VTA, which I administer, enrol this starter key under this ACL scope, having seen this context\". Or a decline of either. Issued by the identified DID and signed for assertionMethod; carried only inside auth/oob/respond. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, proof) are owned by the framework — SPEC §6.3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["requestId", "purpose", "decision", "sessionKey", "approverKey", "origin", "contextDigest"],
+  "properties": {
+    "requestId": {
+      "$ref": "../../_shared/0.2/oob.schema.json#/$defs/RequestId"
+    },
+    "purpose": {
+      "$ref": "../../_shared/0.2/oob.schema.json#/$defs/OobPurpose",
+      "description": "The purpose from step 2, repeated so the signed grant says what it authorizes. `login` arms a session; `deviceEnrol` lets the VTA create an ACL entry."
+    },
+    "decision": {
+      "type": "string",
+      "enum": ["approve", "decline"],
+      "description": "The member's decision. A decline still names the context it declines, and needs no user verification."
+    },
+    "sessionKey": {
+      "$ref": "../../_shared/0.2/oob.schema.json#/$defs/OobKey",
+      "description": "The starter key `K_b`, from step 2. On approve of a `login`, the only key the grant lets act as the issuer; of a `deviceEnrol`, the only key the VTA may make the subject of the entry."
+    },
+    "approverKey": {
+      "$ref": "../../_shared/0.2/oob.schema.json#/$defs/OobKey",
+      "description": "The lock key `K_a`. MUST equal the issuer of the respond that carries this document."
+    },
+    "origin": {
+      "$ref": "../../_shared/0.2/oob.schema.json#/$defs/Origin",
+      "description": "The origin from step 2: for `login`, the portal origin at which the session key may act; for `deviceEnrol`, the origin of the VTA's Trust Task endpoint."
+    },
+    "contextDigest": {
+      "$ref": "../../../../_framework/0.4/framework.schema.json#/$defs/DigestMultibase",
+      "description": "SHA-256 multihash over the RFC 8785 (JCS) canonical form of the signed step 2 response document (the auth/oob/prove/0.4 response), proof included, written as multibase. Producers emit base58btc (`z…`). Binds the decision to exactly what the member was shown."
+    },
+    "sessionEndsAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "`login` only, and then REQUIRED: the latest instant the session key may act as the issuer, as an RFC 3339 date-time. The service ends the session at the earlier of this and its own session limit. MUST be absent for `deviceEnrol`."
+    },
+    "signingScope": {
+      "$ref": "../../_shared/0.2/oob.schema.json#/$defs/SigningScope",
+      "description": "The task families the starter key may sign documents for as the issuer, for the session this grant arms — step 2's `signingScope`, copied unchanged. Absent: the grant delegates no signing. Whatever it names, a service never accepts the key for the exclusions auth/oob/grant/0.4 states (Conformance, consumer item 6), and never beyond the member's own standing. `login` only: MUST be absent for `deviceEnrol`."
+    },
+    "aclScope": {
+      "$ref": "../../_shared/0.2/oob.schema.json#/$defs/AclScope",
+      "description": "`deviceEnrol` only: the access the approver chooses for the starter key, within step 2's `requestedScope`. REQUIRED on approve, and MUST be absent on decline (the schema says so). MUST be absent for `login`."
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "purpose": {
+          "const": "login",
+          "description": "Selects the `login` shape."
+        }
+      },
+      "required": ["sessionEndsAt"],
+      "not": {
+        "required": ["aclScope"]
+      }
+    },
+    {
+      "properties": {
+        "purpose": {
+          "const": "deviceEnrol",
+          "description": "Selects the `deviceEnrol` shape."
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": ["sessionEndsAt"]
+          },
+          {
+            "required": ["signingScope"]
+          }
+        ]
+      },
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "approve",
+            "description": "An approval, which must carry the scope the person chose; a decline must carry none."
+          }
+        },
+        "required": ["decision"]
+      },
+      "then": {
+        "required": ["aclScope"]
+      },
+      "else": {
+        "not": {
+          "required": ["aclScope"]
+        }
+      }
+    }
+  ]
+}

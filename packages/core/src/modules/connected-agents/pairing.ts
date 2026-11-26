@@ -105,7 +105,15 @@ export type ProveOutcome =
   | { ok: false; refused: 'numberMismatch' | 'expired' | 'unreachable' }
 
 export type GrantOutcome =
-  | { ok: true; subject?: string }
+  | {
+      ok: true
+      subject?: string
+      /**
+       * The contexts the grant wrote, when fewer than chosen: draft #1386's `aclScope` carries one (§7.5). The rest are
+       * the confirmed agent's `contextsToAdd`. Absent: all of them.
+       */
+      grantedContexts?: string[]
+    }
   | { ok: false; refused: 'outsideScope' | 'notAdministrator' | 'expired' | 'unreachable' }
 
 /**
@@ -215,6 +223,11 @@ export type ConfirmedAgent = {
   purposes: AgentPurpose[]
   expiresAt: string
   grantType: 'temporary'
+  /**
+   * Chosen memories the grant could not carry (§7.5: draft #1386's `aclScope` holds one context), to be added with one
+   * `acl/update` 0.3 computed from the entry as read back (carriage `completeEnrolment`). Empty on the fallback path.
+   */
+  contextsToAdd: string[]
 }
 
 type Pending = { choice: AgentConnectChoice; link: PairingLink; vtaDid: string; requestId: string; deadline: number }
@@ -230,6 +243,8 @@ export type PairingState =
       choice: AgentConnectChoice
       vtaDid: string
       scope: AgentAclScope
+      /** The contexts the grant wrote: what the entry is checked against at step 10. */
+      grantedContexts: string[]
       /** The key the entry was made for (`K_t`); undefined until the VTA names it (§11 Q7(c)). */
       subject?: string
       deviceId?: string
@@ -308,6 +323,10 @@ const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.l
 /**
  * Whether a rotated entry kept everything the grant set (§3.10: "Rotation lost `expiresAt`, capabilities or kind").
  * Which members `acl/swap-key` actually keeps is measured in step 0.1(c); this check holds whatever it finds.
+ *
+ * Every comparison is exact set equality, and that is load-bearing: on the `deviceEnrol` path the machine checks the
+ * entry against the contexts the grant wrote, a narrower set than chosen (§7.5). Loosened to containment ("kept at
+ * least these"), that narrowing would let an entry with extra contexts through.
  */
 export function entryKeptLimits(entry: ListedEntry, scope: AgentAclScope): boolean {
   if (entry.consumerKind !== AI_AGENT_KIND) return false
@@ -483,11 +502,21 @@ export class PairingMachine {
       if (granted.refused === 'unreachable') return this.fail('vta-unreachable')
       return this.fail('grant-refused')
     }
+    // What the grant wrote must be some of what the owner chose, and not nothing: nothing the VTA answers widens the
+    // entry past Approve, and an empty list would pass `every` vacuously.
+    if (
+      granted.grantedContexts &&
+      (granted.grantedContexts.length === 0 || !granted.grantedContexts.every((c) => scope.contexts.includes(c)))
+    ) {
+      const subject = granted.subject ?? s.subject
+      return this.fail('grant-refused', subject ? { cleanup: { vtaDid: s.vtaDid, subject } } : {})
+    }
     return this.set({
       phase: 'awaitingEnrolment',
       choice: s.choice,
       vtaDid: s.vtaDid,
       scope,
+      grantedContexts: granted.grantedContexts ? [...granted.grantedContexts] : [...scope.contexts],
       subject: granted.subject ?? s.subject,
       grantedAt: now,
     })
@@ -524,7 +553,8 @@ export class PairingMachine {
       subject: entry.subject,
       ...(entry.deviceId ? { deviceId: entry.deviceId } : {}),
     }
-    if (!entryKeptLimits(entry, s.scope)) return this.fail('rotation-lost-limits', { cleanup: rotatedCleanup })
+    if (!entryKeptLimits(entry, { ...s.scope, contexts: s.grantedContexts }))
+      return this.fail('rotation-lost-limits', { cleanup: rotatedCleanup })
     const handle = deriveHandle(s.choice.name, entry.subject, this.deps.takenHandles())
     if (!handle.ok) return this.fail('handle-collision', { cleanup: rotatedCleanup })
     return this.set({
@@ -536,7 +566,8 @@ export class PairingMachine {
         deviceId: entry.deviceId as string,
         vtaDid: s.vtaDid,
         ownerPersonaDid: s.choice.ownerPersonaDid,
-        contexts: [...s.scope.contexts],
+        contexts: [...s.grantedContexts],
+        contextsToAdd: s.scope.contexts.filter((c) => !s.grantedContexts.includes(c)),
         memoryContexts: [...s.choice.memoryContexts],
         capabilities: s.scope.capabilities,
         purposes: [...s.scope.purposes],
