@@ -2,9 +2,10 @@
  * Step 7.10, Revoke (docs/plans/agent-connect-plan.md §3.9, §3.10). Its acceptance line, one describe each:
  * order is ACL entry first; the agent is found by `deviceId` after one and two key swaps and its entry under the new
  * key is revoked; an empty `revokeSubject` answer is never success; a partial or failed listing leaves `revoking`,
- * which survives a restart and clears only on a full listing; the app-start reconcile records a changed key without
- * moving the chat; a failed ACL call leaves `revoking` and retries. And Keyring's 7.10 contract for the record: only
- * `state` (active or expired -> revoking -> revoked) and `lastReconciledAt` are written, `keyChanged` is read-only.
+ * which survives a restart and clears only on a full listing; the app-start reconcile records a changed key
+ * (`keyChanged: true`) without moving the chat; a failed ACL call leaves `revoking` and retries. And Keyring's 7.10
+ * contract for the record: exactly `state` (active or expired -> revoking -> revoked), `lastReconciledAt` and
+ * `keyChanged` (only ever to `true`) are written, each through get, change, put.
  *
  * The VTA side is the real `VtaClient` (its `findAgentEntries` and `revokeSubject`, step 7.4) over a fake `task` that
  * keeps an access list and device bindings, and behaves as the lab measured (ref-25 `l-revoke-after-1-swap` and
@@ -343,16 +344,28 @@ describe("Keyring's 7.10 contract for the record", () => {
       )
     })
 
-  it('a revoke, its retries and the reconcile write only state and lastReconciledAt', async () => {
+  it('a changed key, a revoke, its retries and the reconcile write exactly the three members', async () => {
     const s = await setup()
+    // The agent swaps its key; the app-start reconcile records it.
+    s.swap('dev-1', K_B)
+    await reconcileAgents(s.deps)
+    expect((await s.store.get(K_A))?.keyChanged).toBe(true)
     s.vtaState.partial = true
     await revokeAgentConnection(s.deps, K_A)
     await reconcileAgents(s.deps)
     s.vtaState.partial = false
     await reconcileAgents(s.deps)
     expect((await s.store.get(K_A))?.state).toBe('revoked')
-    expect([...new Set(changed(s.store.writes))].sort()).toEqual(['lastReconciledAt', 'state'])
+    expect([...new Set(changed(s.store.writes))].sort()).toEqual(['keyChanged', 'lastReconciledAt', 'state'])
     for (const w of s.store.writes) for (const k of NEVER) expect(w).not.toHaveProperty(k)
+  })
+
+  it('control: without a changed key, keyChanged is never written', async () => {
+    const s = await setup()
+    await reconcileAgents(s.deps)
+    await revokeAgentConnection(s.deps, K_A)
+    expect([...new Set(changed(s.store.writes))].sort()).toEqual(['lastReconciledAt', 'state'])
+    expect(s.store.writes.every((w) => w.keyChanged === false)).toBe(true)
   })
 
   it('state goes active -> revoking -> revoked, and expired -> revoking -> revoked', async () => {
@@ -372,10 +385,19 @@ describe("Keyring's 7.10 contract for the record", () => {
     }
   })
 
-  it('keyChanged is read-only: a changed key is reported, the record keeps its keyChanged', async () => {
+  it('a changed key is recorded as keyChanged: true through get, change, put, and never set back', async () => {
     for (const keyChanged of [false, true]) {
       const s = await setup({ keyChanged })
       s.swap('dev-1', K_B)
+      const before = s.store.writes.length
+      await reconcileAgents(s.deps)
+      // One put for the stamp and the flag together.
+      expect(s.store.writes.length - before).toBe(1)
+      expect((await s.store.get(K_A))?.keyChanged).toBe(true)
+    }
+    // An agent whose key did not change keeps what it had: a true is not cleared, a false is not set.
+    for (const keyChanged of [false, true]) {
+      const s = await setup({ keyChanged })
       await reconcileAgents(s.deps)
       expect((await s.store.get(K_A))?.keyChanged).toBe(keyChanged)
     }
@@ -398,14 +420,15 @@ describe('removeAgentEntries: rounds', () => {
 })
 
 describe('the app-start reconcile', () => {
-  it('reports a changed key without moving the chat or the agent DID, and writes only the stamp', async () => {
+  it('records and reports a changed key without moving the chat or the agent DID', async () => {
     const s = await setup()
     s.swap('dev-1', K_B)
     expect(await reconcileAgents(s.deps)).toEqual([{ id: K_A, kind: 'keyChanged', subject: K_B }])
     const after = (await s.store.get(K_A)) as Conn
+    // The new subject is not stored: only the flag and the stamp.
     expect(after).not.toHaveProperty('currentSubject')
     expect(after).toMatchObject({
-      keyChanged: false,
+      keyChanged: true,
       agentDid: K_A,
       chatDid: 'did:peer:2.chat',
       handle: 'notes-helper',
@@ -455,6 +478,7 @@ describe('the app-start reconcile', () => {
       return out
     })
     await reconcileAgents(s.deps)
-    expect((await s.store.get(K_A))?.name).toBe('Renamed meanwhile')
+    // The rename survives, and the changed key is recorded on top of it.
+    expect(await s.store.get(K_A)).toMatchObject({ name: 'Renamed meanwhile', keyChanged: true })
   })
 })

@@ -17,9 +17,11 @@
  * 3. The agent is told over the chat, best effort, on the one run that confirms step 1. Not relied on.
  * 4. The record goes from `revoking` to `revoked` only once a full listing no longer shows the entry.
  *
- * **What it writes.** Of the `AgentConnection` record (§3.11), only `state` and `lastReconciledAt`, always as get,
- * change, put. `keyChanged` is read, never written: the reconcile reports a changed key ({@link ReconcileResult}) and
- * the record's owner, step 7.7, records it.
+ * **What it writes.** Of the `AgentConnection` record (§3.11), exactly `state`, `lastReconciledAt` and `keyChanged`,
+ * always as get, change, put. `keyChanged` is written by the reconcile alone, and only to `true`, when it finds the
+ * agent's `deviceId` under a subject other than `agentDid` (the plan's 7.10 acceptance: "the app-start reconcile
+ * records a changed key"); it also reports it ({@link ReconcileResult}). Nothing here sets it back to `false`, and
+ * the new subject itself is not stored: `agentDid` and the chat stay as they were.
  *
  * **The store.** Step 7.7's `AgentConnectionStore` (`list`, `get`, `put`, `remove`; no partial update) is in #1065,
  * not merged yet. Until it is, this module names the members it uses ({@link RevokableConnection}) and that store's
@@ -42,7 +44,7 @@ export const REVOKABLE_FROM: readonly RevokableState[] = ['active', 'expired']
 
 /**
  * The members of step 7.7's `AgentConnection` this step uses. A record carries more; every other member is kept as it
- * is, since each write re-reads the record and changes only `state` and `lastReconciledAt`.
+ * is, since each write re-reads the record and changes only `state`, `lastReconciledAt` and `keyChanged`.
  */
 export type RevokableConnection = {
   /** The record's key (7.7 keys it by the agent's DID). */
@@ -53,8 +55,8 @@ export type RevokableConnection = {
   /** Set by `device/register`, copied by every `acl/swap-key`: what the agent is found by. */
   deviceId: string
   state: RevokableState
-  /** Read-only for this step. */
-  readonly keyChanged: boolean
+  /** Set to `true` by the reconcile when the agent changed its key without Keyring (§3.9); never set back here. */
+  keyChanged: boolean
   /** ISO 8601; absent for a persistent agent. */
   expiresAt?: string
   lastReconciledAt?: string
@@ -188,10 +190,12 @@ async function runRevoke<C extends RevokableConnection>(deps: RevokeDeps<C>, id:
   return outcome
 }
 
-/** The only members this step writes. */
-type Written = { state?: RevokableState; lastReconciledAt?: string }
+/** The only members this step writes. `keyChanged` only ever to `true`. */
+type Written = { state?: RevokableState; lastReconciledAt?: string; keyChanged?: true }
 
-/** Get, change `state` and `lastReconciledAt` only, put: a member another step wrote meanwhile is kept. */
+/**
+ * Get, change `state`, `lastReconciledAt` and `keyChanged` only, put: a member another step wrote meanwhile is kept.
+ */
 async function write<C extends RevokableConnection>(
   store: RevokeConnectionStore<C>,
   id: string,
@@ -202,13 +206,14 @@ async function write<C extends RevokableConnection>(
   const next: C = { ...current }
   if (changes.state !== undefined) next.state = changes.state
   if (changes.lastReconciledAt !== undefined) next.lastReconciledAt = changes.lastReconciledAt
+  if (changes.keyChanged) next.keyChanged = true
   await store.put(next)
 }
 
 /**
- * What the reconcile found for one record. `keyChanged` and `gone` are reported, not written: the first is
- * `keyChanged`, which this step only reads; the second would be a state change outside Revoke's two (§3.9), so the
- * record's owner (step 7.7) decides what it shows.
+ * What the reconcile found for one record. A `keyChanged` result is also written to the record (`keyChanged: true`).
+ * `gone` is reported, not written: it would be a state change outside Revoke's two (§3.9), so the record's owner
+ * (step 7.7) decides what it shows.
  */
 export type ReconcileResult =
   | { id: string; kind: 'revoke'; outcome: RevokeOutcome }
@@ -224,9 +229,10 @@ export type ReconcileResult =
  * The reconcile at app start, and on opening the list or the details (§3.9), for every record not `revoked`:
  * - `revoking`: the revoke runs again, and the record becomes `revoked` once a full listing shows no entry;
  * - `active` or `expired`: one full listing, stamped as `lastReconciledAt`. The agent's `deviceId` under a subject
- *   other than `agentDid` is reported as `keyChanged` (""<name>" changed its key. Revoke it if you did not expect
- *   that."); `agentDid` and the chat are not moved, since a rotation Keyring did not witness proves nothing about who
- *   holds the new key. No entry at all is reported as `gone`.
+ *   other than `agentDid` is recorded as `keyChanged: true`, in the same get, change, put as the stamp, and reported
+ *   as `keyChanged` (""<name>" changed its key. Revoke it if you did not expect that."); `agentDid` and the chat are
+ *   not moved, since a rotation Keyring did not witness proves nothing about who holds the new key. No entry at all
+ *   is reported as `gone`.
  * `pairing` and `notFinished` records are the pairing's (§3.10) and are left alone. One record at a time.
  */
 export async function reconcileAgents<C extends RevokableConnection>(
@@ -253,8 +259,11 @@ export async function reconcileAgents<C extends RevokableConnection>(
       results.push({ id: record.id, kind: 'unknown' })
       continue
     }
-    await write(deps.store, record.id, { lastReconciledAt: iso(now()) })
     const moved = found.matches.find((m) => m.deviceId === record.deviceId && m.entry.subject !== record.agentDid)
+    // One get, change, put: the stamp and, when the key changed, `keyChanged: true`.
+    const changes: Written = { lastReconciledAt: iso(now()) }
+    if (moved) changes.keyChanged = true
+    await write(deps.store, record.id, changes)
     if (moved) results.push({ id: record.id, kind: 'keyChanged', subject: moved.entry.subject })
     else if (found.matches.length === 0) results.push({ id: record.id, kind: 'gone' })
     else results.push({ id: record.id, kind: 'unchanged' })
