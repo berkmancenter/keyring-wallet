@@ -4,20 +4,19 @@
  *
  * Read against the DTG Credentials specification at `trustoverip/dtgwg-cred-spec` `3fbaeb6` (upstream `main`,
  * 2026-11-24), `spec/body.md`: "Base Structure", "Context Versions", "Digest Encoding", "VDC (Verifiable Delegation
- * Credential)" and "Delegation Edges". The pin in `scripts/openvtc/PINS.json` (`b89f389`, 2026-08-12) predates the
- * VDC section, which is why that commit is named here.
+ * Credential)" and "Delegation Edges". `scripts/openvtc/PINS.json` pins that commit since #1042.
  *
  * What it is here: a record of whose agent this is, never presented in room operations, and carrying no authority
  * (the ACL entry is the authority, §3.3). So this module builds, checks and re-issues; it signs and verifies proofs
  * only through what it is given:
  *
- * - the signer: which VTA task signs a credential as the persona is step 0.1(f) (VTI-Q32), and its fallback is a
- *   Trust Task envelope the VTA signs (D19). TODO(0.1(f)): the real {@link VdcSigner}.
- * - the verifier: a `DataIntegrityProof`. The specification recommends `eddsa-jcs-2022`, which
- *   `@bifold/trust-tasks`' `verifyDocumentProof` checks against an expected controller; the grant's signature
- *   follows whatever 0.1(f) finds.
+ * - the signer: the grant is signed as the persona by the owner's VTA with `keys/sign-document/0.1` and the persona's
+ *   `signingKeyId` (step 0.1(f), measured on VTA 0.84.0 and 0.87.0): {@link vtaVdcSigner}. The answer is the credential
+ *   as sent with a `DataIntegrityProof` (`eddsa-jcs-2022`, `assertionMethod`) added. The acceptance is the agent's own.
+ * - the verifier: `@bifold/trust-tasks`' `verifyDocumentProof` checks `eddsa-jcs-2022` against an expected controller.
+ *   It needs the agent to resolve the persona's DID, so it is wired by the connect screens (step 7.7).
  *
- * Pure apart from those two: no storage, no network.
+ * Pure apart from those two: no storage, and no network but the signing task its port sends.
  *
  * @module connected-agents/vdc
  */
@@ -58,7 +57,7 @@ export type UnsignedVdc = {
 /** A VDC with its proof. */
 export type SignedVdc = UnsignedVdc & { proof: unknown }
 
-/** Signs a VDC as `issuer`. TODO(0.1(f)): for the grant, the VTA task that signs as the persona, or D19's envelope. */
+/** Signs a VDC as its `issuer`. For the grant: {@link vtaVdcSigner}. */
 export interface VdcSigner {
   sign(credential: UnsignedVdc): Promise<SignedVdc>
 }
@@ -263,4 +262,37 @@ export async function issueVdc(unsigned: UnsignedVdc, signer: VdcSigner): Promis
     throw new Error('the signer changed the credential it signed')
   if (signed.proof === undefined || signed.proof === null) throw new Error('the signer returned no proof')
   return signed
+}
+
+/** The task that signs a document as a DID whose key the VTA holds (step 0.1(f)). Keyring knows one version of it. */
+export const KEYS_SIGN_DOCUMENT_TASK = 'https://trusttasks.org/spec/keys/sign-document/0.1'
+
+/** What {@link vtaVdcSigner} needs of the VTA client: `VtaClient.task`. */
+export interface VdcSignPort {
+  task(type: string, payload: Record<string, unknown>): Promise<unknown>
+}
+
+/**
+ * The grant's signer: the owner's VTA signs it as the persona with `keys/sign-document/0.1` (step 0.1(f)). `keyId` is the
+ * persona's `signingKeyId` (`<persona DID>#key-0`, as minting and the DID list give it). The answer must name that key,
+ * be signed as the credential's own `issuer`, and carry a proof; {@link issueVdc} then refuses an answer whose claims
+ * differ from what was sent. A refusal (`keys/sign-document:issuerMismatch`, `:proofPresent`, `keys:notFound`, …)
+ * is passed on as the VTA gave it.
+ */
+export function vtaVdcSigner(port: VdcSignPort, signingKeyId: string): VdcSigner {
+  return {
+    async sign(credential: UnsignedVdc): Promise<SignedVdc> {
+      const answer = (await port.task(KEYS_SIGN_DOCUMENT_TASK, { keyId: signingKeyId, document: credential })) as
+        | { keyId?: unknown; signerDid?: unknown; document?: unknown; proof?: unknown }
+        | undefined
+      if (!answer || answer.keyId !== signingKeyId)
+        throw new Error('the VTA signed with another key than the one asked')
+      if (answer.signerDid !== credential.issuer)
+        throw new Error("the VTA signed as someone other than the grant's issuer")
+      const document = answer.document as SignedVdc | undefined
+      if (!document || typeof document !== 'object' || !document.proof)
+        throw new Error('the VTA returned no signed credential')
+      return document
+    },
+  }
 }
