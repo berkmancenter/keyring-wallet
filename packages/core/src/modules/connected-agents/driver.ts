@@ -53,6 +53,11 @@ export interface ConnectionRecords {
   put(record: AgentConnection): Promise<void>
   /** One read-modify-write per record (`AgentConnectionStore.update`): step 7.10 writes the same records. */
   update(id: string, change: (record: AgentConnection) => AgentConnection): Promise<AgentConnection | undefined>
+  /** As `update`, and also for an absent record: the keep-or-write decision is taken under the record's lock. */
+  upsert(
+    id: string,
+    decide: (current: AgentConnection | undefined) => AgentConnection | undefined
+  ): Promise<AgentConnection | undefined>
   /** The record whose `id` (first key) or `agentDid` (current key, §3.9) is `did`. */
   findByKey(did: string): Promise<AgentConnection | undefined>
 }
@@ -244,7 +249,9 @@ export class AgentConnectDriver {
 
   /**
    * Record what an ended pairing left at the VTA as "Not finished". A record already there for that subject that is
-   * neither pairing nor unfinished (a connected agent's) is kept as it is: the leftover is never written over it.
+   * neither pairing nor unfinished (a connected agent's) is kept as it is: the leftover is never written over it. The
+   * decision is taken inside `upsert`, from the record as it is when the leftover would be written, so a grant step
+   * 7.10 or another writer stores meanwhile is seen and kept.
    */
   private async recordLeftover(
     cleanup: PairingCleanup,
@@ -253,15 +260,20 @@ export class AgentConnectDriver {
     // By either key: after a rotation (§3.9) a connected agent's record keeps its first key as `id` and holds the
     // current one as `agentDid`. A leftover keyed by a connected agent's current key would offer "Remove", which
     // revokes by subject: the connected agent's live entry.
-    const existing = await this.ports.connections.findByKey(cleanup.subject)
+    // That record is another record's (its own lock), so this read is outside the write's lock; a rotation onto a
+    // fresh pairing's subject in between would need the agent to rotate onto a key it is pairing with now.
+    const rotated = await this.ports.connections.findByKey(cleanup.subject)
+    if (rotated && rotated.id !== cleanup.subject) return { state: 'kept', subject: cleanup.subject }
     // A `pairing` record may be written over: it is written only after `confirmed`, and every cleanup-carrying phase
     // comes before confirmation, so a cleanup for a subject already at `pairing` would come from a new pairing of that
     // key. Anything further along (a connected, expired, revoking or revoked agent) is kept as it is.
-    if (existing && existing.state !== 'pairing' && existing.state !== 'notFinished') {
-      return { state: 'kept', subject: cleanup.subject }
-    }
-    await this.ports.connections.put(leftoverRecordFor(cleanup, choice, this.ports.clock()))
-    return { state: 'notFinished', subject: cleanup.subject }
+    const leftover = leftoverRecordFor(cleanup, choice, this.ports.clock())
+    const written = await this.ports.connections.upsert(cleanup.subject, (current) =>
+      current && current.state !== 'pairing' && current.state !== 'notFinished' ? current : leftover
+    )
+    return written === leftover
+      ? { state: 'notFinished', subject: cleanup.subject }
+      : { state: 'kept', subject: cleanup.subject }
   }
 
   /** Issue and store the VDC grant (step 7.3, §3.4); `active` only once it is stored (#1060 finding 19). */
