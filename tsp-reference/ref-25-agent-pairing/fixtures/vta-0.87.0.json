@@ -1,0 +1,151 @@
+{
+  "recordedAt": "2026-11-26T07:02:47.423Z",
+  "source": {
+    "repository": "OpenVTC/verifiable-trust-infrastructure",
+    "commit": "4e5861d95b799c0910e92a81bec6af17d1578e2d",
+    "version": "0.87.0",
+    "profile": "debug"
+  },
+  "binarySha256": "61d9e36a5c2413e14f7e43f8c7aa983cc807e84d7aa22987e319c7baa226599e",
+  "administrator": {
+    "roles": [
+      "admin"
+    ],
+    "scopes": [],
+    "capabilities": [
+      "credential-present",
+      "credential-write",
+      "device-admin",
+      "external-accounts-manage",
+      "external-auth-use",
+      "fill-release",
+      "key-export",
+      "key-mint",
+      "memory-read",
+      "memory-write",
+      "pcs-applicant",
+      "pcs-trustee",
+      "pcs-vetter",
+      "pcs-voter",
+      "policy-admin",
+      "proxy-login",
+      "room-open",
+      "room-present",
+      "sign",
+      "sign-csr",
+      "sign-document",
+      "sign-jws",
+      "sign-sshsig",
+      "sign-trust-task",
+      "vault-read",
+      "vault-write",
+      "witness-request"
+    ]
+  },
+  "serves": {
+    "acl/grant": [
+      "0.3"
+    ],
+    "acl/revoke": [
+      "0.3"
+    ],
+    "acl/update": [
+      "0.3"
+    ],
+    "acl/list": [
+      "0.4"
+    ],
+    "acl/show": [
+      "0.3"
+    ],
+    "acl/swap-key": [
+      "0.1"
+    ],
+    "device/register": [
+      "0.2"
+    ],
+    "device/list": [
+      "0.3"
+    ],
+    "device/disable": [
+      "0.1"
+    ],
+    "vta/contexts/create": [
+      "1.0"
+    ],
+    "vta/contexts/list": [
+      "1.0"
+    ],
+    "vta/contexts/update": [
+      "1.0"
+    ],
+    "vta/contexts/delete": [
+      "1.2"
+    ],
+    "vta/memory/put": [
+      "0.1",
+      "0.2",
+      "0.3"
+    ],
+    "vta/memory/get": [
+      "0.1",
+      "0.2"
+    ],
+    "vta/memory/list": [
+      "0.1",
+      "0.2",
+      "0.3"
+    ],
+    "vta/memory/delete": [
+      "0.1",
+      "0.2",
+      "0.3"
+    ],
+    "rooms/keys/present": [
+      "0.2"
+    ],
+    "rooms/keys/open": [
+      "0.2",
+      "0.3"
+    ],
+    "rooms/keys/seal": [
+      "0.2",
+      "0.3"
+    ],
+    "rooms/keys/act": [
+      "0.8",
+      "0.9",
+      "0.10",
+      "0.11",
+      "0.12"
+    ],
+    "auth/oob/request": "not served (422 unsupportedType)",
+    "auth/oob/claim": "not served (422 unsupportedType)",
+    "auth/oob/prove": "not served (422 unsupportedType)",
+    "auth/oob/respond": "not served (422 unsupportedType)",
+    "auth/oob/grant": "not served (422 unsupportedType)",
+    "auth/oob/redeem": "not served (422 unsupportedType)",
+    "task-consent/request": "not served (422 unsupportedType)",
+    "task-consent/decision": [
+      "0.2"
+    ],
+    "vault/credentials/present": [
+      "0.1"
+    ],
+    "vta/webvh/dids/create": [
+      "1.2"
+    ],
+    "keys/sign-document": [
+      "0.1"
+    ],
+    "vta/credentials/issue": [
+      "0.2"
+    ],
+    "credential-exchange/issue": [
+      "0.1"
+    ],
+    "vault/sign-trust-task": [
+      "0.2"
+    ]
+  }
+}

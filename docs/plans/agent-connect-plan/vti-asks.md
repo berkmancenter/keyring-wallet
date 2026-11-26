@@ -81,12 +81,12 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 - **Extension:** an `agents` member (`allowed`, `notAllowed`) in the community's room record and the room profile; later, enforcement for "only with VDCs to people in the room".
 - **Severity:** P1 works around (advisory; "not stated" counts as no, plan §3.8); P2 blocks the third setting.
 
-### AC-07 No task signs a VDC as the persona, and no status hosting for it
+### AC-07 No status hosting for a VDC a persona issues (the signing task exists: answered)
 
-- **Hit:** `docs/` and `vti-specs*` carry VAC and VMC issuance, no VDC.
-- **Evidence:** search of `docs/` and `vti-specs*` at `origin/main`; plan §2.3 item 5.
-- **Extension:** a persona-issuing task for a W3C credential (or a Trust Task envelope the VTA signs) and a status-list hosting path for it.
-- **Severity:** P0 works around (7-day validity re-issued while the entry is active, no status entry; a revoked agent's VDC can stay valid up to 7 days and nothing shows it in P0 and P1 shows it only in the agent's profile record in rooms; Phase 0 step 0.1(f) measures what exists); P1 blocks presenting the VDC with a revocation guarantee.
+- **Hit:** nothing hosts a status entry for a credential a persona issues. The signing half of this ask is **answered**: `keys/sign-document/0.1` signs a W3C credential as the persona.
+- **Evidence:** the rung `tsp-reference/ref-25-agent-pairing`, case `f-sign-as-persona`, on lab VTAs 0.84.0 at `97fda9813` and 0.87.0 at `4e5861d95`, 2026-11-26 (plan §2.3 item 5; companion `2026-11-26-al.md` finding 8): the credential comes back unchanged with an `eddsa-jcs-2022` proof by the persona's `#key-0`, it verifies, and an agent's entry is refused the task. For status: search of `docs/` and `vti-specs*` at `origin/main`.
+- **Extension:** a status-list hosting path for such a credential.
+- **Severity:** P0 none for signing; P0 works around the missing status (7-day validity re-issued while the entry is active, no status entry; a revoked agent's VDC can stay valid up to 7 days and nothing shows it in P0 and P1 shows it only in the agent's profile record in rooms); P2 blocks presenting the VDC with a revocation guarantee.
 
 ### AC-08 Rooms cannot show whose agent a record's author is
 
@@ -113,14 +113,14 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 
 ### AC-09 Per-sender queue cap, and the refusal's guidance
 
-- **Hit:** an offline recipient accepts 49 messages from one sender and refuses the 50th with HTTP 503 `e.p.limits.queue.peer` (`queued_send_messages_per_peer = 50`). The response observed carried no recovery hint beyond the code.
-- **Evidence:** lab measurement 2026-11-20, case S10, `/srv/dev/scratch/2026-11-20-bam-agent-mediator-findings.md`.
-- **Extension:** a documented limit, a `Retry-After` on that refusal, and a way for a sender to learn the recipient is offline before queueing.
+- **Hit:** an offline recipient accepts 50 messages from one sender and refuses the 51st with HTTP 503 `e.p.limits.queue.peer` and `Retry-After: 30` (`queued_send_messages_per_peer = 50`).
+- **Evidence:** the rung `tsp-reference/ref-25-agent-pairing`, cases `queue/none` and `queue/session`, on the mediator v0.53.0 at `f6ed8159a`, 2026-11-26 (plan §2.4). The first measurement, on 0.48.0 on 2026-11-20, saw the 50th refused with no hint.
+- **Extension:** the documented limit and the `Retry-After` exist at v0.53.0 (its `ERRORS.md`), so that part is answered. What remains: a way for a sender to learn the recipient is offline before queueing.
 - **Severity:** P0 works around (Keyring stops at 20 and honours the code); P1 none.
 
 ### AC-10 Closed-mediator ACL for a `did:key` client
 
-- **Hit:** with `global_acl_default = DENY_ALL` authentication still succeeds, then the send is refused (HTTP 403 `e.p.authorization.send`) and the recipient's WebSocket upgrade fails (close 1006). A `did:key` client needs its own ACL step on a closed mediator; `vta-sdk/src/acl_setup.rs` does this for the VTA and PNM. The self-service path for an agent was not tested.
+- **Hit:** with `global_acl_default = DENY_ALL` authentication still succeeds, then the send is refused (HTTP 403 `e.p.authorization.send` with a session, HTTP 401 with none) and the recipient's WebSocket upgrade fails (close 1006); re-measured on v0.53.0 on 2026-11-26 (plan §2.4). A `did:key` client needs its own ACL step on a closed mediator; `vta-sdk/src/acl_setup.rs` does this for the VTA and PNM. The self-service path for an agent was not tested.
 - **Evidence:** lab measurement, case ACL; `vta-sdk/src/acl_setup.rs`.
 - **Extension:** a documented self-service ACL path for an agent or a phone identity, and an error that says why the socket closed.
 - **Severity:** P0 works around (a stated precondition on the mediator; tested on the lab; the Farm is a recorded validation when its operators allow); P1 none.
@@ -128,7 +128,7 @@ Evidence is read at VTI `origin/main` `71d524572` (`git show`, never the stale w
 ### AC-11 A `did:peer` mailbox must name the mediator it is registered on
 
 - **Hit:** a forward to a `did:peer` whose service names another host returns HTTP 200 at send, is never delivered (`FORWARD_FAILED` five times, `FORWARD_ABANDONED`) and leaves a problem report only for the sender. The sender saw success.
-- **Evidence:** lab measurement, case S8.
+- **Evidence:** lab measurement, case S8; re-measured on v0.53.0 on 2026-11-26 with the same result on the open configuration within 8 s (the rung's `peer-elsewhere` cases, plan §2.4). With `external_forwarding` off, as on the wallet mailbox, the message is delivered locally when that DID holds an account there.
 - **Extension:** refuse at send, or report the failure to the sender promptly.
 - **Severity:** P0 works around (the session prints a code only for a `did:peer` that names its own mediator); P1 none.
 
