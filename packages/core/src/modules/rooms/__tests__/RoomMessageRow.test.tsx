@@ -214,7 +214,11 @@ describe('a row whose read was refused over a version (IN-814)', () => {
 
   test('the fourth line, for a refusal that does not say who needs the update, still says an update is needed', () => {
     const words = [en, fr, ptBr].map((language) => (language.Rooms as Record<string, string>).RowCannotRead)
-    expect(words).toEqual(['Needs an update to be read', 'Mise à jour nécessaire pour lire', 'Precisa de atualização para ler'])
+    expect(words).toEqual([
+      'Needs an update to be read',
+      'Mise à jour nécessaire pour lire',
+      'Precisa de atualização para ler',
+    ])
   })
 })
 
