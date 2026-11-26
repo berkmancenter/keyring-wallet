@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-25",
+  "updated": "2026-11-26",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
@@ -25,7 +25,10 @@
         "docs/05-design-notes/",
         "vta-sdk/src/protocol/",
         "vta-service/src/messaging/",
-        "vta-service/Cargo.toml"
+        "vta-service/Cargo.toml",
+        "vta-service/src/trust_tasks/room_read.rs",
+        "vta-service/src/operations/room_groups.rs",
+        "vta-service/src/operations/room_groups/"
       ]
     },
     "verifiable-trust-infrastructure-v047": {
@@ -155,6 +158,17 @@
       "watch": [
         "spec/2.0-draft-3/specification.md",
         "schemas/2.0-draft-3/"
+      ]
+    },
+    "vta-agent-memory": {
+      "sha": "80047d9",
+      "commitDate": "2026-11-24",
+      "pinnedOn": "2026-11-26",
+      "why": "The agent connect plan's plugin (decision D45): Keyring's pairing, mediator session and chat, channel and inbox, sender gate and the hcp agent CLI are built by extending this repository, not a new one (plan \u00a73.12, \u00a77.6, \u00a77.27 track B). Pinned at main, vta-sdk 0.94 and vti-secrets 0.43 (#63).",
+      "watch": [
+        "src/",
+        "Cargo.toml",
+        "docs/"
       ]
     }
   },
