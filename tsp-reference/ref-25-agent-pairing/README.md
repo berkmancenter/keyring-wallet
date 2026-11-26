@@ -41,7 +41,7 @@ node scripts/openvtc/setup-external.mjs                  # once, at the reposito
 
 cd tsp-reference/ref-25-agent-pairing
 npm install
-npm test                                # 42 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs
+npm test                                # 44 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs
 lab/mediator.sh up mailbox              # or: open, deny
 npm start                               # every case for that mode, against the recorded result
 lab/mediator.sh down
@@ -108,12 +108,14 @@ holds it to that producer's own test vector.
 
 | Link | Bytes | Spare | QR version at level M | A decoder reads it back |
 |---|---|---|---|---|
-| `auth/oob`, `_from` a `did:webvh` of 84 bytes (the shape of our lab VTA's DID: a 46-character SCID and a 27-character host) | 192 | 59 | 10 | yes |
+| `auth/oob`, `_from` **the lab VTA's own DID** (vta 0.87.0 on localhost: 73 bytes, a 46-character SCID and `localhost%3A8161`), recorded in `fixtures/links-lab-vta.json` | 183 | 68 | 9 | yes |
+| `auth/oob`, `_from` a `did:webvh` of 84 bytes (a 46-character SCID and a 27-character host, the shape of a VTA of the local stack) | 192 | 59 | 10 | yes |
 | `auth/oob`, `_from` a `did:webvh` of 80 bytes with a path | 188 | 63 | 10 | yes |
 | `auth/oob`, `_from` a `did:peer:2` of 504 bytes | 612 | over by 361 | 19 | yes |
 | Fallback `agent-connect`, `_from` a `did:key` (56 bytes), no scope | 170 | 81 | 9 | yes |
 | The same with the widest scope, `&_scope=rwpo` | 182 | 69 | 9 | yes |
 
+- **Item (h) holds for any VTA DID of 143 bytes or less, by construction.** The link is 108 bytes plus the DID, and 251 bytes is the capacity of a version 11 code at level M, so the lab VTA's DID is one instance and not the proof.
 - **The longest VTA DID an `auth/oob` link can carry is 143 bytes.** For a `did:webvh` with a 46-character SCID
   that leaves 86 bytes for the host and any path.
 - **The scope fits.** The plan left its encoding to this step. The rung encodes capabilities as one letter each

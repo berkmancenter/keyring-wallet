@@ -3,6 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { identityFromSeed } from "./identity.mjs";
 import {
   AGENT_CONNECT_FLOW,
@@ -95,4 +96,23 @@ test("the fallback link without a scope is the base link, and the scope's cost i
   });
   assert.equal(byteLength(bare), 170);
   assert.equal(byteLength(scoped) - byteLength(bare), "&_scope=".length + 1);
+});
+
+test("step 0.1(h) as recorded: the link carrying the lab VTA's own DID fits, and the record is what the code gives", () => {
+  // fixtures/links-lab-vta.json is `node measure-links.mjs <the DID of the lab VTA at 0.87.0>`, as printed.
+  const recorded = JSON.parse(readFileSync(new URL("./fixtures/links-lab-vta.json", import.meta.url), "utf8"));
+  assert.equal(recorded.limitBytes, MAX_LINK_BYTES_LEVEL_M);
+  assert.equal(recorded.oob.length, 1);
+  const [row] = recorded.oob;
+  assert.match(row.did, /^did:webvh:[A-Za-z0-9]{46}:localhost%3A8161$/, "a lab VTA on localhost");
+  const { did: _did, method: _method, didBytes, ...measured } = row;
+  assert.equal(didBytes, byteLength(row.did));
+  assert.deepEqual(measured, measureLink(oobLink({ serviceDid: row.did, requestId: REQUEST_ID, deadline: DEADLINE })));
+  assert.equal(row.fits, true);
+  assert.equal(row.qrDecodes, true);
+  assert.ok(didBytes <= longestServiceDid(), "inside the longest DID a link can carry");
+  for (const link of [recorded.agentConnect.bare, recorded.agentConnect.widestScope]) {
+    assert.equal(link.fits, true);
+    assert.equal(link.qrDecodes, true);
+  }
 });

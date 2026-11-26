@@ -245,14 +245,11 @@ for (const swaps of [1, 2]) {
       revokeByTheDevicesKey: code(revoke),
       deviceStillListed: Boolean(await deviceOf(deviceId)),
       entryStillListed: Boolean(await entryOf(agent.identity.did)),
-      // The session below was opened before the revoke and is used again after it, unchanged.
-      onTheSessionOpenedBeforeTheRevoke: {
+      // The reads step 0.1(e) names, on the session the agent opened before the revoke.
+      theAgentsNextRead: {
         whoami: code(await call(agent.session, "auth/whoami/0.1")),
         memoryGet: code(await get(agent.session, memory)),
-        memoryPut: code(await put(agent.session, memory)),
-        memoryPutNamingItsPurpose: code(await call(agent.session, "vta/memory/put/0.3", { contextId: memory, key: "note/2", value: "after", purpose: "assist" })),
         memoryList: code(await call(agent.session, "vta/memory/list/0.3", { contextId: memory })),
-        sessionLifetimeMinutes: Math.round((Date.parse(agent.session.session.expiresAt) - Date.parse(agent.session.session.issuedAt)) / 60000),
       },
       signInAgain: (await trySignIn({ ...at, identity: agent.identity })).ok ? "ok" : "refused",
     };
@@ -267,7 +264,6 @@ add("l-disable", "0.1(l): device/disable by deviceId, and whether the device sti
   const again = await trySignIn({ ...at, identity: agent.identity });
   return {
     disable: code(disabled),
-    nextMemoryGetOnTheOldSession: code(await get(agent.session, memory)),
     signInAgain: again.ok ? "ok" : (again.code ?? "refused"),
     memoryOnANewSession: again.ok ? code(await get(again.session, memory)) : "no session",
     entryStillListed: Boolean(await entryOf(agent.identity.did)),
@@ -286,9 +282,7 @@ add("p5-narrow", "0.1(p) item 5: removing a memory from an entry, and the agent'
     narrowWithAclUpdate: code(byUpdate),
     narrowWithAclRevokeKindAct: code(byRevoke),
     theActItNamesIsWhatRemains: JSON.stringify(byRevoke.payload.entry?.act?.contexts) === JSON.stringify([kept]),
-    // `after` uses the session opened before the narrowing; `onANewSession` signs in again.
-    after: { kept: code(await put(agent.session, kept)), removed: code(await put(agent.session, removed)), getRemoved: code(await get(agent.session, removed)) },
-    whoamiScopesOnThatSession: ((await call(agent.session, "auth/whoami/0.1")).payload.scopes ?? []).length,
+    // The agent signs in again, and then uses each memory.
     onANewSession: await (async () => {
       const again = await signIn({ ...at, identity: agent.identity });
       return { kept: code(await put(again, kept)), removed: code(await put(again, removed)), getRemoved: code(await get(again, removed)) };

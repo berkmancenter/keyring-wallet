@@ -376,6 +376,8 @@ describe('rooms as Messages rows', () => {
     first.poll.unmount()
     first.list.unmount()
     hidden.unmount()
+    // Its writes land before the app is relaunched: a relaunch loses only what is still in memory.
+    await flush()
     resetRoomRows()
     const again = mount(s)
     await flush()
