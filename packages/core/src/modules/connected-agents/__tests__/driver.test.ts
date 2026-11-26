@@ -47,6 +47,21 @@ class MemoryRecords implements ConnectionRecords {
   public async put(record: AgentConnection) {
     this.records.set(record.id, JSON.parse(JSON.stringify(record)))
   }
+  private queue: Promise<unknown> = Promise.resolve()
+  public update(id: string, change: (r: AgentConnection) => AgentConnection) {
+    const next = this.queue.then(async () => {
+      const r = await this.get(id)
+      if (!r) return undefined
+      const n = change(JSON.parse(JSON.stringify(r)))
+      await this.put(n)
+      return n
+    })
+    this.queue = next.catch(() => undefined)
+    return next
+  }
+  public async findByKey(did: string) {
+    return [...this.records.values()].find((r) => r.id === did || r.agentDid === did)
+  }
 }
 
 class MemorySpent implements SpentRequestStore {
@@ -74,6 +89,7 @@ function fakeVta() {
   const grants: Parameters<AgentAccessPort['grantApplication']>[0][] = []
   let listed: { entry: AccessEntry; deviceId?: string; kind?: string } | undefined
   let signing: 'ok' | 'fail' = 'ok'
+  let duringSign: () => Promise<void> = async () => undefined
   const signed: Record<string, unknown>[] = []
   const access: AgentAccessPort = {
     async grantApplication(grant) {
@@ -91,6 +107,7 @@ function fakeVta() {
     async task(type, payload) {
       expect(type).toBe(KEYS_SIGN_DOCUMENT_TASK)
       if (signing === 'fail') throw new Error('unreachable')
+      await duringSign()
       signed.push(payload)
       const document = payload.document as Record<string, unknown>
       const proof = { type: 'DataIntegrityProof', cryptosuite: 'eddsa-jcs-2022', verificationMethod: payload.keyId }
@@ -125,6 +142,9 @@ function fakeVta() {
     },
     restoreSigning: () => {
       signing = 'ok'
+    },
+    whileSigning: (f: () => Promise<void>) => {
+      duringSign = f
     },
   }
 }
@@ -357,5 +377,53 @@ describe('what an ended pairing leaves at the VTA is recorded as Not finished (Â
     await t.driver.cancel()
     expect(await t.driver.settled()).toEqual({ state: 'kept', subject: K_T })
     expect(t.connections.records.get(K_T)?.state).toBe('active')
+  })
+})
+
+describe('two writers of one record at app start (step 7.10 and the driver)', () => {
+  it("a changed key 7.10 records while the grant is being signed survives the grant's write", async () => {
+    const t = await setup()
+    t.vta.failSigning()
+    await pairToConfirmed(t)
+    t.vta.restoreSigning()
+    t.vta.whileSigning(async () => {
+      await t.connections.update(K_A, (r) => ({ ...r, keyChanged: true, agentDid: 'did:key:z6MkRotatedByReconcile' }))
+    })
+    await t.driver.reconcilePairing()
+    expect(t.connections.records.get(K_A)).toMatchObject({
+      id: K_A,
+      state: 'active',
+      keyChanged: true,
+      agentDid: 'did:key:z6MkRotatedByReconcile',
+    })
+  })
+
+  it("a leftover naming a connected agent's CURRENT key is not written beside it (Remove would revoke it)", async () => {
+    const t = await setup()
+    await t.connections.put({
+      id: 'did:key:z6MkFirstKey',
+      name: 'Rotated agent',
+      handle: 'rotated-k3qa',
+      agentDid: K_T,
+      deviceId: 'dev-0',
+      ownerPersonaDid: PERSONA,
+      vtaDid: VTA,
+      contexts: [],
+      memoryContexts: [],
+      pendingContexts: [],
+      capabilities: [],
+      purposes: ['personalisation'],
+      grantType: 'persistent',
+      answersOthers: false,
+      state: 'active',
+      keyChanged: true,
+      createdAt: new Date(T0).toISOString(),
+    })
+    await t.driver.start(choice())
+    await t.driver.scan(fallbackLink())
+    await t.driver.approve()
+    await t.driver.cancel()
+    expect(await t.driver.settled()).toEqual({ state: 'kept', subject: K_T })
+    expect(t.connections.records.has(K_T)).toBe(false)
   })
 })
