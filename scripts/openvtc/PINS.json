@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-10",
+  "updated": "2026-11-25",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
@@ -144,6 +144,17 @@
         "src/",
         "Cargo.toml",
         "docs/"
+      ]
+    },
+    "hcp-spec": {
+      "url": "https://github.com/loyalagents/hcp-spec.git",
+      "sha": "b790561",
+      "commitDate": "2026-11-09",
+      "pinnedOn": "2026-11-25",
+      "why": "Human Context Protocol 2.0-draft-3 (spec/2.0-draft-3/specification.md, schemas/2.0-draft-3/): the text the agent connect plan's HCP companion cites by section and line, and the commit the hcp/* Trust Task suite (trustoverip/dtgwg-trust-tasks-tf #1380) carries. Not an OpenVTC repository, so it names its own URL.",
+      "watch": [
+        "spec/2.0-draft-3/specification.md",
+        "schemas/2.0-draft-3/"
       ]
     }
   },
