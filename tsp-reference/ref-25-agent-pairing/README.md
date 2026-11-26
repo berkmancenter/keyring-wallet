@@ -41,7 +41,7 @@ node scripts/openvtc/setup-external.mjs                  # once, at the reposito
 
 cd tsp-reference/ref-25-agent-pairing
 npm install
-npm test                                # 53 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, one recorded case
+npm test                                # 60 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, one recorded case
 lab/mediator.sh up mailbox              # or: open, deny
 npm start                               # every case for that mode, against the recorded result
 lab/mediator.sh down
@@ -248,7 +248,7 @@ both memories.
 **The record holds the entries, not verdicts.** The case records the entry sent, the entry from `acl/list` and
 from `acl/show`, and the entry before the widening, in the update's answer, after it and after the second. A
 value that differs on every run (a key, a context, a time) is recorded under a name, and the same value always
-gets the same name, so two recorded entries are equal exactly when the VTA's two answers were. `cases.test.mjs`
+gets the same name (`record.mjs`), so two recorded entries are equal exactly when the VTA's two answers were. `cases.test.mjs`
 asserts each line of the table above on those recorded entries, with no VTA running.
 
 ## Not measured yet

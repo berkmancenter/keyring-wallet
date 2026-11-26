@@ -20,6 +20,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import canonicalize from "canonicalize";
 import { identityFromSeed, mintIdentity } from "./identity.mjs";
 import { keyOfMethod, listedUnder, secure, verify } from "./proof.mjs";
+import { recorder } from "./record.mjs";
 import { call, signIn, trySignIn } from "./vta.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
@@ -330,29 +331,6 @@ add("p7-two-identities", "0.1(p) item 7: two identities, two memories, each reac
   };
 });
 
-/**
- * A recorder for one case: values that differ on every run become names, and the same value always becomes the
- * same name. So two recorded entries are equal exactly when the VTA's two answers were, and a reader can compare
- * them. `known` names the values the case made itself; any other time becomes `<time 1>`, `<time 2>`, in the
- * order first seen, and any other `did:key` likewise.
- */
-function recorder(known) {
-  const names = new Map(Object.entries(known).map(([name, value]) => [value, `<${name}>`]));
-  const counts = { time: 0, key: 0 };
-  const nameOf = (kind, value) => {
-    if (!names.has(value)) names.set(value, `<${kind} ${++counts[kind]}>`);
-    return names.get(value);
-  };
-  return (value) => {
-    if (value === undefined) return undefined;
-    let text = JSON.stringify(value);
-    for (const [raw, name] of names) text = text.replaceAll(raw, name);
-    text = text.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})/g, (time) => nameOf("time", time));
-    text = text.replace(/did:key:z[1-9A-HJ-NP-Za-km-z]+/g, (did) => nameOf("key", did));
-    return JSON.parse(text);
-  };
-}
-
 add("pairing-readback", "step 7.5, the fallback: the entry Keyring grants a throwaway key, as Keyring reads it back after the agent registers and swaps its key; and a widening", async () => {
   const [first, second] = [await newContext("Work notes"), await newContext("Travel")];
   const expiresAt = inFourHours();
@@ -373,7 +351,7 @@ add("pairing-readback", "step 7.5, the fallback: the entry Keyring grants a thro
   const device = deviceId ? await deviceOf(deviceId) : undefined;
   const entry = device ? await entryOf(device.consumerDid) : undefined;
   const shown = device ? await call(A, "acl/show/0.3", { subject: device.consumerDid }) : undefined;
-  const read = recorder({ "first memory": first, "second memory": second, "the throwaway key": throwaway.did, "the agent's key": agentKey ?? "none", "the administrator": admin.did, "the expiry sent": expiresAt, "the device": deviceId ?? "none" });
+  const read = recorder({ "first memory": first, "second memory": second, "the throwaway key": throwaway.did, "the agent's key": agentKey, "the administrator": admin.did, "the expiry sent": expiresAt, "the device": deviceId });
 
   // The widening: an entry with one memory, widened to two from the entry as read back, and the same update again.
   const narrow = mintIdentity();
