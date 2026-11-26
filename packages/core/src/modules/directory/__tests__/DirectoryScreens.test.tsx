@@ -20,6 +20,10 @@ import CommunityMemberCard from '../screens/CommunityMemberCard'
 import CommunityMembers from '../screens/CommunityMembers'
 import { createFakeDirectoryService, type FakeDirectoryService } from '../testing/fakeDirectoryService'
 import { VtiKeysNotHeld, VtiNoIdentity } from '../../trust-tasks/module/sharedIdentity'
+import { MEMBER_BADGES } from '../../badges/badgesSwitch'
+import { BadgesIds } from '../../badges/components/Badges.ids'
+import { createFakeBadgeService } from '../../badges/fakeBadgeService'
+import { resetBadgeService, setBadgeServiceForTests } from '../../badges/useBadges'
 
 const COMMUNITY = 'did:webvh:lab'
 const id = (key: string) => testIdWithKey(key)
@@ -330,6 +334,15 @@ describe('pictures', () => {
     expect(mockService.calls.filter((c) => c.startsWith('showPicture'))).toEqual([])
   })
 
+  it('a card opened by DID whose community named their entry (query 0.2) shows the picture, read by that entry', async () => {
+    const card = { name: 'Ana Lopez', role: 'member', picture: pic(A), entries: [], entryId: 'dir_ana' } as never
+    mockParams = { memberDid: 'did:key:ana' }
+    mockService = createFakeDirectoryService({ cards: { 'did:key:ana': card }, pictureUris: { [A]: URI } })
+    const tree = show(<CommunityMemberCard />)
+    await waitFor(() => tree.getByTestId(id('MemberCardPhoto')))
+    expect(mockService.calls.filter((c) => c.startsWith('showPicture'))).toEqual(['showPicture dir_ana aaaaaaaa'])
+  })
+
   it('Your card on the community screen shows your picture only after Your card was read this run', async () => {
     mockService = createFakeDirectoryService({ cardName: 'Ana Lopez', cardPicture: pic(A), pictureUris: { [A]: URI } })
     const section = show(<CommunityDirectorySection communityDid={COMMUNITY} />)
@@ -556,5 +569,60 @@ describe('your photo on your card', () => {
     const elsewhere = show(<CommunityCard />)
     await waitFor(() => elsewhere.getByTestId(id('DirectoryCardPhotoRemove')))
     expect(elsewhere.queryByTestId(id('DirectoryCardPhotoDiffers'))).toBeNull()
+  })
+})
+
+describe('a member’s badges on their card', () => {
+  const card = (over: Record<string, unknown> = {}) =>
+    ({ name: 'Ana Lopez', role: 'member', entries: [], ...over }) as never
+  const SHIPPED = { ...MEMBER_BADGES }
+  let wall: jest.SpyInstance
+  beforeEach(() => {
+    const fake = createFakeBadgeService()
+    wall = jest.spyOn(fake, 'wall')
+    setBadgeServiceForTests(fake)
+  })
+  afterEach(() => {
+    Object.assign(MEMBER_BADGES, SHIPPED)
+    resetBadgeService()
+  })
+
+  it('a room author’s card, by DID, shows their badges when the community named their entry (query 0.2)', async () => {
+    mockParams = { memberDid: 'did:key:ana' }
+    mockService = createFakeDirectoryService({ cards: { 'did:key:ana': card({ entryId: 'dir_ana' }) } })
+    const tree = show(<CommunityMemberCard />)
+    await waitFor(() => tree.getByTestId(id(BadgesIds.memberRow)))
+    expect(wall).toHaveBeenCalledWith(COMMUNITY, 'dir_ana')
+    expect(tree.getAllByTestId(id(BadgesIds.memberChip))).toHaveLength(1)
+  })
+
+  it('from a community before 0.2 (no entry), the card shows as before, with no badges, and no wall is asked', async () => {
+    mockParams = { memberDid: 'did:key:ana' }
+    mockService = createFakeDirectoryService({ cards: { 'did:key:ana': card() } })
+    const tree = show(<CommunityMemberCard />)
+    await waitFor(() => tree.getByTestId(id('MemberCardName')))
+    await act(async () => undefined)
+    expect(tree.getByTestId(id('MemberCardName'))).toHaveTextContent('Ana Lopez')
+    expect(tree.queryByTestId(id(BadgesIds.memberRow))).toBeNull()
+    expect(wall).not.toHaveBeenCalled()
+  })
+
+  it('a card from the members list still reads its badges by the entry it was opened with (control)', async () => {
+    mockParams = { entryId: 'dir_ana' }
+    mockService = createFakeDirectoryService({ cards: { dir_ana: card() } })
+    const tree = show(<CommunityMemberCard />)
+    await waitFor(() => tree.getByTestId(id(BadgesIds.memberRow)))
+    expect(wall).toHaveBeenCalledWith(COMMUNITY, 'dir_ana')
+  })
+
+  it('with badges killed by the release, a room author’s card shows no badges and asks for none', async () => {
+    MEMBER_BADGES.remoteOff = true
+    mockParams = { memberDid: 'did:key:ana' }
+    mockService = createFakeDirectoryService({ cards: { 'did:key:ana': card({ entryId: 'dir_ana' }) } })
+    const tree = show(<CommunityMemberCard />)
+    await waitFor(() => tree.getByTestId(id('MemberCardName')))
+    await act(async () => undefined)
+    expect(tree.queryByTestId(id(BadgesIds.memberRow))).toBeNull()
+    expect(wall).not.toHaveBeenCalled()
   })
 })
