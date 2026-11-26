@@ -81,6 +81,48 @@ describe('AgentConnectionStore.update: one read-modify-write at a time per recor
   })
 })
 
+describe('AgentConnectionStore: put, update and upsert share one lock per record', () => {
+  it('a direct put sent while an update is in progress waits for it, and is not lost', async () => {
+    const { agent } = fakeAgent()
+    const store = new AgentConnectionStore(agent)
+    await store.put(agentRecord({ state: 'pairing' }))
+    const id = agentRecord().id
+    const updating = store.update(id, (r) => ({ ...r, state: 'active', vdcGrant: { issuer: 'p' } }))
+    const putting = store.put(agentRecord({ state: 'notFinished', name: 'Leftover shell' }))
+    await Promise.all([updating, putting])
+    expect(await store.get(id)).toMatchObject({ state: 'notFinished', name: 'Leftover shell' })
+  })
+
+  it('upsert decides from the record as it is under the lock: a grant written just before is seen, and kept', async () => {
+    const { agent, genericRecords } = fakeAgent()
+    const store = new AgentConnectionStore(agent)
+    await store.put(agentRecord({ state: 'pairing' }))
+    const id = agentRecord().id
+    const granting = store.update(id, (r) => ({ ...r, state: 'active', vdcGrant: { issuer: 'p' } }))
+    const leftover = store.upsert(id, (current) =>
+      current && current.state !== 'pairing' ? current : agentRecord({ state: 'notFinished' })
+    )
+    await Promise.all([granting, leftover])
+    expect(await leftover).toMatchObject({ state: 'active', vdcGrant: { issuer: 'p' } })
+    expect(await store.get(id)).toMatchObject({ state: 'active', vdcGrant: { issuer: 'p' } })
+    const writes = genericRecords.save.mock.calls.length + genericRecords.update.mock.calls.length
+    await store.upsert(id, (current) => current)
+    expect(genericRecords.save.mock.calls.length + genericRecords.update.mock.calls.length).toBe(writes)
+  })
+
+  it('upsert creates a record that is absent, and refuses one under another id', async () => {
+    const { agent } = fakeAgent()
+    const store = new AgentConnectionStore(agent)
+    const id = agentRecord().id
+    expect(await store.upsert(id, (current) => current ?? agentRecord({ state: 'notFinished' }))).toMatchObject({
+      id,
+      state: 'notFinished',
+    })
+    expect(await store.upsert('did:key:z6MkAbsent', () => undefined)).toBeUndefined()
+    await expect(store.upsert('did:key:z6MkAbsent', () => agentRecord())).rejects.toThrow(/cannot change/)
+  })
+})
+
 describe('KeyedLockoutStore (§3.2 step 5): the lock survives a restart', () => {
   it('a new lockout over the same storage reads the same lock', async () => {
     const { agent } = fakeAgent()
