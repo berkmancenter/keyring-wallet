@@ -777,6 +777,8 @@ restarting makes the gate live; then an admin caller IS held (admin is not
 exempt — the earlier appearance of exemption was enforcement being off).
 **Measured:** vta-service 0.28.0, 2026-09-17.
 
+Keyring after the SEDI removal (sedi-demos-move-plan, S5): it no longer writes trusted-approver policies; "Ask me before" still writes consent policies, so enforcement still decides whether they bite.
+
 ### VTI-23 — Every operation a manager needs requires the admin role
 
 *Measured on era **A** (see [Stack under test](#stack-under-test)).*
@@ -807,6 +809,7 @@ and queue for a never-seen DID is the open upstream question. **Measured:**
 vta-service 0.28.0, 2026-09-17: manager held for consent proven on the phone;
 delivery to a second device pending this route being warm at push time.
 
+Keyring after the SEDI removal (sedi-demos-move-plan, S5): still exercised. The approver is the person's own phone ("Ask me before", sign-in approval); only the push to another person's phone goes with trusted approvers.
 
 ### VTI-25 — On the Eucalyptus train the card is delivered, not returned
 
@@ -898,6 +901,8 @@ had been minting a DIDComm v1 `did-communication` service holding the socket
 URL, which #1579 correctly reads as "no route"; fixed in the client (bifold
 `1fcd7b5`). An approver minted before that fix is still unroutable and is
 reached only by relay, which is the behaviour #1579 specifies.
+
+Keyring after the SEDI removal (sedi-demos-move-plan, S5): still exercised. `VtaClient.relayConsentRequests` stays; only the relay to another person's phone goes.
 
 ### VTI-27 — An authentication or ACL refusal over DIDComm is a `problem-report`, not a `trust-task-error`
 
@@ -1260,6 +1265,8 @@ signed requests by reference (a fetch by `correlator`) rather than inline.
 **Measured:** vti `a96fe02f`, 2026-09-21; the bound dates from `f68178ee`
 (2026-08-26), so era G carried it too.
 
+Keyring after the SEDI removal (sedi-demos-move-plan, S5): "Ask me before" (`approvalRules.ts`) writes a set holding this phone's own manager key alone with `minApprovals: 1`, and nothing else in the app builds a larger set, so Keyring no longer forms an approver set of several members itself; a set another client wrote is read and kept as it is (`modelFromExt`, `withKeySwapped`). The finding stands upstream as written.
+
 ### VTI-38 — A cancelled relationship is forgotten before the VTA can answer the cancel
 
 *Measured on era **H** (see [Stack under test](#stack-under-test)).*
@@ -1359,6 +1366,8 @@ the Farm's admin surface. The plugin's own guidance treats consent prompts as
 security controls, where "one silently lost prompt is a gated action that never
 got its human check". This is the inverse failure: an approval that was given,
 silently lost.
+
+Keyring after the SEDI removal (sedi-demos-move-plan, S5): unchanged; the plugin's path is not Keyring's.
 
 ### VTI-41 — TSP Rev 3 does not cross two mediators: no accept comes back; DIDComm does
 
