@@ -309,9 +309,9 @@ All implementation runs as subagents, one branch off `main` per step group. Heav
 
 - _Done when:_ `git grep -n -iw sedi -- docs` lists only intentional motivation text and this plan, and `git grep -n -i "trusted approver" -- docs` lists only this plan, the findings lines and dated companions.
 
-**S6. Branches.** Rebase `origin/feat/sedi-k0-developer-rows` and `origin/feat/sedi-state-office` onto `sedi-demos` (D3), force-pushing only those two feature branches after Brendan agrees to it.
+**S6. Branches.** Rebase `origin/feat/sedi-k0-developer-rows` and `origin/feat/sedi-state-office` onto `sedi-demos` (D3), force-pushing only those two feature branches. Brendan agrees to the rebase; the force-push itself also needs Alberto's own word, given to the session that runs it.
 
-- _Done when:_ both branches build and pass the demo's tests on `sedi-demos`, or a note on each says why not and what remains. Owner of the decision to drop one instead: Brendan.
+- _Done when:_ both branches build and pass the demo's tests on `sedi-demos`, or a note on each says why not and what remains. Owner of the decision to drop one instead: Brendan. Owning the decision does not authorise a push: carrying it out by a force-push or a branch delete also needs Alberto's own word.
 
 **S7. Verify.** On the removal branch: root `yarn lint`, `yarn typecheck`, `yarn test`; `cd bifold/packages/core && yarn test`; `git grep -n -iw sedi` and review each hit (kept paths, the `sedi-vtc` strings, docs); a second agent reads each call site named in §2.6 and §2.7 on the diff (R3).
 
@@ -367,6 +367,7 @@ S1 is a refactor with its own tests and reverts alone. S2 to S4 are deletions th
 | 2026-11-23, BAM | [`2026-11-23-bam.md`](sedi-demos-move-plan/2026-11-23-bam.md): the inventory behind this plan's §2 against `main` `800a44ba`, and how it differs from the earlier modularity note                                                                                                         |
 | 2026-11-23, AL  | [`2026-11-23-al.md`](sedi-demos-move-plan/2026-11-23-al.md): review: the scope of guardianship and trusted approvers (D2, D6, D7), what join, sign-in and vetting reach (this plan's §2.6), the corrections to this plan's §2.3, the upstream findings touched (this plan's §12) |
 | 2026-11-23, BAM (second) | [`2026-11-23-bam-2.md`](sedi-demos-move-plan/2026-11-23-bam-2.md): the owner's two requirements (everything removed moves to `sedi-demos`; Keyring joins `sedi-vtc` afterwards), the S2 to S3 ordering fix, and the review findings applied |
+| 2026-11-26, AL  | [`2026-11-26-al.md`](sedi-demos-move-plan/2026-11-26-al.md): S6 names whose word each branch action needs: Brendan's for the rebase and for dropping a branch, Alberto's own for the force-push or delete that carries either out |
 
 ## 12. Upstream findings touched
 
