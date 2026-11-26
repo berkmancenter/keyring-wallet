@@ -2,7 +2,7 @@
  * A room read refused over a version will be refused again until someone updates, so its row stops reading and says
  * who (IN-814). Which refusals count, how the side that needs the update is told, and what the log line adds.
  */
-import { readNotComing, refusedByHost, refusedVersions, refusedVersionsWords } from '../readNotComing'
+import { readNotComing, refusedByHost, refusedVersions, refusedVersionsWords, versionsNamed } from '../readNotComing'
 
 const SPEC = 'https://trusttasks.org/spec/'
 const refusal = (code: string, message: string, details?: unknown) =>
@@ -46,22 +46,15 @@ describe('which refusals end a row for good', () => {
   })
 })
 
-describe('who needs the update', () => {
-  test('the host serves only older versions than the agent asked for: the community', () => {
-    expect(readNotComing(hostServes('0.8', ['0.5', '0.6']))).toBe('communityNeedsUpdate')
-    expect(readNotComing(hostServes('1.0', ['0.9']))).toBe('communityNeedsUpdate')
+// The agent passing on a host's refusal WITH the framework's details: not what an agent sends today, and read if one does.
+const hostDetails = (asked: string, served: string[]) =>
+  refusal('rooms/keys/browse:hostRefused', 'room host refused', {
+    code: 'unsupportedVersion',
+    requestedType: `${SPEC}rooms/records/list/${asked}`,
+    servedVersions: served.map((v) => `${SPEC}rooms/records/list/${v}`),
   })
 
-  test('the host serves only newer versions than the agent asked for: the agent', () => {
-    expect(readNotComing(hostServes('0.6', ['0.8', '0.9']))).toBe('agentNeedsUpdate')
-    expect(readNotComing(hostServes('0.10', ['1.0']))).toBe('agentNeedsUpdate')
-  })
-
-  test('versions compare as numbers, not as text: 0.10 is newer than 0.9', () => {
-    expect(readNotComing(hostServes('0.10', ['0.9']))).toBe('communityNeedsUpdate')
-    expect(readNotComing(hostServes('0.9', ['0.10']))).toBe('agentNeedsUpdate')
-  })
-
+describe('who needs the update, where the refusal says it in details that mean it', () => {
   test('the agent serves only older versions than Keyring asked for: the agent', () => {
     expect(readNotComing(byAgent('0.6', ['0.4', '0.5']))).toBe('agentNeedsUpdate')
   })
@@ -70,48 +63,101 @@ describe('who needs the update', () => {
     expect(readNotComing(byAgent('0.6', ['0.7']))).toBe('appNeedsUpdate')
   })
 
+  test('a host whose details say it serves only older versions than the agent asked for: the community; only newer: the agent', () => {
+    expect(readNotComing(hostDetails('0.8', ['0.5', '0.6']))).toBe('communityNeedsUpdate')
+    expect(readNotComing(hostDetails('0.6', ['0.8', '0.9']))).toBe('agentNeedsUpdate')
+  })
+
+  test('versions compare as numbers, not as text: 0.10 is newer than 0.9', () => {
+    expect(readNotComing(byAgent('0.10', ['0.9']))).toBe('agentNeedsUpdate')
+    expect(readNotComing(byAgent('0.9', ['0.10']))).toBe('appNeedsUpdate')
+  })
+
   test('a task the one asked does not serve at all: that one is behind', () => {
     expect(readNotComing(byHost('unsupportedType', 'unknown task'))).toBe('communityNeedsUpdate')
     expect(readNotComing(refusal('unsupportedType', 'unknown task'))).toBe('agentNeedsUpdate')
   })
 
-  test('not guessed at: no versions named, versions on both sides of the one asked, or another task', () => {
-    expect(readNotComing(byHost('unsupportedVersion', 'this version is not served'))).toBe('cannotTell')
+  test('not guessed at: no versions served named, versions on both sides of the one asked, or another task', () => {
     expect(readNotComing(refusal('unsupportedVersion', 'no'))).toBe('cannotTell')
-    expect(readNotComing(hostServes('0.6', ['0.5', '0.8']))).toBe('cannotTell')
+    expect(readNotComing(byAgent('0.6', []))).toBe('cannotTell')
+    expect(readNotComing(byAgent('0.6', ['0.5', '0.8']))).toBe('cannotTell')
     expect(
       readNotComing(
-        byHost('unsupportedVersion', `${SPEC}rooms/records/list/0.8 is not served; ${SPEC}rooms/records/read/0.4 is`)
+        refusal('unsupportedVersion', 'no', {
+          requestedType: `${SPEC}rooms/keys/browse/0.6`,
+          servedVersions: [`${SPEC}rooms/keys/read/0.2`],
+        })
       )
     ).toBe('cannotTell')
   })
 })
 
+describe("who is behind is never read from a refusal's words (found in review)", () => {
+  // One refusal, the same facts, worded two ways. The host serves list 0.1 and 0.2; the agent asked for 0.3. So the
+  // community is behind. A reader that took the first address named as the one asked for called A the agent's fault.
+  const wordedA = refusal('rooms/keys/browse:hostRefused', `the room's host refused ${SPEC}rooms/records/list/0.3`, {
+    code: 'unsupportedVersion',
+    reason: `this host serves ${SPEC}rooms/records/list/0.1 and ${SPEC}rooms/records/list/0.2`,
+  })
+  const wordedB = byHost(
+    'unsupportedVersion',
+    `asked ${SPEC}rooms/records/list/0.3; this host serves ${SPEC}rooms/records/list/0.1 and ${SPEC}rooms/records/list/0.2`
+  )
+  const servedFirst = byHost(
+    'unsupportedVersion',
+    `this host serves ${SPEC}rooms/records/list/0.1 and ${SPEC}rooms/records/list/0.2, not ${SPEC}rooms/records/list/0.3`
+  )
+
+  test.each([
+    ['the agent names what it asked, the host what it serves', wordedA],
+    ['both in the host’s words, the one asked for first', wordedB],
+    ['both in the host’s words, the ones served first', servedFirst],
+    ['the wording the first draft was written for', hostServes('0.8', ['0.5', '0.6'])],
+  ])('%s: the row says only that it can’t be read yet', (_wording, e) => {
+    expect(readNotComing(e)).toBe('cannotTell')
+    expect(refusedVersions(e)).toBeUndefined()
+  })
+
+  test('the three wordings of one refusal give one answer', () => {
+    expect(new Set([wordedA, wordedB, servedFirst].map(readNotComing)).size).toBe(1)
+  })
+
+  test('the log line repeats the versions named, each once, and never says which was asked for', () => {
+    expect(refusedVersionsWords(wordedA)).toBe(
+      " by the room's host; its words name rooms/records/list 0.3, rooms/records/list 0.1, rooms/records/list 0.2"
+    )
+    expect(refusedVersionsWords(servedFirst)).toBe(
+      " by the room's host; its words name rooms/records/list 0.1, rooms/records/list 0.2, rooms/records/list 0.3"
+    )
+    for (const e of [wordedA, wordedB, servedFirst]) {
+      expect(refusedVersionsWords(e)).not.toMatch(/asked|serves/)
+      expect(versionsNamed(e).sort()).toEqual([
+        'rooms/records/list 0.1',
+        'rooms/records/list 0.2',
+        'rooms/records/list 0.3',
+      ])
+    }
+  })
+})
+
 describe('the versions a refusal names', () => {
-  test('from the framework details', () => {
+  test('asked and served, from the framework details and nowhere else', () => {
     expect(refusedVersions(byAgent('0.6', ['0.4', '0.5']))).toEqual({
       task: 'rooms/keys/browse',
       asked: '0.6',
       served: ['0.4', '0.5'],
     })
-  })
-
-  test("from the words a host's refusal was passed on with: the first is the one asked for", () => {
-    expect(refusedVersions(hostServes('0.8', ['0.5', '0.6']))).toEqual({
-      task: 'rooms/records/list',
-      asked: '0.8',
-      served: ['0.5', '0.6'],
-    })
-  })
-
-  test('only what has the form of a specification URI is read', () => {
-    const e = byHost(
-      'unsupportedVersion',
-      `ask ${SPEC}Rooms/Records/list/0.8 or http://evil.example/spec/rooms/records/list/9.9 or ${SPEC}rooms/records/list/v8`
-    )
-    expect(refusedVersions(e)).toBeUndefined()
     expect(refusedVersions(new Error('x'))).toBeUndefined()
     expect(refusedVersions(undefined)).toBeUndefined()
+  })
+
+  test('only what has the form of a specification URI is read, from details or from words', () => {
+    const odd = `ask ${SPEC}Rooms/Records/list/0.8 or http://evil.example/spec/rooms/records/list/9.9 or ${SPEC}rooms/records/list/v8 or ${SPEC}rooms/records/list/1.2.3`
+    expect(versionsNamed(byHost('unsupportedVersion', odd))).toEqual([])
+    expect(
+      refusedVersions(refusal('unsupportedVersion', 'no', { requestedType: odd, servedVersions: [odd] }))
+    ).toBeUndefined()
   })
 
   test('who refused is read from the agent’s own code, never from the code it passed on', () => {
@@ -122,12 +168,12 @@ describe('the versions a refusal names', () => {
 })
 
 describe('what the log line adds, so a report says who is behind', () => {
-  test('who refused, the task and version asked for, and the versions served', () => {
-    expect(refusedVersionsWords(hostServes('0.8', ['0.5', '0.6']))).toBe(
-      " by the room's host: asked rooms/records/list 0.8, it serves 0.5, 0.6"
-    )
+  test('from details: who refused, the task and version asked for, and the versions served', () => {
     expect(refusedVersionsWords(byAgent('0.6', ['0.7']))).toBe(
       ' by the agent: asked rooms/keys/browse 0.6, it serves 0.7'
+    )
+    expect(refusedVersionsWords(hostDetails('0.8', ['0.5', '0.6']))).toBe(
+      " by the room's host: asked rooms/records/list 0.8, it serves 0.5, 0.6"
     )
   })
 
@@ -143,6 +189,6 @@ describe('what the log line adds, so a report says who is behind', () => {
         `Dear member Ana, ${SPEC}rooms/records/list/0.8 is refused by did:webvh:secret; we serve ${SPEC}rooms/records/list/0.6`
       )
     )
-    expect(words).toBe(" by the room's host: asked rooms/records/list 0.8, it serves 0.6")
+    expect(words).toBe(" by the room's host; its words name rooms/records/list 0.8, rooms/records/list 0.6")
   })
 })

@@ -12,11 +12,19 @@
  * Every other refusal can change without anyone updating anything (a host that could not be reached, keys that have
  * not arrived, a membership that is on its way), so its row keeps reading and its read is tried again, as before.
  *
- * Who needs the update is read from the refusal where it says. The member's agent passes a host's refusal on as its
- * own `hostRefused` with the host's code in `details.code` (vta-service `room_group.rs` `host_failure`); a refusal
- * whose own code is the version code is the agent's. For a version, the side asked serves either only older versions
- * than the one asked for (it is behind) or only newer (the one asking is behind); anything else, or a refusal that
- * names no versions, is not guessed at.
+ * Who needs the update is said only where the refusal says it in a form that MEANS it. The member's agent passes a
+ * host's refusal on as its own `hostRefused` with the host's code in `details.code` (vta-service `room_group.rs`
+ * `host_failure`); a refusal whose own code is the version code is the agent's. The framework's `details` name the
+ * version asked for (`requestedType`) and the versions served (`servedVersions`): then the side asked serves either
+ * only older versions than the one asked for (it is behind) or only newer (the one asking is behind).
+ *
+ * A host's refusal passed on carries no such details today, only the host's words, and words are not read for who is
+ * behind. A first draft took the first specification address in them as the version asked for and the rest as those
+ * served. The same refusal worded another way (the agent naming what it asked for in its own sentence, the host
+ * naming what it serves in its own) then named the OPPOSITE side, with numbers in the log to back it: a member told
+ * to update their agent for a room that waits on its community. Position in a sentence does not mean "asked", so
+ * such a row says only that it can't be read yet, and the log line repeats the versions named without saying which
+ * was which.
  *
  * @module rooms/readNotComing
  */
@@ -49,27 +57,31 @@ export function refusedByHost(e: unknown): boolean {
 }
 
 /**
- * The versions a refusal names: the task asked for, at which version, and the versions the refuser serves. Read from
- * the framework's `details` (`requestedType`, `servedVersions`) where the refusal has them, else from the specification
- * URIs in the words a host's refusal was passed on with (the first is the one asked for). Only what has the form of a
- * specification URI is read, so nothing else a refusal says is ever repeated.
+ * The version a refusal says was asked for and the versions it says are served, from the framework's `details`
+ * (`requestedType`, `servedVersions`): the one source that means which is which. Undefined when the refusal has no
+ * such details, whatever its words name.
  */
 export function refusedVersions(e: unknown): RefusedVersions | undefined {
   const details = record((e as { details?: unknown } | null | undefined)?.details)
   const [asked] = urisIn(details?.requestedType)
-  if (asked) {
-    const served = (Array.isArray(details?.servedVersions) ? details.servedVersions : []).flatMap(urisIn)
-    return {
-      task: asked.task,
-      asked: asked.version,
-      served: served.filter((s) => s.task === asked.task).map((s) => s.version),
-    }
+  if (!asked) return undefined
+  const served = (Array.isArray(details?.servedVersions) ? details.servedVersions : []).flatMap(urisIn)
+  return {
+    task: asked.task,
+    asked: asked.version,
+    served: served.filter((s) => s.task === asked.task).map((s) => s.version),
   }
-  const said = [...urisIn(details?.reason), ...urisIn((e as { message?: unknown } | null | undefined)?.message)]
-  const [first, ...rest] = said
-  if (!first) return undefined
-  const served = rest.filter((s) => s.task === first.task && s.version !== first.version).map((s) => s.version)
-  return { task: first.task, asked: first.version, served: [...new Set(served)] }
+}
+
+/**
+ * The tasks and versions a refusal's words name, in the order named and each once: what a host's refusal passed on
+ * gives (`details.reason`, and the agent's own sentence). For a log line only. Nothing here says which version was
+ * asked for and which are served, and nothing is read from their order.
+ */
+export function versionsNamed(e: unknown): string[] {
+  const details = record((e as { details?: unknown } | null | undefined)?.details)
+  const named = [...urisIn((e as { message?: unknown } | null | undefined)?.message), ...urisIn(details?.reason)]
+  return [...new Set(named.map((n) => `${n.task} ${n.version}`))]
 }
 
 const parts = (version: string): [number, number] => {
@@ -103,18 +115,23 @@ export function readNotComing(e: unknown): RowCannotRead | undefined {
 }
 
 /**
- * What a log line adds to a version refusal, so a report says who is behind: who refused, the task and version asked
- * for, and the versions served. Empty for any other failure, and for a refusal that names no versions only who
- * refused. Task names and version numbers only.
+ * What a log line adds to a version refusal, so a report says who is behind: who refused, and where the refusal's
+ * details say so, the task and version asked for and the versions served. Where it has only words, the tasks and
+ * versions those words name, without saying which was asked for. Empty for any other failure. Task names and version
+ * numbers only.
  */
 export function refusedVersionsWords(e: unknown): string {
   const code = refusalCode(e)
   if (code !== 'unsupportedVersion' && code !== 'unsupportedType') return ''
   const who = refusedByHost(e) ? "by the room's host" : 'by the agent'
   const versions = refusedVersions(e)
-  if (!versions) return ` ${who}`
-  const serves = versions.served.length > 0 ? `, it serves ${versions.served.join(', ')}` : ''
-  return ` ${who}: asked ${versions.task} ${versions.asked}${serves}`
+  if (versions) {
+    const serves = versions.served.length > 0 ? `, it serves ${versions.served.join(', ')}` : ''
+    return ` ${who}: asked ${versions.task} ${versions.asked}${serves}`
+  }
+  // Words only: the versions they name, unattributed. A reader of the report can tell more than the app may claim.
+  const named = versionsNamed(e)
+  return named.length > 0 ? ` ${who}; its words name ${named.join(', ')}` : ` ${who}`
 }
 
 /** The row's words for each reason (`Rooms.*` in the localisation files). */

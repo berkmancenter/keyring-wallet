@@ -115,11 +115,12 @@ const mount = (service: RoomsService) => {
 }
 
 describe('a room whose host does not serve the version the agent asks it in', () => {
-  test('its row stops reading and says the community needs an update; the other room reads as ever', async () => {
+  test('its row stops reading and says it can’t be read yet; the other room reads as ever', async () => {
     const { service } = serviceWith(async () => Promise.reject(hostServes('0.8', ['0.5', '0.6'])))
     const { row } = mount(service)
     await flush()
-    expect(row('integration')).toMatchObject({ cannotRead: 'communityNeedsUpdate' })
+    // A host's refusal passed on has only words, and who is behind is not read from words (readNotComing).
+    expect(row('integration')).toMatchObject({ cannotRead: 'cannotTell' })
     expect(row('integration').reading).toBeUndefined()
     expect(row('integration').lastPost).toBeUndefined()
     expect(row('planning').cannotRead).toBeUndefined()
@@ -133,7 +134,7 @@ describe('a room whose host does not serve the version the agent asks it in', ()
     await flush()
     expect(lines).toContainEqual(
       expect.stringMatching(
-        /^\[Rooms:rows\] integration of .+ not read: refused \(unsupportedVersion\) by the room's host: asked rooms\/records\/list 0\.8, it serves 0\.5, 0\.6$/
+        /^\[Rooms:rows\] integration of .+ not read: refused \(unsupportedVersion\) by the room's host; its words name rooms\/records\/list 0\.8, rooms\/records\/list 0\.5, rooms\/records\/list 0\.6$/
       )
     )
     expect(lines).toContainEqual(
@@ -159,7 +160,7 @@ describe('a room whose host does not serve the version the agent asks it in', ()
     )
     const { row } = mount(service)
     await flush()
-    expect(row('integration').cannotRead).toBe('communityNeedsUpdate')
+    expect(row('integration').cannotRead).toBe('cannotTell')
     updated = true
     act(() => refreshRoomRows())
     await flush()
@@ -168,24 +169,30 @@ describe('a room whose host does not serve the version the agent asks it in', ()
     expect(row('integration').lastPost?.text).toBe('the words of i1')
   })
 
-  test('the other sides: the agent behind the host, and Keyring behind the agent', async () => {
-    const hostAhead = serviceWith(async () => Promise.reject(hostServes('0.6', ['0.8'])))
-    const first = mount(hostAhead.service)
-    await flush()
-    expect(first.row('integration').cannotRead).toBe('agentNeedsUpdate')
-
-    resetRoomRows()
-    const agentAhead = serviceWith(async () =>
-      Promise.reject(
-        refusal('unsupportedVersion', 'unsupported version', {
-          requestedType: `${SPEC}rooms/keys/browse/0.6`,
-          servedVersions: [`${SPEC}rooms/keys/browse/0.7`],
-        })
-      )
-    )
-    const second = mount(agentAhead.service)
-    await flush()
-    expect(second.row('integration').cannotRead).toBe('appNeedsUpdate')
+  test('where the refusal has details that say it, the row names the side: the agent, Keyring, or the community', async () => {
+    const details = (own: string, task: string, asked: string, served: string[], inner?: string) =>
+      refusal(own, 'unsupported version', {
+        ...(inner ? { code: inner } : {}),
+        requestedType: `${SPEC}${task}/${asked}`,
+        servedVersions: served.map((v) => `${SPEC}${task}/${v}`),
+      })
+    const cases: [Error, string][] = [
+      // The agent's own refusal of what Keyring asked.
+      [details('unsupportedVersion', 'rooms/keys/browse', '0.6', ['0.4', '0.5']), 'agentNeedsUpdate'],
+      [details('unsupportedVersion', 'rooms/keys/browse', '0.6', ['0.7']), 'appNeedsUpdate'],
+      // A host's refusal passed on with details: no agent sends this today.
+      [
+        details('rooms/keys/browse:hostRefused', 'rooms/records/list', '0.8', ['0.6'], 'unsupportedVersion'),
+        'communityNeedsUpdate',
+      ],
+    ]
+    for (const [failure, side] of cases) {
+      resetRoomRows()
+      const { service } = serviceWith(async () => Promise.reject(failure))
+      const { row } = mount(service)
+      await flush()
+      expect(row('integration').cannotRead).toBe(side)
+    }
   })
 })
 
@@ -220,7 +227,7 @@ describe('the control: a failure that asking again may get past', () => {
     const { service } = serviceWith(async () => Promise.reject(failure))
     const { row } = mount(service)
     await flush()
-    expect(row('integration').cannotRead).toBe('communityNeedsUpdate')
+    expect(row('integration').cannotRead).toBe('cannotTell')
     failure = new Error('agent not ready')
     act(() => refreshRoomRows())
     await flush()
