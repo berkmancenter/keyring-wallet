@@ -30,14 +30,14 @@
  * @module trust-tasks/__tests__/fixtures/registryDrift
  */
 import { execFileSync } from 'child_process'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readdirSync, readFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { isDeepStrictEqual } from 'util'
 
 /**
  * The upstream clones a vendored fixture can come from, by their folder in `external/`
- * (`scripts/openvtc/setup-external.mjs` clones them there, at `scripts/openvtc/PINS.json`'s pins). Each fixture's README
- * names its source; the Trust Tasks registry is the default.
+ * (`scripts/openvtc/setup-external.mjs` clones them there, at `scripts/openvtc/PINS.json`'s pins). Each fixture's
+ * README names its source; the Trust Tasks registry is the default.
  */
 export type DriftSource = 'dtgwg-trust-tasks-tf' | 'verifiable-trust-infrastructure'
 const REGISTRY: DriftSource = 'dtgwg-trust-tasks-tf'
@@ -56,10 +56,11 @@ export function repoRootAbove(from: string): string | undefined {
 /**
  * Where the drift tests read the registry clone, or undefined where they skip.
  *
- * `TRUST_TASKS_REGISTRY` overrides. Otherwise it is `external/dtgwg-trust-tasks-tf` in the repository's root
- * (`scripts/openvtc/setup-external.mjs` clones it there). Only a checkout with no `external/` at all answers undefined,
- * so only it skips: CI, which has no clone by design, and a fresh checkout. Where `external/` exists, or the variable is
- * set (for any source: it names the registry, but says drift checking is wanted), the path is answered whether or not it is there: the drift test then runs, and `expectNoDrift` fails it, that
+ * `TRUST_TASKS_REGISTRY` overrides, for the registry. Otherwise it is `external/<source>` in the repository's root
+ * (`scripts/openvtc/setup-external.mjs` clones it there). Only a checkout with no `external/` at all, and the variable
+ * unset, answers undefined, so only it skips: CI, which has no clone by design, and a fresh checkout. Where
+ * `external/` exists, or the variable is set (for any source: it names the registry, but says drift checking is
+ * wanted), the path is answered whether or not it is there: the drift test then runs, and `expectNoDrift` fails that
  * one test, saying what is missing. A setup gap never collapses the rest of the file, and never passes as a skip.
  */
 export function registryPath(from: string = __dirname, source: DriftSource = REGISTRY): string | undefined {
@@ -82,8 +83,20 @@ function requireRegistry(registry: string, source: DriftSource): void {
       : `${registry} is missing, so the drift test cannot compare anything: ` +
         (source === REGISTRY
           ? 'run node scripts/openvtc/setup-external.mjs, or set TRUST_TASKS_REGISTRY'
-          : `run node scripts/openvtc/setup-external.mjs (TRUST_TASKS_REGISTRY names the Trust Tasks registry only, not ${source})`)
+          : 'run node scripts/openvtc/setup-external.mjs ' +
+            `(TRUST_TASKS_REGISTRY names the Trust Tasks registry only, not ${source})`)
   )
+}
+
+/** Every vendored `.json` under `dir`, as paths relative to it with `/`, sorted: what a drift map must name. */
+export function vendoredFiles(dir: string, rel = ''): string[] {
+  return readdirSync(join(dir, rel), { withFileTypes: true })
+    .flatMap((entry) => {
+      const path = rel ? `${rel}/${entry.name}` : entry.name
+      if (entry.isDirectory()) return vendoredFiles(dir, path)
+      return entry.name.endsWith('.json') ? [path] : []
+    })
+    .sort()
 }
 
 /** A file's bytes at a commit, or undefined when that commit does not have it. */
@@ -154,7 +167,9 @@ export function expectNoDrift(
     const same = as === 'json' ? isDeepStrictEqual(JSON.parse(live), JSON.parse(here)) : live === here
     if (!same) drifted.push(vendored)
   }
+  // A vendored file the map does not name is never compared: the test would stay green guarding the rest.
+  const unmapped = vendoredFiles(fixtureDir).filter((file) => !(file in map))
   // Reported together, and as data rather than prose, so one run names every
   // file that moved instead of stopping at the first.
-  expect({ unlisted, missing, drifted }).toEqual({ unlisted: [], missing: [], drifted: [] })
+  expect({ unmapped, unlisted, missing, drifted }).toEqual({ unmapped: [], unlisted: [], missing: [], drifted: [] })
 }

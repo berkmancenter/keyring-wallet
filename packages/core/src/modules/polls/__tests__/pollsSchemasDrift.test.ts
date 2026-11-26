@@ -4,9 +4,10 @@
  * two goes: the first eight at one commit, the later generations at another (the fixture's README; both commits are
  * in its `PROVENANCE.sha`). Skips only where the checkout has no `external/` (CI has none, by design).
  */
+import { readFileSync } from 'fs'
 import { join } from 'path'
 
-import { expectNoDrift, registryPath } from '../../trust-tasks/__tests__/fixtures/registryDrift'
+import { expectNoDrift, registryPath, vendoredFiles } from '../../trust-tasks/__tests__/fixtures/registryDrift'
 
 const DIR = join(__dirname, 'fixtures', 'polls-schemas')
 const SOURCE = 'verifiable-trust-infrastructure'
@@ -41,6 +42,14 @@ const VENDORED = {
 }
 
 describe('the vendored voter bundles still match upstream', () => {
+  // Runs everywhere, registry or not, so this file reports in CI too: a suite whose only test skips reports nothing.
+  test('the map names every bundle in the folder, each at a commit PROVENANCE.sha lists', () => {
+    expect(vendoredFiles(DIR)).toEqual(Object.keys(VENDORED).sort())
+    const listed = readFileSync(join(DIR, 'PROVENANCE.sha'), 'utf8').trim().split(/\s+/)
+    expect(listed).toEqual([FIRST, LATER])
+    expect(Object.values(VENDORED).filter(({ commit }) => !listed.includes(commit))).toEqual([])
+  })
+
   const maybe = registryPath(DIR, SOURCE) ? test : test.skip
 
   maybe('byte-identical to the Verifiable Trust Infrastructure commit each was copied at', () => {
