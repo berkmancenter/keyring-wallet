@@ -27,6 +27,7 @@ import { useTheme } from '../../../contexts/theme'
 import { useDateWords, useUses24HourClock } from '../../../utils/localDay'
 import { testIdWithKey } from '../../../utils/testable'
 import { useDirectoryNames, useDirectoryService } from '../../directory/useDirectory'
+import { ROW_CANNOT_READ_KEY } from '../readNotComing'
 import { hideRoom, type RoomRow } from '../useRoomRows'
 import { usePetnames } from '../usePetname'
 
@@ -68,8 +69,19 @@ const RoomMessageRow: React.FC<RoomMessageRowProps> = ({ row, onOpen }) => {
   // A row this phone already had from its last run reads quietly: its name and time stand, its preview line is empty
   // until the room is read, and nothing spins (Alberto, 11-24). The spinner is for a room shown for the first time.
   const quiet = reading && !!row.fromLastTime
+  // Its read was refused for a reason asking again will not change (readNotComing): who needs an update, in words,
+  // where the spinner used to turn for ever (IN-814).
+  const cannotRead = !post && !row.notJoined ? row.cannotRead : undefined
   const what = !post
-    ? (t(row.notJoined ? 'Rooms.NotJoinedYet' : row.reading ? 'Rooms.Reading' : 'Rooms.RowNoPosts') as string)
+    ? (t(
+        row.notJoined
+          ? 'Rooms.NotJoinedYet'
+          : cannotRead
+            ? ROW_CANNOT_READ_KEY[cannotRead]
+            : row.reading
+              ? 'Rooms.Reading'
+              : 'Rooms.RowNoPosts'
+      ) as string)
     : post.kind === 'note'
       ? (t('Rooms.RowNote', { title: post.text, ...asWritten }) as string)
       : post.kind === 'file'
