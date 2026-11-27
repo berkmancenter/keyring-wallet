@@ -1,7 +1,7 @@
 /**
  * One read of each agent's entry (backlog fb-2): `listed` by deviceId first, then by subject; `notListed` only from a
- * complete listing for a record with a deviceId; everything else `unknown`. Only `active` and `expired` records are
- * read, and `entryContexts` gives drift a value only from a listed entry.
+ * complete, empty listing for a record with a deviceId; everything else `unknown`. Only `active` and `expired` records
+ * are read, and `entryContexts` gives drift a value only from a listed entry stating `contexts` or `none`.
  */
 import type { AccessEntry, AgentAccessPort } from '../carriage'
 import { entryContexts, readAgentEntries, readAgentEntry, type EntryRead } from '../entryRead'
@@ -62,9 +62,15 @@ describe('readAgentEntry', () => {
     expect(queries).toEqual([{ subject: K_A }])
   })
 
-  it('a match under another subject and another device is not this agent', async () => {
+  it('a complete listing with a row it cannot place (a new key, no deviceId echoed) is unknown', async () => {
+    const { access } = port({ complete: true, matches: [{ entry: entry(K_B) }] })
+    expect(await readAgentEntry(access, { agentDid: K_A, deviceId: DEVICE })).toEqual({ kind: 'unknown' })
+  })
+
+  it("a complete listing with a row echoing another device's deviceId under a new key is unknown", async () => {
+    // two devices sharing a key can make the port echo the other one's deviceId: the row is no proof of absence
     const { access } = port({ complete: true, matches: [{ entry: entry(K_B), deviceId: 'device-other' }] })
-    expect(await readAgentEntry(access, { agentDid: K_A, deviceId: DEVICE })).toEqual({ kind: 'notListed' })
+    expect(await readAgentEntry(access, { agentDid: K_A, deviceId: DEVICE })).toEqual({ kind: 'unknown' })
   })
 
   it('with no deviceId, a complete miss is unknown: a rotated entry is invisible by key alone', async () => {
@@ -88,8 +94,9 @@ describe('readAgentEntry', () => {
     expect(await readAgentEntry(access, { agentDid: K_A, deviceId: DEVICE })).toEqual({ kind: 'unknown' })
   })
 
-  it('control: a complete miss for a record with a deviceId is notListed', async () => {
-    // control: the deviceId is what makes this miss proof of absence; the no-deviceId miss above is unknown
+  it('control: a complete, empty listing for a record with a deviceId is notListed', async () => {
+    // control: an empty listing and the deviceId are what make this miss proof of absence; the no-deviceId miss and
+    // the unplaced rows above are unknown
     const { access } = port({ complete: true, matches: [] })
     expect(await readAgentEntry(access, { agentDid: K_A, deviceId: DEVICE })).toEqual({ kind: 'notListed' })
   })
@@ -151,11 +158,18 @@ describe('entryContexts', () => {
     ).toEqual([])
   })
 
-  it('any other listed act, or none, gives []', () => {
+  it('a listed entry stating none gives []', () => {
     expect(
-      entryContexts({ kind: 'listed', entry: { subject: K_A, role: 'application', act: { stated: 'any' } } })
+      entryContexts({ kind: 'listed', entry: { subject: K_A, role: 'application', act: { stated: 'none' } } })
     ).toEqual([])
-    expect(entryContexts({ kind: 'listed', entry: { subject: K_A, role: 'application' } })).toEqual([])
+  })
+
+  it('a listed entry stating all or byShape, or with no act, gives undefined', () => {
+    for (const stated of ['all', 'byShape']) {
+      const read: EntryRead = { kind: 'listed', entry: { subject: K_A, role: 'application', act: { stated } } }
+      expect(entryContexts(read)).toBeUndefined()
+    }
+    expect(entryContexts({ kind: 'listed', entry: { subject: K_A, role: 'application' } })).toBeUndefined()
   })
 
   it('notListed, unknown and no read give undefined', () => {

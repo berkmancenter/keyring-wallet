@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/_shared/0.1/disclosure.schema.json",
+  "title": "HCP — Disclosure",
+  "description": "The Human Context Protocol (HCP) 2.0-draft-3 disclosure: an entry as a Context Client receives it, never the stored entry (HCP 7.4), shared by the hcp/* tasks. Written for this registry from the HCP 2.0-draft-3 specification text (CC BY 4.0, https://github.com/loyalagents/hcp-spec), with attribution, and checked against the shapes HCP publishes for the same draft; not copied from HCP's own schema files. Open, as HCP's own shapes are. Where this schema and the HCP text differ, the HCP text governs. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty, which an hcp/* party never writes empty. hcp/import applies neither to an export it takes.",
+  "$defs": {
+    "Disclosure": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["ref", "version", "content", "assertion", "classification", "standing", "useUntil"],
+      "description": "A disclosed copy of an entry (HCP 7.4). It names the entry by a grant-scoped `ref`, never by its `id`, and withholds the entry's `id`, `subject`, `schema` and the whole of `record` (status, provenance, relationships, conversion, metadata): those members describe the person's activity with other systems, which no grant authorizes a client to learn (HCP 7.4). What the client needs to judge the entry it receives in `standing`.",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "A reference to the entry, opaque to the client, stable for one grant and one entry and different under every other grant, and never derivable into the entry's `id` (HCP 7.4). The client names the entry by it in get entry, revise and withdraw; under any other grant it fails with not authorized."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The entry version disclosed: the stored `record.version` (HCP 7.4, 4.2)."
+        },
+        "content": {
+          "$ref": "context-entry.schema.json#/$defs/Content",
+          "description": "The content, as stored for the version disclosed (HCP 7.4)."
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DisclosedEvidenceItem" },
+          "description": "The evidence, as stored (so at most one item whose `role` is `content`, HCP 4.2.2), including each item's `verification`, except that a credential may be disclosed in derived form (HCP 7.4, 14.9). Absent or empty when none is disclosed. The one-`content`-item rule is stated here and not in the schema: the registry's Rust generator does not support `contains`, so a validator does not check it."
+        },
+        "assertion": {
+          "$ref": "context-entry.schema.json#/$defs/Assertion",
+          "description": "The assertion, as stored for the version disclosed, including `basis` and `permittedPurposes` (HCP 7.4)."
+        },
+        "classification": {
+          "$ref": "context-entry.schema.json#/$defs/Classification",
+          "description": "Only the entry's categories the requesting grant covers, with its dimension and its `permittedPurposes` where present; its other categories are withheld (HCP 7.4)."
+        },
+        "standing": {
+          "$ref": "#/$defs/Standing",
+          "description": "What the client needs to judge the entry's standing (HCP 7.4, 3.8)."
+        },
+        "useUntil": {
+          "$ref": "common.schema.json#/$defs/Instant",
+          "description": "The instant after which the client MUST NOT use the copy, or pass it on, without fetching it again (HCP 7.6). The provider sets it at disclosure: the earliest explicit time that applies (such as `assertion.validUntil`), else a heuristic of at least 1 hour; never more than 30 days after disclosure, 24 hours for an entry of High default sensitivity, or 1 hour where the client has no registered notification endpoint (HCP 7.6)."
+        },
+        "onwardSharing": {
+          "const": true,
+          "description": "Present, and true, only where the client may share from this entry under HCP 3.12: the detail of the grant that reaches the entry carries `onwardSharing` and every category of the entry has a default sensitivity of Low. Omitted otherwise (HCP 7.4)."
+        },
+        "relationships": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DisclosedRelationship" },
+          "description": "Only the relationships whose target is disclosed in the same response, with the target named by its `ref` (HCP 7.4, 4.2.3)."
+        },
+        "provenance": {
+          "$ref": "#/$defs/DisclosedProvenance",
+          "description": "Present only where the requesting grant includes the `provenance` action for a category of the entry (HCP 7.4.1)."
+        }
+      },
+      "not": {
+        "anyOf": [
+          { "required": ["id"] },
+          { "required": ["subject"] },
+          { "required": ["record"] },
+          { "required": ["schema"] }
+        ]
+      }
+    },
+    "Standing": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["assurance", "confirmed"],
+      "description": "The standing of the disclosed version (HCP 7.4).",
+      "properties": {
+        "assurance": {
+          "$ref": "common.schema.json#/$defs/Assurance",
+          "description": "The stored `record.provenance.assertedBy.assurance`."
+        },
+        "confirmed": {
+          "type": "boolean",
+          "description": "True where the most recent confirmation record on the version disclosed is `confirmed` (HCP 7.4, 3.8)."
+        }
+      }
+    },
+    "DisclosedEvidenceItem": {
+      "description": "An evidence item as disclosed (HCP 7.4). An item carrying a derived credential adds `revealed`.",
+      "allOf": [{ "$ref": "context-entry.schema.json#/$defs/EvidenceItem" }],
+      "properties": {
+        "revealed": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 2048 },
+          "description": "The JSON Pointers into the stored credential of the claims a derived credential reveals (HCP 7.4, 14.9)."
+        }
+      }
+    },
+    "DisclosedRelationship": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "target"],
+      "description": "A relationship as disclosed (HCP 7.4).",
+      "properties": {
+        "type": { "$ref": "common.schema.json#/$defs/RelationshipType", "description": "The kind of relationship." },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The `ref` of the related entry, disclosed in the same response."
+        }
+      }
+    },
+    "DisclosedProvenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["submittedBy", "source", "assertedAt", "recordedAt"],
+      "description": "Provenance on request (HCP 7.4.1): names, never identifiers. It MUST NOT carry an identifier of a client, a Client Operator, a grant, a conversation or a document, nor `confirmedBy`.",
+      "properties": {
+        "submittedBy": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["name", "operator"],
+          "description": "The names of the client that submitted the version disclosed and of its Client Operator.",
+          "properties": {
+            "name": { "type": "string", "minLength": 1, "maxLength": 1024, "description": "The client's name." },
+            "operator": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "description": "The Client Operator's name."
+            }
+          }
+        },
+        "source": {
+          "type": "string",
+          "enum": ["conversation", "document", "person-input", "integration"],
+          "description": "The kind of origin the stored `source` records, not its value (HCP 7.4.1). HCP's own values, carried verbatim."
+        },
+        "assertedAt": { "$ref": "common.schema.json#/$defs/Instant", "description": "When the assertion was made." },
+        "recordedAt": {
+          "$ref": "common.schema.json#/$defs/Instant",
+          "description": "When the provider recorded the version."
+        }
+      },
+      "not": {
+        "anyOf": [
+          { "required": ["id"] },
+          { "required": ["confirmedBy"] },
+          { "required": ["authorizedUnder"] },
+          { "required": ["submittedByClient"] }
+        ]
+      }
+    }
+  }
+}

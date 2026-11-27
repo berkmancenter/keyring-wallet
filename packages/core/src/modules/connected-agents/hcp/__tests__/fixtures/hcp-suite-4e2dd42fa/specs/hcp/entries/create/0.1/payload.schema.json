@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/entries/create/0.1",
+  "title": "HCP — Create Entry — payload",
+  "description": "The request payload of the HCP 2.0-draft-3 Create operation (HCP 5.2.3): an HCP Client writes a new entry about the Context Subject, under the grant its access token evidences. The members are the entry in the form of HCP 4.2, carrying the fields of HCP 5.2.3 and omitting those the provider assigns (HCP 9.4.3), plus the access token. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, proof) are owned by the framework — SPEC §6.3. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "subject", "content", "classification", "assertion", "record"],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "https://hcp.example/spec/entry/2.0",
+      "description": "HCP `schema`: the entry structure version, compared as an exact string (HCP 4.2, 1.7). HCP 2.0-draft-3's create request takes this one value: v1 entry forms are accepted through hcp/import only (HCP 4.3). Any other value fails the schema and is refused with `malformedRequest` (HCP 4.2, 5.2.3)."
+    },
+    "subject": {
+      "$ref": "../../../_shared/0.1/entry-write.schema.json#/$defs/WriteSubject",
+      "description": "HCP `subject`: the Context Subject, by `subject.id` (HCP 4.2, 5.2.3)."
+    },
+    "content": {
+      "$ref": "../../../_shared/0.1/context-entry.schema.json#/$defs/Content",
+      "description": "HCP `content`, in the shape its profile defines (HCP 11, 14). Where the content is a credential, the client supplies the credential whole, with its proof, in an `evidence` item, and the provider MUST NOT modify it (HCP 4.2.2, 5.2.3)."
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "../../../_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem" },
+      "description": "HCP `evidence`: the evidence items (HCP 4.2.2), at most one of them with `role` `content`; that rule is not checked by the schema, since the registry's Rust generator does not support `contains`. The bound of 64 is a framework bound."
+    },
+    "classification": {
+      "$ref": "../../../_shared/0.1/entry-write.schema.json#/$defs/WriteClassification",
+      "description": "HCP `classification.categories` and `classification.dimension` (HCP 5.2.3)."
+    },
+    "assertion": {
+      "$ref": "../../../_shared/0.1/context-entry.schema.json#/$defs/Assertion",
+      "description": "HCP `assertion`: `declarationType` (REQUIRED), `confidence`, `validUntil`, `basis` and `permittedPurposes` (HCP 5.2.3). `confidence` is REQUIRED and non-null when `declarationType` is `model-inferred`, and null or absent otherwise; a write that breaks this is refused with `malformedRequest` (HCP 5.2.3). Not checked by the schema."
+    },
+    "record": {
+      "$ref": "../../../_shared/0.1/entry-write.schema.json#/$defs/CreateRecord",
+      "description": "HCP `record.provenance` and `record.relationships` (HCP 5.2.3)."
+    },
+    "accessToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "The HCP access token for the grant under which the client acts (HCP 12, 13), carried unchanged. HCP's HTTP Binding sends it as a Bearer token (HCP 9.3); this member carries it in the document. The provider validates it exactly as over HTTP and treats it as opaque. The maxLength is a framework bound, not an HCP requirement. OPTIONAL: where it is absent, the provider authenticates the request's `issuer` VID, by the REQUIRED request proof, as a Management Client the Authorizing Principal enrolled (HCP 3.2.3), and refuses any other issuer with permissionDenied; where it is present, the token rules apply unchanged. Pending HCP confirmation (question 56)."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "HCP — Create Entry — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry"],
+      "description": "The HCP Create result (HCP 5.2.3): the created entry with the provider-assigned fields populated. Failures use trust-task-error, not this shape.",
+      "properties": {
+        "entry": {
+          "anyOf": [
+            { "$ref": "../../../_shared/0.1/disclosure.schema.json#/$defs/Disclosure" },
+            { "$ref": "../../../_shared/0.1/context-entry.schema.json#/$defs/Entry" }
+          ],
+          "description": "The created entry: a Disclosure carrying its new `ref` where the requester is a Context Client (HCP 7.4), otherwise the whole Entry. HCP returns it as the result itself; this task wraps it in `entry`."
+        }
+      }
+    }
+  }
+}
