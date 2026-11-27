@@ -100,6 +100,13 @@ readme = [
     "to a row. These are the design the screens are built to (D41, the plan's section 8.6); the kit SVGs in `../mockups/`",
     "are the checked source for the copy, and only that. Re-export when a new canvas version is approved.",
     "",
+    "A re-export changes the bytes of most frames whose drawing did not change: headless Chrome's anti-aliasing of",
+    "text differs from run to run. So compare each changed frame with its committed copy as a thresholded",
+    "difference image (a block of changed content shows; speckle across all the text does not), not by PSNR, which",
+    "scores a one-letter change and run-to-run speckle alike; and commit only the frames with a changed block. The",
+    "sheet is built from the frames of the run that made it, and is not pinned to the committed frames' bytes, so a",
+    "partial commit does not require rebuilding it.",
+    "",
     "| # | File | Board | Size |",
     "|---|---|---|---|",
 ]

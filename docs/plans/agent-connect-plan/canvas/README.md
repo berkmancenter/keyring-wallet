@@ -1,10 +1,17 @@
 # The UI/UX canvas, exported
 
-Exported from the UI/UX lane's canvas, artifact version `1795709041-9afc (the UI/UX lane's canvas version 43, 2026-11-26)`, by `scripts/plans/export-canvas.py`.
+Exported from the UI/UX lane's canvas, artifact version `1795797015-5052 (the UI/UX lane's canvas version 45, 2026-11-27)`, by `scripts/plans/export-canvas.py`.
 One PNG per artboard, in the canvas's order, rendered with headless Chrome at the board's size at twice the
 pixel density from the published artboard files and their shared stylesheet; `sheet.png` is all of them, three
 to a row. These are the design the screens are built to (D41, the plan's section 8.6); the kit SVGs in `../mockups/`
 are the checked source for the copy, and only that. Re-export when a new canvas version is approved.
+
+A re-export changes the bytes of most frames whose drawing did not change: headless Chrome's anti-aliasing of
+text differs from run to run. So compare each changed frame with its committed copy as a thresholded
+difference image (a block of changed content shows; speckle across all the text does not), not by PSNR, which
+scores a one-letter change and run-to-run speckle alike; and commit only the frames with a changed block. The
+sheet is built from the frames of the run that made it, and is not pinned to the committed frames' bytes, so a
+partial commit does not require rebuilding it.
 
 | # | File | Board | Size |
 |---|---|---|---|
@@ -64,3 +71,5 @@ are the checked source for the copy, and only that. Re-export when a new canvas 
 | 54 | `54-hcp-revoke.png` | H5 Revoke: "We'll tell it" | 390×844 |
 | 55 | `55-hcp-revoke-states.png` | H6 After revoking: the three lines (reference, not a real screen) | 390×920 |
 | 56 | `56-memory-use.png` | 11d PROPOSED: how much each memory holds (P0, no rooms) | 390×1000 |
+| 57 | `57-memories-list.png` | 57 Your memories: the list (step 7.16, P1) | 390×844 |
+| 58 | `58-acting-as.png` | 58 Acting as: more than one persona (finding 18) | 390×844 |
