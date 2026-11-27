@@ -130,6 +130,7 @@ export function leftoverRecordFor(
     handle: '',
     agentDid: cleanup.subject,
     deviceId: cleanup.deviceId ?? '',
+    ...(cleanup.expiresAt ? { expiresAt: cleanup.expiresAt } : {}),
     ownerPersonaDid: choice?.ownerPersonaDid ?? '',
     vtaDid: cleanup.vtaDid,
     contexts: [],

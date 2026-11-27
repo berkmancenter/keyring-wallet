@@ -330,6 +330,31 @@ describe('Remove (§3.10, §7.7)', () => {
     expect(await t.actions.remove(known.id)).toEqual({ ok: true })
   })
 
+  it("no deviceId: once its entry's recorded expiry has passed, it is gone under any key, and the record is dropped", async () => {
+    const until = new Date(FIXTURE_NOW + 60 * 60 * 1000).toISOString()
+    const leftover = agentRecord({
+      id: 'did:key:z6MkLeftover',
+      agentDid: 'did:key:z6MkLeftover',
+      deviceId: '',
+      state: 'notFinished',
+      expiresAt: until,
+    })
+    const t = setup(leftover)
+    await t.connections.put(leftover)
+    // before the expiry: still unproven
+    expect(await t.actions.remove(leftover.id)).toEqual({ ok: false, code: 'goneUnproven' })
+    // after it: dropped, with nothing revoked
+    t.clock.now = Date.parse(until)
+    expect(await t.actions.remove(leftover.id)).toEqual({ ok: true })
+    expect(t.revoked).toEqual([])
+    expect(await t.connections.get(leftover.id)).toBeUndefined()
+    // control: with no expiry recorded, it stays unproven however late
+    const unrecorded = agentRecord({ ...leftover, expiresAt: undefined })
+    await t.connections.put(unrecorded)
+    t.clock.now = FIXTURE_NOW + 365 * 24 * 60 * 60 * 1000
+    expect(await t.actions.remove(unrecorded.id)).toEqual({ ok: false, code: 'goneUnproven' })
+  })
+
   it('a leftover with no deviceId is found by its subject', async () => {
     const leftover = agentRecord({
       id: 'did:key:z6MkLeftover',

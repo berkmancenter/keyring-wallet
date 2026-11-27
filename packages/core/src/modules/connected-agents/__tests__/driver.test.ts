@@ -8,7 +8,13 @@ import { AgentConnectDriver, ConnectionRecords, personaSigningKeyId, unservedOob
 import { isContactStatus, statusOf } from '../status'
 import { deriveHandle } from '../handle'
 import type { LockoutStore } from '../lockout'
-import { NOT_FINISHED_AFTER_MS, type AgentConnectChoice, type PairingLink, type SpentRequestStore } from '../pairing'
+import {
+  NOT_FINISHED_AFTER_MS,
+  TEMPORARY_GRANT_MS,
+  type AgentConnectChoice,
+  type PairingLink,
+  type SpentRequestStore,
+} from '../pairing'
 import type { AgentConnection } from '../types'
 import { KEYS_SIGN_DOCUMENT_TASK, type VdcSignPort } from '../vdc'
 
@@ -336,6 +342,8 @@ describe('what an ended pairing leaves at the VTA is recorded as Not finished (Â
     expect(await t.driver.settled()).toEqual({ state: 'notFinished', subject: K_T })
     const record = t.connections.records.get(K_T)
     expect(record).toMatchObject({ id: K_T, name: 'Notes helper', vtaDid: VTA, state: 'notFinished', handle: '' })
+    // the entry's expiry as the grant set it, so Remove can drop the row once it has passed (#1060 finding 24, 3A)
+    expect(Date.parse(record?.expiresAt ?? '')).toBe(T0 + TEMPORARY_GRANT_MS)
     expect(statusOf(record as AgentConnection, T0)).toBe('notFinished')
     expect(isContactStatus(statusOf(record as AgentConnection, T0))).toBe(false)
   })
