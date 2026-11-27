@@ -70,6 +70,9 @@ describe('ConnectedAgents words', () => {
     // the failure is here and says so ("Received array" without it), not a confusing one below: repoint it then.
     expect(Object.keys(PROPOSED_COPY)).toContain('MemoryChangeFailed')
     expect(settled('MemoryChangeFailed')).toBe(false)
+    // Control that never runs out: a sentence the plan does not say is not settled, and a settled key reads true.
+    expect(settled('SeeDetails')).toBe(true)
+    expect(quotedIn6('Keyring never says this sentence anywhere.')).toBe(false)
     expect(quotedIn6('It will be able to read and change it.')).toBe(false)
   })
 
