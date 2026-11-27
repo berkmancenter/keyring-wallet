@@ -13,7 +13,7 @@
  * screenshot pairs on the emulator and the simulator. The walk reads the same manifest.
  */
 import { act, fireEvent, render } from '@testing-library/react-native'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readdirSync, readFileSync } from 'fs'
 import path from 'path'
 import React from 'react'
 
@@ -21,7 +21,7 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import en from '../../../localization/en/en.json'
 import { testIdWithKey } from '../../../utils/testable'
 
-import { SCREEN_STATES } from './fixtures/screenStates'
+import type { WordSource } from './fixtures/wordSource'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -41,7 +41,40 @@ type ScreenState = {
 type Manifest = { canvas: string; kit: string; states: ScreenState[] }
 
 const ROOT = path.resolve(__dirname, '../../../../../..')
-const MANIFEST: Manifest = JSON.parse(readFileSync(path.join(ROOT, 'e2e/lib/agent-connect-screens.json'), 'utf8'))
+/**
+ * The manifest is every `e2e/lib/agent-connect-screens*.json`, and the drawings every `fixtures/screenStates*.tsx`
+ * (each exporting SCREEN_STATES), so a piece of work adds its own pair of files and writes no file another writes. The
+ * first is the base file, `agent-connect-screens.json`; the others add states and name the same canvas and kit folders.
+ */
+const MANIFEST_FILES = readdirSync(path.join(ROOT, 'e2e/lib'))
+  .filter((name) => /^agent-connect-screens.*\.json$/.test(name))
+  .sort()
+const MANIFESTS: Array<{ file: string } & Manifest> = MANIFEST_FILES.map((file) => ({
+  file,
+  ...JSON.parse(readFileSync(path.join(ROOT, 'e2e/lib', file), 'utf8')),
+}))
+const MANIFEST: Manifest = {
+  canvas: MANIFESTS[0].canvas,
+  kit: MANIFESTS[0].kit,
+  states: MANIFESTS.flatMap((m) => m.states),
+}
+const FIXTURES = path.join(__dirname, 'fixtures')
+const DRAWING_FILES = readdirSync(FIXTURES)
+  .filter((name) => /^screenStates.*\.tsx$/.test(name))
+  .sort()
+// A drawing file may also export WORD_SOURCES (see fixtures/wordSource.ts): words that do not come through t().
+type DrawingFile = {
+  SCREEN_STATES: Record<string, () => React.ReactElement>
+  WORD_SOURCES?: WordSource[]
+}
+const DRAWINGS: Array<{ file: string; states: Record<string, () => React.ReactElement>; sources: WordSource[] }> =
+  DRAWING_FILES.map((file) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const loaded = require(path.join(FIXTURES, file)) as DrawingFile
+    return { file, states: loaded.SCREEN_STATES, sources: loaded.WORD_SOURCES ?? [] }
+  })
+const WORD_SOURCES: WordSource[] = DRAWINGS.flatMap((d) => d.sources)
+const SCREEN_STATES: Record<string, () => React.ReactElement> = Object.assign({}, ...DRAWINGS.map((d) => d.states))
 const id = (key: string) => testIdWithKey(key)
 
 /**
@@ -49,18 +82,19 @@ const id = (key: string) => testIdWithKey(key)
  * i18n returns keys). It checks words, not literal content: a name, a digit or the "7 / 64" counter is not collected,
  * so a wrong counter or a wrong name passes here.
  */
-const shownKeys = (node: unknown, out: string[] = []): string[] => {
+const shownKeys = (node: unknown, out: string[] = [], sources: WordSource[] = WORD_SOURCES): string[] => {
   if (node == null) return out
   if (typeof node === 'string') {
-    if (/^[A-Z]\w*\.[A-Z]\w*$/.test(node) && !out.includes(node)) out.push(node)
+    const word = /^[A-Z]\w*\.[A-Z]\w*$/.test(node) ? node : sources.map((s) => s.wordOf(node)).find(Boolean)
+    if (word && !out.includes(word)) out.push(word)
     return out
   }
   if (Array.isArray(node)) {
-    node.forEach((child) => shownKeys(child, out))
+    node.forEach((child) => shownKeys(child, out, sources))
     return out
   }
   const children = (node as { children?: unknown }).children
-  if (children) shownKeys(children, out)
+  if (children) shownKeys(children, out, sources)
   return out
 }
 
@@ -89,6 +123,19 @@ describe('agent connect screen catalogue (a check on words, not 7.11 evidence)',
     expect(new Set(listed).size).toBe(listed.length)
   })
 
+  it('reads every manifest and drawing file, names one canvas and kit folder, and draws no state twice', () => {
+    expect(MANIFEST_FILES[0]).toBe('agent-connect-screens.json')
+    expect(DRAWING_FILES).toContain('screenStates.tsx')
+    expect(MANIFESTS.filter((m) => m.canvas !== MANIFEST.canvas || m.kit !== MANIFEST.kit).map((m) => m.file)).toEqual(
+      []
+    )
+    // Two drawing files may not both draw one state: Object.assign would silently keep the later one.
+    const drawn = DRAWINGS.flatMap((d) => Object.keys(d.states))
+    expect(drawn.filter((key, i) => drawn.indexOf(key) !== i)).toEqual([])
+    // Control: the patterns do not take a file that only starts the same.
+    expect(/^agent-connect-screens.*\.json$/.test('agent-connect-screensaver.txt')).toBe(false)
+  })
+
   it('names a frame and a kit mockup that exist, or says why a state has no frame or no words', () => {
     const problems = MANIFEST.states.flatMap((s) => {
       const out: string[] = []
@@ -106,10 +153,24 @@ describe('agent connect screen catalogue (a check on words, not 7.11 evidence)',
     expect(existsSync(path.join(ROOT, MANIFEST.canvas, '99-not-a-frame.png'))).toBe(false)
   })
 
-  it('lists only words that exist in the English strings', () => {
+  it('collects words from a word source as it does t() keys, and only what the source names', () => {
+    const fake: WordSource = {
+      prefix: 'Fake.',
+      wordOf: (text) => (text === 'Hello there.' ? 'Fake.Hello' : undefined),
+      exists: (word) => word === 'Fake.Hello',
+    }
+    const tree = { children: ['ConnectedAgents.Revoke', 'Hello there.', 'Some name', { children: ['Hello there.'] }] }
+    expect(shownKeys(tree, [], [fake])).toEqual(['ConnectedAgents.Revoke', 'Fake.Hello'])
+    // Control: without the source, the finished text is not a word.
+    expect(shownKeys(tree, [], [])).toEqual(['ConnectedAgents.Revoke'])
+  })
+
+  it('lists only words that exist in the English strings, or in the word source their prefix names', () => {
     const missing = MANIFEST.states.flatMap((s) =>
       s.words
         .filter((key) => {
+          const source = WORD_SOURCES.find((w) => key.startsWith(w.prefix))
+          if (source) return !source.exists(key)
           const [section, name] = key.split('.')
           const strings = (en as unknown as Record<string, Record<string, string>>)[section] ?? {}
           return !(name in strings) && !(`${name}_other` in strings)

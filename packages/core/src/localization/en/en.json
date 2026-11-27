@@ -4230,6 +4230,18 @@
     "NarrowBody": "It loses access to it on its next request. What it already remembered stays in \"{{memory}}\".",
     "StopUsing": "Stop using",
     "Keep": "Keep",
-    "MyVta": "My VTA"
+    "MyVta": "My VTA",
+    "ActingAs": "Acting as",
+    "MemoriesTitle": "Your memories",
+    "Delete": "Delete",
+    "DeleteMemoryTitle": "Delete \"{{memory}}\"?",
+    "DeleteMemoryBody_one": "This destroys the {{count}} item it remembers and removes the memory from {{agents}}. This can't be undone.",
+    "DeleteMemoryBody_other": "This destroys the {{count}} items it remembers and removes the memory from {{agents}}. This can't be undone.",
+    "DeleteMemoryBodyNoAgents_one": "This destroys the {{count}} item it remembers. This can't be undone.",
+    "DeleteMemoryBodyNoAgents_other": "This destroys the {{count}} items it remembers. This can't be undone.",
+    "DeleteMemoryHeld": "Your VTA asks for approval before a memory is deleted, so this one wasn't deleted.",
+    "DeleteMemoryRecordsLeft_one": "Deleted. {{count}} agent still lists it until Keyring checks again.",
+    "DeleteMemoryRecordsLeft_other": "Deleted. {{count}} agents still list it until Keyring checks again.",
+    "UnnamedAgent": "an agent with no name"
   }
 }

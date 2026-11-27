@@ -13,6 +13,13 @@
  */
 export const PROPOSED_COPY: Readonly<Record<string, string>> = {
   MemoryChangeFailed: 'seam gap: a widen or narrow the VTA did not make',
+  MemoriesTitle: 'backlog (memories list heading, step 7.16): no words in the plan',
+  DeleteMemoryBodyNoAgents_one: 'backlog (step 7.16): the delete body when no agent is bound',
+  DeleteMemoryBodyNoAgents_other: 'backlog (step 7.16): as above',
+  DeleteMemoryHeld: 'backlog (step 7.16): a delete held by an approval rule, never "Try again"',
+  DeleteMemoryRecordsLeft_one: 'backlog (step 7.16): records not updated after a delete',
+  DeleteMemoryRecordsLeft_other: 'backlog (step 7.16): as above',
+  UnnamedAgent: 'backlog (step 7.16): an agent with no name in the delete body',
   NumberDigitFilled: 'accessibility: §6 says each digit is announced as it is typed, not in which words',
 }
 
@@ -32,4 +39,6 @@ export const NO_ROOM_FORMS: Readonly<Record<string, string>> = {
  * (a test checks it there). Settled, so not waiting on a ruling; listed so §6 stays the strict rule and each exception
  * is a decision someone made, with its source beside it.
  */
-export const SETTLED_ELSEWHERE: Readonly<Record<string, string>> = {}
+export const SETTLED_ELSEWHERE: Readonly<Record<string, string>> = {
+  ActingAs: '§7.7',
+}

@@ -4188,6 +4188,18 @@
     "NarrowBody": "Il y perd l'accès à sa prochaine requête. Ce qu'il a déjà retenu reste dans « {{memory}} ».",
     "StopUsing": "Arrêter l'utilisation",
     "Keep": "Garder",
-    "MyVta": "Mon VTA"
+    "MyVta": "Mon VTA",
+    "ActingAs": "Agir en tant que",
+    "MemoriesTitle": "Vos mémoires",
+    "Delete": "Supprimer",
+    "DeleteMemoryTitle": "Supprimer « {{memory}} » ?",
+    "DeleteMemoryBody_one": "Cela détruit {{count}} élément qu'elle contient et retire la mémoire de {{agents}}. C'est irréversible.",
+    "DeleteMemoryBody_other": "Cela détruit les {{count}} éléments qu'elle contient et retire la mémoire de {{agents}}. C'est irréversible.",
+    "DeleteMemoryBodyNoAgents_one": "Cela détruit {{count}} élément qu'elle contient. C'est irréversible.",
+    "DeleteMemoryBodyNoAgents_other": "Cela détruit les {{count}} éléments qu'elle contient. C'est irréversible.",
+    "DeleteMemoryHeld": "Votre VTA demande une approbation avant de supprimer une mémoire, celle-ci n'a donc pas été supprimée.",
+    "DeleteMemoryRecordsLeft_one": "Supprimée. {{count}} agent la mentionne encore jusqu'à la prochaine vérification de Keyring.",
+    "DeleteMemoryRecordsLeft_other": "Supprimée. {{count}} agents la mentionnent encore jusqu'à la prochaine vérification de Keyring.",
+    "UnnamedAgent": "un agent sans nom"
   }
 }
