@@ -723,6 +723,118 @@
         "Rooms.AgentBadge",
         "ConnectedAgents.YourAgent"
       ]
+    },
+    {
+      "id": "revoke",
+      "step": "7.10",
+      "marker": "RevokeAgentSheet",
+      "frame": "19-revoke.png",
+      "kit": "17-revoke.svg",
+      "words": [
+        "ConnectedAgents.RevokeTitle",
+        "ConnectedAgents.RevokeBody",
+        "ConnectedAgents.Revoke",
+        "ConnectedAgents.Keep"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Also delete what it remembered\"",
+          "why": "P2 (step 7.18); not shown in P0"
+        }
+      ]
+    },
+    {
+      "id": "revoke-no-rooms",
+      "step": "7.10",
+      "marker": "RevokeAgentSheet",
+      "frame": "19-revoke.png",
+      "kit": "17-revoke.svg",
+      "words": [
+        "ConnectedAgents.RevokeTitle",
+        "ConnectedAgents.RevokeBodyNoRooms",
+        "ConnectedAgents.Revoke",
+        "ConnectedAgents.Keep"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Also delete what it remembered\"",
+          "why": "P2 (step 7.18); not shown in P0"
+        },
+        {
+          "what": "the room sentence of the body (\"…and rooms. A room permission it already holds can work for up to 4 hours.\")",
+          "why": "the no-room form: P0 has no rooms (§6)"
+        }
+      ]
+    },
+    {
+      "id": "revoke-unreachable",
+      "step": "7.10",
+      "marker": "RevokeOutcomeNotice",
+      "steps": [
+        {
+          "press": "RevokeAgentConfirm"
+        }
+      ],
+      "frame": "19-revoke.png",
+      "kit": "17-revoke.svg",
+      "words": [
+        "ConnectedAgents.RevokeTitle",
+        "ConnectedAgents.RevokeBodyNoRooms",
+        "ConnectedAgents.Revoke",
+        "ConnectedAgents.Keep",
+        "ConnectedAgents.StatusRevokeNotConfirmed",
+        "ConnectedAgents.TryAgain",
+        "ConnectedAgents.RevokeUnreachable"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Also delete what it remembered\"",
+          "why": "P2 (step 7.18); not shown in P0"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "the outcome notice: ConnectedAgents.RevokeUnreachable with ConnectedAgents.TryAgain",
+          "why": "§6 \"Revoke incomplete\"; frame 19 draws the sheet before Revoke is pressed"
+        },
+        {
+          "what": "the title ConnectedAgents.StatusRevokeNotConfirmed over the unreachable line",
+          "why": "§6 gives \"Revoke incomplete\" only its line, and the agent is still connected there; a question for the plan owner"
+        }
+      ]
+    },
+    {
+      "id": "revoke-not-confirmed",
+      "step": "7.10",
+      "marker": "RevokeOutcomeNotice",
+      "steps": [
+        {
+          "press": "RevokeAgentConfirm"
+        }
+      ],
+      "frame": "19-revoke.png",
+      "kit": "17-revoke.svg",
+      "words": [
+        "ConnectedAgents.RevokeTitle",
+        "ConnectedAgents.RevokeBodyNoRooms",
+        "ConnectedAgents.Revoke",
+        "ConnectedAgents.Keep",
+        "ConnectedAgents.StatusRevokeNotConfirmed",
+        "ConnectedAgents.TryAgain",
+        "ConnectedAgents.RevokeNotConfirmedBody"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Also delete what it remembered\"",
+          "why": "P2 (step 7.18); not shown in P0"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "the outcome notice: ConnectedAgents.StatusRevokeNotConfirmed, ConnectedAgents.RevokeNotConfirmedBody, ConnectedAgents.TryAgain",
+          "why": "§6 \"Revoke not confirmed\"; frame 19 draws the sheet before Revoke is pressed"
+        }
+      ]
     }
   ]
 }
