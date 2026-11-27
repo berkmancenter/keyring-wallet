@@ -2972,8 +2972,16 @@ export class VtaClient {
     return Array.isArray(result) ? result : (result.contexts ?? [])
   }
 
+  /**
+   * Create a context. Sent by this phone about itself (agent connect's memories, plan §3.15), so a create held for
+   * consent is refused at once rather than waited on: `vta/contexts/create` is a task an approval rule can hold, and
+   * the approver the rule names may be this phone, so the wait could never end (approvalRules.ts, PHONE_SENDS). A
+   * held create fails; whether the owner can hold it at all is the 7.7 plan's question.
+   */
   createContext(id: string, name: string) {
-    return this.task<VtaContext>(VTA_TASK.contextsCreate, { id, name })
+    return this.task<VtaContext>(VTA_TASK.contextsCreate, { id, name }, undefined, {}, undefined, {
+      waitForConsent: false,
+    })
   }
 
   /**
