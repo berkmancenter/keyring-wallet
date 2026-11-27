@@ -4104,6 +4104,18 @@
     "NarrowBody": "Ele perde o acesso na próxima solicitação. O que ele já lembrou continua em \"{{memory}}\".",
     "StopUsing": "Parar de usar",
     "Keep": "Manter",
-    "MyVta": "Meu VTA"
+    "MyVta": "Meu VTA",
+    "ActingAs": "Agindo como",
+    "MemoriesTitle": "Suas memórias",
+    "Delete": "Excluir",
+    "DeleteMemoryTitle": "Excluir \"{{memory}}\"?",
+    "DeleteMemoryBody_one": "Isso destrói {{count}} item que ela guarda e remove a memória de {{agents}}. Isso não pode ser desfeito.",
+    "DeleteMemoryBody_other": "Isso destrói os {{count}} itens que ela guarda e remove a memória de {{agents}}. Isso não pode ser desfeito.",
+    "DeleteMemoryBodyNoAgents_one": "Isso destrói {{count}} item que ela guarda. Isso não pode ser desfeito.",
+    "DeleteMemoryBodyNoAgents_other": "Isso destrói os {{count}} itens que ela guarda. Isso não pode ser desfeito.",
+    "DeleteMemoryHeld": "Seu VTA pede aprovação antes de excluir uma memória, então esta não foi excluída.",
+    "DeleteMemoryRecordsLeft_one": "Excluída. {{count}} agente ainda a lista até o Keyring verificar de novo.",
+    "DeleteMemoryRecordsLeft_other": "Excluída. {{count}} agentes ainda a listam até o Keyring verificar de novo.",
+    "UnnamedAgent": "um agente sem nome"
   }
 }

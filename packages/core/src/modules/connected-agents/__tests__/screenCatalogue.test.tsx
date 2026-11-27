@@ -13,15 +13,13 @@
  * screenshot pairs on the emulator and the simulator. The walk reads the same manifest.
  */
 import { act, fireEvent, render } from '@testing-library/react-native'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readdirSync, readFileSync } from 'fs'
 import path from 'path'
 import React from 'react'
 
 import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import en from '../../../localization/en/en.json'
 import { testIdWithKey } from '../../../utils/testable'
-
-import { SCREEN_STATES } from './fixtures/screenStates'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -41,7 +39,35 @@ type ScreenState = {
 type Manifest = { canvas: string; kit: string; states: ScreenState[] }
 
 const ROOT = path.resolve(__dirname, '../../../../../..')
-const MANIFEST: Manifest = JSON.parse(readFileSync(path.join(ROOT, 'e2e/lib/agent-connect-screens.json'), 'utf8'))
+/**
+ * The manifest is every `e2e/lib/agent-connect-screens*.json`, and the drawings every `fixtures/screenStates*.tsx`
+ * (each exporting SCREEN_STATES), so a piece of work adds its own pair of files and writes no file another writes. The
+ * first is the base file, `agent-connect-screens.json`; the others add states and name the same canvas and kit folders.
+ */
+const MANIFEST_FILES = readdirSync(path.join(ROOT, 'e2e/lib'))
+  .filter((name) => /^agent-connect-screens.*\.json$/.test(name))
+  .sort()
+const MANIFESTS: Array<{ file: string } & Manifest> = MANIFEST_FILES.map((file) => ({
+  file,
+  ...JSON.parse(readFileSync(path.join(ROOT, 'e2e/lib', file), 'utf8')),
+}))
+const MANIFEST: Manifest = {
+  canvas: MANIFESTS[0].canvas,
+  kit: MANIFESTS[0].kit,
+  states: MANIFESTS.flatMap((m) => m.states),
+}
+const FIXTURES = path.join(__dirname, 'fixtures')
+const DRAWING_FILES = readdirSync(FIXTURES)
+  .filter((name) => /^screenStates.*\.tsx$/.test(name))
+  .sort()
+const DRAWINGS: Array<{ file: string; states: Record<string, () => React.ReactElement> }> = DRAWING_FILES.map(
+  (file) => ({
+    file,
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    states: require(path.join(FIXTURES, file)).SCREEN_STATES as Record<string, () => React.ReactElement>,
+  })
+)
+const SCREEN_STATES: Record<string, () => React.ReactElement> = Object.assign({}, ...DRAWINGS.map((d) => d.states))
 const id = (key: string) => testIdWithKey(key)
 
 /**
@@ -87,6 +113,19 @@ describe('agent connect screen catalogue (a check on words, not 7.11 evidence)',
     const listed = MANIFEST.states.map((s) => s.id).sort()
     expect(Object.keys(SCREEN_STATES).sort()).toEqual(listed)
     expect(new Set(listed).size).toBe(listed.length)
+  })
+
+  it('reads every manifest and drawing file, names one canvas and kit folder, and draws no state twice', () => {
+    expect(MANIFEST_FILES[0]).toBe('agent-connect-screens.json')
+    expect(DRAWING_FILES).toContain('screenStates.tsx')
+    expect(MANIFESTS.filter((m) => m.canvas !== MANIFEST.canvas || m.kit !== MANIFEST.kit).map((m) => m.file)).toEqual(
+      []
+    )
+    // Two drawing files may not both draw one state: Object.assign would silently keep the later one.
+    const drawn = DRAWINGS.flatMap((d) => Object.keys(d.states))
+    expect(drawn.filter((key, i) => drawn.indexOf(key) !== i)).toEqual([])
+    // Control: the patterns do not take a file that only starts the same.
+    expect(/^agent-connect-screens.*\.json$/.test('agent-connect-screensaver.txt')).toBe(false)
   })
 
   it('names a frame and a kit mockup that exist, or says why a state has no frame or no words', () => {
