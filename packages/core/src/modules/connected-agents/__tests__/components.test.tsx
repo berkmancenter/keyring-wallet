@@ -51,12 +51,13 @@ describe('ConnectedAgents words', () => {
   const PLAN = readFileSync(path.resolve(__dirname, '../../../../../../docs/plans/agent-connect-plan.md'), 'utf8')
   const SECTION_6 = PLAN.slice(PLAN.indexOf('\n## 6. UX'), PLAN.indexOf('\n## 7. Steps'))
   const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  // "{{name}}" in a locale string is "<name>" (or "<n>", "<time>") in the plan.
+  // "{{name}}" in a locale string is "<name>" (or "<n>", "<time>") in the plan's prose, and "{{name}}" itself in its
+  // key list, which quotes the i18n strings as they are written.
   const asPlan = (text: string) =>
     text
       .split(/{{\s*\w+\s*}}/)
       .map(escape)
-      .join('<[^>"]+>')
+      .join('(?:<[^>"]+>|\\{\\{\\s*\\w+\\s*\\}\\})')
   const quotedIn6 = (text: string) => new RegExp(`"${asPlan(text)}"`).test(SECTION_6)
   const partOf6 = (text: string) => new RegExp(asPlan(text)).test(SECTION_6)
   // A plural's "_one" stands or falls with its "_other", which is the form the plan quotes.
@@ -66,7 +67,13 @@ describe('ConnectedAgents words', () => {
     expect(SECTION_6.length).toBeGreaterThan(10000)
     expect(settled('ApproveOwnTerminal')).toBe(true)
     // Control: a proposal's words are not in §6, and a key word-for-word in §6 inside a longer string is not "quoted".
-    expect(settled('SeeDetails')).toBe(false)
+    // The control's subject is a string still proposed. Guarded first, so the day none is left (or this one settles)
+    // the failure is here and says so ("Received array" without it), not a confusing one below: repoint it then.
+    expect(Object.keys(PROPOSED_COPY)).toContain('MemoryChangeFailed')
+    expect(settled('MemoryChangeFailed')).toBe(false)
+    // Control that never runs out: a sentence the plan does not say is not settled, and a settled key reads true.
+    expect(settled('SeeDetails')).toBe(true)
+    expect(quotedIn6('Keyring never says this sentence anywhere.')).toBe(false)
     expect(quotedIn6('It will be able to read and change it.')).toBe(false)
   })
 

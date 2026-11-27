@@ -22,7 +22,7 @@ export type CreateMemoryResult = { ok: true; memory: PickerMemory } | { ok: fals
 const REFUSAL_KEY: Record<CreateRefusal, string> = {
   duplicateName: 'ConnectedAgents.MemoryNameTaken',
   failed: 'ConnectedAgents.MemoryCreateFailed',
-  // TODO(#1060 finding 20): proposed words. Never "Try again" here: a retry fails the same way.
+  // Never "Try again" here (§6, #1060 finding 20): a retry fails the same way. A test holds it in every language.
   heldForApproval: 'ConnectedAgents.MemoryHeldForApproval',
 }
 

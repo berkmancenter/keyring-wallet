@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
 
 /**
  * An agent's details (§6 "Agent bottom sheet and agent details"; canvas frame 11 in its no-room form, frame 11d for
- * the counts). The header title is the agent's name, set by the navigator (#1060 finding 9, agreed by relay). P0 has
+ * the counts). The header title is the agent's name, set by the navigator (§6, #1060 finding 9). P0 has
  * no rooms, so neither "in every room it is in" nor any "Can read all of <room>" line is drawn, and the P1 lines
  * ("Mention it as", "Answers other people", "Add a credential") are left out.
  */
@@ -177,7 +177,6 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
           return (
             <View key={memory.id} style={styles.memory} accessible testID={testIdWithKey('AgentDetailsMemoryCount')}>
               <ThemedText style={[styles.factText, styles.bold]}>{memory.name}</ThemedText>
-              {/* TODO(#1060 finding 9, P-c): the count words are agreed by relay, not yet in the plan. */}
               {counts === undefined ? (
                 <ActivityIndicator size="small" style={{ alignSelf: 'flex-start' }} />
               ) : !c || c.failed || c.count === undefined ? (
@@ -185,7 +184,9 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
               ) : (
                 <>
                   <ThemedText style={styles.small}>
-                    {t('ConnectedAgents.MemoryCount', { count: c.count, date: c.lastChange ?? '' })}
+                    {c.lastChange
+                      ? t('ConnectedAgents.MemoryCount', { count: c.count, date: c.lastChange })
+                      : t('ConnectedAgents.MemoryCountNoDate', { count: c.count })}
                   </ThemedText>
                   {c.rose ? (
                     <ThemedText style={styles.small}>
@@ -211,7 +212,6 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
         })}
         {agent.pending.map((memory) => (
           <View key={`pending-${memory.id}`} style={styles.memory} testID={testIdWithKey('AgentDetailsPending')}>
-            {/* TODO(#1060 proposal 17): proposed words for finding 7 of #1048. */}
             <ThemedText style={styles.small}>{t('ConnectedAgents.PendingMemory', { memory: memory.name })}</ThemedText>
             <TouchableOpacity
               onPress={onRetryPending}

@@ -68,8 +68,6 @@ export interface ApproveViewProps {
  * 4 hours and until when, and that approving is not signing in. The room sentence is the P1 form and is left out in
  * P0. Then the warning box, and "Approve", which asks the phone's face or fingerprint check: approval is never sent
  * without it passing (the seam's condition, held by this view's test). Nothing here elects persistence.
- *
- * TODO(#1060 proposal 17): the requester and network lines are proposed words.
  */
 const ApproveView: React.FC<ApproveViewProps> = ({
   name,
