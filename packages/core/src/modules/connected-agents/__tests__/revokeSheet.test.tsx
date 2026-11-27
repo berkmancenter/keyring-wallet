@@ -98,7 +98,8 @@ describe('RevokeAgentSheet', () => {
       fireEvent.press(view.getByTestId(id('RevokeAgentConfirm')))
     })
     await waitFor(() => expect(view.getByText('ConnectedAgents.RevokeUnreachable')).toBeTruthy())
-    expect(view.getByText('ConnectedAgents.StatusRevokeNotConfirmed')).toBeTruthy()
+    // Only the line, as §6 writes "Revoke incomplete": no "Revoke not confirmed" title over "still connected".
+    expect(view.queryByText('ConnectedAgents.StatusRevokeNotConfirmed')).toBeNull()
     await act(async () => {
       fireEvent.press(view.getByTestId(id('RevokeTryAgain')))
     })
@@ -179,6 +180,17 @@ describe('RevokeAgentSheet', () => {
 })
 
 describe('RevokeOutcomeNotice', () => {
+  it('gives the title "Revoke not confirmed" to the not-confirmed case only (§6; option A, agreed by relay)', () => {
+    const titled = (kind: 'notConfirmed' | 'unreachable') =>
+      show(<RevokeOutcomeNotice name={NAME} outcome={{ kind }} />).queryAllByText(
+        'ConnectedAgents.StatusRevokeNotConfirmed'
+      ).length
+    expect({ notConfirmed: titled('notConfirmed'), unreachable: titled('unreachable') }).toEqual({
+      notConfirmed: 1,
+      unreachable: 0,
+    })
+  })
+
   it('not confirmed: the status, "may still have access" and Try again', () => {
     const onTryAgain = jest.fn()
     const view = show(<RevokeOutcomeNotice name={NAME} outcome={{ kind: 'notConfirmed' }} onTryAgain={onTryAgain} />)
@@ -191,6 +203,7 @@ describe('RevokeOutcomeNotice', () => {
   it('unreachable: "still connected", and no Try again without a handler', () => {
     const view = show(<RevokeOutcomeNotice name={NAME} outcome={{ kind: 'unreachable' }} />)
     expect(view.getByText('ConnectedAgents.RevokeUnreachable')).toBeTruthy()
+    expect(view.queryByText('ConnectedAgents.StatusRevokeNotConfirmed')).toBeNull()
     expect(view.queryByTestId(id('RevokeTryAgain'))).toBeNull()
   })
 

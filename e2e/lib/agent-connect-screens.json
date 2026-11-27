@@ -1,5 +1,5 @@
 {
-  "about": "Every P0 screen state of agent connect step 7.7 (docs/plans/agent-connect-plan.md §6, step 7.11): its on-screen marker (a testID key), the steps that reach it from that screen, its canvas frame and kit mockup, the words it shows (localization keys), and every difference from its frame with its reason. Plain data: the jest catalogue (packages/core/src/modules/connected-agents/__tests__/screenCatalogue.test.tsx) checks each view renders exactly these words; the emulator walk of step 7.11 reads the same file. It is a curated list of the states chosen for the catalogue: the catalogue checks that this list and its drawings agree, which is not coverage of every state the screens have. A check on words and states, not step 7.11's evidence, which is the screenshot pairs.",
+  "about": "Every P0 screen state of agent connect step 7.7 (docs/plans/agent-connect-plan.md §6, step 7.11): its on-screen marker (a testID key), the steps that reach it from that screen, its canvas frame and kit mockup, the words it shows (localization keys), and every difference from its frame with its reason. Plain data: the jest catalogue (packages/core/src/modules/connected-agents/__tests__/screenCatalogue.test.tsx) checks each view renders exactly these words; the emulator walk of step 7.11 reads the same file. It is a curated list of the states chosen for the catalogue: the catalogue checks that this list and its drawings agree, which is not coverage of every state the screens have, and that a state shows the listed words, not that they are the right words for it. A check on words and states, not step 7.11's evidence, which is the screenshot pairs.",
   "canvas": "docs/plans/agent-connect-plan/canvas/",
   "kit": "docs/plans/agent-connect-plan/mockups/",
   "states": [
@@ -782,7 +782,6 @@
         "ConnectedAgents.RevokeBodyNoRooms",
         "ConnectedAgents.Revoke",
         "ConnectedAgents.Keep",
-        "ConnectedAgents.StatusRevokeNotConfirmed",
         "ConnectedAgents.TryAgain",
         "ConnectedAgents.RevokeUnreachable"
       ],
@@ -795,11 +794,7 @@
       "appOnly": [
         {
           "what": "the outcome notice: ConnectedAgents.RevokeUnreachable with ConnectedAgents.TryAgain",
-          "why": "§6 \"Revoke incomplete\"; frame 19 draws the sheet before Revoke is pressed"
-        },
-        {
-          "what": "the title ConnectedAgents.StatusRevokeNotConfirmed over the unreachable line",
-          "why": "§6 gives \"Revoke incomplete\" only its line, and the agent is still connected there; a question for the plan owner"
+          "why": "§6 \"Revoke incomplete\"; frame 19 draws the sheet before Revoke is pressed. No title: option A, agreed by relay from the plan owner (§6 gives the case only its line)"
         }
       ]
     },
