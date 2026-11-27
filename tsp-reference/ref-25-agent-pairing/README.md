@@ -41,7 +41,7 @@ node scripts/openvtc/setup-external.mjs                  # once, at the reposito
 
 cd tsp-reference/ref-25-agent-pairing
 npm install
-npm test                                # 126 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, the recordings, the notification checks, and track C's HCP interfaces
+npm test                                # 131 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, the recordings, the notification checks, and track C's HCP interfaces
 lab/mediator.sh up mailbox              # or: open, deny
 npm start                               # every case for that mode, against the recorded result
 lab/mediator.sh down
@@ -314,12 +314,22 @@ and asks about itself. It is not one of step 0.1's items. The same on 0.84.0 and
 |---|---|
 | `acl/show` 0.3 for its own subject | `permissionDenied` |
 | `acl/list` 0.4 with its own subject as the prefix | `permissionDenied` |
-| `auth/whoami` 0.1 | answers, with `capabilities`, `roles`, `scopes` and `session` only; it does not name the entry's creator |
-| The control: the administrator's `acl/show` 0.3 of the same entry | answers, and names the creator |
+| `auth/whoami` 0.1 | answers, with `capabilities`, `roles`, `scopes` and `session` only; the creator's DID is nowhere in it |
+| The control: the administrator's `acl/show` 0.3 of the same entry | answers, and the entry's `createdBy` is the administrator |
 
-So an agent entry cannot learn who created its entry, or read the entry at all, through a task it is allowed:
-`acl/show` and `acl/list` admit only an administrator or an initiator (`require_manage`, `vti-common`
-`auth/extractor.rs`). On 0.79.0 the case cannot run: `acl/show` 0.3 and `acl/list` 0.4 are not served there.
+So an agent entry cannot learn who created its entry, or read the entry at all, through a task it is allowed. The
+creator is the entry's `createdBy` member, which `acl/show` and `acl/list` render; both tasks open with
+`require_manage` (`vta-service` `operations/acl_v0_3.rs`, `vti-common` `auth/extractor.rs`), which admits only an
+administrator or an initiator, the same at 0.84.0 and 0.87.0. The refusal is that role gate, not the finer filter
+after it in both tasks (`is_acl_entry_auditable`: `acl/show` answers an entry the caller may not audit as
+`entry: null`, so a read does not disclose it exists): an agent never reaches that filter, and neither layer allows
+a caller to read its own entry. On 0.79.0
+the case cannot run: `acl/show` 0.3 and `acl/list` 0.4 are not served there.
+
+The case records `createdBy` by name, and `"<not answered>"` when the read was refused, so a refusal and an answer
+without the member differ. `cases.test.mjs` asserts each line of the table on the recorded values, the control
+with them: a broken probe would also record `permissionDenied` everywhere, and only the administrator's answer
+says the VTA refused this caller.
 
 ## Item 0.3: the notification checks
 

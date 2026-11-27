@@ -518,18 +518,27 @@ add("own-entry", "Q7: can an agent entry read its own ACL entry, and who created
   // The control: the same reads by the administrator, so a refusal above is about the caller, not the reads.
   const asAdmin = await call(A, "acl/show/0.3", { subject: agent.did });
   const names = (payload) => (payload && typeof payload === "object" ? Object.keys(payload).sort() : []);
+  // The entry's `createdBy` member, by name: the administrator's DID recorded under a name, any other value as it
+  // is, and "<not answered>" when the read was refused, so a refusal and an answer without the member differ.
+  const createdBy = (answer, entryOf) => {
+    if (!answer.ok) return "<not answered>";
+    const value = entryOf(answer.payload)?.createdBy;
+    return value === admin.did ? "<the administrator>" : (value ?? null);
+  };
+  const own = (payload) => (payload?.entries ?? []).find((entry) => entry.subject === agent.did);
   return {
     grant: code(granted),
     asTheAgent: {
       aclShowOwn: code(shown),
-      aclShowOwnNamesCreator: shown.ok ? JSON.stringify(shown.payload).includes(admin.did) : false,
+      aclShowOwnCreatedBy: createdBy(shown, (payload) => payload?.entry),
       aclListOwn: code(listed),
-      aclListOwnNamesCreator: listed.ok ? JSON.stringify(listed.payload).includes(admin.did) : false,
+      aclListOwnCreatedBy: createdBy(listed, own),
       whoami: code(who),
       whoamiMembers: names(who.payload),
-      whoamiNamesCreator: who.ok ? JSON.stringify(who.payload).includes(admin.did) : false,
+      // whoami renders no entry, so the claim is the absence of the creator's DID anywhere in its answer.
+      whoamiMentionsCreator: who.ok ? JSON.stringify(who.payload).includes(admin.did) : "<not answered>",
     },
-    control: { aclShowAsAdministrator: code(asAdmin), namesCreator: asAdmin.ok ? JSON.stringify(asAdmin.payload).includes(admin.did) : false },
+    control: { aclShowAsAdministrator: code(asAdmin), createdBy: createdBy(asAdmin, (payload) => payload?.entry) },
   };
 }, ["acl/show/0.3", "acl/list/0.4", "auth/whoami/0.1"]);
 
