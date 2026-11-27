@@ -1,0 +1,835 @@
+{
+  "about": "Every P0 screen state of agent connect step 7.7 (docs/plans/agent-connect-plan.md §6, step 7.11): its on-screen marker (a testID key), the steps that reach it from that screen, its canvas frame and kit mockup, the words it shows (localization keys), and every difference from its frame with its reason. Plain data: the jest catalogue (packages/core/src/modules/connected-agents/__tests__/screenCatalogue.test.tsx) checks each view renders exactly these words; the emulator walk of step 7.11 reads the same file. It is a curated list of the states chosen for the catalogue: the catalogue checks that this list and its drawings agree, which is not coverage of every state the screens have, and that a state shows the listed words, not that they are the right words for it. A check on words and states, not step 7.11's evidence, which is the screenshot pairs.",
+  "canvas": "docs/plans/agent-connect-plan/canvas/",
+  "kit": "docs/plans/agent-connect-plan/mockups/",
+  "states": [
+    {
+      "id": "connect-name",
+      "step": "7.7",
+      "marker": "ConnectAgentForm",
+      "frame": "02-main.png",
+      "kit": "01-connect-name.svg",
+      "words": [
+        "ConnectedAgents.NameThisAgent",
+        "ConnectedAgents.MemoryItCanUse",
+        "ConnectedAgents.ContainsOtherMemories",
+        "ConnectedAgents.NewMemory",
+        "ConnectedAgents.NameHelper",
+        "ConnectedAgents.PurposesTitle",
+        "ConnectedAgents.PurposePersonalisation",
+        "ConnectedAgents.PurposeTaskExecution",
+        "ConnectedAgents.ForFourHours",
+        "ConnectedAgents.ForFourHoursHelper",
+        "ConnectedAgents.TerminalHelper",
+        "Global.Continue"
+      ]
+    },
+    {
+      "id": "connect-new-memory",
+      "step": "7.7",
+      "marker": "ConnectAgentForm",
+      "steps": [
+        {
+          "press": "MemoryPickerNew"
+        }
+      ],
+      "frame": "03-new-memory.png",
+      "kit": "01-connect-name.svg",
+      "words": [
+        "ConnectedAgents.NameThisAgent",
+        "ConnectedAgents.MemoryItCanUse",
+        "ConnectedAgents.ContainsOtherMemories",
+        "ConnectedAgents.NewMemory",
+        "ConnectedAgents.NameThisMemory",
+        "ConnectedAgents.CreateMemory",
+        "ConnectedAgents.NameHelper",
+        "ConnectedAgents.PurposesTitle",
+        "ConnectedAgents.PurposePersonalisation",
+        "ConnectedAgents.PurposeTaskExecution",
+        "ConnectedAgents.ForFourHours",
+        "ConnectedAgents.ForFourHoursHelper",
+        "ConnectedAgents.TerminalHelper",
+        "Global.Continue"
+      ]
+    },
+    {
+      "id": "connect-checking",
+      "step": "7.7",
+      "marker": "ConnectAgentChecking",
+      "frame": null,
+      "noFrame": "a wait before the guard answers; no words",
+      "kit": null,
+      "words": [],
+      "noWords": "a wait while the guard answers: a spinner with no words, by design; only its marker is checked"
+    },
+    {
+      "id": "connect-not-administrator",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": "11-not-administrator.png",
+      "kit": "23-not-an-administrator.svg",
+      "words": [
+        "ConnectedAgents.NotAnAdministrator",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "connect-vta-too-old",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": null,
+      "noFrame": "§6 \"Not drawn\": the wrong-number layout with its own line; the words are proposed (#1060 proposal 17)",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.VtaTooOld",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "connect-unreachable",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": null,
+      "noFrame": "§6 \"Not drawn\": the wrong-number layout with its own line",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.FailUnreachable",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "scan",
+      "step": "7.7",
+      "marker": "ConnectScan",
+      "frame": "04-scan.png",
+      "kit": "02-connect-scan.svg",
+      "words": [
+        "ConnectedAgents.ScanTitle",
+        "ConnectedAgents.PasteLinkInstead"
+      ]
+    },
+    {
+      "id": "scan-paste",
+      "step": "7.7",
+      "marker": "ConnectScan",
+      "steps": [
+        {
+          "press": "ConnectScanPaste"
+        }
+      ],
+      "frame": null,
+      "noFrame": "the paste field is not drawn; §6 names only the link \"Paste the link instead\"",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.ScanTitle",
+        "ConnectedAgents.PasteLinkInstead",
+        "Global.Continue"
+      ]
+    },
+    {
+      "id": "number",
+      "step": "7.7",
+      "marker": "ConnectNumber",
+      "frame": "05-number.png",
+      "kit": "03-connect-number.svg",
+      "words": [
+        "ConnectedAgents.NumberTitle",
+        "ConnectedAgents.NumberBodyTwoDigits",
+        "Global.Continue",
+        "Global.Cancel"
+      ],
+      "frameOnly": [
+        {
+          "what": "four cells and \"four digits\" (canvas v40)",
+          "why": "Q8 stands at two today; canvas v43 (in #1060) draws two cells, as built"
+        }
+      ]
+    },
+    {
+      "id": "end-wrong-number",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": "06-wrong-number.png",
+      "kit": "04-connect-wrong-number.svg",
+      "words": [
+        "ConnectedAgents.FailWrongNumber",
+        "Global.Close"
+      ],
+      "frameOnly": [
+        {
+          "what": "four typed cells (canvas v40)",
+          "why": "two cells today (Q8); canvas v43 in #1060 draws two"
+        }
+      ]
+    },
+    {
+      "id": "end-expired",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": "10-expired.png",
+      "kit": "18-pairing-expired.svg",
+      "words": [
+        "ConnectedAgents.FailExpired",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "end-spent",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": null,
+      "noFrame": "§6 \"Not drawn\": the wrong-number layout with its own line; proposed words (#1060 proposal 17)",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.FailSpent",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "end-foreign-vta",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": null,
+      "noFrame": "§6 \"Not drawn\": the wrong-number layout with its own line",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.FailForeignVta",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "end-not-a-pairing-code",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": null,
+      "noFrame": "§6 \"Not drawn\": the wrong-number layout with its own line; proposed words (#1060 proposal 17)",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.FailNotAPairingCode",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "end-grant-refused",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": null,
+      "noFrame": "§6 \"Not drawn\": the wrong-number layout with its own line; proposed words (#1060 proposal 17)",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.FailGrantRefused",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "end-unsupported",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": null,
+      "noFrame": "§6 \"Not drawn\": the wrong-number layout with its own line",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.VersionMismatch",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "end-rotation-lost-limits",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": null,
+      "noFrame": "§6 \"Not drawn\": the wrong-number layout with its own line; proposed words (#1060 proposal 17)",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.FailRotationLostLimits",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "end-handle-collision",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": null,
+      "noFrame": "§6 \"Not drawn\": the wrong-number layout with its own line; proposed words (#1060 proposal 17)",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.FailHandleCollision",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "end-invalid-choice",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": null,
+      "noFrame": "§6 \"Not drawn\": the wrong-number layout with its own line; proposed words (#1060 proposal 17)",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.FailGeneric",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "end-mediator-closed",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": null,
+      "noFrame": "§6 \"Not drawn\": the wrong-number layout with its own line",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.FailMediatorClosed",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "end-terminal-refused",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": null,
+      "noFrame": "§6 \"Not drawn\": the wrong-number layout with its own line",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.TerminalRefused",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "end-locked",
+      "step": "7.7",
+      "marker": "ConnectFailure",
+      "frame": null,
+      "noFrame": "§6 \"Not drawn\": the wrong-number layout with its own line",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.FailLocked",
+        "Global.Close"
+      ]
+    },
+    {
+      "id": "approve",
+      "step": "7.7",
+      "marker": "ConnectApprove",
+      "frame": "07-approve.png",
+      "kit": "05-approve.svg",
+      "words": [
+        "ConnectedAgents.ApproveTitle",
+        "ConnectedAgents.ApproveRunBy",
+        "ConnectedAgents.ApproveChat",
+        "ConnectedAgents.ApproveMemories",
+        "ConnectedAgents.ApprovePurposes",
+        "ConnectedAgents.PurposePersonalisation",
+        "ConnectedAgents.PurposeTaskExecution",
+        "ConnectedAgents.ApproveUntil",
+        "ConnectedAgents.ApproveNotSignIn",
+        "ConnectedAgents.ApproveOwnTerminal",
+        "ConnectedAgents.Approve"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"It can read a room only after you add it to one.\"",
+          "why": "the P1 form; P0 has no rooms (§6 Approve)"
+        }
+      ]
+    },
+    {
+      "id": "approve-no-memory",
+      "step": "7.7",
+      "marker": "ConnectApprove",
+      "frame": null,
+      "noFrame": "the Approve layout with \"It will have no memory.\" and no purposes (§6)",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.ApproveTitle",
+        "ConnectedAgents.ApproveRunBy",
+        "ConnectedAgents.ApproveChat",
+        "ConnectedAgents.ApproveNoMemory",
+        "ConnectedAgents.ApproveUntil",
+        "ConnectedAgents.ApproveNotSignIn",
+        "ConnectedAgents.ApproveOwnTerminal",
+        "ConnectedAgents.Approve"
+      ]
+    },
+    {
+      "id": "approve-signals",
+      "step": "7.7",
+      "marker": "ConnectApprove",
+      "frame": null,
+      "noFrame": "the requester and network lines are proposed (#1060 proposal 17) and not drawn yet",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.ApproveTitle",
+        "ConnectedAgents.ApproveRunBy",
+        "ConnectedAgents.ApproveRequester",
+        "ConnectedAgents.ApproveChat",
+        "ConnectedAgents.ApproveMemories",
+        "ConnectedAgents.ApprovePurposes",
+        "ConnectedAgents.PurposePersonalisation",
+        "ConnectedAgents.PurposeTaskExecution",
+        "ConnectedAgents.ApproveUntil",
+        "ConnectedAgents.ApproveNotSignIn",
+        "ConnectedAgents.ApproveOtherNetwork",
+        "ConnectedAgents.ApproveOwnTerminal",
+        "ConnectedAgents.Approve"
+      ]
+    },
+    {
+      "id": "connecting",
+      "step": "7.7",
+      "marker": "ConnectConnecting",
+      "frame": null,
+      "noFrame": "proposed (#1060 proposal 17); not drawn yet",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.Connecting"
+      ]
+    },
+    {
+      "id": "connected",
+      "step": "7.7",
+      "marker": "ConnectConnected",
+      "frame": "08-connected.png",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.IsConnected",
+        "Rooms.AgentBadge",
+        "ConnectedAgents.ConnectedUntilSentence",
+        "ConnectedAgents.SeeDetails"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Open chat\"",
+          "why": "the chat is step 7.9; \"See details\" until then (#1060 finding 14)"
+        },
+        {
+          "what": "\"Keep it connected\"",
+          "why": "offered from step 7.28 only (D42)"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "ConnectedAgents.SeeDetails",
+          "why": "#1060 finding 14, until the chat exists"
+        }
+      ]
+    },
+    {
+      "id": "list",
+      "step": "7.7",
+      "marker": "AgentList",
+      "frame": "12-agent-list.png",
+      "kit": "06-agent-list.svg",
+      "words": [
+        "ConnectedAgents.ConnectedUntil",
+        "ConnectedAgents.Extend",
+        "ConnectedAgents.StatusExpired",
+        "ConnectedAgents.ConnectAgain",
+        "ConnectedAgents.Remove",
+        "ConnectedAgents.StatusUnreachable",
+        "ConnectedAgents.ConnectAnAgent"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Answers other people: Off/On\" on each row",
+          "why": "P1 (step 7.14), not drawn in P0"
+        },
+        {
+          "what": "\"Revoke\" on each row",
+          "why": "step 7.10 wires it (#1060 finding 15)"
+        },
+        {
+          "what": "\"Extend\" on the Expired row",
+          "why": "the VTA sweeps an expired entry (measured); Connect again and Remove instead (#1060 finding 12)"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "ConnectedAgents.ConnectAgain, ConnectedAgents.Remove on the Expired row",
+          "why": "#1060 finding 12"
+        }
+      ]
+    },
+    {
+      "id": "list-states",
+      "step": "7.7",
+      "marker": "AgentList",
+      "frame": "13-agent-list-states.png",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.StatusRevokeNotConfirmed",
+        "ConnectedAgents.StatusConnected",
+        "ConnectedAgents.KeyChanged",
+        "ConnectedAgents.ConnectedUntil",
+        "ConnectedAgents.Extend",
+        "ConnectedAgents.StatusNotFinished",
+        "ConnectedAgents.NotFinishedLine",
+        "ConnectedAgents.Remove",
+        "ConnectedAgents.StatusRevoked",
+        "ConnectedAgents.ConnectAnAgent"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Answers other people\" lines",
+          "why": "P1 (step 7.14), not drawn in P0"
+        },
+        {
+          "what": "\"Revoke\" on the changed-key and temporary rows",
+          "why": "step 7.10 wires it"
+        },
+        {
+          "what": "the canvas note box",
+          "why": "a canvas note, not on the phone"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "ConnectedAgents.NotFinishedLine and ConnectedAgents.Remove on Not finished",
+          "why": "#1060 findings 4 and 13; drawn in canvas v43 (in #1060), not v40"
+        }
+      ]
+    },
+    {
+      "id": "details",
+      "step": "7.7",
+      "marker": "AgentDetails",
+      "frame": "16-agent-details.png",
+      "kit": "11-agent-details.svg",
+      "words": [
+        "Rooms.AgentBadge",
+        "ConnectedAgents.BelongsTo",
+        "ConnectedAgents.ConnectedUntil",
+        "ConnectedAgents.Memories",
+        "ConnectedAgents.MemoryCount",
+        "ConnectedAgents.MemoryCountRose",
+        "ConnectedAgents.MemoryCountWarning",
+        "ConnectedAgents.CanUseMemory",
+        "ConnectedAgents.VtaKeepsItToThese",
+        "ConnectedAgents.ChangeMemories",
+        "ConnectedAgents.Extend"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Mention it as @<handle>.\"",
+          "why": "P1 (step 7.14), not drawn in P0"
+        },
+        {
+          "what": "\"Answers other people\" with its switch and \"What others see\"",
+          "why": "P1 (step 7.14), not drawn in P0"
+        },
+        {
+          "what": "\"Message\"",
+          "why": "the chat is step 7.9"
+        },
+        {
+          "what": "\"Keep it connected\"",
+          "why": "step 7.28"
+        },
+        {
+          "what": "\"in every room it is in\" and \"Can read all of <room>\"",
+          "why": "the no-room form: P0 has no rooms"
+        },
+        {
+          "what": "\"Add a credential\"",
+          "why": "P1 (step 7.23)"
+        },
+        {
+          "what": "\"Revoke\"",
+          "why": "step 7.10 wires it"
+        },
+        {
+          "what": "the <title> stand-in",
+          "why": "the header title is the agent's name, set by the navigator (#1060 finding 9)"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "ConnectedAgents.MemoryCount, MemoryCountRose, MemoryCountWarning",
+          "why": "drawn in canvas v43 frame 56-memory-use.png (in #1060), not v40"
+        }
+      ]
+    },
+    {
+      "id": "details-drift",
+      "step": "7.7",
+      "marker": "AgentDetails",
+      "frame": "24-memory-access-changed.png",
+      "kit": "22-memory-drift.svg",
+      "words": [
+        "Rooms.AgentBadge",
+        "ConnectedAgents.BelongsTo",
+        "ConnectedAgents.ConnectedUntil",
+        "ConnectedAgents.MemoryAccessChanged",
+        "ConnectedAgents.MemoryAccessChangedLine",
+        "ConnectedAgents.RestoreMemoryAccess",
+        "ConnectedAgents.Memories",
+        "ConnectedAgents.MemoryCount",
+        "ConnectedAgents.MemoryCountRose",
+        "ConnectedAgents.MemoryCountWarning",
+        "ConnectedAgents.CanUseMemory",
+        "ConnectedAgents.VtaKeepsItToThese",
+        "ConnectedAgents.ChangeMemories",
+        "ConnectedAgents.Extend"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Revoke\" in the notice",
+          "why": "step 7.10 wires it"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "the rest of the details below the notice",
+          "why": "frame 24 draws the notice over a shortened details; the rest is frame 16's"
+        }
+      ]
+    },
+    {
+      "id": "details-key-changed",
+      "step": "7.7",
+      "marker": "AgentDetails",
+      "frame": "18-details-key-changed.png",
+      "kit": null,
+      "words": [
+        "Rooms.AgentBadge",
+        "ConnectedAgents.BelongsTo",
+        "ConnectedAgents.StatusConnected",
+        "ConnectedAgents.KeyChanged",
+        "ConnectedAgents.Memories",
+        "ConnectedAgents.MemoryCount",
+        "ConnectedAgents.MemoryCountRose",
+        "ConnectedAgents.MemoryCountWarning",
+        "ConnectedAgents.CanUseMemory",
+        "ConnectedAgents.VtaKeepsItToThese",
+        "ConnectedAgents.ChangeMemories"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Revoke\"",
+          "why": "step 7.10 wires it"
+        },
+        {
+          "what": "\"Mention it as @<handle>.\"",
+          "why": "P1 (step 7.14), not drawn in P0"
+        },
+        {
+          "what": "\"Answers other people\" with its switch and \"What others see\"",
+          "why": "P1 (step 7.14), not drawn in P0"
+        },
+        {
+          "what": "\"Message\"",
+          "why": "the chat is step 7.9"
+        },
+        {
+          "what": "\"in every room it is in\" and \"Can read all of <room>\"",
+          "why": "the no-room form: P0 has no rooms"
+        },
+        {
+          "what": "\"Add a credential\"",
+          "why": "P1 (step 7.23)"
+        },
+        {
+          "what": "the <title> stand-in",
+          "why": "the header title is the agent's name, set by the navigator (#1060 finding 9)"
+        }
+      ]
+    },
+    {
+      "id": "details-expired",
+      "step": "7.7",
+      "marker": "AgentDetails",
+      "frame": null,
+      "noFrame": "the details with Connect again and Remove (#1060 finding 12); not drawn yet",
+      "kit": null,
+      "words": [
+        "Rooms.AgentBadge",
+        "ConnectedAgents.BelongsTo",
+        "ConnectedAgents.StatusExpired",
+        "ConnectedAgents.Memories",
+        "ConnectedAgents.MemoryCount",
+        "ConnectedAgents.MemoryCountRose",
+        "ConnectedAgents.MemoryCountWarning",
+        "ConnectedAgents.CanUseMemory",
+        "ConnectedAgents.VtaKeepsItToThese",
+        "ConnectedAgents.ConnectAgain",
+        "ConnectedAgents.Remove"
+      ]
+    },
+    {
+      "id": "change-memories-widen",
+      "step": "7.7",
+      "marker": "ChangeMemoriesSheet",
+      "steps": [
+        {
+          "pressLabel": "Housing",
+          "within": "MemoryPickerRow"
+        }
+      ],
+      "frame": "21-change-memories.png",
+      "kit": "20-change-memories.svg",
+      "words": [
+        "ConnectedAgents.MemoryItCanUse",
+        "ConnectedAgents.ContainsOtherMemories",
+        "ConnectedAgents.NewMemory",
+        "ConnectedAgents.WidenTitle",
+        "ConnectedAgents.WidenBody",
+        "ConnectedAgents.Allow",
+        "Global.NotNow"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"This also applies in <rooms>.\"",
+          "why": "the P1 form; P0 has no rooms (§6)"
+        },
+        {
+          "what": "the new memory ticked while the question is open",
+          "why": "the view ticks it only once the change is made; a difference to dispose of at the walk"
+        }
+      ]
+    },
+    {
+      "id": "change-memories-narrow",
+      "step": "7.7",
+      "marker": "ChangeMemoriesSheet",
+      "steps": [
+        {
+          "pressLabel": "Healthcare",
+          "within": "MemoryPickerRow"
+        }
+      ],
+      "frame": "22-stop-memory.png",
+      "kit": "20-change-memories.svg",
+      "words": [
+        "ConnectedAgents.MemoryItCanUse",
+        "ConnectedAgents.ContainsOtherMemories",
+        "ConnectedAgents.NewMemory",
+        "ConnectedAgents.NarrowTitle",
+        "ConnectedAgents.NarrowBody",
+        "ConnectedAgents.StopUsing",
+        "ConnectedAgents.Keep"
+      ],
+      "frameOnly": [
+        {
+          "what": "the memory unticked while the question is open",
+          "why": "the view unticks it only once the change is made; a difference to dispose of at the walk"
+        }
+      ]
+    },
+    {
+      "id": "contacts-row",
+      "step": "7.7",
+      "marker": "AgentContactCard",
+      "frame": "25-contacts.png",
+      "kit": "09-contacts-agent-row.svg",
+      "words": [
+        "Rooms.AgentBadge",
+        "ConnectedAgents.YourAgent"
+      ]
+    },
+    {
+      "id": "revoke",
+      "step": "7.10",
+      "marker": "RevokeAgentSheet",
+      "frame": "19-revoke.png",
+      "kit": "17-revoke.svg",
+      "words": [
+        "ConnectedAgents.RevokeTitle",
+        "ConnectedAgents.RevokeBody",
+        "ConnectedAgents.Revoke",
+        "ConnectedAgents.Keep"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Also delete what it remembered\"",
+          "why": "P2 (step 7.18); not shown in P0"
+        }
+      ]
+    },
+    {
+      "id": "revoke-no-rooms",
+      "step": "7.10",
+      "marker": "RevokeAgentSheet",
+      "frame": "19-revoke.png",
+      "kit": "17-revoke.svg",
+      "words": [
+        "ConnectedAgents.RevokeTitle",
+        "ConnectedAgents.RevokeBodyNoRooms",
+        "ConnectedAgents.Revoke",
+        "ConnectedAgents.Keep"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Also delete what it remembered\"",
+          "why": "P2 (step 7.18); not shown in P0"
+        },
+        {
+          "what": "the room sentence of the body (\"…and rooms. A room permission it already holds can work for up to 4 hours.\")",
+          "why": "the no-room form: P0 has no rooms (§6)"
+        }
+      ]
+    },
+    {
+      "id": "revoke-unreachable",
+      "step": "7.10",
+      "marker": "RevokeOutcomeNotice",
+      "steps": [
+        {
+          "press": "RevokeAgentConfirm"
+        }
+      ],
+      "frame": "19-revoke.png",
+      "kit": "17-revoke.svg",
+      "words": [
+        "ConnectedAgents.RevokeTitle",
+        "ConnectedAgents.RevokeBodyNoRooms",
+        "ConnectedAgents.Revoke",
+        "ConnectedAgents.Keep",
+        "ConnectedAgents.TryAgain",
+        "ConnectedAgents.RevokeUnreachable"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Also delete what it remembered\"",
+          "why": "P2 (step 7.18); not shown in P0"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "the outcome notice: ConnectedAgents.RevokeUnreachable with ConnectedAgents.TryAgain",
+          "why": "§6 \"Revoke incomplete\"; frame 19 draws the sheet before Revoke is pressed. No title: option A, agreed by relay from the plan owner (§6 gives the case only its line)"
+        }
+      ]
+    },
+    {
+      "id": "revoke-not-confirmed",
+      "step": "7.10",
+      "marker": "RevokeOutcomeNotice",
+      "steps": [
+        {
+          "press": "RevokeAgentConfirm"
+        }
+      ],
+      "frame": "19-revoke.png",
+      "kit": "17-revoke.svg",
+      "words": [
+        "ConnectedAgents.RevokeTitle",
+        "ConnectedAgents.RevokeBodyNoRooms",
+        "ConnectedAgents.Revoke",
+        "ConnectedAgents.Keep",
+        "ConnectedAgents.StatusRevokeNotConfirmed",
+        "ConnectedAgents.TryAgain",
+        "ConnectedAgents.RevokeNotConfirmedBody"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Also delete what it remembered\"",
+          "why": "P2 (step 7.18); not shown in P0"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "the outcome notice: ConnectedAgents.StatusRevokeNotConfirmed, ConnectedAgents.RevokeNotConfirmedBody, ConnectedAgents.TryAgain",
+          "why": "§6 \"Revoke not confirmed\"; frame 19 draws the sheet before Revoke is pressed"
+        }
+      ]
+    }
+  ]
+}

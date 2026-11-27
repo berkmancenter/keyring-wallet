@@ -279,6 +279,14 @@ value that differs on every run (a key, a context, a time) is recorded under a n
 gets the same name (`record.mjs`), so two recorded entries are equal exactly when the VTA's two answers were. `cases.test.mjs`
 asserts each line of the table above on those recorded entries, with no VTA running.
 
+## Item 0.3: the notification checks
+
+Item 0.3 asks how a Claude Code session is told a message arrived. It needs no mediator or VTA, so its probes live in
+[`notify/`](./notify/README.md): a trivial channel, a throwaway plugin with the tool-gating hook and the hold-back,
+the Monitor fallback and an `asyncRewake` hook, all measured on Claude Code 2.1.332 on 2026-11-26. In short: a
+channel wakes an idle session but does not register in a background session; the Monitor fallback works in both;
+the hook denies every tool but `reply` in auto mode with the tools pre-allowed.
+
 ## Not measured yet
 
 - **For (f): a hosted persona, a status entry, and a verifier outside the rung.** The lab persona's log is hosted

@@ -1,6 +1,6 @@
 # The UI/UX canvas, exported
 
-Exported from the UI/UX lane's canvas, artifact version `1795645469-b277 (the UI/UX lane's canvas version 40, 2026-11-25)`, by `scripts/plans/export-canvas.py`.
+Exported from the UI/UX lane's canvas, artifact version `1795709041-9afc (the UI/UX lane's canvas version 43, 2026-11-26)`, by `scripts/plans/export-canvas.py`.
 One PNG per artboard, in the canvas's order, rendered with headless Chrome at the board's size at twice the
 pixel density from the published artboard files and their shared stylesheet; `sheet.png` is all of them, three
 to a row. These are the design the screens are built to (D41, the plan's section 8.6); the kit SVGs in `../mockups/`
@@ -20,7 +20,7 @@ are the checked source for the copy, and only that. Re-export when a new canvas 
 | 10 | `10-expired.png` | 18 Code expired | 390×844 |
 | 11 | `11-not-administrator.png` | K23 The guard: a phone that is not a full administrator ends the connect | 390×844 |
 | 12 | `12-agent-list.png` | 6 AI agents: the My Agent tab's first screen | 390×844 |
-| 13 | `13-agent-list-states.png` | 6b Reference, not a real screen: every status a list row can show | 390×1066 |
+| 13 | `13-agent-list-states.png` | 6b Reference, not a real screen: every status a list row can show | 390×1320 |
 | 14 | `14-agent-sheet.png` | 7 Agent sheet, opened in a room: owner, Answers other people | 390×844 |
 | 15 | `15-answers-on.png` | 8 Turning Answers other people on (from the sheet or the details) | 390×844 |
 | 16 | `16-agent-details.png` | 11 Agent details (the whole scroll; a temporary agent) | 390×1150 |
@@ -63,3 +63,4 @@ are the checked source for the copy, and only that. Re-export when a new canvas 
 | 53 | `53-hcp-what-it-saw.png` | H4 What Notes helper saw (P1) | 390×844 |
 | 54 | `54-hcp-revoke.png` | H5 Revoke: "We'll tell it" | 390×844 |
 | 55 | `55-hcp-revoke-states.png` | H6 After revoking: the three lines (reference, not a real screen) | 390×920 |
+| 56 | `56-memory-use.png` | 11d PROPOSED: how much each memory holds (P0, no rooms) | 390×1000 |
