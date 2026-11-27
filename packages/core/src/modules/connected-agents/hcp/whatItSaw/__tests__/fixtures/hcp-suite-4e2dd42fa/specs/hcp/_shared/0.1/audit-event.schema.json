@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/_shared/0.1/audit-event.schema.json",
+  "title": "HCP — Audit event",
+  "description": "One event in the Context Subject's Human Context Protocol (HCP) 2.0-draft-3 audit log (HCP 8.2), shared by the hcp/* tasks. Written for this registry from the HCP 2.0-draft-3 specification text (CC BY 4.0, https://github.com/loyalagents/hcp-spec), with attribution, and checked against the shapes HCP publishes for the same draft; not copied from HCP's own schema files. Member names are HCP's, carried verbatim (including `timestamp`), so an event read here is the event an export carries. Open, as HCP's own shapes are. Where this schema and the HCP text differ, the HCP text governs. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty, which an hcp/* party never writes empty. hcp/import applies neither to an export it takes.",
+  "$defs": {
+    "AuditEvent": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "eventId",
+        "eventType",
+        "timestamp",
+        "participants",
+        "entryId",
+        "relatedEntryId",
+        "purpose",
+        "purposeDescription",
+        "grantId"
+      ],
+      "description": "One audit event (HCP 8.2). The log names entries by their stable `id`, never by the `ref` a client received, because the log is the Context Subject's (HCP 8.2, 8.3). The query text is never recorded (HCP 8.2). `entryId`, `relatedEntryId`, `purpose`, `purposeDescription` and `grantId` are required, each a value or null, as HCP 8.2's template writes them: HCP's own shape leaves them optional, and the carriage requires them so that a null always travels and is never confused with an absent member, pending HCP confirmation (question 42). An event redacted for a former delegate carries `entryId` and `relatedEntryId` as null (HCP 17.7).",
+      "properties": {
+        "eventId": { "$ref": "common.schema.json#/$defs/Urn", "description": "The event's identifier (HCP 8.2)." },
+        "eventType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The event type, one of those HCP 8.1 lists (such as `context.read`, `grant.revoked`, `rule.set`). Left open, as HCP's own shape leaves it, so that the event types of a later draft are not refused. The minLength and maxLength are framework bounds, not HCP requirements."
+        },
+        "timestamp": {
+          "$ref": "common.schema.json#/$defs/Instant",
+          "description": "When the event occurred. HCP's member name (HCP 8.2), carried verbatim so the event is the one an export carries (HCP 5.4.1)."
+        },
+        "participants": { "$ref": "#/$defs/AuditParticipants", "description": "Who took part (HCP 8.2, 3.9)." },
+        "entryId": {
+          "type": ["string", "null"],
+          "pattern": "^urn:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "description": "The entry concerned, by its `id`, or null where the event concerns none (HCP 8.2). For conflict events, the conflicted entry (HCP 8.2). Required, and null in an event redacted for a former delegate (HCP 17.7), pending HCP confirmation (question 42)."
+        },
+        "relatedEntryId": {
+          "type": ["string", "null"],
+          "pattern": "^urn:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "description": "For conflict events, the authoritative entry (or the other entry where neither or both are authoritative); null for every other event type (HCP 8.2). Required, and null in an event redacted for a former delegate (HCP 17.7), pending HCP confirmation (question 42)."
+        },
+        "categories": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "common.schema.json#/$defs/Category" },
+          "description": "The categories concerned (HCP 8.2). The maxItems is a framework bound, not an HCP requirement."
+        },
+        "purpose": {
+          "type": ["string", "null"],
+          "format": "uri",
+          "minLength": 1,
+          "maxLength": 2048,
+          "pattern": "^[a-zA-Z][a-zA-Z0-9+.-]*:\\S+$",
+          "description": "The purpose code stated, an absolute URI with the same shape as `PurposeCode` in common.schema.json (HCP's `anyOf [purposeCode, null]`), or null where none was (HCP 8.2, 6.1.5.2). `format` constrains only a string, so null still passes. Required, pending HCP confirmation (question 42). The minLength and maxLength are framework bounds, not HCP requirements."
+        },
+        "purposeDescription": {
+          "type": ["string", "null"],
+          "maxLength": 4096,
+          "description": "The stated task, or null where none was stated (HCP 8.2). Required, pending HCP confirmation (question 42). The maxLength is a framework bound, not an HCP requirement."
+        },
+        "grantId": {
+          "type": ["string", "null"],
+          "pattern": "^urn:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "description": "The grant concerned, or null where the event concerns none (HCP 8.2). Required, pending HCP confirmation (question 42)."
+        },
+        "disclosed": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/AuditDisclosed" },
+          "description": "Present on `context.read`: every entry the retrieval disclosed (HCP 8.2). A retrieval discloses at most 20 entries (HCP 7.2)."
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "The members HCP 8.2 fixes for the event type, such as `options` for `context.exported` or `ruleId` for `rule.set`. Implementations may add members, which are preserved and not interpreted (HCP 8.2, A.3)."
+        }
+      }
+    },
+    "AuditParticipants": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["initiator", "provider"],
+      "description": "The participants in an audit event (HCP 8.2, 3.9). No event names \"system\" (HCP 8.2).",
+      "properties": {
+        "initiator": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["role", "id"],
+          "description": "Who initiated the event.",
+          "properties": {
+            "role": {
+              "type": "string",
+              "enum": ["management-client", "context-client", "authorization-service", "hcp-provider"],
+              "description": "Their role (HCP 8.2). HCP's own values, carried verbatim."
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "description": "Their identifier. The minLength and maxLength are framework bounds, not HCP requirements."
+            }
+          }
+        },
+        "clientOperator": {
+          "$ref": "#/$defs/AuditParty",
+          "description": "The Client Operator, where a client took part (HCP 3.9)."
+        },
+        "requestingParty": {
+          "$ref": "#/$defs/AuditParty",
+          "description": "The Requesting Party, where there is one (HCP 3.9)."
+        },
+        "authorizingPrincipal": { "$ref": "#/$defs/AuditParty", "description": "The Authorizing Principal (HCP 3.9)." },
+        "provider": { "$ref": "#/$defs/AuditParty", "description": "The HCP Provider (HCP 8.2)." },
+        "retrievalId": {
+          "$ref": "common.schema.json#/$defs/Urn",
+          "description": "The retrieval, on a read (HCP 8.2)."
+        },
+        "model": { "$ref": "#/$defs/AuditParty", "description": "The model, where one took part (HCP 3.9)." }
+      }
+    },
+    "AuditParty": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id"],
+      "description": "A participant named by its identifier (HCP 8.2).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The participant's identifier. The minLength and maxLength are framework bounds, not HCP requirements."
+        }
+      }
+    },
+    "AuditDisclosed": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["entryId", "version", "useUntil"],
+      "description": "One entry a retrieval disclosed (HCP 8.2).",
+      "properties": {
+        "entryId": { "$ref": "common.schema.json#/$defs/Urn", "description": "The entry's stable `id`." },
+        "version": { "type": "integer", "minimum": 1, "description": "The version disclosed." },
+        "useUntil": {
+          "$ref": "common.schema.json#/$defs/Instant",
+          "description": "The use-until time the disclosure was given (HCP 7.6)."
+        },
+        "provenance": {
+          "type": "boolean",
+          "description": "True where the disclosure carried provenance (HCP 7.4.1); omitted otherwise."
+        },
+        "revealed": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["evidence", "claims"],
+            "description": "Where a credential was disclosed in derived form, the evidence item and the claims revealed (HCP 14.9).",
+            "properties": {
+              "evidence": { "type": "integer", "minimum": 0, "description": "The evidence item's index." },
+              "claims": {
+                "type": "array",
+                "maxItems": 256,
+                "items": { "type": "string", "maxLength": 2048 },
+                "description": "The claims revealed, each a JSON Pointer. The maxItems and maxLength are framework bounds, not HCP requirements."
+              }
+            }
+          },
+          "description": "Present only where a credential was disclosed in derived form (HCP 8.2, 14.9). The maxItems is a framework bound, not an HCP requirement."
+        }
+      }
+    }
+  }
+}
