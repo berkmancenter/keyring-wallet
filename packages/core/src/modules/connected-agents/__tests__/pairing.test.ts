@@ -589,6 +589,12 @@ describe('step 10: the entry as the VTA lists it', () => {
     const t = await granted()
     t.entries.reachable = false
     expect((await t.machine.checkEnrolment()).phase).toBe('awaitingEnrolment')
+    // still unreachable 10 minutes on: Not finished, with the entry named for removal and the grant's expiry
+    t.advance(NOT_FINISHED_AFTER_MS)
+    expect(await t.machine.checkEnrolment()).toEqual({
+      phase: 'notFinished',
+      cleanup: { vtaDid: VTA, subject: K_T, expiresAt: GRANTED_UNTIL },
+    })
   })
 
   it('a handle collision at six characters fails the pairing with the entry to remove', async () => {
