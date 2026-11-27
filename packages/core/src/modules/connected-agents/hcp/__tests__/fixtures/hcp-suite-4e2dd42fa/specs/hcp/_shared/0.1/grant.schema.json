@@ -1,0 +1,297 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/_shared/0.1/grant.schema.json",
+  "title": "HCP — Grant",
+  "description": "The Human Context Protocol (HCP) 2.0-draft-3 grant object (HCP 6.1.5), the record of an authorization, shared by the hcp/* tasks. Written for this registry from the HCP 2.0-draft-3 specification text (CC BY 4.0, https://github.com/loyalagents/hcp-spec), with attribution, and checked against the shapes HCP publishes for the same draft; not copied from HCP's own schema files. Open, as HCP's own shapes are. Where this schema and the HCP text differ, the HCP text governs. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty, which an hcp/* party never writes empty. hcp/import applies neither to an export it takes.",
+  "$defs": {
+    "Grant": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "grantId",
+        "subject",
+        "authorizingPrincipal",
+        "client",
+        "access",
+        "grantType",
+        "issuedAt",
+        "expiresAt",
+        "status"
+      ],
+      "description": "A grant (HCP 6.1.5). `expiresAt` is an instant for a `temporary` grant and null for a `persistent` one (HCP 6.1.4, 6.1.5). That rule is stated here and not as a schema conditional: the registry's Rust generator does not support `if`/`then`/`else`, so it is not checked by the schema. An HCP Provider never discloses a grant issued to one HCP Client to any other (HCP 6.1.5).",
+      "properties": {
+        "grantId": {
+          "$ref": "common.schema.json#/$defs/Urn",
+          "description": "Stable for the life of the grant; the `grantId` recorded in audit events (HCP 6.1.5, 8.2)."
+        },
+        "subject": {
+          "$ref": "#/$defs/GrantParty",
+          "description": "The Context Subject, by a pseudonym specific to the client (HCP 3.4)."
+        },
+        "authorizingPrincipal": {
+          "$ref": "#/$defs/AuthorizingPrincipal",
+          "description": "Who authorized the grant (HCP 3.4, 6.1.5)."
+        },
+        "client": {
+          "$ref": "#/$defs/GrantClient",
+          "description": "The HCP Client the grant was issued to (HCP 6.1.5)."
+        },
+        "requestingParty": {
+          "$ref": "#/$defs/RequestingParty",
+          "description": "The party on whose behalf the client requested access, where there is one (HCP 3.2.7, 3.4)."
+        },
+        "access": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/AccessDetail" },
+          "description": "What the grant authorizes: one or more authorization details (HCP 6.1.5)."
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 2048,
+            "pattern": "^hcp:[^:]+(:[^:]+)*:(read|write)$"
+          },
+          "description": "Scope strings derived from `access`, in the form `hcp:{category}:{action}` (HCP 6.1.1), for display. They never grant anything `access` does not (HCP 6.1.5)."
+        },
+        "grantType": {
+          "type": "string",
+          "enum": ["temporary", "persistent"],
+          "description": "Temporary or persistent (HCP 6.1.4). HCP's own values, carried verbatim."
+        },
+        "issuedAt": {
+          "$ref": "common.schema.json#/$defs/Instant",
+          "description": "When the grant was issued."
+        },
+        "expiresAt": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "For a temporary grant, its absolute expiry, never null; for a persistent grant, null (HCP 6.1.4, 6.1.5)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "revoked", "expired"],
+          "description": "`expired` on lapse of `expiresAt`, `revoked` on revocation (HCP 6.1.5, 6.2.1). HCP's own values, carried verbatim."
+        }
+      }
+    },
+    "GrantParty": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id"],
+      "description": "An actor a grant binds, named by identifier (HCP 3.4).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Its identifier; for the Context Subject, a pseudonym specific to the client (HCP 3.4). The minLength is a framework bound, not an HCP requirement."
+        }
+      }
+    },
+    "AuthorizingPrincipal": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id"],
+      "description": "The Authorizing Principal (HCP 3.4). In Core it is the Context Subject and carries the same pseudonym as `subject`; under the Delegated Authorization Profile it is the delegate (HCP 17.4).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Its identifier."
+        },
+        "delegation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The delegation under which a delegate authorized the grant; present only then (HCP 6.1.5, 17.4)."
+        }
+      }
+    },
+    "Named": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "name"],
+      "description": "An organization, by identifier and a name a person can recognize.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Its identifier."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Its name. The minLength is a framework bound, not an HCP requirement."
+        }
+      }
+    },
+    "LegalRetention": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["record", "obligation", "period"],
+      "description": "A record the client declared at registration that the law requires it to keep of what it receives (HCP 6.2.5).",
+      "properties": {
+        "record": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "The record kept."
+        },
+        "obligation": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "The law or rule that requires it."
+        },
+        "period": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "How long it is kept."
+        }
+      }
+    },
+    "GrantClient": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "name", "operator"],
+      "description": "The client a grant was issued to (HCP 6.1.5).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Its client identifier."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "A name the person can recognize (HCP 6.1.5)."
+        },
+        "operator": {
+          "$ref": "#/$defs/Named",
+          "description": "The Client Operator (HCP 3.2.8)."
+        },
+        "legalRetention": {
+          "$ref": "#/$defs/LegalRetention",
+          "description": "Present only where the client declared a legal obligation to keep what it receives (HCP 6.2.5)."
+        },
+        "claims": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/Uri" },
+          "description": "The client conformance claims it declared at registration (HCP 18.1); absent where it declared none."
+        }
+      }
+    },
+    "RequestingParty": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "id"],
+      "description": "The Requesting Party (HCP 3.2.7).",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["person", "organization"],
+          "description": "A person or an organization. HCP's own values, carried verbatim."
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Its identifier."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Its name."
+        }
+      }
+    },
+    "Purpose": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["code", "description"],
+      "description": "A purpose with a description the person can read (HCP 6.1.5.2).",
+      "properties": {
+        "code": {
+          "$ref": "common.schema.json#/$defs/PurposeCode",
+          "description": "The purpose code."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "The description shown to the person before approval (HCP 6.1.5.2, 6.1.6)."
+        }
+      }
+    },
+    "OnwardSharing": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Present only where the Authorizing Principal elected onward sharing for the detail (HCP 3.12, 6.1.5).",
+      "properties": {
+        "domains": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 253 },
+          "description": "Where present, the DNS domains of the organizations the client may share with (HCP 6.1.5)."
+        },
+        "notTo": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 2048 },
+          "description": "Set by the provider: each DNS domain or operator a standing rule denies any of the detail's categories (HCP 6.1.5, 6.3)."
+        }
+      }
+    },
+    "AccessDetail": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "actions", "categories", "purposes"],
+      "description": "An authorization detail (HCP 6.1.5); under HCP's OAuth Interop Profile, an RFC 9396 authorization detail (HCP 13.3). `onwardSharing` appears only in a detail that includes `read` and all of whose categories have a default sensitivity of Low (HCP 6.1.5); not checked by the schema.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "https://hcp.example/spec/authorization/context-access",
+          "description": "The HCP authorization detail type (HCP 6.1.5)."
+        },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["read", "write", "provenance"]
+          },
+          "description": "What the detail allows. `provenance` is an action only alongside `read` (HCP 6.1.5, 7.4.1); not checked by the schema."
+        },
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/Category" },
+          "description": "The categories the detail covers (HCP 4.5)."
+        },
+        "purposes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/Purpose" },
+          "description": "The purposes the person approved for these categories; never empty (HCP 6.1.5.2)."
+        },
+        "narrowedTo": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "An implementation-defined narrowing below category grain, which only narrows (HCP 6.1.5.1). To a Context Client, entries it names are named by `ref`, never by `id` (HCP 5.2.6)."
+        },
+        "onwardSharing": {
+          "$ref": "#/$defs/OnwardSharing",
+          "description": "The onward sharing the person elected for the detail (HCP 3.12, 6.1.5)."
+        }
+      }
+    }
+  }
+}

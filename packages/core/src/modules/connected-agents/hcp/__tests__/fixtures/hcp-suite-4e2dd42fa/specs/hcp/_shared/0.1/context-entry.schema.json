@@ -1,0 +1,493 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/_shared/0.1/context-entry.schema.json",
+  "title": "HCP — Context entry",
+  "description": "The Human Context Protocol (HCP) 2.0-draft-3 entry (HCP 4.2) and its parts, shared by the hcp/* tasks. Written for this registry from the HCP 2.0-draft-3 specification text (CC BY 4.0, https://github.com/loyalagents/hcp-spec), with attribution, and checked against the shapes HCP publishes for the same draft; not copied from HCP's own schema files. Objects are open: a provider preserves entry members HCP does not define (HCP 4.2, A.3), and HCP's own shapes leave every object open, so an undeclared member is carried, never rejected. Where this schema and the HCP text differ, the HCP text governs. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty, which an hcp/* party never writes empty. hcp/import applies neither to an export it takes.",
+  "$defs": {
+    "Entry": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["schema", "id", "type", "subject", "content", "assertion", "classification", "record"],
+      "description": "An HCP entry, in the one form a provider emits (HCP 4.2, 4.3). A Context Client never receives one: it receives a Disclosure instead (HCP 7.4). The whole entry, with its stable `id`, reaches only the Context Subject's own access (HCP 7.4).",
+      "properties": {
+        "@context": {
+          "type": ["array", "string"],
+          "description": "The entry's JSON-LD context, `https://hcp.example/contexts/v2` in HCP 2.0-draft-3 (HCP 4.2)."
+        },
+        "schema": {
+          "type": "string",
+          "const": "https://hcp.example/spec/entry/2.0",
+          "description": "The version of the entry structure, compared as an exact string (HCP 4.2, 1.7). HCP 2.0-draft-3 defines this one value."
+        },
+        "id": {
+          "$ref": "common.schema.json#/$defs/Urn",
+          "description": "The entry's stable identifier, the same across all its versions (HCP 4.2). Never disclosed to a Context Client, which names the entry by a `ref` (HCP 7.4)."
+        },
+        "type": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "minItems": 1,
+          "description": "The entry's types. It MUST include `ContextEntry` (HCP 4.2). That rule is stated here and not in the schema: the registry's Rust generator does not support `contains`, so a validator does not check it."
+        },
+        "subject": {
+          "$ref": "#/$defs/EntrySubject",
+          "description": "The Context Subject the entry is about."
+        },
+        "content": {
+          "$ref": "#/$defs/Content",
+          "description": "What is said about the Context Subject, shaped by its content profile (HCP 4.2)."
+        },
+        "assertion": {
+          "$ref": "#/$defs/Assertion",
+          "description": "What the submitting client states about the assertion (HCP 4.2, 4.4)."
+        },
+        "classification": {
+          "$ref": "#/$defs/Classification",
+          "description": "HCP's classification of the entry: its categories, dimension and purpose limits (HCP 4.2, 4.5)."
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceItem" },
+          "description": "Evidence items (HCP 4.2.2): at most one whose `role` is `content`. Absent or empty when the entry carries none. This rule is stated here and not in the schema: the registry's Rust generator does not support `contains`, so a validator does not check it."
+        },
+        "record": {
+          "$ref": "#/$defs/Record",
+          "description": "The provider's record of the entry: status, version, provenance, relationships, conversion and metadata (HCP 4.2)."
+        }
+      }
+    },
+    "EntrySubject": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id"],
+      "description": "The subject of an entry (HCP 4.2).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "A URI identifying the Context Subject of the HCP instance that holds the entry, possibly a pseudonym the provider issues (HCP 4.2)."
+        },
+        "relationship": {
+          "type": "null",
+          "description": "Reserved by HCP (HCP 4.2, 11.3); null where present."
+        }
+      }
+    },
+    "Content": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["profile"],
+      "description": "Entry content. `profile` names its shape (HCP 4.2). Under the General Context Profile it carries `value` and optionally `language` (HCP 11.2); under the VC Evidence Profile it carries `evidence`, the index of the evidence item holding the credential, and no `value` (HCP 4.2.2, 14). So `value` is REQUIRED under General Context, and under VC Evidence `evidence` is REQUIRED and `value` is forbidden. This rule is stated here and not as a schema conditional: the registry's Rust generator does not support `if`/`then`/`else`, so a validator does not check it.",
+      "properties": {
+        "profile": {
+          "$ref": "common.schema.json#/$defs/Uri",
+          "description": "The content profile, a URI: `https://hcp.example/spec/profiles/general-context/2.0` or `https://hcp.example/spec/profiles/vc-evidence/2.0` in HCP 2.0-draft-3, or a custom profile (HCP A.3)."
+        },
+        "value": {
+          "type": ["string", "object"],
+          "description": "The statement, under the General Context Profile: a string or a structured object (HCP 11.2)."
+        },
+        "language": {
+          "type": ["string", "null"],
+          "maxLength": 64,
+          "description": "The BCP 47 language tag of a string `value`, under the General Context Profile (HCP 11.2). Optional; may be null."
+        },
+        "evidence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Under the VC Evidence Profile, the index in `evidence` of the item whose credential is the content (HCP 4.2.2)."
+        }
+      }
+    },
+    "Assertion": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["declarationType"],
+      "description": "What the submitting client states about the assertion (HCP 4.2). `confidence` is REQUIRED and non-null when `declarationType` is `model-inferred`, and null or absent otherwise (HCP 4.2, 4.4). This rule is stated here and not as a schema conditional: the registry's Rust generator does not support `if`/`then`/`else`, so a validator does not check it.",
+      "properties": {
+        "declarationType": {
+          "type": "string",
+          "enum": ["person-declared", "model-inferred", "issuer-attested"],
+          "description": "What kind of party made the assertion (HCP 4.4); never omitted. HCP's own values, carried verbatim."
+        },
+        "confidence": {
+          "type": ["string", "null"],
+          "enum": ["high", "medium", "low", null],
+          "description": "How confident an inferring model is (HCP 4.2, 4.4)."
+        },
+        "validUntil": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "The instant after which the content no longer holds; absent or null means it does not expire (HCP 4.2). Not the instant after which a disclosed copy stops being usable, which is a disclosure's `useUntil` (HCP 7.6)."
+        },
+        "basis": {
+          "$ref": "#/$defs/Basis",
+          "description": "What the assertion was drawn from (HCP 4.2.5)."
+        },
+        "permittedPurposes": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/PurposeCode" },
+          "description": "The purposes the asserter permits the entry to be used for; absent means no limit (HCP 4.2.6). The bound of 256 is a framework bound, not an HCP requirement."
+        }
+      }
+    },
+    "Basis": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "What an assertion was drawn from (HCP 4.2.5). It identifies no party but the Context Subject.",
+      "properties": {
+        "drawnFrom": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "type": "string", "maxLength": 2048 },
+          "description": "The sources the assertion was drawn from. The bound of 256 is a framework bound, not an HCP requirement."
+        },
+        "task": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "The task during which the assertion was made."
+        },
+        "setting": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "The setting in which the assertion was made."
+        },
+        "rationale": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "Why the asserter drew the conclusion."
+        }
+      }
+    },
+    "Classification": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["categories"],
+      "description": "HCP's classification of the entry (HCP 4.2, 4.5). A grant reaches an entry when it covers any one of the entry's categories (HCP 4.5).",
+      "properties": {
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/Category" },
+          "description": "One or more categories, without duplicates (HCP 4.2, 4.5). In a disclosure, only the categories the requesting grant covers (HCP 7.4)."
+        },
+        "dimension": {
+          "type": ["string", "null"],
+          "maxLength": 2048,
+          "description": "A free-form identifier of the dimension the entry addresses, scoped within its categories: a hint for conflict detection that grants and limits nothing (HCP 4.2)."
+        },
+        "permittedPurposes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "common.schema.json#/$defs/PurposeCode" },
+          "description": "The Authorizing Principal's narrowing of the entry's purposes; absent means no limit (HCP 4.2.6)."
+        }
+      }
+    },
+    "Record": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["status", "version", "provenance"],
+      "description": "The provider's record of the entry (HCP 4.2). Withheld from a Context Client in full (HCP 7.4).",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["active", "deprecated", "conflicted", "expired", "revoked", "suspended", "deleted"],
+          "description": "The entry's lifecycle state (HCP 4.2.4). HCP's own values, carried verbatim."
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The revision number: starts at 1 and increments by exactly 1 on each revision (HCP 4.2)."
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance",
+          "description": "Who asserted, submitted, authorized, recorded and confirmed this version (HCP 3.5–3.8)."
+        },
+        "relationships": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Relationship" },
+          "description": "Relationships to other entries (HCP 4.2.3). Absent or empty when there are none."
+        },
+        "conversion": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["from", "convertedAt", "convertedBy"],
+          "description": "Present only on an entry converted from HCP v1 (HCP 4.3).",
+          "properties": {
+            "from": { "type": "string", "maxLength": 2048, "description": "What the entry was converted from." },
+            "convertedAt": { "$ref": "common.schema.json#/$defs/Instant", "description": "When it was converted." },
+            "convertedBy": { "type": "string", "maxLength": 2048, "description": "Who converted it." },
+            "unmapped": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "v1 members the conversion did not map."
+            }
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Free-form data the implementation attaches for its own purposes; carries no HCP meaning (HCP 4.2)."
+        }
+      }
+    },
+    "Provenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "assertedBy",
+        "assertedAt",
+        "source",
+        "submittedByClient",
+        "authorizedUnder",
+        "recordedByProvider",
+        "recordedAt"
+      ],
+      "description": "The provenance of one version of an entry (HCP 4.2, 3.5).",
+      "properties": {
+        "assertedBy": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["id", "assurance"],
+          "description": "The Context Asserter (HCP 3.5, 3.6).",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "description": "The Context Asserter's identifier."
+            },
+            "assurance": {
+              "$ref": "common.schema.json#/$defs/Assurance",
+              "description": "How the asserter's identity was established."
+            },
+            "via": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": ["kind", "id"],
+              "description": "Present only where a client attested for an issuer under the issuer's authorization (HCP 3.7).",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["authorization-credential", "arrangement"],
+                  "description": "What the client attested under. HCP's own values, carried verbatim."
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2048,
+                  "description": "The identifier of the attestation authorization or the recorded arrangement."
+                }
+              }
+            }
+          }
+        },
+        "assertedAt": {
+          "$ref": "common.schema.json#/$defs/Instant",
+          "description": "When the assertion was made, as the submitting client states it."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The origin of the entry, as the submitting client states it: a conversation or document identifier, `person-input` or `integration` (HCP 4.2)."
+        },
+        "submittedByClient": {
+          "$ref": "#/$defs/ClientDescription",
+          "description": "The HCP Client that submitted this version, and its Client Operator (HCP 3.5)."
+        },
+        "authorizedUnder": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The grant under which this version was written."
+        },
+        "recordedByProvider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The HCP Provider that recorded this version."
+        },
+        "recordedAt": {
+          "$ref": "common.schema.json#/$defs/Instant",
+          "description": "When the provider recorded this version."
+        },
+        "confirmations": {
+          "type": "array",
+          "description": "Confirmation records for this version (HCP 3.8). Absent or empty when there are none.",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["disposition", "confirmedBy", "confirmedAt"],
+            "properties": {
+              "disposition": {
+                "type": "string",
+                "enum": ["confirmed", "rejected"],
+                "description": "Whether the Context Subject confirmed or rejected the version."
+              },
+              "confirmedBy": {
+                "type": "object",
+                "additionalProperties": true,
+                "required": ["id"],
+                "description": "Who confirmed or rejected it.",
+                "properties": {
+                  "id": { "type": "string", "minLength": 1, "maxLength": 2048, "description": "Their identifier." }
+                }
+              },
+              "confirmedAt": { "$ref": "common.schema.json#/$defs/Instant", "description": "When." }
+            }
+          }
+        }
+      }
+    },
+    "ClientDescription": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "name", "operator"],
+      "description": "An HCP Client and its Client Operator, as recorded (HCP 3.5, 3.2.8).",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 2048, "description": "The client's identifier." },
+        "name": { "type": "string", "minLength": 1, "maxLength": 1024, "description": "The client's name." },
+        "operator": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["id", "name"],
+          "description": "The Client Operator.",
+          "properties": {
+            "id": { "type": "string", "minLength": 1, "maxLength": 2048, "description": "The operator's identifier." },
+            "name": { "type": "string", "minLength": 1, "maxLength": 1024, "description": "The operator's name." }
+          }
+        }
+      }
+    },
+    "Relationship": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "target", "assertedBy", "recordedAt"],
+      "description": "A relationship from this entry to another (HCP 4.2.3). Only a `contradicts` relationship may carry a `proposal` (HCP 4.7.4), which is a `RecordedProposal`, as HCP defines it. This rule is stated here and not as a schema conditional: the registry's Rust generator does not support `if`/`then`/`else`, so a validator does not check it.",
+      "properties": {
+        "type": { "$ref": "common.schema.json#/$defs/RelationshipType", "description": "The kind of relationship." },
+        "target": { "type": "string", "minLength": 1, "maxLength": 2048, "description": "The related entry's `id`." },
+        "assertedBy": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["role", "id"],
+          "description": "Who asserted the relationship.",
+          "properties": {
+            "role": {
+              "type": "string",
+              "enum": ["management-client", "context-client", "authorization-service", "hcp-provider"],
+              "description": "Their role (HCP 3.9). HCP's own values, carried verbatim."
+            },
+            "id": { "type": "string", "minLength": 1, "maxLength": 2048, "description": "Their identifier." }
+          }
+        },
+        "recordedAt": {
+          "$ref": "common.schema.json#/$defs/Instant",
+          "description": "When the provider recorded the relationship."
+        },
+        "proposal": {
+          "$ref": "#/$defs/RecordedProposal",
+          "description": "A proposal for resolving a conflict, which changes nothing until the Context Subject acts (HCP 4.7.4)."
+        }
+      }
+    },
+    "RecordedProposal": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["act", "entry", "rationale", "weighed", "proposedBy", "proposedAt"],
+      "description": "A proposal for resolving a conflict, as the provider records it on a `contradicts` relationship (HCP 4.7.4). It changes nothing until the Context Subject acts. It is the `Proposal` a client writes (entry-write.schema.json), with `proposedBy` and `proposedAt`, which the provider sets and never takes from a request (HCP 4.7.4). A proposal is never disclosed to a Context Client (HCP 7.4). Open, as HCP's own shape is.",
+      "properties": {
+        "act": {
+          "type": "string",
+          "enum": ["reject", "accept", "supersede"],
+          "description": "The act proposed (HCP 4.7.3, 4.7.4). HCP's own values, carried verbatim."
+        },
+        "entry": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The entry the act applies to (HCP 4.7.4). The maxLength is a framework bound, not an HCP requirement."
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "Why, in words the Context Subject can read (HCP 4.7.4). The maxLength is a framework bound, not an HCP requirement."
+        },
+        "weighed": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "type": "string", "minLength": 1, "maxLength": 2048 },
+          "description": "What the proposal considered: an open set, of which HCP defines `basis`, `declarationType`, `standing`, `permittedPurposes`, `recency` and `confidence` (HCP 4.7.4). The maxItems and maxLength are framework bounds, not HCP requirements."
+        },
+        "proposedBy": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["role", "id"],
+          "description": "Who made the proposal: the provider under the Memory Manager Profile, or the client that asserted the conflict (HCP 4.7.4, 15). Set by the provider, never taken from a request.",
+          "properties": {
+            "role": {
+              "type": "string",
+              "enum": ["management-client", "context-client", "authorization-service", "hcp-provider"],
+              "description": "Their role (HCP 3.9). HCP's own values, carried verbatim."
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048,
+              "description": "Their identifier. The maxLength is a framework bound, not an HCP requirement."
+            }
+          }
+        },
+        "proposedAt": {
+          "$ref": "common.schema.json#/$defs/Instant",
+          "description": "When the provider recorded the proposal (HCP 4.7.4). Set by the provider, never taken from a request."
+        }
+      }
+    },
+    "EvidenceItem": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["role", "type"],
+      "description": "One evidence item (HCP 4.2.2). An item of a type the provider does not recognize is preserved and never raises assurance (HCP A.3). An item whose type is `verifiable-credential` MUST carry `credential`, an object with `@context`, `type`, `issuer` and `credentialSubject`, held whole as its issuer secured it (HCP 4.2.2). This rule is stated here and not as a schema conditional: the registry's Rust generator does not support `if`/`then`/`else`, so a validator does not check it.",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["content", "supports"],
+          "description": "`content`: the item's credential is the entry's content (VC Evidence Profile). `supports`: the item backs content stated elsewhere in the entry (HCP 4.2.2)."
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The evidence type: `verifiable-credential`, or a URI (HCP 4.2.2, A.3)."
+        },
+        "credential": {
+          "description": "The credential: for `verifiable-credential`, a W3C Verifiable Credential with `@context`, `type`, `issuer` and `credentialSubject`, whose own data model governs its contents (HCP 4.2.2, 14.2)."
+        },
+        "verification": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["result", "at"],
+          "description": "The provider's record of its most recent verification of the credential (HCP 4.2.2). Set only by the provider.",
+          "properties": {
+            "result": { "type": "string", "enum": ["verified", "failed"], "description": "The outcome." },
+            "at": { "$ref": "common.schema.json#/$defs/Instant", "description": "When the provider verified." },
+            "by": {
+              "type": "string",
+              "enum": ["provider", "trust-domain"],
+              "description": "Who verified: the provider, or the Context Subject's trust domain under end-to-end encrypted storage (HCP 4.8). HCP's own values, carried verbatim."
+            }
+          }
+        }
+      }
+    }
+  }
+}

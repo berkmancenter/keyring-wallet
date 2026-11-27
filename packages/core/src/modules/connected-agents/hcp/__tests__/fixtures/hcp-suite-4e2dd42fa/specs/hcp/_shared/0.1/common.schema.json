@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/_shared/0.1/common.schema.json",
+  "title": "HCP — Common definitions",
+  "description": "Common value shapes of the Human Context Protocol (HCP) 2.0-draft-3, shared by the hcp/* tasks. Written for this registry from the HCP 2.0-draft-3 specification text (CC BY 4.0, https://github.com/loyalagents/hcp-spec), with attribution, and checked against the shapes HCP publishes for the same draft; not copied from HCP's own schema files. Where this schema and the HCP text differ, the HCP text governs. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty, which an hcp/* party never writes empty. hcp/import applies neither to an export it takes.",
+  "$defs": {
+    "Urn": {
+      "type": "string",
+      "pattern": "^urn:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "description": "An HCP identifier: a UUID in `urn:uuid:` form, of any UUID version (HCP 4.2), as HCP uses for entry, grant, directive and retrieval identifiers."
+    },
+    "Uri": {
+      "type": "string",
+      "format": "uri",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^[a-zA-Z][a-zA-Z0-9+.-]*:\\S+$",
+      "description": "An absolute URI with no whitespace, as HCP writes every custom value at an extension point (HCP A.3)."
+    },
+    "Category": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^([a-z][a-z0-9_]*|[a-zA-Z][a-zA-Z0-9+.-]*:\\S+)$",
+      "description": "An HCP context category (HCP 4.5), the primary unit of access control: either a slug from HCP's category registry, such as `general_preferences` or `health_context`, or a custom category written as an absolute URI under a domain its definer controls. A custom category is not portable between providers without bilateral agreement (HCP 4.5). The pattern admits the slug or an absolute URI's outline only: it carries no `format: uri`, which would refuse every slug, so checking that a custom value is a well-formed absolute URI, as HCP's prose requires (HCP A.3), is the consumer's check."
+    },
+    "PurposeCode": {
+      "type": "string",
+      "format": "uri",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^[a-zA-Z][a-zA-Z0-9+.-]*:\\S+$",
+      "description": "An HCP purpose code: an absolute URI naming the purpose for which context is requested or may be used (HCP 6.1.5.2)."
+    },
+    "Instant": {
+      "type": "string",
+      "format": "date-time",
+      "description": "An RFC 3339 instant."
+    },
+    "Assurance": {
+      "type": "string",
+      "enum": ["unverified", "authenticated", "cryptographically-verified"],
+      "description": "How a Context Asserter's identity was established (HCP 3.6). HCP's own values, carried verbatim."
+    },
+    "RelationshipType": {
+      "type": "string",
+      "enum": ["derivedFrom", "supersedes", "contradicts", "duplicates"],
+      "description": "How one entry relates to another (HCP 4.2.3). HCP's own values, carried verbatim."
+    },
+    "MinimizationReport": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["method"],
+      "description": "The minimization report a query or get-entry result carries (HCP 7.5). It MUST NOT carry the number of entries considered, the number available within scope, or any other measure of what was withheld (HCP 7.5); no schema can check that by name.",
+      "properties": {
+        "method": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The relevance method that determined the final ordering (HCP 7.3): the method the provider declares as `minimization_method` in its discovery document (HCP 19.3), such as `lexical`, `semantic` or `llm`, or `none` for a get-entry result. The set of values is open."
+        }
+      }
+    }
+  }
+}
