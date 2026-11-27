@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/entries/revise/0.1",
+  "title": "HCP — Revise Entry — payload",
+  "description": "The request payload of the HCP 2.0-draft-3 Revise operation (HCP 5.2.4): an HCP Client writes a new version of an entry, replacing its content, assertion and evidence whole, provided the version it names is still current. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, proof) are owned by the framework — SPEC §6.3. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["expectedVersion", "content", "reason", "accessToken"],
+  "properties": {
+    "ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "description": "HCP `ref`: the entry to revise, by the grant-scoped reference a Context Client was given (HCP 5.2.4, 7.4). Exactly one of `ref` and `entryId` is present; not checked by the schema, and a request with both or neither fails with `malformedRequest`. The maxLength is a framework bound, not an HCP requirement."
+    },
+    "entryId": {
+      "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Urn",
+      "description": "HCP `entryId`: the entry to revise, by its `id`, as a Management Client names it (HCP 5.2.4)."
+    },
+    "expectedVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "HCP `expectedVersion`: the `record.version` of the current version, which this revision replaces. Where it is not the current version, the revision fails with `hcp:versionConflict` and changes nothing (HCP 5.2.4)."
+    },
+    "content": {
+      "$ref": "../../../_shared/0.1/context-entry.schema.json#/$defs/Content",
+      "description": "HCP `content`: the revised content, whole. Where the content is a credential, the new credential is supplied whole in `evidence` (HCP 5.2.4)."
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "../../../_shared/0.1/context-entry.schema.json#/$defs/EvidenceItem" },
+      "description": "HCP `evidence`: the revision's evidence items, whole; absent means none (HCP 5.2.4). At most one item has `role` `content` (HCP 4.2.2); not checked by the schema, since the registry's Rust generator does not support `contains`. The bound of 64 is a framework bound."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "description": "HCP `reason`: why the entry is revised, recorded in the audit log (HCP 5.2.4). The maxLength is a framework bound, not an HCP requirement."
+    },
+    "assertion": {
+      "$ref": "../../../_shared/0.1/entry-write.schema.json#/$defs/RevisionAssertion",
+      "description": "HCP `assertion.*`: the revised assertion; `declarationType` omitted means unchanged, and the other members are as for create (HCP 5.2.4)."
+    },
+    "record": {
+      "$ref": "../../../_shared/0.1/entry-write.schema.json#/$defs/WriteRecord",
+      "description": "HCP `record.provenance.*` for the revised assertion, and `record.relationships`, as for create (HCP 5.2.4)."
+    },
+    "accessToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "The HCP access token for the grant under which the client acts (HCP 12, 13), carried unchanged. HCP's HTTP Binding sends it as a Bearer token (HCP 9.3); this member carries it in the document. The provider validates it exactly as over HTTP and treats it as opaque. The maxLength is a framework bound, not an HCP requirement."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "HCP — Revise Entry — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry"],
+      "description": "The HCP Revise result (HCP 5.2.4): the revised entry, with `record.version` (a disclosure's `version`) incremented by 1. Failures use trust-task-error, not this shape.",
+      "properties": {
+        "entry": {
+          "anyOf": [
+            { "$ref": "../../../_shared/0.1/disclosure.schema.json#/$defs/Disclosure" },
+            { "$ref": "../../../_shared/0.1/context-entry.schema.json#/$defs/Entry" }
+          ],
+          "description": "The revised entry: a Disclosure where the requester is a Context Client (HCP 7.4), otherwise the whole Entry. Its `id`, and its `ref` under the grant, are unchanged (HCP 5.2.4). HCP returns it as the result itself; this task wraps it in `entry`."
+        }
+      }
+    }
+  }
+}
