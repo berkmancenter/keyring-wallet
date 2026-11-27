@@ -9,6 +9,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 
 import type { ActionResult } from './actions'
+import type { DeleteMemoryResult, DeletePreview } from './deleteMemory'
+import type { KeepConnectedResult } from './keepConnected'
 import type { ConnectGuard, MemoryCount } from './memories'
 import { countNotice } from './memories'
 import type { AgentConnectChoice, NumberEntry, PairingLink, PairingState } from './pairing'
@@ -41,10 +43,23 @@ export interface ConnectedAgentsServices {
   saveCount(agentId: string, contextId: string, count: number): Promise<void>
   connectGuard(): Promise<ConnectGuard>
   personas(): Promise<{ did: string; name: string }[]>
-  /** Records still pairing get their VDC grant, or become Not finished (§3.4, asked where the VDC policy is asked). */
+  /**
+   * Asked where the VDC policy is asked (§3.4): records still pairing get their grant or become Not finished, a revoke
+   * left unconfirmed runs again, each agent's entry is read once, and grants close to their end are re-issued.
+   */
   reconcile(): Promise<void>
+  /** The contexts the agent's entry held at the last reconcile, for drift; undefined when nothing was proved. */
+  entryContexts?(agentId: string): readonly string[] | undefined
+  /** Step 7.16's confirmation: the memory's count and the agents bound to it. Sends no delete. */
+  previewDelete(memoryId: string): Promise<DeletePreview>
+  /** Step 7.16's delete, only after the owner confirmed the preview. */
+  deleteMemory(memoryId: string, confirmed: true): Promise<DeleteMemoryResult>
+  /** Step 7.28's "Keep it connected". The screen asks `keepConnectedOffered` first. */
+  keepConnected(agentId: string): Promise<KeepConnectedResult>
+  /** Whether "Keep it connected" is offered for this agent (false while `KEEP_CONNECTED_MEASURED` is false). */
+  keepConnectedOffered(agentId: string): Promise<boolean>
   driver(onState: (state: PairingState) => void): Promise<PairingDriver>
-  /** Step 7.7's actions on one agent (`connected-agents/actions.ts`). Revoke is step 7.10's, not here. */
+  /** Step 7.7's actions on one agent (`connected-agents/actions.ts`); Remove revokes a listed entry (step 7.10). */
   actions: AgentActionsPort
   reachability?: (agentId: string) => Reachability
 }
@@ -57,6 +72,8 @@ export interface AgentActionsPort {
   retryPending(agentId: string): Promise<ActionResult>
   extend(agentId: string): Promise<ActionResult>
   remove(agentId: string): Promise<ActionResult>
+  /** Step 7.28's "Keep it connected" (`connected-agents/keepConnected.ts`). */
+  keepConnected(agentId: string): Promise<KeepConnectedResult>
 }
 
 const ServicesContext = createContext<ConnectedAgentsServices | undefined>(undefined)
@@ -120,6 +137,7 @@ export function useAgentConnections(): { agents: AgentView[]; loading: boolean; 
           now,
           reach: services.reachability?.(r.id),
           names: (id) => (names as Record<string, string>)[id],
+          entryContexts: services.entryContexts?.(r.id),
         })
       )
       .filter((v): v is AgentView => v !== undefined)
@@ -264,4 +282,21 @@ export function usePersonas(): { did: string; name: string }[] {
  */
 export function useAgentActions(): AgentActionsPort {
   return useConnectedAgentsServices().actions
+}
+
+/**
+ * Step 7.16's delete of a memory (§3.15): `preview` for the confirmation (the count and the agents bound to it), then
+ * `remove` once the owner confirmed it. Each answers a code the screen words; the screen refreshes its own listing.
+ */
+export function useDeleteMemory(): {
+  preview: (memoryId: string) => Promise<DeletePreview>
+  remove: (memoryId: string, confirmed: true) => Promise<DeleteMemoryResult>
+} {
+  const services = useConnectedAgentsServices()
+  const preview = useCallback((memoryId: string) => services.previewDelete(memoryId), [services])
+  const remove = useCallback(
+    (memoryId: string, confirmed: true) => services.deleteMemory(memoryId, confirmed),
+    [services]
+  )
+  return { preview, remove }
 }

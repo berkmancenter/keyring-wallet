@@ -1,12 +1,41 @@
 import type { Agent } from '@credo-ts/core'
 
 import { memoryGenericRecords } from '../../../../__tests__/modules/vrc/fixtures/memoryGenericRecords'
+import { VTA_TASK } from '../../trust-tasks/module/VtaClient'
+import { AgentActions } from '../actions'
+import { AgentConnectDriver } from '../driver'
+import { ACL_UPDATE_03 } from '../keepConnected'
 import { NOT_FINISHED_AFTER_MS } from '../pairing'
-import { administratorSigner, connectedAgentsServices, vtaPorts, type VtaSession } from '../services'
+import type { RevokeVta } from '../revoke'
+import { administratorSigner, connectedAgentsServices, revokeEntryPort, vtaPorts, type VtaSession } from '../services'
 import { AgentConnectionStore } from '../store'
 import { agentRecord, FIXTURE_NOW } from '../testing/fixtures'
 
 jest.mock('react-native-keychain', () => ({ ACCESS_CONTROL: {}, ACCESSIBLE: {}, STORAGE_TYPE: {} }))
+
+// The reconcile's steps that are plain functions, recorded in the order they run and failed on demand; each otherwise
+// runs as it is.
+const mockSteps: string[] = []
+const mockFailing = new Set<string>()
+function mockStep<A extends unknown[], R>(name: string, actual: (...args: A) => Promise<R>) {
+  return jest.fn(async (...args: A) => {
+    mockSteps.push(name)
+    if (mockFailing.has(name)) throw new Error(`${name} failed`)
+    return actual(...args)
+  })
+}
+jest.mock('../revoke', () => {
+  const actual = jest.requireActual('../revoke')
+  return { ...actual, reconcileAgents: mockStep('reconcileAgents', actual.reconcileAgents) }
+})
+jest.mock('../entryRead', () => {
+  const actual = jest.requireActual('../entryRead')
+  return { ...actual, readAgentEntries: mockStep('readAgentEntries', actual.readAgentEntries) }
+})
+jest.mock('../vdcReissue', () => {
+  const actual = jest.requireActual('../vdcReissue')
+  return { ...actual, reissueDueGrants: mockStep('reissueDueGrants', actual.reissueDueGrants) }
+})
 jest.mock('../../trust-tasks/documentProof', () => ({
   signDocumentProof: jest.fn(async (_agent: unknown, doc: Record<string, unknown>, did: string, opts: unknown) => ({
     ...doc,
@@ -17,7 +46,9 @@ jest.mock('../../trust-tasks/documentProof', () => ({
 
 const VTA = 'did:webvh:QmVta:vta.example.org'
 
-function fakeSession(managerDid?: string) {
+type Answer = (...args: unknown[]) => unknown
+
+function fakeSession(managerDid?: string, answers: Record<string, Answer> = {}) {
   const calls: { vtaDid: string; method: string; args: unknown[] }[] = []
   const client = new Proxy(
     {},
@@ -26,8 +57,10 @@ function fakeSession(managerDid?: string) {
         (_t, method: string) =>
         async (...args: unknown[]) => {
           calls.push({ vtaDid: '', method, args })
+          if (answers[method]) return answers[method](...args)
           if (method === 'listContexts') return [{ id: 'keyring-memory-educat1on', name: 'Education' }, { id: 'vta' }]
           if (method === 'findAgentEntries') return { complete: true, matches: [] }
+          if (method === 'listAcl') return []
           return {}
         },
     }
@@ -127,6 +160,245 @@ describe('connectedAgentsServices', () => {
     const { session } = fakeSession('did:peer:2.admin')
     const services = connectedAgentsServices(agent(), VTA, session, async () => [])
     expect((await services.driver(() => undefined)).state.phase).toBe('idle')
+  })
+})
+
+describe('the reconcile (§3.4, §3.9, §3.10)', () => {
+  let pairing: jest.SpyInstance
+  let sweep: jest.SpyInstance
+  beforeEach(() => {
+    mockSteps.length = 0
+    mockFailing.clear()
+    const reconcilePairing = AgentConnectDriver.prototype.reconcilePairing
+    pairing = jest.spyOn(AgentConnectDriver.prototype, 'reconcilePairing').mockImplementation(async function (
+      this: AgentConnectDriver
+    ) {
+      mockSteps.push('reconcilePairing')
+      if (mockFailing.has('reconcilePairing')) throw new Error('reconcilePairing failed')
+      return reconcilePairing.call(this)
+    })
+    const sweepNotFinished = AgentActions.prototype.sweepNotFinished
+    sweep = jest.spyOn(AgentActions.prototype, 'sweepNotFinished').mockImplementation(async function (
+      this: AgentActions
+    ) {
+      mockSteps.push('sweepNotFinished')
+      if (mockFailing.has('sweepNotFinished')) throw new Error('sweepNotFinished failed')
+      return sweepNotFinished.call(this)
+    })
+  })
+  afterEach(() => {
+    pairing.mockRestore()
+    sweep.mockRestore()
+  })
+
+  const ORDER = ['reconcilePairing', 'reconcileAgents', 'sweepNotFinished', 'readAgentEntries', 'reissueDueGrants']
+
+  it('runs the pairing, the revoke reconcile, the sweep, the entry reads and the VDC re-issue, in that order', async () => {
+    const { session } = fakeSession('did:peer:2.admin')
+    await connectedAgentsServices(agent(), VTA, session, async () => []).reconcile()
+    expect(mockSteps).toEqual(ORDER)
+  })
+
+  it('one step failing still runs the rest, and the reconcile itself does not fail', async () => {
+    // control: awaiting each step without `step`'s catch makes this fail (the reconcile rejects at the first step).
+    for (const failing of ORDER) {
+      mockSteps.length = 0
+      mockFailing.clear()
+      mockFailing.add(failing)
+      const { session } = fakeSession('did:peer:2.admin')
+      await expect(connectedAgentsServices(agent(), VTA, session, async () => []).reconcile()).resolves.toBeUndefined()
+      expect(mockSteps).toEqual(ORDER)
+    }
+  })
+
+  it("keeps each agent's entry as read, and answers its contexts for drift; none before a reconcile", async () => {
+    const record = agentRecord()
+    const { session } = fakeSession('did:peer:2.admin', {
+      findAgentEntries: () => ({
+        complete: true,
+        matches: [
+          {
+            deviceId: record.deviceId,
+            entry: { subject: record.agentDid, act: { stated: 'contexts', contexts: ['keyring-memory-trave1abc'] } },
+          },
+        ],
+      }),
+    })
+    const a = agent()
+    await new AgentConnectionStore(a).put(record)
+    const services = connectedAgentsServices(
+      a,
+      VTA,
+      session,
+      async () => [],
+      () => FIXTURE_NOW
+    )
+    expect(services.entryContexts?.(record.id)).toBeUndefined()
+    await services.reconcile()
+    expect(services.entryContexts?.(record.id)).toEqual(['keyring-memory-trave1abc'])
+    expect(services.entryContexts?.('did:key:z6MkNoSuchAgent')).toBeUndefined()
+  })
+})
+
+describe("Remove's revoke (step 7.10, #1077)", () => {
+  const refusal = () => Object.assign(new Error('subjectNotPresent'), { name: 'VtiRefusal' })
+  const vta = (listings: Awaited<ReturnType<RevokeVta['findAgentEntries']>>[] | Error) => {
+    const asked: { method: string; arg: unknown }[] = []
+    const port: RevokeVta = {
+      findAgentEntries: async (query) => {
+        asked.push({ method: 'findAgentEntries', arg: query })
+        if (listings instanceof Error) throw listings
+        return listings.shift() ?? { complete: true, matches: [] }
+      },
+      revokeSubject: async (did) => {
+        asked.push({ method: 'revokeSubject', arg: did })
+        throw refusal()
+      },
+    }
+    return { port, asked }
+  }
+  const listed = (subject: string) => ({ complete: true, matches: [{ entry: { subject } as never }] })
+
+  it('with no deviceId: revokes the stored key (a refusal ignored), then lists by that key alone', async () => {
+    const record = agentRecord({ deviceId: '' })
+    const { port, asked } = vta([{ complete: true, matches: [] }])
+    expect(await revokeEntryPort(port)(record)).toEqual({ gone: true })
+    expect(asked).toEqual([
+      { method: 'revokeSubject', arg: record.agentDid },
+      { method: 'findAgentEntries', arg: { subject: record.agentDid } },
+    ])
+  })
+
+  it('with no deviceId: an entry still listed, or a partial listing, is not gone; no answer throws', async () => {
+    const record = agentRecord({ deviceId: '' })
+    expect(await revokeEntryPort(vta([listed(record.agentDid)]).port)(record)).toEqual({ gone: false })
+    expect(await revokeEntryPort(vta([{ complete: false, matches: [] }]).port)(record)).toEqual({ gone: false })
+    await expect(revokeEntryPort(vta(new Error('timeout')).port)(record)).rejects.toThrow()
+  })
+
+  it('with a deviceId: removeAgentEntries decides, and a VTA that never answered throws', async () => {
+    const record = agentRecord()
+    const { port, asked } = vta([listed(record.agentDid), { complete: true, matches: [] }])
+    expect(await revokeEntryPort(port)(record)).toEqual({ gone: true })
+    expect(asked[0]).toEqual({
+      method: 'findAgentEntries',
+      arg: { deviceId: record.deviceId, subject: record.agentDid },
+    })
+    await expect(revokeEntryPort(vta(new Error('timeout')).port)(record)).rejects.toThrow(/did not answer/)
+  })
+
+  it('Remove of an expired agent with no deviceId whose entry is listed: revoked, then the record is dropped', async () => {
+    const record = agentRecord({
+      deviceId: '',
+      expiresAt: new Date(FIXTURE_NOW - 60_000).toISOString(),
+    })
+    let revoked = false
+    const { session, calls } = fakeSession('did:peer:2.admin', {
+      findAgentEntries: () => (revoked ? { complete: true, matches: [] } : listed(record.agentDid)),
+      revokeSubject: () => {
+        revoked = true
+        return { subject: record.agentDid }
+      },
+    })
+    const a = agent()
+    const store = new AgentConnectionStore(a)
+    await store.put(record)
+    const services = connectedAgentsServices(
+      a,
+      VTA,
+      session,
+      async () => [],
+      () => FIXTURE_NOW
+    )
+    expect(await services.actions.remove(record.id)).toEqual({ ok: true })
+    expect(await store.get(record.id)).toBeUndefined()
+    expect(calls.filter((c) => c.method === 'revokeSubject').map((c) => c.args)).toEqual([[record.agentDid]])
+  })
+})
+
+describe('tasks this phone sends about its own VTA: never waited on for consent', () => {
+  it('deleting a memory sends vta/contexts/delete/1.2 with force, and waitForConsent: false', async () => {
+    const { session, calls } = fakeSession('did:peer:2.admin')
+    const services = connectedAgentsServices(agent(), VTA, session, async () => [])
+    expect(await services.deleteMemory('keyring-memory-trave1abc', true)).toEqual({ ok: true, recordsNotUpdated: 0 })
+    const sent = calls.filter((c) => c.method === 'task')
+    expect(sent.map((c) => c.args)).toEqual([
+      [
+        VTA_TASK.contextsDelete12,
+        { id: 'keyring-memory-trave1abc', force: true },
+        30000,
+        {},
+        undefined,
+        { waitForConsent: false },
+      ],
+    ])
+    expect(sent[0].vtaDid).toBe(VTA)
+  })
+
+  it('a delete held for approval is heldForApproval, by the client classifier', async () => {
+    const { VtiRefusal } = jest.requireActual('../../trust-tasks/module/vtiAgent') as {
+      VtiRefusal: new (code: string, message: string, details?: unknown) => Error
+    }
+    const { session } = fakeSession('did:peer:2.admin', {
+      task: () => {
+        throw new VtiRefusal('auth:consent_required', 'held', { reason: 'auth:consent_required', consentRequests: [] })
+      },
+    })
+    const services = connectedAgentsServices(agent(), VTA, session, async () => [])
+    expect(await services.deleteMemory('keyring-memory-trave1abc', true)).toEqual({
+      ok: false,
+      code: 'heldForApproval',
+    })
+  })
+
+  it('Keep it connected sends acl/update/0.3 with { subject, expiresAt: null }, and waitForConsent: false', async () => {
+    const record = agentRecord()
+    let updated = false
+    const entry = () => ({
+      complete: true,
+      matches: [
+        {
+          deviceId: record.deviceId,
+          entry: updated ? { subject: record.agentDid } : { subject: record.agentDid, expiresAt: record.expiresAt },
+        },
+      ],
+    })
+    const { session, calls } = fakeSession('did:peer:2.admin', {
+      findAgentEntries: entry,
+      task: (type) => {
+        if (type === ACL_UPDATE_03) updated = true
+        return {}
+      },
+    })
+    const a = agent()
+    await new AgentConnectionStore(a).put(record)
+    const services = connectedAgentsServices(
+      a,
+      VTA,
+      session,
+      async () => [],
+      () => FIXTURE_NOW
+    )
+    await services.actions.keepConnected(record.id)
+    const update = calls.filter((c) => c.method === 'task' && c.args[0] === ACL_UPDATE_03)
+    expect(update.map((c) => c.args)).toEqual([
+      [ACL_UPDATE_03, { subject: record.agentDid, expiresAt: null }, 30000, {}, undefined, { waitForConsent: false }],
+    ])
+  })
+
+  it('Keep it connected is not offered while it is unmeasured, nor for an agent with no record', async () => {
+    const record = agentRecord()
+    const a = agent()
+    await new AgentConnectionStore(a).put(record)
+    const services = connectedAgentsServices(
+      a,
+      VTA,
+      fakeSession().session,
+      async () => [],
+      () => FIXTURE_NOW
+    )
+    expect(await services.keepConnectedOffered(record.id)).toBe(false)
+    expect(await services.keepConnectedOffered('did:key:z6MkNoSuchAgent')).toBe(false)
   })
 })
 
