@@ -2,7 +2,7 @@
  * `copy.ts` held to the brief's "Copy" table: every key present and no other, the three languages non-empty and
  * distinct, the same placeholder names in all three, and none of the words plan §6's copy rules forbid.
  */
-import { HCP_COPY, type HcpCopyKey, hcpPlaceholders, hcpText } from '../copy'
+import { HCP_COPY, HCP_REFUSAL_KEYS, type HcpCopyKey, hcpPlaceholders, hcpText } from '../copy'
 
 const KEYS: HcpCopyKey[] = [
   'ApproveTitle',
@@ -22,16 +22,36 @@ const KEYS: HcpCopyKey[] = [
   'Revoke',
   'Keep',
   'RevokeUnreachable',
+  'RevokeRefused',
   'NewMemoryTitle',
   'NewMemoryField',
   'NewMemoryHelper',
   'NewMemorySave',
   'MemoryNotSaved',
+  // Added at review, beyond the brief's table: the refusals.
+  'MemoryRefused',
+  // Added at review: no manager DID, so not signed in to a VTA.
+  'MemoryNoVta',
+  // Added at review: the approve flow's failed and cancelled, one key per case.
+  'ApproveNotApproved',
+  'ApproveNotRecorded',
+  'ApproveDeclined',
+  'ApproveAnsweredElsewhere',
+  'ApproveCancelled',
 ]
+const APPROVE_ENDINGS = [
+  'ApproveNotApproved',
+  'ApproveNotRecorded',
+  'ApproveDeclined',
+  'ApproveAnsweredElsewhere',
+  'ApproveCancelled',
+] as const satisfies readonly HcpCopyKey[]
+/** An offer of another attempt, in any of the three languages. */
+const RETRY = /try again|again|retry|réessa|relance|de nouveau|à nouveau|tente de novo|novamente|de novo/i
 const FORBIDDEN = /instant|encrypted|private|no trace/i
 
 describe('HCP_COPY', () => {
-  it('has exactly the keys of the brief’s table', () => {
+  it('has exactly the keys of the brief’s table, and the keys added at review', () => {
     expect(Object.keys(HCP_COPY).sort()).toEqual([...KEYS].sort())
   })
 
@@ -59,6 +79,57 @@ describe('HCP_COPY', () => {
   it('control: the checks bite on a string that breaks them', () => {
     expect('Gone in an instant').toMatch(FORBIDDEN)
     expect(hcpPlaceholders('Révoqué. « {{nom}} »')).not.toEqual(hcpPlaceholders(HCP_COPY.RevokeTitle.en))
+  })
+
+  it('a refusal has its own key per case, PROPOSED, and offers no retry in any language', () => {
+    expect([...HCP_REFUSAL_KEYS].sort()).toEqual(['MemoryRefused', 'RevokeRefused'])
+    for (const key of HCP_REFUSAL_KEYS) {
+      const { en, fr, ptBr, source } = HCP_COPY[key]
+      expect(source).toBe('PROPOSED')
+      for (const text of [en, fr, ptBr]) expect(text).not.toMatch(RETRY)
+    }
+    // Not the unreachable strings under another name.
+    expect(HCP_COPY.RevokeRefused.en).not.toBe(HCP_COPY.RevokeUnreachable.en)
+    expect(HCP_COPY.MemoryRefused.en).not.toBe(HCP_COPY.MemoryNotSaved.en)
+    expect(hcpPlaceholders(HCP_COPY.RevokeRefused.en)).toEqual(['name'])
+  })
+
+  it('no manager DID has its own key, PROPOSED, not the unreachable or refused strings, and offers no retry', () => {
+    const { en, fr, ptBr, source } = HCP_COPY.MemoryNoVta
+    expect(source).toBe('PROPOSED')
+    for (const text of [en, fr, ptBr]) expect(text).not.toMatch(RETRY)
+    for (const lang of ['en', 'fr', 'ptBr'] as const) {
+      expect(HCP_COPY.MemoryNoVta[lang]).not.toBe(HCP_COPY.MemoryNotSaved[lang])
+      expect(HCP_COPY.MemoryNoVta[lang]).not.toBe(HCP_COPY.MemoryRefused[lang])
+    }
+    expect(en).not.toMatch(/couldn't reach/i)
+  })
+
+  it('the approve endings are PROPOSED; only "not approved" offers another attempt, never "approved but not recorded"', () => {
+    for (const key of APPROVE_ENDINGS) expect(HCP_COPY[key].source).toBe('PROPOSED')
+    for (const key of APPROVE_ENDINGS) {
+      const { en, fr, ptBr } = HCP_COPY[key]
+      for (const text of [en, fr, ptBr]) {
+        if (key === 'ApproveNotApproved') expect(text).toMatch(RETRY)
+        else expect(text).not.toMatch(RETRY)
+      }
+    }
+    // Approved but not recorded names the agent, and says it will show as connected rather than that it failed.
+    expect(hcpPlaceholders(HCP_COPY.ApproveNotRecorded.en)).toEqual(['name'])
+    expect(HCP_COPY.ApproveNotRecorded.en).toMatch(/approved/i)
+    expect(HCP_COPY.ApproveNotRecorded.en).toMatch(/connected/i)
+    // Five cases, five strings.
+    expect(new Set(APPROVE_ENDINGS.map((k) => HCP_COPY[k].en)).size).toBe(APPROVE_ENDINGS.length)
+  })
+
+  // control: the retry check bites, in each language, on the strings that do offer another attempt.
+  it('control: the retry check matches an offer of another attempt in each language', () => {
+    expect(HCP_COPY.Locked.en).toMatch(RETRY)
+    expect(HCP_COPY.Locked.fr).toMatch(RETRY)
+    expect(HCP_COPY.Locked.ptBr).toMatch(RETRY)
+    expect(HCP_COPY.CodeExpired.en).toMatch(RETRY)
+    expect(HCP_COPY.CodeExpired.fr).toMatch(RETRY)
+    expect(HCP_COPY.CodeExpired.ptBr).toMatch(RETRY)
   })
 })
 
