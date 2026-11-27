@@ -88,7 +88,11 @@ export const VtaOfflineBanner: React.FC = () => {
   // Replies have stopped reaching this phone (the agent's reply breaker): said as that, socket up or not, since the
   // phone reaching its mediator says nothing about the agent's answers getting back (D7FG-2Y9J read "away").
   const notAnswering = Boolean(state.repliesStalled) && state.link.connection.kind !== 'gone'
-  if (!notAnswering && !showsOfflineBanner(state.link, now)) return null
+  // The agent refused what this phone signed for the phone's date and time (phoneClock.ts): said first, at once, since
+  // every signed ask fails the same way until the clock is put right, and "away" or "not answering" would send the
+  // person to the network instead.
+  const clockWrong = Boolean(state.phoneClockRefused) && state.link.connection.kind !== 'gone'
+  if (!clockWrong && !notAnswering && !showsOfflineBanner(state.link, now)) return null
   return (
     <View
       style={[styles.banner, { backgroundColor: ColorPalette.semantic.error }]}
@@ -97,12 +101,14 @@ export const VtaOfflineBanner: React.FC = () => {
       accessibilityLiveRegion="polite"
     >
       <ThemedText style={{ color: ColorPalette.grayscale.white }}>
-        {notAnswering
-          ? t('VtaLink.BannerNotAnswering')
-          : t('VtaLink.BannerAway', {
-              status: connectionText(connectionShown(state.link.connection, now), t),
-              interpolation: { escapeValue: false },
-            })}
+        {clockWrong
+          ? t('VtaLink.BannerPhoneClock')
+          : notAnswering
+            ? t('VtaLink.BannerNotAnswering')
+            : t('VtaLink.BannerAway', {
+                status: connectionText(connectionShown(state.link.connection, now), t),
+                interpolation: { escapeValue: false },
+              })}
       </ThemedText>
     </View>
   )

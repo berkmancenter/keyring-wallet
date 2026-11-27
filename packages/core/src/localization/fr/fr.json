@@ -1839,6 +1839,7 @@
     "DetailsLinkedAt": "Relié",
     "BannerAway": "Votre agent est absent — {{status}}",
     "BannerNotAnswering": "Votre agent ne répond pas à ce téléphone. Nouvelle tentative.",
+    "BannerPhoneClock": "La date et l'heure de votre téléphone semblent incorrectes. Activez la date et l'heure automatiques dans les réglages de votre téléphone, puis réessayez.",
     "OpenYourAgent": "Votre agent",
     "IWasInvited": "J'ai été invité",
     "IWasInvitedHint": "L'admin d'une communauté vous invite. Vous lui envoyez qui vous êtes, puis vous rejoignez.",
@@ -2694,6 +2695,7 @@
       "notApproved": "Votre approbateur n'a pas approuvé, donc votre agent ne l'a pas fait. Il a peut-être refusé, ou pas répondu à temps.",
       "noAnswer": "Votre agent n'a pas répondu. Vérifiez Mon agent avant de réessayer.",
       "unreachable": "Keyring n'a pas pu joindre votre agent. Vérifiez votre connexion et réessayez.",
+      "phoneClock": "La date et l'heure de votre téléphone semblent incorrectes. Activez la date et l'heure automatiques dans les réglages de votre téléphone, puis réessayez.",
       "failed": "Votre agent n'a pas pu faire cela.",
       "refused": "Votre agent a refusé ({{code}})."
     },
