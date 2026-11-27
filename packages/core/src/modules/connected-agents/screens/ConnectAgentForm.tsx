@@ -6,6 +6,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { testIdWithKey } from '../../../utils/testable'
+import ActingAsRow, { ActingAsPersona } from '../components/ActingAsRow'
 import { AGENT_COLORS } from '../components/agentStyle'
 import MemoryPicker, { CreateMemoryResult, PickerMemory } from '../components/MemoryPicker'
 import { AGENT_PURPOSES, AgentPurpose } from '../pairing'
@@ -18,10 +19,20 @@ export const AGENT_NAME_MAX = 64
 /** The connect guard, run before the picker shows (§1.5, §2.6, §3.15). */
 export type ConnectGuard = 'checking' | 'ok' | 'notAdministrator' | 'vtaTooOld' | 'unreachable'
 
-/** What the name step hands on. The logic fills the persona and the empty context (seam, point 4). */
-export type ConnectFormChoice = { name: string; memoryContexts: string[]; purposes: AgentPurpose[] }
+/**
+ * What the name step hands on. The logic fills the persona and the empty context (seam, point 4); with more than one
+ * persona the person picks it here ("Acting as", finding 18), and it comes as `ownerPersonaDid`.
+ */
+export type ConnectFormChoice = {
+  name: string
+  memoryContexts: string[]
+  purposes: AgentPurpose[]
+  ownerPersonaDid?: string
+}
 
-const PURPOSE_KEY: Record<AgentPurpose, string> = {
+const NO_PERSONAS: ActingAsPersona[] = []
+
+const PURPOSE_KEY:Record<AgentPurpose, string> = {
   personalisation: 'ConnectedAgents.PurposePersonalisation',
   taskExecution: 'ConnectedAgents.PurposeTaskExecution',
 }
@@ -56,6 +67,8 @@ export interface ConnectAgentFormProps {
   guard: ConnectGuard
   /** The owner's memories; undefined while they are listed. */
   memories?: PickerMemory[]
+  /** The owner's personas. With more than one, "Acting as" asks which; with 0 or 1 nothing is asked. */
+  personas?: ActingAsPersona[]
   onCreateMemory: (name: string) => Promise<CreateMemoryResult>
   onContinue: (choice: ConnectFormChoice) => void
   onClose: () => void
@@ -64,7 +77,9 @@ export interface ConnectAgentFormProps {
 /**
  * Connect, the first step (§6 "Connect, name step"; canvas frames 1 and 1b): "Name this agent"; "Memory it can use"
  * as the memory picker, with its helper; "What it can use them for", the two purposes shown, not picked (D44); "For 4
- * hours" with its helper, with no expiry choice (D42); the terminal helper; and "Continue".
+ * hours" with its helper, with no expiry choice (D42); the terminal helper; and "Continue". With more than one persona,
+ * "Acting as" sits above "Memory it can use" (finding 18, §7.7; canvas frame 58), nothing is pre-selected, and
+ * "Continue" waits for a choice, which it hands on as `ownerPersonaDid`.
  *
  * Before any of that the connect guard runs: a phone that is not a full administrator, a VTA too old for agents, or a
  * VTA it cannot reach, ends the connect here, with no name field, no picker and no "New memory" (canvas frame K23).
@@ -72,6 +87,7 @@ export interface ConnectAgentFormProps {
 const ConnectAgentForm: React.FC<ConnectAgentFormProps> = ({
   guard,
   memories,
+  personas = NO_PERSONAS,
   onCreateMemory,
   onContinue,
   onClose,
@@ -80,6 +96,7 @@ const ConnectAgentForm: React.FC<ConnectAgentFormProps> = ({
   const [name, setName] = useState('')
   const [selected, setSelected] = useState<string[]>([])
   const [naming, setNaming] = useState(false)
+  const [personaDid, setPersonaDid] = useState<string | undefined>()
 
   if (guard === 'checking') {
     return (
@@ -94,7 +111,16 @@ const ConnectAgentForm: React.FC<ConnectAgentFormProps> = ({
 
   const trimmed = name.trim()
   // Memories still being listed: wait for them, so a memory cannot be missed by a quick "Continue".
-  const ready = trimmed.length > 0 && !naming && memories !== undefined
+  // With several personas the connect asks, so "Continue" waits for a choice that is still in the list (§7.7).
+  const asksPersona = personas.length > 1
+  const ownerPersonaDid = asksPersona ? personas.find((p) => p.did === personaDid)?.did : undefined
+  const ready = trimmed.length > 0 && !naming && memories !== undefined && (!asksPersona || ownerPersonaDid !== undefined)
+  const choice = (): ConnectFormChoice => ({
+    name: trimmed,
+    memoryContexts: selected,
+    purposes: [...AGENT_PURPOSES],
+    ...(ownerPersonaDid !== undefined ? { ownerPersonaDid } : {}),
+  })
   const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
 
   return (
@@ -112,6 +138,8 @@ const ConnectAgentForm: React.FC<ConnectAgentFormProps> = ({
           accessibilityLabelledBy="ConnectAgentNameLabel"
           testID={testIdWithKey('ConnectAgentName')}
         />
+
+        <ActingAsRow personas={personas} selected={ownerPersonaDid} onSelect={setPersonaDid} />
 
         <ThemedText style={styles.section}>{t('ConnectedAgents.MemoryItCanUse')}</ThemedText>
         {memories === undefined ? (
@@ -154,9 +182,7 @@ const ConnectAgentForm: React.FC<ConnectAgentFormProps> = ({
           title={t('Global.Continue')}
           buttonType={ButtonType.Primary}
           disabled={!ready}
-          onPress={() =>
-            ready && onContinue({ name: trimmed, memoryContexts: selected, purposes: [...AGENT_PURPOSES] })
-          }
+          onPress={() => ready && onContinue(choice())}
           testID={testIdWithKey('ConnectAgentContinue')}
           accessibilityLabel={t('Global.Continue')}
         />

@@ -8,6 +8,8 @@
       "src/screens/CredentialOffer.tsx"
     ],
     "AcceptDevCredentialsSwitchElement": ["src/screens/Developer.tsx"],
+    "ActingAsOption": ["src/modules/connected-agents/components/ActingAsRow.tsx"],
+    "ActingAsRow": ["src/modules/connected-agents/components/ActingAsRow.tsx"],
     "AddContact": ["src/screens/Messages.tsx"],
     "AddProfile": ["src/modules/vrc/screens/MyProfiles.tsx"],
     "AgentActivity": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
