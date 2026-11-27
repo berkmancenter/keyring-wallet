@@ -23,12 +23,15 @@
  *   container rather than loosen this);
  * - an import through a package specifier (`@bifold/core`) or a path alias: only relative imports are resolved, by
  *   path, so a caller reached only through one does not count. This fails closed (a real caller is missed, and the
- *   gate stays red), never open: two files of one name are told apart;
+ *   gate stays red), never open: two files of one name are told apart. That is safe only while every navigator is in
+ *   `packages/core/src`, so the Revoke wiring is a relative import: were one in `app/src`, it would import through
+ *   `@bifold/core` and the gate could never be satisfied. A test below fails when a navigator appears outside the
+ *   package, which is the moment to teach the gate that import;
  * - the one way it can admit a caller it should not: any file containing `.Screen` (or creating a navigator) counts as
  *   a navigator and seeds the search, so a stray `.Screen` token outside navigation would count a file as routed. It
- *   over-counts navigators, which fails open on "is Revoke wired"; 14 navigator files is right for this app today.
+ *   over-counts navigators, which fails open on "is Revoke wired". Every file it seeds from today is a real navigator.
  *
- * None of these exists today; a new way of turning the flag on must come through the setter or be added here.
+ * A new way of turning the flag on must come through the setter or be added here.
  */
 import { existsSync, readdirSync, readFileSync } from 'fs'
 import { dirname, join, relative, resolve, sep } from 'path'
@@ -150,6 +153,18 @@ describe('the agent-connect release gate (#1060 finding 21)', () => {
 
   it('today the flag is not reachable: nothing outside the tests sets it, and it starts off', () => {
     expect(releaseGate([...sources(CORE_SRC), ...sources(APP_SRC)]).flagReachable).toBe(false)
+  })
+
+  it('every navigator is in packages/core/src, so the Revoke wiring is an import the gate can follow', () => {
+    const navigators = (root: string) =>
+      sources(root)
+        .filter((f) => !isTest(f.path) && NAVIGATOR.test(f.text))
+        .map((f) => relative(join(CORE_SRC, '..', '..', '..'), f.path))
+    // Control: the same reading finds the package's navigators, so an empty app list is a finding, not a blind spot.
+    expect(navigators(CORE_SRC).length).toBeGreaterThan(0)
+    // A navigator in app/src reaches the package through `@bifold/core`, which the gate does not follow: teach it that
+    // import before adding one, or Revoke can never count as wired.
+    expect(navigators(APP_SRC)).toEqual([])
   })
 })
 
