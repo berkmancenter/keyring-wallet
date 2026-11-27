@@ -107,7 +107,7 @@ export async function previewDelete(ports: DeleteMemoryPorts, memoryId: string):
 /**
  * Delete the memory, after the owner confirmed the preview (§3.15: `force` only after that confirmation). `confirmed`
  * is the literal `true`, so no caller can pass an unconfirmed delete; a value that is not `true` at run time throws
- * before anything is sent. The bound entries are listed first (the delete removes what names the memory), and the
+ * before anything is sent. The bound entries are listed first (only to prove the VTA answers), and the
  * records with them (one `store.list()`: a store that cannot be read now could not be cleaned afterwards), then
  * `deleteContext(memoryId, true)`. A listing that fails is `unreachable` with nothing sent; a held call is
  * `heldForApproval`, any other failure `unreachable`, and in each case no record is written.
@@ -124,6 +124,7 @@ export async function deleteMemory(
   if (confirmed !== true) throw new Error('a memory is deleted only after the owner confirms')
   let records: AgentConnection[]
   try {
+    // The answer is not used: this proves the VTA answers, so no delete is sent to a VTA we cannot reach.
     await ports.listEntries()
     records = await ports.store.list()
   } catch {
