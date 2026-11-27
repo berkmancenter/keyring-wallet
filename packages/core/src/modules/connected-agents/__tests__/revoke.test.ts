@@ -507,6 +507,44 @@ describe('removeAgentEntries: rounds', () => {
   })
 })
 
+describe('removeAgentEntries: a record with no deviceId', () => {
+  const missing: { label: string; deviceId: unknown }[] = [
+    { label: 'empty', deviceId: '' },
+    { label: 'undefined', deviceId: undefined },
+    { label: 'null', deviceId: null },
+  ]
+  it.each(missing)(
+    'an agent whose deviceId is $label, with a live entry under its own key, is not reported revoked',
+    async ({ deviceId }) => {
+      // The record is stored without its deviceId; the VTA still has its live entry under K_A, bound to dev-1.
+      const s = await setup({ deviceId: deviceId as string })
+      const stored = s.disk.disk.get(K_A)
+      const writes = s.store.writes.length
+      const agent = { agentDid: K_A, deviceId: deviceId as string }
+      expect(await removeAgentEntries(s.vta, agent)).toEqual({ kind: 'notConfirmed', reason: 'noDeviceId' })
+      // No VTA call at all (no listing, no revoke), the entry and its device are still there, and nothing is written.
+      expect(s.sent).toEqual([])
+      expect(s.revokes()).toEqual([])
+      expect(s.entries.has(K_A)).toBe(true)
+      expect(s.devices.get('dev-1')).toBe(K_A)
+      expect(s.store.writes).toHaveLength(writes)
+      expect(s.store.calls).toEqual([])
+      expect(s.disk.disk.get(K_A)).toBe(stored)
+    }
+  )
+
+  it('control: the same agent with its deviceId is found, its entry revoked, and the revoke confirmed', async () => {
+    const s = await setup()
+    const writes = s.store.writes.length
+    expect(await removeAgentEntries(s.vta, { agentDid: K_A, deviceId: 'dev-1' })).toEqual({ kind: 'revoked' })
+    expect(s.store.writes).toHaveLength(writes)
+    expect(s.revokes()).toEqual([K_A])
+    expect(s.entries.has(K_A)).toBe(false)
+    expect(s.devices.has('dev-1')).toBe(false)
+    expect(s.entries.has(OTHER)).toBe(true)
+  })
+})
+
 describe('the app-start reconcile', () => {
   it('records the new subject and keyChanged, and reports it, without moving the record id or the chat', async () => {
     const s = await setup()

@@ -111,10 +111,12 @@ export interface RevokeDeps<C extends RevokableConnection = RevokableConnection>
 }
 
 /**
- * Why a revoke is not confirmed. `listingFailed`: a listing was refused or broke off; `partialListing`: the listings
- * never reached their end; `entryRemains`: a full listing still shows the agent after the last round.
+ * Why a revoke is not confirmed. `noDeviceId`: the record has no `deviceId`, so no listing was made (Keyring could not
+ * ask properly, as against the VTA not answering); `listingFailed`: a listing was refused or broke off;
+ * `partialListing`: the listings never reached their end; `entryRemains`: a full listing still shows the agent after
+ * the last round. The views show all four as "Revoke not confirmed".
  */
-export type NotConfirmedReason = 'listingFailed' | 'partialListing' | 'entryRemains'
+export type NotConfirmedReason = 'noDeviceId' | 'listingFailed' | 'partialListing' | 'entryRemains'
 
 /**
  * What a revoke came to. Only `revoked` is success.
@@ -136,12 +138,16 @@ const iso = (ms: number) => new Date(ms).toISOString()
 /**
  * Step 1 alone: revoke every entry that is the agent's, re-list, and repeat, until a full listing shows none or the
  * rounds run out. Answers how it ended; writes nothing.
+ *
+ * A record with no `deviceId` (empty, `undefined` or `null`) answers `notConfirmed` / `noDeviceId` at once, without a
+ * listing or any VTA call: the agent is found by its `deviceId`, and without one a `revoked` would not be checked.
  */
 export async function removeAgentEntries(
   vta: RevokeVta,
   agent: Pick<RevokableConnection, 'agentDid' | 'deviceId'>,
   maxRounds: number = REVOKE_MAX_ROUNDS
 ): Promise<RevokeOutcome> {
+  if (!agent.deviceId) return { kind: 'notConfirmed', reason: 'noDeviceId' }
   let answered = false
   for (let round = 0; ; round++) {
     let found: Awaited<ReturnType<RevokeVta['findAgentEntries']>>
