@@ -68,7 +68,9 @@ export const SCREEN_STATES: Record<string, () => React.ReactElement> = {
       onDelete={none}
     />
   ),
-  'memories-list-counting': () => <MemoriesListView memories={DELETE_MEMORIES} formatDate={formatDate} onDelete={none} />,
+  'memories-list-counting': () => (
+    <MemoriesListView memories={DELETE_MEMORIES} formatDate={formatDate} onDelete={none} />
+  ),
   'delete-memory': () => sheet(preview()),
   'delete-memory-no-agents': () => sheet(preview({ agents: [] })),
   'delete-memory-unnamed-agent': () => sheet(preview({ agents: [NOTES, { subject: 'did:key:z6MkOther', name: '' }] })),

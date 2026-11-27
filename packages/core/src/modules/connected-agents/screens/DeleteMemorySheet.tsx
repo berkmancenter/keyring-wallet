@@ -150,9 +150,7 @@ const DeleteMemorySheet: React.FC<DeleteMemorySheetProps> = ({ memory, preview, 
         {outcome.kind === 'recordsLeft'
           ? line(t('ConnectedAgents.DeleteMemoryRecordsLeft', { count: outcome.count }))
           : line(t('ConnectedAgents.DeleteMemoryHeld'))}
-        <View style={styles.buttons}>
-          {keep(t('Global.Close'), outcome.kind === 'recordsLeft' ? onDone : onKeep)}
-        </View>
+        <View style={styles.buttons}>{keep(t('Global.Close'), outcome.kind === 'recordsLeft' ? onDone : onKeep)}</View>
       </View>
     )
   }

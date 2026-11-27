@@ -98,11 +98,7 @@ const MemoriesListView: React.FC<MemoriesListViewProps> = ({ memories, counts, f
       ) : memories.length > 0 ? (
         <View style={styles.group}>
           {memories.map((memory, i) => (
-            <View
-              key={memory.id}
-              style={[styles.row, i > 0 && styles.rule]}
-              testID={testIdWithKey('MemoriesListRow')}
-            >
+            <View key={memory.id} style={[styles.row, i > 0 && styles.rule]} testID={testIdWithKey('MemoriesListRow')}>
               <Icon name="layers-outline" size={22} color={AGENT_COLORS.primary} accessibilityElementsHidden />
               <View style={styles.main} accessible>
                 <ThemedText style={styles.name}>{memory.name}</ThemedText>
