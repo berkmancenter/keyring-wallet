@@ -1,0 +1,77 @@
+/**
+ * A well-formed HCP grant consent request, as `vtaAgent` lists it, for the link of the match-number vectors' first
+ * case. Tests change one thing at a time from it.
+ */
+import type { VtiApproval } from '../../../../trust-tasks/module/vtaAgent'
+import { HCP_GRANTS_REQUEST, type HcpConnectLink } from '../../types'
+
+export const CLIENT_VID = 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK'
+export const OTHER_VID = 'did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp'
+export const UUID = '7c2a9e41-5b3d-4f6a-8e1c-0a9b8d7c6e51'
+export const THREAD = `urn:uuid:${UUID}`
+export const OTHER_THREAD = 'urn:uuid:0f8c1d2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f'
+export const GRANT = 'urn:uuid:3f1c2b4a-5d6e-4f70-8a9b-0c1d2e3f4a5b'
+/** The match number of THREAD and CLIENT_VID (the vectors' first case). */
+export const NUMBER = '2644'
+
+export const LINK: HcpConnectLink = { clientVid: CLIENT_VID, uuid: UUID, threadId: THREAD }
+
+/** The instant the fixture's VTA held the request; the approval expires 5 minutes later. */
+export const HELD_AT = Date.parse('2026-11-27T10:00:00.000Z')
+
+export const ROWS = [
+  'Run by Example Labs.',
+  'It can read general preferences to tailor its answers.',
+  'It can keep what it reads for up to 10 minutes after reading it.',
+  'For 4 hours from when you approve.',
+  'Approving gives access. It is not signing in.',
+]
+
+export function hcpEffects(): Record<string, unknown>[] {
+  return [
+    {
+      kind: 'hcpGrantClient',
+      summary: ROWS[0],
+      detail: {
+        clientVid: CLIENT_VID,
+        clientName: 'hcp-cli',
+        operator: { id: 'did:web:labs.example', name: 'Example Labs' },
+        threadId: THREAD,
+        grantId: GRANT,
+      },
+    },
+    {
+      kind: 'hcpGrantAccess',
+      summary: ROWS[1],
+      detail: {
+        access: [
+          {
+            actions: ['read'],
+            categories: ['general_preferences'],
+            purposes: [{ code: 'personalization', description: 'tailor its answers' }],
+          },
+        ],
+      },
+    },
+    { kind: 'hcpGrantUseUntil', summary: ROWS[2], detail: { maxUseSeconds: 600 } },
+    { kind: 'hcpGrantTerm', summary: ROWS[3], detail: { grantType: 'temporary', expiresInSeconds: 14400 } },
+    { kind: 'hcpGrantNotSignIn', summary: ROWS[4], detail: {} },
+  ]
+}
+
+export function hcpApproval(change: Partial<VtiApproval> = {}): VtiApproval {
+  return {
+    id: 'consent-1',
+    receivedAt: new Date(HELD_AT).toISOString(),
+    status: 'pending',
+    challenge: 'challenge-1',
+    taskType: HCP_GRANTS_REQUEST,
+    payloadDigest: 'digest-1',
+    requester: CLIENT_VID,
+    approverSet: 'owner',
+    minApprovals: 1,
+    expiresAt: new Date(HELD_AT + 5 * 60 * 1000).toISOString(),
+    effects: hcpEffects(),
+    ...change,
+  }
+}
