@@ -4,7 +4,7 @@ import { memoryGenericRecords } from '../../../../__tests__/modules/vrc/fixtures
 import { VTA_TASK } from '../../trust-tasks/module/VtaClient'
 import { AgentActions } from '../actions'
 import { AgentConnectDriver } from '../driver'
-import { ACL_UPDATE_03 } from '../keepConnected'
+import { ACL_UPDATE_03, KeepConnectedIntentStore } from '../keepConnected'
 import { NOT_FINISHED_AFTER_MS } from '../pairing'
 import type { RevokeVta } from '../revoke'
 import { administratorSigner, connectedAgentsServices, revokeEntryPort, vtaPorts, type VtaSession } from '../services'
@@ -31,6 +31,10 @@ jest.mock('../revoke', () => {
 jest.mock('../entryRead', () => {
   const actual = jest.requireActual('../entryRead')
   return { ...actual, readAgentEntries: mockStep('readAgentEntries', actual.readAgentEntries) }
+})
+jest.mock('../keepConnected', () => {
+  const actual = jest.requireActual('../keepConnected')
+  return { ...actual, settleKeepConnected: mockStep('settleKeepConnected', actual.settleKeepConnected) }
 })
 jest.mock('../vdcReissue', () => {
   const actual = jest.requireActual('../vdcReissue')
@@ -191,9 +195,16 @@ describe('the reconcile (§3.4, §3.9, §3.10)', () => {
     sweep.mockRestore()
   })
 
-  const ORDER = ['reconcilePairing', 'reconcileAgents', 'sweepNotFinished', 'readAgentEntries', 'reissueDueGrants']
+  const ORDER = [
+    'reconcilePairing',
+    'reconcileAgents',
+    'sweepNotFinished',
+    'settleKeepConnected',
+    'readAgentEntries',
+    'reissueDueGrants',
+  ]
 
-  it('runs the pairing, the revoke reconcile, the sweep, the entry reads and the VDC re-issue, in that order', async () => {
+  it('runs the pairing, the revoke reconcile, the sweep, the Keep it connected settle, the entry reads and the VDC re-issue, in that order', async () => {
     const { session } = fakeSession('did:peer:2.admin')
     await connectedAgentsServices(agent(), VTA, session, async () => []).reconcile()
     expect(mockSteps).toEqual(ORDER)
@@ -237,6 +248,32 @@ describe('the reconcile (§3.4, §3.9, §3.10)', () => {
     await services.reconcile()
     expect(services.entryContexts?.(record.id)).toEqual(['keyring-memory-trave1abc'])
     expect(services.entryContexts?.('did:key:z6MkNoSuchAgent')).toBeUndefined()
+  })
+
+  it('settles a Keep it connected intent left behind: the record is made persistent and the intent removed', async () => {
+    const record = agentRecord()
+    const startedAt = new Date(FIXTURE_NOW - 60_000).toISOString()
+    // The entry no longer expires: the update took, but its record write never happened.
+    const { session } = fakeSession('did:peer:2.admin', {
+      findAgentEntries: () => ({
+        complete: true,
+        matches: [{ deviceId: record.deviceId, entry: { subject: record.agentDid } }],
+      }),
+    })
+    const a = agent()
+    const store = new AgentConnectionStore(a)
+    await store.put(record)
+    const intents = new KeepConnectedIntentStore(a)
+    await intents.put({ id: record.id, subject: record.agentDid, startedAt })
+    await connectedAgentsServices(
+      a,
+      VTA,
+      session,
+      async () => [],
+      () => FIXTURE_NOW
+    ).reconcile()
+    expect(await store.get(record.id)).toMatchObject({ grantType: 'persistent', persistentElectedAt: startedAt })
+    expect(await intents.list()).toEqual([])
   })
 })
 
@@ -380,6 +417,10 @@ describe('tasks this phone sends about its own VTA: never waited on for consent'
       () => FIXTURE_NOW
     )
     await services.actions.keepConnected(record.id)
+    // Its intent was written under `keyring/keep-connected` and removed once the record was made persistent. (This
+    // fake VTA signs no grant, so the act itself ends `vdc`, after both.)
+    expect(await new AgentConnectionStore(a).get(record.id)).toMatchObject({ grantType: 'persistent' })
+    expect(await new KeepConnectedIntentStore(a).list()).toEqual([])
     const update = calls.filter((c) => c.method === 'task' && c.args[0] === ACL_UPDATE_03)
     expect(update.map((c) => c.args)).toEqual([
       [ACL_UPDATE_03, { subject: record.agentDid, expiresAt: null }, 30000, {}, undefined, { waitForConsent: false }],

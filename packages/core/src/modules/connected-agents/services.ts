@@ -18,7 +18,13 @@ import type { AgentActionsPort, ConnectedAgentsServices } from './ConnectedAgent
 import { deleteMemory, previewDelete, type DeleteMemoryPorts } from './deleteMemory'
 import { AgentConnectDriver } from './driver'
 import { entryContexts, readAgentEntries, type EntryRead } from './entryRead'
-import { keepConnected, keepConnectedOffered, type KeepConnectedPorts } from './keepConnected'
+import {
+  keepConnected,
+  KeepConnectedIntentStore,
+  keepConnectedOffered,
+  settleKeepConnected,
+  type KeepConnectedPorts,
+} from './keepConnected'
 import { connectGuard, countMemory, createMemory, pickerMemories, type MemoryPort } from './memories'
 import { reconcileAgents, removeAgentEntries, type RevokeVta } from './revoke'
 import { AgentConnectionStore, KeyedLockoutStore, KeyedSpentRequestStore } from './store'
@@ -146,8 +152,10 @@ export function connectedAgentsServices(
     task: memory.task,
     store: connections,
   }
-  // Step 7.28's "Keep it connected" (fb-4): built, and offered only once `KEEP_CONNECTED_MEASURED` is true.
-  const keepPorts: KeepConnectedPorts = { clock, access, task: ownTask, vdcSign, connections }
+  // Step 7.28's "Keep it connected" (fb-4): built, and offered only once `KEEP_CONNECTED_MEASURED` is true. Its intent
+  // is written under `keyring/keep-connected` before the update is sent, and the reconcile settles any it left.
+  const keepIntents = new KeepConnectedIntentStore(agent)
+  const keepPorts: KeepConnectedPorts = { clock, access, task: ownTask, vdcSign, connections, intents: keepIntents }
   const keep = (agentId: string) => keepConnected(keepPorts, agentId)
   const actions: AgentActionsPort = {
     widen: (agentId, memoryId) => agentActions.widen(agentId, memoryId),
@@ -189,12 +197,15 @@ export function connectedAgentsServices(
         .map((p) => ({ did: p.did, name: p.label ?? '' })),
     // In order, each step catching its own failure: records still pairing get their grant or become Not finished; a
     // revoke left `revoking` runs again and an active or expired agent is listed (§3.9, #1077); those Not finished for
-    // 10 minutes are removed (§3.10); each active or expired agent's entry is read once, kept for drift; and grants
-    // with 48 hours or less left are re-issued from those reads (§3.4).
+    // 10 minutes are removed (§3.10); a "Keep it connected" left unfinished is settled from a fresh read of its entry
+    // (§7.28, fb-4), before the reads below so a record it makes persistent is read and re-issued as one; each active
+    // or expired agent's entry is read once, kept for drift; and grants with 48 hours or less left are re-issued from
+    // those reads (§3.4).
     reconcile: async () => {
       await step(async () => (await driverFor(() => undefined)).reconcilePairing())
       await step(() => reconcileAgents({ store: connections, vta: revokeVta, now: clock }))
       await step(() => agentActions.sweepNotFinished())
+      await step(() => settleKeepConnected({ access, connections, intents: keepIntents }))
       // A store that cannot be read leaves no reads: no drift is shown from an older reconcile, and nothing is due.
       let records: AgentConnection[] = []
       lastReads = new Map()
