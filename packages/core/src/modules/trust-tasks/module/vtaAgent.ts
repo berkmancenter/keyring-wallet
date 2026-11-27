@@ -43,6 +43,7 @@ import { mayApprove } from './afterStepDown'
 import { approvedAgentOf, sendForeignDecision, takeForeignReply } from './foreignApproval'
 import { isKeyCopiesTogetherOn, KEY_COPIES_AT_ONCE, sweepKeyCopies } from './keyCopySweep'
 import type { StepUpRequest } from './stepUp'
+import { phoneClockRefusal } from './phoneClock'
 import { releaseWarn } from './releaseLog'
 import { approvalsView, withPhoneRule, type ApprovalsModel, type ApprovalsView } from './approvalRules'
 import {
@@ -231,6 +232,13 @@ export interface VtaAgentState {
    * breaker, VTI #1978). "Your agent is catching up", not "didn't answer".
    */
   repliesStalled?: boolean
+  /**
+   * The linked agent refused what this phone signed because the phone's date and time are outside its window
+   * (phoneClock.ts): set by a sign-in's hello the agent refused that way, cleared by one it answers. Every signed
+   * ask fails the same way until the clock is put right, so it is said once, across the app, and nothing is retried
+   * for it; the session, the link and the keys stay as they are. `code` is the agent's, for the log.
+   */
+  phoneClockRefused?: { code: string; at: number }
   /**
    * A session to the linked agent is being opened, the quiet reopen after an unlock included (the link stays
    * shown online then): a screen whose read failed meanwhile waits for it rather than saying the agent is
@@ -725,6 +733,8 @@ export class VtaAgentController {
   }
   private listeners = new Set<Listener>()
   private current?: { client: VtaClient; vtaDid: string; store: VtiIdentityStore; agent: Agent }
+  /** A recheck of the phone's clock in flight (recheckPhoneClock). */
+  private clockCheck?: Promise<void>
   /** The agent the app handed over at restore; the app builds a new one after every lock. */
   private agent?: Agent
   /** A grant check's question still open after it gave up waiting (GRANT_HOLD_MS). */
@@ -977,9 +987,15 @@ export class VtaAgentController {
         // that ends the connect, so the link is removed at once rather than at
         // the next presence tick (IN-350). Any other failure of the hello is
         // not a verdict on the link.
-        await client.whoAmI().catch((error: unknown) => {
-          if (refusedAsNotOnAcl(error)) throw error
-        })
+        // A hello refused for the phone's clock is not a verdict on the link either, but it is said (phoneClock.ts).
+        await client.whoAmI().then(
+          () => this.notePhoneClock(undefined),
+          (error: unknown) => {
+            if (refusedAsNotOnAcl(error)) throw error
+            const clock = phoneClockRefusal(error)
+            if (clock) this.notePhoneClock(clock)
+          }
+        )
         this.set({ status: 'connected', managerDid: client.managerDid, sessionOpenedAt: this.now() })
         // With a name already shown for the agent, asking it again waits behind the session's first work, with the
         // ask of what it serves (agentLastKnownSwitch.ts). With none, or with the switch off: at once, as before.
@@ -3654,8 +3670,12 @@ export class VtaAgentController {
     // Back in the foreground with nothing linked: a link left part-way picks up (IN-135).
     if (link.kind === 'notLinked') void this.resumeLink(agent).catch(() => undefined)
     if (link.kind !== 'linked' || this.reconnecting) return
-    // Online already, unless the session it was online on is gone (reopen).
-    if (link.connection.kind === 'online' && !options.reopen) return
+    // Online already, unless the session it was online on is gone (reopen). Back with the phone's clock said to be
+    // wrong: one hello, so a clock put right in Settings meanwhile clears the banner (and one still wrong keeps it).
+    if (link.connection.kind === 'online' && !options.reopen) {
+      if (this.state.phoneClockRefused) void this.recheckPhoneClock()
+      return
+    }
     this.reconnecting = true
     if (this.retryTimer) clearTimeout(this.retryTimer)
     this.retryTimer = undefined
@@ -3699,6 +3719,40 @@ export class VtaAgentController {
     } finally {
       this.reconnecting = false
     }
+  }
+
+  /** Say, or stop saying, that the agent refused this phone's clock; a change is logged with the agent's code. */
+  private notePhoneClock(code: string | undefined): void {
+    const was = this.state.phoneClockRefused
+    if (!code) {
+      if (!was) return
+      releaseWarn(`[VTA] the agent accepts this phone's clock again (was refused: ${was.code})`)
+      this.set({ phoneClockRefused: undefined })
+      return
+    }
+    if (!was) releaseWarn(`[VTA] the agent refused what this phone signed for the phone's date and time: ${code}`)
+    this.set({ phoneClockRefused: { code, at: was?.at ?? this.now() } })
+  }
+
+  /** One hello on the open session, to learn whether the phone's clock is still refused. Never more than one at once. */
+  private async recheckPhoneClock(): Promise<void> {
+    const current = this.current
+    const link = this.state.link
+    if (!current || link.kind !== 'linked' || current.vtaDid !== link.vtaDid || this.clockCheck) return
+    this.clockCheck = current.client
+      .whoAmI()
+      .then(
+        () => this.notePhoneClock(undefined),
+        (error: unknown) => {
+          // Only the agent's own word changes what is said: no answer leaves it as it was.
+          const clock = phoneClockRefusal(error)
+          if (clock) this.notePhoneClock(clock)
+        }
+      )
+      .finally(() => {
+        this.clockCheck = undefined
+      })
+    await this.clockCheck
   }
 
   /** The agent answered: keep when, and forget any "not found" seen before (agentGone.ts). */

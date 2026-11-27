@@ -15,6 +15,7 @@
  */
 
 import { consentPendingOf, refusedAsNotOnAcl } from './VtaClient'
+import { phoneClockRefusal } from './phoneClock'
 import { StepUpDeclined } from './stepUp'
 import { VtiRefusal } from './vtiAgent'
 
@@ -94,6 +95,9 @@ export class DeviceCannotOwn extends Error {
  * - `noAnswer` — the agent said nothing in time; the act may or may not have
  *   happened, so the list is worth reading again.
  * - `unreachable` — Keyring could not sign in to the agent.
+ * - `phoneClock` — the agent refused what this phone signed because the phone's
+ *   date and time are outside its window (phoneClock.ts). The agent does not
+ *   say which way, so neither do the words.
  * - `failed` — anything else; the agent's words are in `detail`.
  */
 export type DeviceRefusalReason =
@@ -113,6 +117,7 @@ export type DeviceRefusalReason =
   | 'notServed'
   | 'noAnswer'
   | 'unreachable'
+  | 'phoneClock'
   | 'failed'
   /** The agent answered with a refusal Keyring has no words of its own for: said as a refusal, with its code. */
   | 'refused'
@@ -135,6 +140,8 @@ const PLAIN_WORDS: Record<DeviceRefusalReason, string> = {
   notServed: "Your agent doesn't support asking before this, so nothing changed.",
   noAnswer: "Your agent didn't answer. Check the list before trying again.",
   unreachable: "Keyring couldn't reach your agent. Check your connection and try again.",
+  phoneClock:
+    "Your phone's date and time look wrong. Turn on automatic date and time in your phone's settings, then try again.",
   failed: "Your agent couldn't do that.",
   refused: 'Your agent refused this.',
 }
@@ -230,6 +237,9 @@ export function deviceRefusalOf(error: unknown): DeviceActionRefused {
   // By name, as above by code: approvalRules is not imported here, so no stub of it can break this line.
   if (error instanceof Error && error.name === 'NotServed') return refusal('notServed')
   if (!(error instanceof VtiRefusal)) return refusal(NO_ANSWER.test(message) ? 'noAnswer' : 'failed')
+  // Before every reading of the agent's own words: a document refused for the phone's clock would otherwise be shown
+  // as the agent's refusal with its code (`malformedRequest`, `expired`), which says nothing a person can act on.
+  if (phoneClockRefusal(error)) return refusal('phoneClock')
   const details = (error.details ?? {}) as { reason?: unknown }
   if (message === STEP_UP_REQUIRED || details.reason === STEP_UP_REQUIRED) return refusal('stepUpRequired')
   if (refusedAsNotOnAcl(error)) return refusal('accessRevoked')
