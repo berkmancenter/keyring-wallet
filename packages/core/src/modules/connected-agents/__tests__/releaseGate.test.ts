@@ -34,6 +34,10 @@
  *   the flag as off, reads the file with its comments blanked, and the revoke call and export with its strings blanked
  *   too (`blanked`, TypeScript's own parser). The setter is still read raw, since a mention there only errs strict.
  *
+ * **The invariant each pattern's view follows:** a false match in either direction must make the gate stricter, never
+ * looser. So a pattern that would count a step as wired, or the flag as off, reads live code; a pattern whose false
+ * match only makes the flag look reachable may read more. A new pattern picks its view by that rule.
+ *
  * A new way of turning the flag on must come through the setter or be added here.
  */
 import { existsSync, readdirSync, readFileSync } from 'fs'
