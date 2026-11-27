@@ -44,10 +44,12 @@ const styles = StyleSheet.create({
 })
 
 /**
- * The line a revoke that is not confirmed leaves (§6, §3.9; canvas frame 17): "Revoke not confirmed" with
- * `ConnectedAgents.RevokeNotConfirmedBody` (""<name>" may still have access. Keyring will check again.") when the VTA
- * answered but no full listing showed the agent gone, or `ConnectedAgents.RevokeUnreachable` ("We couldn't reach your
- * VTA, so "<name>" is still connected.") when nothing answered; "Try again" in both. Announced by its text (an
+ * The line a revoke that did not end leaves (§6, §3.9; canvas frame 17). When the VTA answered but no full listing
+ * showed the agent gone: the status "Revoke not confirmed" as a title, with `ConnectedAgents.RevokeNotConfirmedBody`
+ * (""<name>" may still have access. Keyring will check again."). When nothing answered: only the line
+ * `ConnectedAgents.RevokeUnreachable` ("We couldn't reach your VTA, so "<name>" is still connected."), with no title,
+ * as §6 writes it; "Revoke not confirmed" names the other case, and here the agent is plainly still connected (option
+ * A, agreed by relay from the plan owner). "Try again" in both. Announced by its text (an
  * alert), not by colour. A view: it never runs the revoke itself.
  */
 const RevokeOutcomeNotice: React.FC<RevokeOutcomeNoticeProps> = ({ name, outcome, onTryAgain }) => {
@@ -62,7 +64,9 @@ const RevokeOutcomeNotice: React.FC<RevokeOutcomeNoticeProps> = ({ name, outcome
       <View style={styles.head}>
         <Icon name="alert-outline" size={24} color={AGENT_COLORS.warnText} accessibilityElementsHidden />
         <View style={styles.words}>
-          <ThemedText style={styles.title}>{t('ConnectedAgents.StatusRevokeNotConfirmed')}</ThemedText>
+          {outcome.kind === 'notConfirmed' ? (
+            <ThemedText style={styles.title}>{t('ConnectedAgents.StatusRevokeNotConfirmed')}</ThemedText>
+          ) : null}
           <ThemedText style={styles.line}>{line}</ThemedText>
         </View>
       </View>

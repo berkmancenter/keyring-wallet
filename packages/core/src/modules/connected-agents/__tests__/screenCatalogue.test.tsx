@@ -5,7 +5,9 @@
  * failure names the state and its frame.
  *
  * The manifest is a curated list of the states chosen for the catalogue. Its agreement with the drawings, which this
- * checks both ways, is not coverage of every state the screens have.
+ * checks both ways, is not coverage of every state the screens have. And it proves a state shows the words the
+ * manifest lists, not that those are the right words for that state: a settled string shown in the wrong case passes
+ * the copy test and this one alike (the Revoke notice's title was such a case, settled by the plan owner).
  *
  * This is a check on words and states before the emulator walk of step 7.11, not 7.11's evidence: that is the
  * screenshot pairs on the emulator and the simulator. The walk reads the same manifest.
