@@ -11,6 +11,7 @@ import type { Agent } from '@credo-ts/core'
 import { signDocumentProof, verifyDocumentProof } from '../trust-tasks/documentProof'
 import { getKeyed, putKeyed } from '../trust-tasks/module/keyedRecords'
 import { consentPendingOf, type VtaClient } from '../trust-tasks/module/VtaClient'
+import { AgentActions } from './actions'
 import type { AgentAccessPort } from './carriage'
 import type { AdministratorSigner } from './deviceEnrolDraft'
 import type { ConnectedAgentsServices } from './ConnectedAgentsProvider'
@@ -83,6 +84,9 @@ export function connectedAgentsServices(
   const { access, vdcSign, memory } = vtaPorts(agent, vtaDid, session)
   const connections = new AgentConnectionStore(agent)
   const randomBytes = (length: number) => agent.kms.randomBytes({ length })
+  // Step 7.10's revoke (#1077) joins as `revokeEntry` when it is on the branch; until then Remove of a listed entry
+  // answers revokeUnavailable.
+  const actions = new AgentActions({ clock, access, connections, vdcSign })
   return {
     clock,
     listConnections: () => connections.list(),
@@ -102,7 +106,13 @@ export function connectedAgentsServices(
       (await personas())
         .filter((p) => p.vtaDid === undefined || p.vtaDid === vtaDid)
         .map((p) => ({ did: p.did, name: p.label ?? '' })),
-    reconcile: async () => (await driverFor(() => undefined)).reconcilePairing(),
+    // Records still pairing get their grant or become Not finished, and those Not finished for 10 minutes are removed
+    // (§3.10): the sweep drops only what the VTA no longer lists until step 7.10's revoke is here.
+    reconcile: async () => {
+      await (await driverFor(() => undefined)).reconcilePairing()
+      await actions.sweepNotFinished()
+    },
+    actions,
     driver: (onState) => driverFor(onState),
   }
 

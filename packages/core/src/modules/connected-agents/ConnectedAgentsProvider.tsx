@@ -8,6 +8,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 
+import type { ActionResult } from './actions'
 import type { ConnectGuard, MemoryCount } from './memories'
 import { countNotice } from './memories'
 import type { AgentConnectChoice, NumberEntry, PairingLink, PairingState } from './pairing'
@@ -43,7 +44,19 @@ export interface ConnectedAgentsServices {
   /** Records still pairing get their VDC grant, or become Not finished (§3.4, asked where the VDC policy is asked). */
   reconcile(): Promise<void>
   driver(onState: (state: PairingState) => void): Promise<PairingDriver>
+  /** Step 7.7's actions on one agent (`connected-agents/actions.ts`). Revoke is step 7.10's, not here. */
+  actions: AgentActionsPort
   reachability?: (agentId: string) => Reachability
+}
+
+/** The actions the agent list and the details call (`AgentActions`), by the agent's record id. */
+export interface AgentActionsPort {
+  widen(agentId: string, memoryId: string): Promise<ActionResult>
+  narrow(agentId: string, memoryId: string): Promise<ActionResult>
+  restore(agentId: string): Promise<ActionResult>
+  retryPending(agentId: string): Promise<ActionResult>
+  extend(agentId: string): Promise<ActionResult>
+  remove(agentId: string): Promise<ActionResult>
 }
 
 const ServicesContext = createContext<ConnectedAgentsServices | undefined>(undefined)
@@ -242,4 +255,13 @@ export function usePersonas(): { did: string; name: string }[] {
   const services = useConnectedAgentsServices()
   const load = useCallback(() => services.personas(), [services])
   return useLoaded(load, [] as { did: string; name: string }[]).value
+}
+
+/**
+ * Step 7.7's actions, for the list and the details (§3.15 items 4 and 5, §7.7). Each answers what the VTA did; the
+ * screen has already taken the owner's decision (the biometric before a widening and Extend, a confirmation before a
+ * narrowing and Restore), and refreshes its own listing after.
+ */
+export function useAgentActions(): AgentActionsPort {
+  return useConnectedAgentsServices().actions
 }

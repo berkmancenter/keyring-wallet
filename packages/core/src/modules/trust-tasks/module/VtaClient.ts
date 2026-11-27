@@ -722,6 +722,13 @@ export type AgentAccessChange = {
   act?: { from: readonly string[]; to: readonly string[] }
   /** The capability set wanted, replacing the entry's (either way). */
   capabilities?: readonly string[]
+  /**
+   * A new expiry (ISO 8601) for a temporary agent, sent as `acl/update` 0.3's `expiresAt` (Extend, §7.7). Only a time:
+   * the null that would make the entry permanent is a separate act (step 7.28), never sent from here. The schema says
+   * why: an explicit null is "a privilege increase, which a consumer SHOULD gate at least as strictly as the original
+   * grant" (`specs/acl/update/0.3/payload.schema.json`, trust-tasks at `2a66a0351`).
+   */
+  expiresAt?: string
 }
 
 /**
@@ -756,6 +763,10 @@ export function agentAccessWrites(change: AgentAccessChange): { type: string; pa
     if (added) update.act = { scope: 'contexts', contexts: to }
   }
   if (change.capabilities) update.capabilities = capabilityScopeOf(change.capabilities)
+  if (change.expiresAt !== undefined) {
+    if (Number.isNaN(Date.parse(change.expiresAt))) throw new Error(`${LOG_PREFIX} an agent's new expiry is not a time`)
+    update.expiresAt = change.expiresAt
+  }
   if (Object.keys(update).length > 0)
     // version-pinned: an agent's entry is written at acl 0.3 only, since 0.1 and 0.2 cannot state purposes (AgentAccessUnsupportedError)
     writes.push({ type: VTA_TASK.aclUpdate03, payload: { subject: change.subject, ...update } })
