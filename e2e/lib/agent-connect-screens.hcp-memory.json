@@ -1,0 +1,58 @@
+{
+  "about": "The HCP new memory (step 7.27, backlog Section C part U3). Read with agent-connect-screens.json by the screen catalogue, with the same fields. HCP words are the Hcp.<key> ids of hcp/copy.ts, read back through __tests__/fixtures/hcpWordSource.ts. The agent's name and the memory's text are data, not words, so no entry lists them.",
+  "canvas": "docs/plans/agent-connect-plan/canvas/",
+  "kit": "docs/plans/agent-connect-plan/mockups/",
+  "states": [
+    {
+      "id": "hcp-new-memory",
+      "step": "7.27",
+      "marker": "HcpNewMemory",
+      "frame": "51-hcp-new-memory.png",
+      "kit": null,
+      "words": ["Hcp.NewMemoryTitle", "Hcp.NewMemoryField", "Hcp.NewMemoryHelper", "Hcp.NewMemorySave"],
+      "frameOnly": [
+        {
+          "what": "the canvas note box (\"Canvas note, not on the phone\")",
+          "why": "a canvas note, not on the phone; \"I'm vegetarian\" is the demo script's sample, drawn here as the field's text"
+        },
+        {
+          "what": "the band \"HCP lane: behind the flag, off by default\", and the \"<title>\" stand-in",
+          "why": "canvas labels, not on the phone; the header is set by the navigator"
+        },
+        { "what": "the tab bar", "why": "set by the navigator; where the view opens from is the wiring's" }
+      ]
+    },
+    {
+      "id": "hcp-new-memory-not-saved",
+      "step": "7.27",
+      "marker": "HcpNewMemoryOutcome",
+      "steps": [{ "press": "HcpNewMemorySave" }],
+      "frame": "51-hcp-new-memory.png",
+      "kit": null,
+      "words": [
+        "Hcp.NewMemoryTitle",
+        "Hcp.NewMemoryField",
+        "Hcp.NewMemoryHelper",
+        "Hcp.MemoryNotSaved",
+        "Hcp.NewMemorySave"
+      ],
+      "frameOnly": [
+        {
+          "what": "the canvas note box (\"Canvas note, not on the phone\")",
+          "why": "a canvas note, not on the phone; \"I'm vegetarian\" is the demo script's sample, drawn here as the field's text"
+        },
+        {
+          "what": "the band \"HCP lane: behind the flag, off by default\", and the \"<title>\" stand-in",
+          "why": "canvas labels, not on the phone; the header is set by the navigator"
+        },
+        { "what": "the tab bar", "why": "set by the navigator; where the view opens from is the wiring's" }
+      ],
+      "appOnly": [
+        {
+          "what": "the line Hcp.MemoryNotSaved under the helper, with the text kept and \"Save\" there to press again",
+          "why": "the VTA could not be reached; frame 51 draws the view before Save is pressed"
+        }
+      ]
+    }
+  ]
+}
