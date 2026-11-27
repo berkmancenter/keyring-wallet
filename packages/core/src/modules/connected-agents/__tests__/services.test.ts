@@ -1,7 +1,10 @@
 import type { Agent } from '@credo-ts/core'
 
 import { memoryGenericRecords } from '../../../../__tests__/modules/vrc/fixtures/memoryGenericRecords'
+import { NOT_FINISHED_AFTER_MS } from '../pairing'
 import { administratorSigner, connectedAgentsServices, vtaPorts, type VtaSession } from '../services'
+import { AgentConnectionStore } from '../store'
+import { agentRecord, FIXTURE_NOW } from '../testing/fixtures'
 
 jest.mock('react-native-keychain', () => ({ ACCESS_CONTROL: {}, ACCESSIBLE: {}, STORAGE_TYPE: {} }))
 jest.mock('../../trust-tasks/documentProof', () => ({
@@ -91,6 +94,33 @@ describe('connectedAgentsServices', () => {
       { did: 'did:p:1', name: 'Ada at work' },
       { did: 'did:p:3', name: 'No VTA named' },
     ])
+  })
+
+  it('reconcile also sweeps unfinished pairings 10 minutes old that the VTA no longer lists (§3.10)', async () => {
+    const { session } = fakeSession('did:peer:2.admin') // its VTA lists no entry
+    const a = agent()
+    const store = new AgentConnectionStore(a)
+    const at = (msAgo: number) => new Date(FIXTURE_NOW - msAgo).toISOString()
+    await store.put(
+      agentRecord({
+        id: 'did:key:z6MkOld',
+        agentDid: 'did:key:z6MkOld',
+        state: 'notFinished',
+        createdAt: at(NOT_FINISHED_AFTER_MS),
+      })
+    )
+    await store.put(
+      agentRecord({ id: 'did:key:z6MkYoung', agentDid: 'did:key:z6MkYoung', state: 'notFinished', createdAt: at(1000) })
+    )
+    const services = connectedAgentsServices(
+      a,
+      VTA,
+      session,
+      async () => [],
+      () => FIXTURE_NOW
+    )
+    await services.reconcile()
+    expect((await store.list()).map((r) => r.id)).toEqual(['did:key:z6MkYoung'])
   })
 
   it('a driver is made over these services, idle until started', async () => {
