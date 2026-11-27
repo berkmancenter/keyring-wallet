@@ -12,29 +12,8 @@
  * @module connected-agents/proposedCopy
  */
 export const PROPOSED_COPY: Readonly<Record<string, string>> = {
-  Remove: 'C2 (the button follows from §3.10; "no confirmation" is P-b)',
-  NotFinishedLine: 'P-b',
-  ConnectAgain: 'P-d, revised after the lab measured the VTA sweeper',
-  Connecting: 'seam gap: the awaitingEnrolment phase',
-  SeeDetails: 'P-e',
-  FailSpent: 'seam gap: a spent code',
-  FailNotAPairingCode: 'seam gap: not a pairing code',
-  FailGrantRefused: 'seam gap: the grant refused',
-  FailRotationLostLimits: 'seam gap: the swapped key lost the approved limits',
-  FailHandleCollision: 'seam gap: handle collision',
-  FailGeneric: 'seam gap: invalid choice',
-  VtaTooOld: 'seam gap: a VTA below 0.84.0 (§2.6)',
-  ApproveRequester: 'seam gap: §3.2 step 5, the requester signal',
-  ApproveSameNetwork: 'seam gap: §3.2 step 5, the same-network signal',
-  ApproveOtherNetwork: 'seam gap: §3.2 step 5, the same-network signal',
-  MemoryCount_one: 'P-c',
-  MemoryCount_other: 'P-c',
-  MemoryCountRose: 'P-c',
-  MemoryCountWarning: 'P-c',
-  MemoryCountFailed: 'P-c',
-  PendingMemory: 'seam gap: finding 7 of #1048, a memory not reached yet',
-  NumberDigitEmpty: 'accessibility: §6 says each digit is announced, not in which words',
-  NumberDigitFilled: 'accessibility: as above',
+  MemoryChangeFailed: 'seam gap: a widen or narrow the VTA did not make',
+  NumberDigitFilled: 'accessibility: §6 says each digit is announced as it is typed, not in which words',
 }
 
 /**
@@ -53,6 +32,4 @@ export const NO_ROOM_FORMS: Readonly<Record<string, string>> = {
  * (a test checks it there). Settled, so not waiting on a ruling; listed so §6 stays the strict rule and each exception
  * is a decision someone made, with its source beside it.
  */
-export const SETTLED_ELSEWHERE: Readonly<Record<string, string>> = {
-  MemoryCreateFailed: '§3.15',
-}
+export const SETTLED_ELSEWHERE: Readonly<Record<string, string>> = {}

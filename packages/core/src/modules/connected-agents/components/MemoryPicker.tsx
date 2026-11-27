@@ -11,7 +11,20 @@ import { AGENT_COLORS } from './agentStyle'
 /** One memory as the picker shows it: by its name, never its context id (§6, copy rules for memory). */
 export type PickerMemory = { id: string; name: string; containsOthers: boolean }
 
-export type CreateMemoryResult = { ok: true; memory: PickerMemory } | { ok: false; code: 'duplicateName' | 'failed' }
+type CreateRefusal = 'duplicateName' | 'failed' | 'heldForApproval'
+
+/**
+ * A create's outcome. "heldForApproval": the owner's VTA asks for approval before a memory is made, so this one was
+ * not made, and the phone does not wait on its own approval; a retry would fail the same way, so nothing offers one.
+ */
+export type CreateMemoryResult = { ok: true; memory: PickerMemory } | { ok: false; code: CreateRefusal }
+
+const REFUSAL_KEY: Record<CreateRefusal, string> = {
+  duplicateName: 'ConnectedAgents.MemoryNameTaken',
+  failed: 'ConnectedAgents.MemoryCreateFailed',
+  // Never "Try again" here (§6, #1060 finding 20): a retry fails the same way. A test holds it in every language.
+  heldForApproval: 'ConnectedAgents.MemoryHeldForApproval',
+}
 
 /** A memory's name: 1 to 64 characters (§6, memory pickers). */
 export const MEMORY_NAME_MAX = 64
@@ -86,7 +99,7 @@ const MemoryPicker: React.FC<MemoryPickerProps> = ({ memories, selected, onToggl
   const [naming, setNaming] = useState(false)
   const [draft, setDraft] = useState('')
   const [creating, setCreating] = useState(false)
-  const [error, setError] = useState<'duplicateName' | 'failed' | undefined>()
+  const [error, setError] = useState<CreateRefusal | undefined>()
 
   const openNaming = (open: boolean) => {
     setNaming(open)
@@ -186,9 +199,7 @@ const MemoryPicker: React.FC<MemoryPickerProps> = ({ memories, selected, onToggl
               accessibilityLiveRegion="polite"
               testID={testIdWithKey('MemoryPickerError')}
             >
-              {error === 'duplicateName'
-                ? t('ConnectedAgents.MemoryNameTaken')
-                : t('ConnectedAgents.MemoryCreateFailed')}
+              {t(REFUSAL_KEY[error])}
             </ThemedText>
           ) : null}
           <View style={styles.footer}>
