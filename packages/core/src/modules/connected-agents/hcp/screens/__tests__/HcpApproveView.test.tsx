@@ -220,7 +220,11 @@ describe('HcpConnectFlowView', () => {
   it.each<[string, HcpApproveState, string]>([
     ['expired', { state: 'expired', message: { key: 'CodeExpired' } }, en('CodeExpired')],
     ['wrongNumber', { state: 'wrongNumber', message: { key: 'WrongNumber' } }, en('WrongNumber')],
-    ['locked', { state: 'locked', minutes: 7, message: { key: 'Locked', params: { n: '7' } } }, en('Locked', { n: '7' })],
+    [
+      'locked',
+      { state: 'locked', minutes: 7, message: { key: 'Locked', params: { n: '7' } } },
+      en('Locked', { n: '7' }),
+    ],
     [
       'failed, not approved',
       { state: 'failed', error: 'x', message: { key: 'ApproveNotApproved' } },
@@ -278,7 +282,9 @@ describe('HcpConnectFlowView', () => {
       // A value import from track C's hcp/ logic (a sibling of screens/, other than the copy) or the module's own logic
       // (a file directly under connected-agents/, not its screens/ or components/).
       const logic = [
-        ...source.matchAll(/^import (?!type )[^\n]*from '(\.\.\/(?!copy')[\w]+|\.\.\/\.\.\/(?!screens\/|components\/)[\w]+)'/gm),
+        ...source.matchAll(
+          /^import (?!type )[^\n]*from '(\.\.\/(?!copy')[\w]+|\.\.\/\.\.\/(?!screens\/|components\/)[\w]+)'/gm
+        ),
       ].map((m) => m[0])
       expect({ file, logic }).toEqual({ file, logic: [] })
     }
@@ -337,12 +343,12 @@ describe('the HCP word source', () => {
   })
 
   it('throws, naming both keys, when one template matches the other', () => {
-    expect(() => buildHcpWordSource({ Plain: { en: 'Revoke "Notes"?' }, Template: { en: 'Revoke "{{name}}"?' } })).toThrow(
-      /Hcp\.Plain.*Hcp\.Template/
-    )
-    expect(() => buildHcpWordSource({ A: { en: 'Hello {{who}}.' }, B: { en: 'Hello {{who}} and {{other}}.' } })).toThrow(
-      /Hcp\.A.*Hcp\.B/
-    )
+    expect(() =>
+      buildHcpWordSource({ Plain: { en: 'Revoke "Notes"?' }, Template: { en: 'Revoke "{{name}}"?' } })
+    ).toThrow(/Hcp\.Plain.*Hcp\.Template/)
+    expect(() =>
+      buildHcpWordSource({ A: { en: 'Hello {{who}}.' }, B: { en: 'Hello {{who}} and {{other}}.' } })
+    ).toThrow(/Hcp\.A.*Hcp\.B/)
     // Control: texts that only share a start do not count.
     expect(() => buildHcpWordSource({ A: { en: 'Revoke' }, B: { en: 'Revoke "{{name}}"?' } })).not.toThrow()
   })

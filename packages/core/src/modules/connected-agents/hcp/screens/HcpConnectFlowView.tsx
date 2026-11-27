@@ -113,7 +113,9 @@ const HcpConnectFlowView: React.FC<HcpConnectFlowViewProps> = ({
     case 'failed':
       // The failure's own copy key, chosen by case in the flow (never the error text): one case, "Not recorded",
       // says the VTA did approve, which a generic "Nothing was connected." would contradict.
-      return <End text={hcp(state.message.key, 'params' in state.message ? state.message.params : {})} onClose={onClose} />
+      return (
+        <End text={hcp(state.message.key, 'params' in state.message ? state.message.params : {})} onClose={onClose} />
+      )
     case 'cancelled':
       // The caller has closed the flow.
       return null
