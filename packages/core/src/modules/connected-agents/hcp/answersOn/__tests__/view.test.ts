@@ -1,7 +1,8 @@
 /**
  * "Answers on" as a view model, against a fake VTA port, a fake clock and the real `HcpAnswersStore` over memory
  * records: the three states' views; on, then off, then on is refused before any call; the record is written only on
- * success; `operators` is the target's operator; every payload sent and answer given validates against the vendored
+ * success, after an intent written before the send, which an unanswered or unrecorded directive leaves holding the
+ * switch where the VTA may be (an Off locked); `operators` is the target's operator; every payload sent and answer given validates against the vendored
  * schema; and a `permit` is never sent after a `deny`, even when the two are asked for at once.
  */
 import type { Agent } from '@credo-ts/core'
@@ -180,20 +181,25 @@ describe('changeHcpAnswers', () => {
       message: { key: 'AnswersRefused' },
     })
     await expect(store.get(CLIENT_VID)).resolves.toBeUndefined()
+    await expect(store.listIntents()).resolves.toEqual([])
   })
 
-  it('an unreachable VTA writes nothing: a failed Off leaves the switch on and changeable', async () => {
+  it('an unreachable VTA records nothing but keeps the intent: a failed Off reads off for good, unconfirmed', async () => {
     let fail = false
-    const { deps, store } = setup((payload, n) => (fail ? new Error('timeout') : validAnswer(payload, n)))
+    const { deps, store, sent } = setup((payload, n) => (fail ? new Error('timeout') : validAnswer(payload, n)))
     await changeHcpAnswers(deps, target(true))
     fail = true
     await expect(changeHcpAnswers(deps, target(false))).resolves.toEqual({
       ok: false,
       unreachable: true,
-      view: hcpAnswersView('on', NAME),
+      view: hcpAnswersView('offForGood', NAME, { on: false }),
       message: { key: 'AnswersUnreachable' },
     })
-    await expect(store.state(CLIENT_VID, OPERATOR)).resolves.toBe('on')
+    await expect(store.get(CLIENT_VID)).resolves.toMatchObject({ state: 'on' })
+    await expect(store.state(CLIENT_VID, OPERATOR)).resolves.toBe('offForGood')
+    // The deny may hold: no permit follows it.
+    await expect(changeHcpAnswers(deps, target(true))).resolves.toMatchObject({ ok: false, locked: true })
+    expect(sent.map((p) => p.effect)).toEqual(['permit', 'deny'])
   })
 
   it('a success with no directiveId is recorded, so an Off still locks the switch', async () => {
@@ -214,6 +220,131 @@ describe('changeHcpAnswers', () => {
     expect(sent.map((p) => p.effect)).toEqual(['permit', 'deny'])
   })
 
+  it('the intent is written before the directive is sent, and removed once it is recorded', async () => {
+    const { deps, store, port } = setup()
+    const seen: unknown[] = []
+    const answer = port.task as jest.Mock
+    const inner = answer.getMockImplementation()!
+    answer.mockImplementation(async (type: string, payload: Record<string, unknown>) => {
+      seen.push(await store.listIntents())
+      return inner(type, payload)
+    })
+    await changeHcpAnswers(deps, target(false))
+    await changeHcpAnswers(deps, target(true))
+    await changeHcpAnswers(deps, target(false))
+    expect(seen).toEqual([
+      [{ id: CLIENT_VID, operatorId: OPERATOR, on: true, startedAt: NOW }],
+      [{ id: CLIENT_VID, operatorId: OPERATOR, on: false, startedAt: NOW }],
+    ])
+    await expect(store.listIntents()).resolves.toEqual([])
+  })
+
+  it('an intent that cannot be written sends nothing', async () => {
+    const { deps, store, port } = setup()
+    jest.spyOn(store, 'putIntent').mockRejectedValueOnce(new Error('disk full'))
+    await expect(changeHcpAnswers(deps, target(true))).resolves.toEqual({
+      ok: false,
+      notSaved: true,
+      view: hcpAnswersView('off', NAME),
+      message: { key: 'AnswersNotSaved' },
+    })
+    expect(port.task).not.toHaveBeenCalled()
+    await expect(store.state(CLIENT_VID, OPERATOR)).resolves.toBe('off')
+  })
+
+  // The review of #1106: a successful Off whose record write fails must not leave the switch on and enabled.
+  it('a successful Off whose record cannot be written still reads off for good, and no permit follows', async () => {
+    const { deps, store, sent } = setup()
+    await changeHcpAnswers(deps, target(true))
+    jest.spyOn(store, 'put').mockRejectedValueOnce(new Error('disk full'))
+    await expect(changeHcpAnswers(deps, target(false))).resolves.toEqual({
+      ok: true,
+      view: hcpAnswersView('offForGood', NAME),
+      sent: true,
+      notRecorded: true,
+    })
+    const after = await loadHcpAnswersView(store, { connectionId: CLIENT_VID, name: NAME, operatorId: OPERATOR })
+    expect(after.state).toBe('offForGood')
+    expect(after.switch).toEqual({ on: false, enabled: false })
+    await expect(changeHcpAnswers(deps, target(true))).resolves.toMatchObject({ ok: false, locked: true })
+    expect(sent.map((p) => p.effect)).toEqual(['permit', 'deny'])
+  })
+
+  it('the app stopping after the send, before the record: the intent alone reads off for good', async () => {
+    const { deps, store, sent, genericRecords } = setup()
+    await changeHcpAnswers(deps, target(true))
+    // As if the app stopped between the send and `complete`: `complete` is held, and the store read afresh meanwhile.
+    let release!: () => void
+    const held = new Promise<void>((resolve) => (release = resolve))
+    jest.spyOn(store, 'complete').mockImplementationOnce(() => held)
+    const change = changeHcpAnswers(deps, target(false))
+    while (sent.length < 2) await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(sent.map((p) => p.effect)).toEqual(['permit', 'deny'])
+    const restarted = new HcpAnswersStore({ genericRecords } as unknown as Agent)
+    await expect(restarted.state(CLIENT_VID, OPERATOR)).resolves.toBe('offForGood')
+    await expect(restarted.read(CLIENT_VID, OPERATOR)).resolves.toMatchObject({ intent: { on: false } })
+    release()
+    await change
+  })
+
+  it('an unconfirmed Off is sent again on request, and settles once the VTA answers', async () => {
+    let fail = false
+    const { deps, store, sent } = setup((payload, n) => (fail ? new Error('timeout') : validAnswer(payload, n)))
+    await changeHcpAnswers(deps, target(true))
+    fail = true
+    await changeHcpAnswers(deps, target(false))
+    fail = false
+    await expect(changeHcpAnswers(deps, target(false))).resolves.toEqual({
+      ok: true,
+      view: hcpAnswersView('offForGood', NAME),
+      sent: true,
+    })
+    expect(sent.map((p) => p.effect)).toEqual(['permit', 'deny', 'deny'])
+    await expect(store.listIntents()).resolves.toEqual([])
+    await expect(store.get(CLIENT_VID)).resolves.toMatchObject({ state: 'offForGood' })
+    // Settled: a further Off sends nothing.
+    await expect(changeHcpAnswers(deps, target(false))).resolves.toMatchObject({ ok: true, sent: false })
+  })
+
+  it('an unconfirmed On reads on, so the Off that overrides it stays offered, and can be sent again', async () => {
+    let fail = true
+    const { deps, store, sent } = setup((payload, n) => (fail ? new Error('timeout') : validAnswer(payload, n)))
+    await expect(changeHcpAnswers(deps, target(true))).resolves.toEqual({
+      ok: false,
+      unreachable: true,
+      view: hcpAnswersView('on', NAME, { on: true }),
+      message: { key: 'AnswersUnreachable' },
+    })
+    expect(hcpAnswersView('on', NAME, { on: true }).confirm).toMatchObject({ turn: 'off' })
+    fail = false
+    await expect(changeHcpAnswers(deps, target(true))).resolves.toMatchObject({ ok: true, sent: true })
+    expect(sent.map((p) => p.effect)).toEqual(['permit', 'permit'])
+    await expect(
+      loadHcpAnswersView(store, { connectionId: CLIENT_VID, name: NAME, operatorId: OPERATOR })
+    ).resolves.toEqual(hcpAnswersView('on', NAME))
+  })
+
+  it('a refused Off after an unconfirmed On puts the On’s intent back: its permit may still hold', async () => {
+    const answers: Answer[] = [() => new Error('timeout'), () => refusal('permissionDenied')]
+    const { deps, store } = setup((payload, n) => answers[n - 1](payload, n))
+    await changeHcpAnswers(deps, target(true))
+    await expect(changeHcpAnswers(deps, target(false))).resolves.toMatchObject({
+      ok: false,
+      refused: 'permissionDenied',
+    })
+    await expect(store.read(CLIENT_VID, OPERATOR)).resolves.toMatchObject({ state: 'on', intent: { on: true } })
+  })
+
+  it('an unconfirmed Off through one connection locks the operator’s other connections', async () => {
+    let fail = false
+    const { deps, sent } = setup((payload, n) => (fail ? new Error('timeout') : validAnswer(payload, n)))
+    await changeHcpAnswers(deps, target(true, { connectionId: OTHER_VID }))
+    fail = true
+    await changeHcpAnswers(deps, target(false, { connectionId: OTHER_VID }))
+    await expect(changeHcpAnswers(deps, target(true))).resolves.toMatchObject({ ok: false, locked: true })
+    expect(sent.map((p) => p.effect)).toEqual(['permit', 'deny'])
+  })
+
   it('with the HCP flags off, nothing is read or sent', async () => {
     setHcpEnabled(false)
     const { deps, port, genericRecords } = setup()
@@ -226,6 +357,7 @@ describe('changeHcpAnswers', () => {
     const { deps, store } = setup(() => new HcpOffError())
     await expect(changeHcpAnswers(deps, target(true))).resolves.toEqual({ ok: false, off: true })
     await expect(store.get(CLIENT_VID)).resolves.toBeUndefined()
+    await expect(store.listIntents()).resolves.toEqual([])
   })
 
   // control: the brief's control, a permit sent after a deny is never produced.

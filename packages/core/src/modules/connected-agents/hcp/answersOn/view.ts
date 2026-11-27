@@ -4,10 +4,13 @@
  *
  * - {@link hcpAnswersView}: the row, its value, the switch, the help line and the confirmation to show before a change.
  *   `off` and `on` each confirm first (Off because it cannot be undone in P1); `offForGood` shows off, disabled, with
- *   `AnswersLocked`, and offers no change.
+ *   `AnswersLocked`, and offers no change. `unconfirmed` names a directive sent with no answer known.
  * - {@link changeHcpAnswers}: turn the switch on or off. Turning on after a `deny` is refused here, before any call:
  *   a `permit` is never sent after a `deny` for the same operator. A change to the state it is already in sends
- *   nothing. The record is written only after the VTA answered success.
+ *   nothing, unless the directive for it was sent with no answer known, which is sent again. A directive cannot be
+ *   undone or read back in P1, so an intent is written before it is sent and settled after (`./store.ts`): the
+ *   record is written only after the VTA answered success, and until then the intent holds the switch where the VTA
+ *   may be (an Off locked, an On on).
  *
  * @module connected-agents/hcp/answersOn/view
  */
@@ -15,7 +18,7 @@ import type { HcpCopyLanguage } from '../copy'
 import { isHcpEnabled } from '../hcpFlag'
 import { type HcpVtaPort, onHcpFailure } from '../vtaPort'
 import { setHcpAnswers } from './directive'
-import type { HcpAnswersRecord, HcpAnswersState, HcpAnswersStore } from './store'
+import type { HcpAnswersIntent, HcpAnswersRecord, HcpAnswersState, HcpAnswersStore } from './store'
 
 /** The confirmation shown before a change, with the directive's `text` (HCP: shown to the person when it is set). */
 export type HcpAnswersConfirm =
@@ -47,10 +50,29 @@ export type HcpAnswersView = {
     | { key: 'AnswersLocked' }
   /** What a tap on the switch asks first; absent when the switch is disabled. */
   confirm?: HcpAnswersConfirm
+  /**
+   * Present when a directive for this connection was sent and its answer is not known (the VTA was unreachable, or
+   * the app stopped before recording it): `state` already reads as if it had been set. `changeHcpAnswers` with the
+   * same `turn` sends it again, even when the switch is disabled.
+   */
+  unconfirmed?: { turn: 'on' | 'off'; message: { key: 'AnswersUnreachable' } }
 }
 
-/** The view model for a connection named `name` in `state`. */
-export function hcpAnswersView(state: HcpAnswersState, name: string): HcpAnswersView {
+/**
+ * The view model for a connection named `name` in `state`, with `intent` the connection's directive sent with no
+ * answer known, if any (`HcpAnswersStore.read`).
+ */
+export function hcpAnswersView(
+  state: HcpAnswersState,
+  name: string,
+  intent?: Pick<HcpAnswersIntent, 'on'>
+): HcpAnswersView {
+  const view = stateView(state, name)
+  if (!intent) return view
+  return { ...view, unconfirmed: { turn: intent.on ? 'on' : 'off', message: { key: 'AnswersUnreachable' } } }
+}
+
+function stateView(state: HcpAnswersState, name: string): HcpAnswersView {
   const row = { key: 'AnswersRow' } as const
   if (state === 'on') {
     return {
@@ -105,24 +127,35 @@ export interface HcpAnswersTarget {
 
 /** The view model as the store has it now. */
 export async function loadHcpAnswersView(
-  store: Pick<HcpAnswersStore, 'state'>,
+  store: Pick<HcpAnswersStore, 'read'>,
   target: HcpAnswersTarget
 ): Promise<HcpAnswersView> {
-  return hcpAnswersView(await store.state(target.connectionId, target.operatorId), target.name)
+  const { state, intent } = await store.read(target.connectionId, target.operatorId)
+  return hcpAnswersView(state, target.name, intent)
 }
 
 export interface HcpAnswersDeps {
   port: HcpVtaPort
-  store: Pick<HcpAnswersStore, 'state' | 'put' | 'locked'>
+  store: Pick<HcpAnswersStore, 'read' | 'putIntent' | 'removeIntent' | 'complete' | 'locked'>
   clock: () => Date
 }
 
 export type HcpAnswersChange =
-  /** `sent`: whether a directive was set (false when the switch was already in the state asked for). */
-  | { ok: true; view: HcpAnswersView; sent: boolean }
+  /**
+   * `sent`: whether a directive was set (false when the switch was already in the state asked for). `notRecorded`:
+   * the VTA set it but the record could not be written; the intent written before the send stays and reads the same
+   * state, so the switch still shows what the VTA holds.
+   */
+  | { ok: true; view: HcpAnswersView; sent: boolean; notRecorded?: true }
   /** Turning on after a `deny`: refused before any call. */
   | { ok: false; locked: true; view: HcpAnswersView; message: { key: 'AnswersLocked' } }
+  /** The intent could not be written, so nothing was sent. */
+  | { ok: false; notSaved: true; view: HcpAnswersView; message: { key: 'AnswersNotSaved' } }
   | { ok: false; refused: string; view: HcpAnswersView; message: { key: 'AnswersRefused' } }
+  /**
+   * No answer from the VTA: the directive may have been set, so its intent stays, and `view` reads as if it had been
+   * (an Off locked, an On on), with `unconfirmed`.
+   */
   | { ok: false; unreachable: true; view: HcpAnswersView; message: { key: 'AnswersUnreachable' } }
   /**
    * The HCP flags are off: nothing was read or sent. No copy, as in `../revoke.ts`: with the flags off no screen that
@@ -131,8 +164,16 @@ export type HcpAnswersChange =
   | { ok: false; off: true }
 
 /**
- * Turn "Answers on" on or off for one connection, after the person confirmed (`view.confirm`). Read, send and write
- * happen as one step under the operator's lock (`HcpAnswersStore.locked`).
+ * Turn "Answers on" on or off for one connection, after the person confirmed (`view.confirm`), or send again a
+ * directive left unconfirmed (`view.unconfirmed`). Read, intent, send and record happen as one step under the
+ * operator's lock (`HcpAnswersStore.locked`):
+ *
+ * 1. the intent is written; if that fails, nothing is sent (`notSaved`);
+ * 2. the directive is sent, once;
+ * 3. on success, the record is written and the intent removed (`HcpAnswersStore.complete`); if that fails, the intent
+ *    stays and reads the same state (`notRecorded`). On a refusal, or the flags found off, the directive was not set:
+ *    the intent is removed, or the connection's earlier unconfirmed intent put back, since what that one sent may
+ *    still have been set. With no answer, the intent stays (`unreachable`).
  */
 export async function changeHcpAnswers(
   deps: HcpAnswersDeps,
@@ -141,18 +182,45 @@ export async function changeHcpAnswers(
   if (!isHcpEnabled()) return { ok: false, off: true }
   const { connectionId, name, operatorId, on, language } = target
   return deps.store.locked(operatorId, async (): Promise<HcpAnswersChange> => {
-    const state = await deps.store.state(connectionId, operatorId)
-    const view = hcpAnswersView(state, name)
+    const { state, intent: earlier } = await deps.store.read(connectionId, operatorId)
+    const view = hcpAnswersView(state, name, earlier)
     if (on && state === 'offForGood') return { ok: false, locked: true, view, message: { key: 'AnswersLocked' } }
-    // Already on, or not on (off, or off for good) when asked to turn off: nothing to send.
-    if (on === (state === 'on')) return { ok: true, view, sent: false }
+    // Already on, or not on (off, or off for good) when asked to turn off: nothing to send, unless the directive
+    // for that was sent with no answer known, which is sent again.
+    const resend = earlier?.on === on
+    if (!resend && on === (state === 'on')) return { ok: true, view, sent: false }
+
+    const intent: HcpAnswersIntent = { id: connectionId, operatorId, on, startedAt: deps.clock().toISOString() }
+    try {
+      await deps.store.putIntent(intent)
+    } catch {
+      return { ok: false, notSaved: true, view, message: { key: 'AnswersNotSaved' } }
+    }
 
     const result = await setHcpAnswers(deps.port, { operatorId, on, language })
     if (!result.ok) {
-      return onHcpFailure<HcpAnswersChange>(result, {
-        refused: (code) => ({ ok: false, refused: code, view, message: { key: 'AnswersRefused' } }),
-        unreachable: () => ({ ok: false, unreachable: true, view, message: { key: 'AnswersUnreachable' } }),
-        off: () => ({ ok: false, off: true }),
+      const notSet = async (): Promise<void> => {
+        if (earlier) await deps.store.putIntent(earlier)
+        else await deps.store.removeIntent(connectionId)
+      }
+      return onHcpFailure<Promise<HcpAnswersChange>>(result, {
+        refused: async (code) => {
+          await notSet()
+          return { ok: false, refused: code, view, message: { key: 'AnswersRefused' } }
+        },
+        unreachable: async () => {
+          const now = await deps.store.read(connectionId, operatorId)
+          return {
+            ok: false,
+            unreachable: true,
+            view: hcpAnswersView(now.state, name, now.intent),
+            message: { key: 'AnswersUnreachable' },
+          }
+        },
+        off: async () => {
+          await notSet()
+          return { ok: false, off: true }
+        },
       })
     }
     const record: HcpAnswersRecord = {
@@ -162,7 +230,12 @@ export async function changeHcpAnswers(
       setAt: deps.clock().toISOString(),
       operatorId,
     }
-    await deps.store.put(record)
-    return { ok: true, view: hcpAnswersView(record.state, name), sent: true }
+    const done = { ok: true, view: hcpAnswersView(record.state, name), sent: true } as const
+    try {
+      await deps.store.complete(record)
+    } catch {
+      return { ...done, notRecorded: true }
+    }
+    return done
   })
 }
