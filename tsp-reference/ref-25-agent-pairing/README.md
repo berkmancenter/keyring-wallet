@@ -41,7 +41,7 @@ node scripts/openvtc/setup-external.mjs                  # once, at the reposito
 
 cd tsp-reference/ref-25-agent-pairing
 npm install
-npm test                                # 126 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, the recordings, the notification checks, and track C's HCP interfaces
+npm test                                # 131 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, the recordings, the notification checks, and track C's HCP interfaces
 lab/mediator.sh up mailbox              # or: open, deny
 npm start                               # every case for that mode, against the recorded result
 lab/mediator.sh down
@@ -204,7 +204,7 @@ One VTA on localhost that serves its own `did:webvh`, started by `lab/vta.sh` af
 cargo build --locked -p vta-service
 lab/vta.sh up <path to target/debug/vta> "$(git -C <that checkout> rev-parse HEAD)"
 node vta-serves.mjs        # which version of each task family this VTA serves
-node vta-run.mjs           # the 15 cases, against the recorded result for this version
+node vta-run.mjs           # the 16 cases, against the recorded result for this version
 lab/vta.sh down
 ```
 
@@ -225,7 +225,7 @@ commits, so the rung ran on three builds, each a debug build from a checkout at 
 | `keys/sign-document` 0.1, `vta/webvh/dids/create` 1.2, `vta/credentials/issue` 0.2, `credential-exchange/issue` 0.1, `vault/sign-trust-task` 0.2 (item (f)) | the same on all three | | |
 | `auth/oob/*`, `task-consent/request` | not served (`unsupportedType`) on all three | | |
 | The seeded administrator | roles `admin`, no scopes, 27 capabilities, on all three | | |
-| The 15 cases | **none can run**: `acl/grant` 0.3 and `vta/memory/put` 0.3 are not served | 15 recorded, each repeats | 15 recorded, each repeats, **the same as 0.84.0 on every case** |
+| The 16 cases | **none can run**: `acl/grant` 0.3 and `vta/memory/put` 0.3 are not served | 16 recorded, each repeats | 16 recorded, each repeats, **the same as 0.84.0 on every case** |
 
 A VTA serves one version of each `acl` task, not two. So a client speaks `acl/grant` 0.3 to a 0.84.0 or a 0.87.0
 and 0.2 to a 0.79.0, and agent connect as the plan describes it needs 0.84.0 or later.
@@ -304,6 +304,32 @@ from `acl/show`, and the entry before the widening, in the update's answer, afte
 value that differs on every run (a key, a context, a time) is recorded under a name, and the same value always
 gets the same name (`record.mjs`), so two recorded entries are equal exactly when the VTA's two answers were. `cases.test.mjs`
 asserts each line of the table above on those recorded entries, with no VTA running.
+
+### Brendan's Q7: can an agent read its own entry? (measured 2026-11-27)
+
+One case, `own-entry`: Keyring grants a fresh key an `application` entry for one memory, the agent signs in with it
+and asks about itself. It is not one of step 0.1's items. The same on 0.84.0 and 0.87.0:
+
+| The agent asks | Answer |
+|---|---|
+| `acl/show` 0.3 for its own subject | `permissionDenied` |
+| `acl/list` 0.4 with its own subject as the prefix | `permissionDenied` |
+| `auth/whoami` 0.1 | answers, with `capabilities`, `roles`, `scopes` and `session` only; the creator's DID is nowhere in it |
+| The control: the administrator's `acl/show` 0.3 of the same entry | answers, and the entry's `createdBy` is the administrator |
+
+So an agent entry cannot learn who created its entry, or read the entry at all, through a task it is allowed. The
+creator is the entry's `createdBy` member, which `acl/show` and `acl/list` render; both tasks open with
+`require_manage` (`vta-service` `operations/acl_v0_3.rs`, `vti-common` `auth/extractor.rs`), which admits only an
+administrator or an initiator, the same at 0.84.0 and 0.87.0. The refusal is that role gate, not the finer filter
+after it in both tasks (`is_acl_entry_auditable`: `acl/show` answers an entry the caller may not audit as
+`entry: null`, so a read does not disclose it exists): an agent never reaches that filter, and neither layer allows
+a caller to read its own entry. On 0.79.0
+the case cannot run: `acl/show` 0.3 and `acl/list` 0.4 are not served there.
+
+The case records `createdBy` by name, and `"<not answered>"` when the read was refused, so a refusal and an answer
+without the member differ. `cases.test.mjs` asserts each line of the table on the recorded values, the control
+with them: a broken probe would also record `permissionDenied` everywhere, and only the administrator's answer
+says the VTA refused this caller.
 
 ## Item 0.3: the notification checks
 

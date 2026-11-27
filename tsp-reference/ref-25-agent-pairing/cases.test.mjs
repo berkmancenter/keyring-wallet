@@ -67,3 +67,37 @@ for (const recording of ran) {
     assert.deepEqual(widening.onANewSession, { first: "ok", second: "ok" });
   });
 }
+
+// The recorded case `own-entry` (Brendan's Q7): what the README's "can an agent read its own entry?" table says,
+// asserted on the recorded values, the control with it. A broken probe also records permissionDenied everywhere;
+// the administrator's answer naming the creator in `createdBy` is what says the VTA refused this caller.
+const ownEntryRan = recordings.filter((recording) => !recording.cases["own-entry"]?.notRunnable);
+
+test("own-entry is recorded for every VTA version, ran on 0.84.0 and 0.87.0, and says why not on 0.79.0", () => {
+  for (const recording of recordings) assert.ok(recording.cases["own-entry"], recording.name);
+  assert.deepEqual(ownEntryRan.map((recording) => recording.source.version).sort(), ["0.84.0", "0.87.0"]);
+  const pinned = recordings.find((recording) => recording.source.version === "0.79.0");
+  assert.match(pinned.cases["own-entry"].notRunnable.join(" "), /acl\/show\/0\.3 is not served/);
+  assert.match(pinned.cases["own-entry"].notRunnable.join(" "), /acl\/list\/0\.4 is not served/);
+});
+
+for (const recording of ownEntryRan) {
+  const recorded = recording.cases["own-entry"];
+
+  test(`${recording.name}: the agent cannot read its own entry, or learn its creator, through a task it is allowed`, () => {
+    assert.equal(recorded.grant, "ok");
+    assert.deepEqual(recorded.asTheAgent, {
+      aclShowOwn: "permissionDenied",
+      aclShowOwnCreatedBy: "<not answered>",
+      aclListOwn: "permissionDenied",
+      aclListOwnCreatedBy: "<not answered>",
+      whoami: "ok",
+      whoamiMembers: ["capabilities", "roles", "scopes", "session"],
+      whoamiMentionsCreator: false,
+    });
+  });
+
+  test(`${recording.name}: the control: the administrator's acl/show of the same entry answers, with createdBy`, () => {
+    assert.deepEqual(recorded.control, { aclShowAsAdministrator: "ok", createdBy: "<the administrator>" });
+  });
+}
