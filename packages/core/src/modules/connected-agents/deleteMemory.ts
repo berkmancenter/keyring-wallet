@@ -8,10 +8,12 @@
  * with `includeValues: false`, every page) and names the agents whose entry's `act` names the memory, and only
  * {@link deleteMemory}, called with the owner's confirmation, sends the delete, always with `force: true`.
  *
- * **What it writes.** After a delete the VTA confirmed, each `AgentConnection` record bound to the memory loses the id
- * from `memoryContexts` and `contexts`, each write one `store.update(record.id, r => ({ ...r, ... }))` that spreads the
- * record read under the store's lock and changes only those two members. No record is removed: step 7.10's reconcile
- * owns that, for an agent whose only context it was.
+ * **What it writes.** After a delete the VTA confirmed, every `AgentConnection` record that lists the id in
+ * `memoryContexts` or `contexts` loses it from both, whether or not its entry still names the memory (a drifted record
+ * would otherwise keep offering a memory that is gone). The records come from one `store.list()`, not from the entries;
+ * each affected record is written once, by one `store.update(record.id, r => ({ ...r, ... }))` that spreads the record
+ * read under the store's lock and changes only those two members. No record is removed: step 7.10's reconcile owns
+ * that, for an agent whose only context it was. A write that fails is counted in `recordsNotUpdated`, never hidden.
  *
  * **Held, never waited on.** An approval rule on `vta/contexts/delete` can hold the call; a held call throws, and the
  * `isHeld` port classifies it, as `createMemory` does (#1060 finding 20). The phone never waits on its own approval.
@@ -23,6 +25,7 @@
 
 import { countMemory, countNotice, MemoryCount, MemoryPort } from './memories'
 import type { AgentConnectionStore } from './store'
+import type { AgentConnection } from './types'
 
 /** One ACL entry as `VtaClient.listAcl` reads it: its subject, its label and its `act` as stated. */
 export type DeleteMemoryAclEntry = {
@@ -41,8 +44,8 @@ export interface DeleteMemoryPorts {
   isHeld(error: unknown): boolean
   /** `vta/memory/list/0.3`, for the item count. */
   task: MemoryPort['task']
-  /** The agents' records: a subject's record, and the one write this step makes. */
-  store: Pick<AgentConnectionStore, 'findByKey' | 'update'>
+  /** The agents' records: every record, a subject's record, and the one write per record this step makes. */
+  store: Pick<AgentConnectionStore, 'list' | 'findByKey' | 'update'>
 }
 
 /** An agent the delete removes the memory from: its subject and the name to show ('' when there is none). */
@@ -53,8 +56,14 @@ export type DeletePreview =
   | { ok: true; count: MemoryCount; overWarning: boolean; agents: DeleteMemoryAgent[] }
   | { ok: false; code: 'unreachable' }
 
-/** The delete's answer. `heldForApproval`: an approval rule holds it; its words name the rule, never "Try again". */
-export type DeleteMemoryResult = { ok: true } | { ok: false; code: 'heldForApproval' | 'unreachable' }
+/**
+ * The delete's answer. `heldForApproval`: an approval rule holds it; its words name the rule, never "Try again".
+ * `recordsNotUpdated`: how many records listing the memory could not be written after the delete (0 when all were);
+ * those still name a memory that is gone until the reconcile clears them, so a caller can say so.
+ */
+export type DeleteMemoryResult =
+  | { ok: true; recordsNotUpdated: number }
+  | { ok: false; code: 'heldForApproval' | 'unreachable' }
 
 /**
  * Whether an entry names the memory: only an `act` stated as `contexts`, or implied by a 0.1 entry's shape
@@ -64,6 +73,11 @@ function entryNamesMemory(entry: DeleteMemoryAclEntry, memoryId: string): boolea
   const act = entry.act
   if (!act || (act.stated !== 'contexts' && act.stated !== 'byShape')) return false
   return Array.isArray(act.contexts) && act.contexts.includes(memoryId)
+}
+
+/** Whether a record lists the memory, in `memoryContexts` or in `contexts`. */
+function listsMemory(record: AgentConnection, memoryId: string): boolean {
+  return record.memoryContexts.includes(memoryId) || record.contexts.includes(memoryId)
 }
 
 /**
@@ -86,19 +100,21 @@ export async function previewDelete(ports: DeleteMemoryPorts, memoryId: string):
     const record = await ports.store.findByKey(entry.subject)
     agents.push({ subject: entry.subject, name: record?.name || entry.label || '' })
   }
+  // overWarning follows countNotice (memories.ts): change the threshold there, and this follows it.
   return { ok: true, count, overWarning: countNotice(count.count, undefined).overWarning, agents }
 }
 
 /**
  * Delete the memory, after the owner confirmed the preview (§3.15: `force` only after that confirmation). `confirmed`
  * is the literal `true`, so no caller can pass an unconfirmed delete; a value that is not `true` at run time throws
- * before anything is sent. The bound entries are listed first (the delete removes what names the memory), then
- * `deleteContext(memoryId, true)`. A held call is `heldForApproval`, any other failure `unreachable`, and either way
- * no record is written.
+ * before anything is sent. The bound entries are listed first (the delete removes what names the memory), and the
+ * records with them (one `store.list()`: a store that cannot be read now could not be cleaned afterwards), then
+ * `deleteContext(memoryId, true)`. A listing that fails is `unreachable` with nothing sent; a held call is
+ * `heldForApproval`, any other failure `unreachable`, and in each case no record is written.
  *
- * Once the VTA has deleted it, each bound record loses the id from `memoryContexts` and `contexts`. A record that
- * cannot be written is left for the reconcile (§3.9 step 5, "Lost access"): the memory is gone, so the answer stays
- * `ok`.
+ * Once the VTA has deleted it, every record listing the id in `memoryContexts` or `contexts` loses it from both, read
+ * again under the store's lock. A record that cannot be written is counted in `recordsNotUpdated` and left for the
+ * reconcile (§3.9 step 5, "Lost access"): the memory is gone, so the answer stays `ok`.
  */
 export async function deleteMemory(
   ports: DeleteMemoryPorts,
@@ -106,9 +122,10 @@ export async function deleteMemory(
   confirmed: true
 ): Promise<DeleteMemoryResult> {
   if (confirmed !== true) throw new Error('a memory is deleted only after the owner confirms')
-  let entries: DeleteMemoryAclEntry[]
+  let records: AgentConnection[]
   try {
-    entries = await ports.listEntries()
+    await ports.listEntries()
+    records = await ports.store.list()
   } catch {
     return { ok: false, code: 'unreachable' }
   }
@@ -117,14 +134,11 @@ export async function deleteMemory(
   } catch (error) {
     return { ok: false, code: ports.isHeld(error) ? 'heldForApproval' : 'unreachable' }
   }
-  const done = new Set<string>()
-  for (const entry of entries.filter((e) => entryNamesMemory(e, memoryId))) {
+  let recordsNotUpdated = 0
+  for (const record of records.filter((r) => listsMemory(r, memoryId))) {
     try {
-      const record = await ports.store.findByKey(entry.subject)
-      if (!record || done.has(record.id)) continue
-      done.add(record.id)
       await ports.store.update(record.id, (r) =>
-        r.memoryContexts.includes(memoryId) || r.contexts.includes(memoryId)
+        listsMemory(r, memoryId)
           ? {
               ...r,
               memoryContexts: r.memoryContexts.filter((c) => c !== memoryId),
@@ -133,8 +147,9 @@ export async function deleteMemory(
           : r
       )
     } catch {
-      // Left for the reconcile: the memory is already deleted.
+      // The memory is already deleted, so the answer stays ok: the record is counted, and left for the reconcile.
+      recordsNotUpdated += 1
     }
   }
-  return { ok: true }
+  return { ok: true, recordsNotUpdated }
 }

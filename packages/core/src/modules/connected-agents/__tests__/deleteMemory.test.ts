@@ -2,8 +2,9 @@
  * Step 7.16, Delete memory, the logic (docs/plans/agent-connect-plan.md §3.15 "Deleting a memory"). Its acceptance
  * line, one describe each: a memory holding only items is never deleted without the confirmation (`force` is sent only
  * by `deleteMemory`, only when confirmed); the agents named are those whose `act` names the id; the count warning shows
- * above the configured count. And the record contract: after a confirmed delete, each bound record loses the id from
- * `memoryContexts` and `contexts` through `store.update`, every other member kept, no record removed.
+ * above the configured count. And the record contract: after a confirmed delete, every record that lists the id (found
+ * by `store.list()`, drifted or not) loses it from `memoryContexts` and `contexts` through one `store.update`, every
+ * other member kept, no record removed, and each failed write counted in `recordsNotUpdated`.
  */
 import { DeleteMemoryAclEntry, DeleteMemoryPorts, deleteMemory, previewDelete } from '../deleteMemory'
 import { MEMORY_COUNT_WARNING, MEMORY_LIST_TASK } from '../memories'
@@ -65,10 +66,14 @@ function world(opts: {
   listFails?: boolean
   countFails?: boolean
   deleteError?: Error
+  storeListFails?: boolean
+  /** Record ids whose `update` throws. */
+  failUpdates?: string[]
 }) {
   const store = new Map((opts.records ?? []).map((r) => [r.id, r]))
   const deletes: { id: string; force: boolean }[] = []
   const updates: string[] = []
+  const updateCalls: string[] = []
   const all = opts.items ?? []
   const ports: DeleteMemoryPorts = {
     listEntries: async () => {
@@ -94,8 +99,14 @@ function world(opts: {
       }
     },
     store: {
+      list: async () => {
+        if (opts.storeListFails) throw new Error('storage')
+        return [...store.values()]
+      },
       findByKey: async (did) => [...store.values()].find((r) => r.id === did || r.agentDid === did),
       update: async (id, change) => {
+        updateCalls.push(id)
+        if (opts.failUpdates?.includes(id)) throw new Error('storage')
         const current = store.get(id)
         if (!current) return undefined
         const next = change(current)
@@ -106,7 +117,10 @@ function world(opts: {
       },
     },
   }
-  return { ports, store, deletes, updates }
+  // The port leaves out AgentConnectionStore.remove, so the type already forbids a removal; the fake has one anyway,
+  // so a removal reached through a cast would still show in the store.
+  Object.assign(ports.store, { remove: async (id: string) => void store.delete(id) })
+  return { ports, store, deletes, updates, updateCalls }
 }
 
 class HeldError extends Error {}
@@ -216,7 +230,7 @@ describe('a memory is never deleted without the confirmation', () => {
 
   it('a confirmed call sends force: true, once, for the memory', async () => {
     const w = world({ entries: [], items: items(2) })
-    expect(await deleteMemory(w.ports, MEMORY, true)).toEqual({ ok: true })
+    expect(await deleteMemory(w.ports, MEMORY, true)).toEqual({ ok: true, recordsNotUpdated: 0 })
     expect(w.deletes).toEqual([{ id: MEMORY, force: true }])
   })
 })
@@ -249,9 +263,16 @@ describe('a held or failed delete', () => {
     expect(await deleteMemory(w.ports, MEMORY, true)).toEqual({ ok: false, code: 'unreachable' })
     expect(w.deletes).toEqual([])
   })
+
+  it('records that cannot be listed send no delete', async () => {
+    const w = world({ entries: [], records: [record(K_A, 'A', [MEMORY])], storeListFails: true })
+    expect(await deleteMemory(w.ports, MEMORY, true)).toEqual({ ok: false, code: 'unreachable' })
+    expect(w.deletes).toEqual([])
+    expect(w.updates).toEqual([])
+  })
 })
 
-describe('after a confirmed delete, the bound records', () => {
+describe('after a confirmed delete, the records that list the memory', () => {
   const entries = [
     contextsEntry(K_A2, [MEMORY, OTHER_MEMORY, 'keyring']),
     { subject: K_B, act: { stated: 'byShape', contexts: [MEMORY] } },
@@ -266,7 +287,7 @@ describe('after a confirmed delete, the bound records', () => {
   it('lose the id from memoryContexts and contexts, every other member kept', async () => {
     const w = world({ entries, records: records() })
     const before = new Map([...w.store].map(([k, v]) => [k, { ...v }]))
-    expect(await deleteMemory(w.ports, MEMORY, true)).toEqual({ ok: true })
+    expect(await deleteMemory(w.ports, MEMORY, true)).toEqual({ ok: true, recordsNotUpdated: 0 })
     expect(w.updates.sort()).toEqual([K_A, K_B].sort())
     expect(w.store.get(K_A)).toEqual({
       ...before.get(K_A),
@@ -279,11 +300,46 @@ describe('after a confirmed delete, the bound records', () => {
     expect(w.store.size).toBe(3)
   })
 
-  it('a record that cannot be written leaves the answer ok: the memory is gone', async () => {
-    const w = world({ entries, records: records() })
-    w.ports.store.update = async () => {
-      throw new Error('storage')
+  it('a drifted record (it lists the id, its entry does not name it) is cleaned too', async () => {
+    const w = world({
+      entries: [contextsEntry(K_C, [OTHER_MEMORY])],
+      records: [record(K_C, 'C', [MEMORY, OTHER_MEMORY])],
+    })
+    const before = { ...w.store.get(K_C) }
+    expect(await deleteMemory(w.ports, MEMORY, true)).toEqual({ ok: true, recordsNotUpdated: 0 })
+    expect(w.updates).toEqual([K_C])
+    expect(w.store.get(K_C)).toEqual({ ...before, memoryContexts: [OTHER_MEMORY], contexts: [OTHER_MEMORY, 'keyring'] })
+  })
+
+  it('a record listing the id only in contexts, with no entry at all, is cleaned', async () => {
+    const onlyContexts = { ...record(K_D, 'D', [OTHER_MEMORY]), contexts: [MEMORY, OTHER_MEMORY, 'keyring'] }
+    const w = world({ entries: [], records: [onlyContexts] })
+    expect(await deleteMemory(w.ports, MEMORY, true)).toEqual({ ok: true, recordsNotUpdated: 0 })
+    expect(w.updates).toEqual([K_D])
+    expect(w.store.get(K_D)).toEqual({ ...onlyContexts, contexts: [OTHER_MEMORY, 'keyring'] })
+  })
+
+  it('each affected record is written once, and no record is removed', async () => {
+    const w = world({
+      // Two entries resolve to A (its old and its current key), and C's record drifted.
+      entries: [...entries, contextsEntry(K_A, [MEMORY])],
+      records: [...records(), record(K_D, 'D', [MEMORY])],
+    })
+    expect(await deleteMemory(w.ports, MEMORY, true)).toEqual({ ok: true, recordsNotUpdated: 0 })
+    expect(w.updates.sort()).toEqual([K_A, K_B, K_D].sort())
+    expect(w.updateCalls.sort()).toEqual([K_A, K_B, K_D].sort())
+    expect([...w.store.keys()].sort()).toEqual([K_A, K_B, K_C, K_D].sort())
+    for (const r of w.store.values()) {
+      expect(r.memoryContexts).not.toContain(MEMORY)
+      expect(r.contexts).not.toContain(MEMORY)
     }
-    expect(await deleteMemory(w.ports, MEMORY, true)).toEqual({ ok: true })
+  })
+
+  it('recordsNotUpdated counts each record whose write failed, and the answer stays ok: the memory is gone', async () => {
+    const w = world({ entries, records: [...records(), record(K_D, 'D', [MEMORY])], failUpdates: [K_A, K_D] })
+    expect(await deleteMemory(w.ports, MEMORY, true)).toEqual({ ok: true, recordsNotUpdated: 2 })
+    expect(w.updates).toEqual([K_B])
+    expect(w.store.get(K_A)?.memoryContexts).toContain(MEMORY)
+    expect(w.store.size).toBe(4)
   })
 })
