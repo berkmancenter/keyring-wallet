@@ -19,6 +19,7 @@ import ConnectedView, { ConnectingView } from '../../screens/ConnectedView'
 import ConnectFailureView from '../../screens/ConnectFailureView'
 import ConnectNumberView from '../../screens/ConnectNumberView'
 import ConnectScanView from '../../screens/ConnectScanView'
+import RevokeAgentSheet from '../../screens/RevokeAgentSheet'
 
 const none = () => undefined
 const never = () => new Promise<never>(() => undefined)
@@ -187,4 +188,22 @@ export const SCREEN_STATES: Record<string, () => React.ReactElement> = {
   'change-memories-widen': () => changeMemories,
   'change-memories-narrow': () => changeMemories,
   'contacts-row': () => <AgentContactCard name="Notes helper" onPress={none} />,
+  revoke: () => <RevokeAgentSheet name="Notes helper" hasRooms onRevoke={never} onKeep={none} />,
+  'revoke-no-rooms': () => <RevokeAgentSheet name="Notes helper" hasRooms={false} onRevoke={never} onKeep={none} />,
+  'revoke-unreachable': () => (
+    <RevokeAgentSheet
+      name="Notes helper"
+      hasRooms={false}
+      onRevoke={async () => ({ kind: 'unreachable' as const })}
+      onKeep={none}
+    />
+  ),
+  'revoke-not-confirmed': () => (
+    <RevokeAgentSheet
+      name="Notes helper"
+      hasRooms={false}
+      onRevoke={async () => ({ kind: 'notConfirmed' as const })}
+      onKeep={none}
+    />
+  ),
 }
