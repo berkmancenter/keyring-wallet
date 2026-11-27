@@ -193,7 +193,7 @@ describe("Keyring's own envelopes", () => {
 
   it('a document signed by another key, or naming another issuer, is a proof refusal', async () => {
     const intruder = didKeySigner()
-    const byIntruder = await signedAs(intruder, chat())
+    const byIntruder = await signEnvelope(intruder.agent, chat(), intruder.did)
     expect((await verifyEnvelope(verifier, byIntruder, expectation())).result).toBe('proof')
     const claimed = { ...byIntruder, issuer: keyring.did }
     expect((await verifyEnvelope(verifier, claimed, expectation())).result).toBe('proof')
