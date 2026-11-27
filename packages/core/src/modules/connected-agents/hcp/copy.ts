@@ -31,11 +31,25 @@ export type HcpCopyKey =
   | 'Revoke'
   | 'Keep'
   | 'RevokeUnreachable'
+  | 'RevokeRefused'
   | 'NewMemoryTitle'
   | 'NewMemoryField'
   | 'NewMemoryHelper'
   | 'NewMemorySave'
   | 'MemoryNotSaved'
+  | 'MemoryRefused'
+  | 'MemoryNoVta'
+  | 'ApproveNotApproved'
+  | 'ApproveNotRecorded'
+  | 'ApproveDeclined'
+  | 'ApproveAnsweredElsewhere'
+  | 'ApproveCancelled'
+
+/**
+ * The keys for a refusal (added after the brief, at review): unlike `RevokeUnreachable` and `MemoryNotSaved`, the
+ * same request fails the same way every time, so none of these strings may offer another attempt.
+ */
+export const HCP_REFUSAL_KEYS = ['RevokeRefused', 'MemoryRefused'] as const satisfies readonly HcpCopyKey[]
 
 export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string; source: HcpCopySource }> = {
   ApproveTitle: {
@@ -140,6 +154,14 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     ptBr: 'Não conseguimos falar com seu VTA, então "{{name}}" continua conectado.',
     source: 'plan §6',
   },
+  // Plan §6 has no words for a refused revoke; this follows its "Your VTA refused this connection. Nothing was
+  // connected." A refusal (for example `notFound`, a grant the VTA no longer holds) repeats, so no "try again".
+  RevokeRefused: {
+    en: 'Your VTA refused to revoke "{{name}}", so nothing changed here.',
+    fr: "Votre VTA a refusé de révoquer « {{name}} », donc rien n'a changé ici.",
+    ptBr: 'Seu VTA recusou revogar "{{name}}", então nada mudou aqui.',
+    source: 'PROPOSED',
+  },
   NewMemoryTitle: {
     en: 'Add a memory for "{{name}}"',
     fr: 'Ajouter un souvenir pour « {{name}} »',
@@ -168,6 +190,60 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     en: "We couldn't reach your VTA, so this memory wasn't saved.",
     fr: "Nous n'avons pas pu joindre votre VTA, donc ce souvenir n'a pas été enregistré.",
     ptBr: 'Não conseguimos falar com seu VTA, então esta memória não foi salva.',
+    source: 'PROPOSED',
+  },
+  // Plan §6 has no words for a refused memory; as `RevokeRefused`, it follows "Your VTA refused this connection." and
+  // offers no retry, since the same memory would be refused again.
+  MemoryRefused: {
+    en: "Your VTA refused this memory, so it wasn't saved.",
+    fr: "Votre VTA a refusé ce souvenir, donc il n'a pas été enregistré.",
+    ptBr: 'Seu VTA recusou esta memória, então ela não foi salva.',
+    source: 'PROPOSED',
+  },
+  // Added at review: a phone with no manager DID is not signed in to a VTA, which is not an unreachable one, and
+  // nothing was sent. Plan §6 has no sign-in words to reuse.
+  MemoryNoVta: {
+    en: "This phone isn't signed in to your VTA, so this memory wasn't saved.",
+    fr: "Ce téléphone n'est pas identifié auprès de votre VTA, donc ce souvenir n'a pas été enregistré.",
+    ptBr: 'Este telefone não está conectado ao seu VTA, então esta memória não foi salva.',
+    source: 'PROPOSED',
+  },
+  // Added at review, the approve flow's `failed` and `cancelled`, one key per case, never the error text. Plan §6 has
+  // words for none of them.
+  // Nothing was approved (the record before `decide` failed, or no name was given): another attempt is safe.
+  ApproveNotApproved: {
+    en: 'Nothing was approved, so nothing was connected. Run the command again.',
+    fr: "Rien n'a été approuvé, donc rien n'a été connecté. Relancez la commande.",
+    ptBr: 'Nada foi aprovado, então nada foi conectado. Execute o comando novamente.',
+    source: 'PROPOSED',
+  },
+  // The VTA approved and the grant exists; only Keyring's record failed, and the reconcile completes it. No other
+  // attempt may be offered: a second approval would create a second grant.
+  ApproveNotRecorded: {
+    en: 'Your VTA approved "{{name}}". It will show as connected the next time Keyring starts.',
+    fr: 'Votre VTA a approuvé « {{name}} ». Il apparaîtra comme connecté au prochain démarrage de Keyring.',
+    ptBr: 'Seu VTA aprovou "{{name}}". Ele vai aparecer como conectado na próxima vez que o Keyring abrir.',
+    source: 'PROPOSED',
+  },
+  // The VTA did not approve (the request settled otherwise, carried its own error, or `decide` failed). It says
+  // nothing about whether something was connected: after a failed `decide` the reconcile may still complete it.
+  ApproveDeclined: {
+    en: "Your VTA didn't approve this connection.",
+    fr: "Votre VTA n'a pas approuvé cette connexion.",
+    ptBr: 'Seu VTA não aprovou esta conexão.',
+    source: 'PROPOSED',
+  },
+  // The request was approved elsewhere in Keyring (the ordinary requests list) while this flow waited: not declined.
+  ApproveAnsweredElsewhere: {
+    en: 'This request was already answered elsewhere in Keyring.',
+    fr: 'Cette demande a déjà reçu une réponse ailleurs dans Keyring.',
+    ptBr: 'Este pedido já foi respondido em outro lugar do Keyring.',
+    source: 'PROPOSED',
+  },
+  ApproveCancelled: {
+    en: 'Cancelled. Nothing was connected.',
+    fr: "Annulé. Rien n'a été connecté.",
+    ptBr: 'Cancelado. Nada foi conectado.',
     source: 'PROPOSED',
   },
 }
