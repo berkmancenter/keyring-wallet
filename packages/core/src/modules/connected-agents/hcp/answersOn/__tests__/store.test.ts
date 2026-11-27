@@ -1,13 +1,14 @@
 /**
  * The "Answers on" record over memory generic records: one per connection under `keyring/hcp-answers`; no record is
- * `off`; a `deny` for an operator locks every connection of that operator; and the operator lock queues changes.
+ * `off`; a `deny` for an operator locks every connection of that operator; an intent written before a send reads as
+ * if its directive were set; and the operator lock queues changes.
  */
 import type { Agent } from '@credo-ts/core'
 
 import { memoryGenericRecords } from '../../../../../../__tests__/modules/vrc/fixtures/memoryGenericRecords'
 import { HcpConnectionStore } from '../../store'
 import { CLIENT_VID, OTHER_VID } from '../../__tests__/fixtures/hcpApproval'
-import { HcpAnswersStore, type HcpAnswersRecord } from '../store'
+import { HcpAnswersStore, type HcpAnswersIntent, type HcpAnswersRecord } from '../store'
 
 const OPERATOR = 'did:web:labs.example'
 const OTHER_OPERATOR = 'did:web:other.example'
@@ -23,6 +24,14 @@ const record = (change: Partial<HcpAnswersRecord> = {}): HcpAnswersRecord => ({
   directiveId: 'urn:uuid:d5f7b9c1-3e2a-4d6f-8b0e-2c4a6e8f0b19',
   setAt: '2026-11-27T12:00:01.000Z',
   operatorId: OPERATOR,
+  ...change,
+})
+
+const intent = (change: Partial<HcpAnswersIntent> = {}): HcpAnswersIntent => ({
+  id: CLIENT_VID,
+  operatorId: OPERATOR,
+  on: false,
+  startedAt: '2026-11-27T12:00:00.000Z',
   ...change,
 })
 
@@ -73,6 +82,44 @@ describe('HcpAnswersStore', () => {
     await store.put(record())
     await expect(new HcpConnectionStore(agent).list()).resolves.toEqual([])
     await expect(store.list()).resolves.toEqual([record()])
+  })
+
+  it('keeps an intent under its own kind, not listed as a record; complete writes the record and removes it', async () => {
+    const { agent, genericRecords } = fakeAgent()
+    const store = new HcpAnswersStore(agent)
+    await store.putIntent(intent())
+    expect(genericRecords.records.map((r) => r.tags)).toEqual([
+      { recordType: 'keyring/hcp-answers', kind: 'answers-setting', key: CLIENT_VID },
+    ])
+    await expect(store.list()).resolves.toEqual([])
+    await expect(store.listIntents()).resolves.toEqual([intent()])
+    await store.complete(record({ state: 'offForGood' }))
+    await expect(store.listIntents()).resolves.toEqual([])
+    await expect(store.list()).resolves.toEqual([record({ state: 'offForGood' })])
+  })
+
+  it('an intent reads as if its directive were set: a deny off for good, operator-wide; a permit on, own only', async () => {
+    const { agent } = fakeAgent()
+    const store = new HcpAnswersStore(agent)
+    await store.putIntent(intent({ on: true }))
+    await expect(store.read(CLIENT_VID, OPERATOR)).resolves.toEqual({ state: 'on', intent: intent({ on: true }) })
+    await expect(store.state(OTHER_VID, OPERATOR)).resolves.toBe('off')
+    await store.putIntent(intent({ id: OTHER_VID }))
+    await expect(store.read(CLIENT_VID, OPERATOR)).resolves.toEqual({
+      state: 'offForGood',
+      intent: intent({ on: true }),
+    })
+    await expect(store.state(CLIENT_VID, OTHER_OPERATOR)).resolves.toBe('off')
+    await store.removeIntent(OTHER_VID)
+    await expect(store.state(CLIENT_VID, OPERATOR)).resolves.toBe('on')
+  })
+
+  it('a record and its intent left side by side (stopped inside complete) read the same state', async () => {
+    const { agent } = fakeAgent()
+    const store = new HcpAnswersStore(agent)
+    await store.put(record({ state: 'offForGood' }))
+    await store.putIntent(intent())
+    await expect(store.state(CLIENT_VID, OPERATOR)).resolves.toBe('offForGood')
   })
 
   it('locked runs one operator’s work in order, and another operator’s beside it', async () => {

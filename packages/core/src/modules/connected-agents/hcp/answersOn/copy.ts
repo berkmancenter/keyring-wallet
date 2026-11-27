@@ -29,6 +29,7 @@ export type AnswersCopyKey =
   | 'AnswersOffDirectiveText'
   | 'AnswersRefused'
   | 'AnswersUnreachable'
+  | 'AnswersNotSaved'
 
 /**
  * The refusal: the same change is refused the same way every time, so it never offers another attempt (only
@@ -135,10 +136,21 @@ export const ANSWERS_COPY: Record<AnswersCopyKey, { en: string; fr: string; ptBr
     ptBr: 'Seu VTA não aceitou esta mudança.',
     source: 'PROPOSED',
   },
+  /**
+   * Not the brief's "…so nothing changed.": a directive sent with no answer may have been set, and Keyring holds the
+   * switch as if it had been (`./store.ts`), so the copy cannot say nothing changed.
+   */
   AnswersUnreachable: {
-    en: "We couldn't reach your VTA, so nothing changed.",
-    fr: 'Impossible de joindre votre VTA : rien n’a changé.',
-    ptBr: 'Não foi possível contatar seu VTA, então nada mudou.',
+    en: "We couldn't reach your VTA, so we can't tell whether this changed.",
+    fr: 'Impossible de joindre votre VTA : nous ne savons pas si ce changement a été pris en compte.',
+    ptBr: 'Não foi possível contatar seu VTA, então não sabemos se esta mudança foi feita.',
+    source: 'PROPOSED',
+  },
+  /** The intent could not be written before the send, so nothing was sent (`./view.ts`). */
+  AnswersNotSaved: {
+    en: "Keyring couldn't save this change, so it wasn't sent.",
+    fr: 'Keyring n’a pas pu enregistrer ce changement : il n’a pas été envoyé.',
+    ptBr: 'O Keyring não conseguiu salvar esta mudança, então ela não foi enviada.',
     source: 'PROPOSED',
   },
 }

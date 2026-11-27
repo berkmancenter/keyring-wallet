@@ -34,10 +34,14 @@ const TABLE: [AnswersCopyKey, string, 'plan §6' | 'PROPOSED'][] = [
   ['AnswersOnDirectiveText', "You may answer other people in rooms you've been added to.", 'PROPOSED'],
   ['AnswersOffDirectiveText', "Don't answer other people.", 'PROPOSED'],
   ['AnswersRefused', "Your VTA didn't accept this change.", 'PROPOSED'],
-  ['AnswersUnreachable', "We couldn't reach your VTA, so nothing changed.", 'PROPOSED'],
+  // Changed from the table's "…so nothing changed.": an unanswered directive may have been set (review of #1106).
+  ['AnswersUnreachable', "We couldn't reach your VTA, so we can't tell whether this changed.", 'PROPOSED'],
 ]
-/** Added beyond the table: the turn-off confirmation's two buttons, which the table does not name. */
-const ADDED: AnswersCopyKey[] = ['AnswersOffTurnOff', 'AnswersOffKeep']
+/**
+ * Added beyond the table: the turn-off confirmation's two buttons, which the table does not name, and the intent
+ * that could not be written before a send.
+ */
+const ADDED: AnswersCopyKey[] = ['AnswersOffTurnOff', 'AnswersOffKeep', 'AnswersNotSaved']
 const KEYS = [...TABLE.map(([key]) => key), ...ADDED]
 
 const RETRY = /try again|again|retry|réessa|relance|de nouveau|à nouveau|tente de novo|novamente|de novo/i
