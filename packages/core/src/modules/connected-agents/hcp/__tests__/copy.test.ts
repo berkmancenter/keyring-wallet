@@ -30,13 +30,15 @@ const KEYS: HcpCopyKey[] = [
   'MemoryNotSaved',
   // Added at review, beyond the brief's table: the refusals.
   'MemoryRefused',
+  // Added at review: no manager DID, so not signed in to a VTA.
+  'MemoryNoVta',
 ]
 /** An offer of another attempt, in any of the three languages. */
 const RETRY = /try again|again|retry|réessa|relance|de nouveau|à nouveau|tente de novo|novamente|de novo/i
 const FORBIDDEN = /instant|encrypted|private|no trace/i
 
 describe('HCP_COPY', () => {
-  it('has exactly the keys of the brief’s table, and the two refusal keys added at review', () => {
+  it('has exactly the keys of the brief’s table, and the three keys added at review', () => {
     expect(Object.keys(HCP_COPY).sort()).toEqual([...KEYS].sort())
   })
 
@@ -77,6 +79,17 @@ describe('HCP_COPY', () => {
     expect(HCP_COPY.RevokeRefused.en).not.toBe(HCP_COPY.RevokeUnreachable.en)
     expect(HCP_COPY.MemoryRefused.en).not.toBe(HCP_COPY.MemoryNotSaved.en)
     expect(hcpPlaceholders(HCP_COPY.RevokeRefused.en)).toEqual(['name'])
+  })
+
+  it('no manager DID has its own key, PROPOSED, not the unreachable or refused strings, and offers no retry', () => {
+    const { en, fr, ptBr, source } = HCP_COPY.MemoryNoVta
+    expect(source).toBe('PROPOSED')
+    for (const text of [en, fr, ptBr]) expect(text).not.toMatch(RETRY)
+    for (const lang of ['en', 'fr', 'ptBr'] as const) {
+      expect(HCP_COPY.MemoryNoVta[lang]).not.toBe(HCP_COPY.MemoryNotSaved[lang])
+      expect(HCP_COPY.MemoryNoVta[lang]).not.toBe(HCP_COPY.MemoryRefused[lang])
+    }
+    expect(en).not.toMatch(/couldn't reach/i)
   })
 
   // control: the retry check bites, in each language, on the strings that do offer another attempt.

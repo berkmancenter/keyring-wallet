@@ -55,7 +55,7 @@ export type HcpAddMemoryResult =
   | { ok: false; invalid: true }
   | { ok: false; refused: string; message: { key: 'MemoryRefused' } }
   | { ok: false; unreachable: true; message: { key: 'MemoryNotSaved' } }
-  | { ok: false; noManager: true; message: { key: 'MemoryNotSaved' } }
+  | { ok: false; noManager: true; message: { key: 'MemoryNoVta' } }
 
 /** The `refused` code given when the VTA answers without `entry`. */
 export const HCP_NO_ENTRY = 'noEntry'
@@ -73,15 +73,15 @@ export type HcpAddMemoryInput = Omit<HcpNewMemoryInput, 'managerDid'>
 /**
  * Save a memory. Invalid text sends nothing. The subject is the session's manager DID, read when the payload is built
  * (so a rotated key is followed); with none (the phone is not signed in to its VTA) nothing is sent and the result is
- * `noManager`, with `MemoryNotSaved`, rather than a memory about nobody. Success is a response with `entry`; a response
- * without one is `refused` with {@link HCP_NO_ENTRY}. A refusal gives `MemoryRefused`, which offers no retry;
- * unreachable gives `MemoryNotSaved`.
+ * `noManager`, with its own `MemoryNoVta` (not the unreachable string: nothing was sent), rather than a memory about
+ * nobody. Success is a response with `entry`; a response without one is `refused` with {@link HCP_NO_ENTRY}. A refusal
+ * gives `MemoryRefused`, which offers no retry; unreachable gives `MemoryNotSaved`.
  */
 export async function addHcpMemory(deps: HcpAddMemoryDeps, input: HcpAddMemoryInput): Promise<HcpAddMemoryResult> {
   if (typeof input.text !== 'string' || !hcpMemoryTextValid(input.text)) return { ok: false, invalid: true }
   const managerDid = deps.session.getState().managerDid
   if (typeof managerDid !== 'string' || managerDid === '') {
-    return { ok: false, noManager: true, message: { key: 'MemoryNotSaved' } }
+    return { ok: false, noManager: true, message: { key: 'MemoryNoVta' } }
   }
   const payload = hcpCreatePayload({ text: input.text, language: input.language, managerDid, now: input.now })
   const outcome = await callHcp<unknown>(deps.port, HCP_ENTRIES_CREATE, payload)

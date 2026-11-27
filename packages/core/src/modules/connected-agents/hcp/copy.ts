@@ -38,6 +38,7 @@ export type HcpCopyKey =
   | 'NewMemorySave'
   | 'MemoryNotSaved'
   | 'MemoryRefused'
+  | 'MemoryNoVta'
 
 /**
  * The keys for a refusal (added after the brief, at review): unlike `RevokeUnreachable` and `MemoryNotSaved`, the
@@ -192,6 +193,14 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     en: "Your VTA refused this memory, so it wasn't saved.",
     fr: "Votre VTA a refusé ce souvenir, donc il n'a pas été enregistré.",
     ptBr: 'Seu VTA recusou esta memória, então ela não foi salva.',
+    source: 'PROPOSED',
+  },
+  // Added at review: a phone with no manager DID is not signed in to a VTA, which is not an unreachable one, and
+  // nothing was sent. Plan §6 has no sign-in words to reuse.
+  MemoryNoVta: {
+    en: "This phone isn't signed in to your VTA, so this memory wasn't saved.",
+    fr: "Ce téléphone n'est pas identifié auprès de votre VTA, donc ce souvenir n'a pas été enregistré.",
+    ptBr: 'Este telefone não está conectado ao seu VTA, então esta memória não foi salva.',
     source: 'PROPOSED',
   },
 }

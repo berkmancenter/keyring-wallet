@@ -166,13 +166,13 @@ describe('addHcpMemory', () => {
     expect(task.mock.calls[1][1]).toStrictEqual(hcpCreatePayload(input({ managerDid: ROTATED })))
   })
 
-  it('with no manager DID on the session, sends nothing and gives MemoryNotSaved, never a subject of undefined', async () => {
+  it('with no manager DID on the session, sends nothing and gives MemoryNoVta, never a subject of undefined', async () => {
     for (const did of [undefined, '']) {
       const { deps, task } = fakePort(async () => ({ entry: createdEntry() }), { did })
       expect(await addHcpMemory(deps, screenInput())).toEqual({
         ok: false,
         noManager: true,
-        message: { key: 'MemoryNotSaved' },
+        message: { key: 'MemoryNoVta' },
       })
       expect(task).not.toHaveBeenCalled()
     }
