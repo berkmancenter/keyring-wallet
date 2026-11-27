@@ -66,7 +66,7 @@ describe('ConnectedAgents words', () => {
     expect(SECTION_6.length).toBeGreaterThan(10000)
     expect(settled('ApproveOwnTerminal')).toBe(true)
     // Control: a proposal's words are not in §6, and a key word-for-word in §6 inside a longer string is not "quoted".
-    expect(settled('SeeDetails')).toBe(false)
+    expect(settled('MemoryChangeFailed')).toBe(false)
     expect(quotedIn6('It will be able to read and change it.')).toBe(false)
   })
 
