@@ -61,8 +61,8 @@ describe('the banner for a phone clock the agent refused', () => {
     ['fr', fr],
     ['pt-br', ptBr],
   ])('%s: the banner and the device refusal say the same, and name no direction', (_, words) => {
-    const banner = (words as { VtaLink: Record<string, string> }).VtaLink.BannerPhoneClock
-    const device = (words as { CreateAgent: { Device: Record<string, string> } }).CreateAgent.Device.phoneClock
+    const banner = words.VtaLink.BannerPhoneClock
+    const device = words.CreateAgent.Device.phoneClock
     expect(banner).toBeTruthy()
     expect(device).toBe(banner)
     expect(banner).not.toMatch(/\d/)
