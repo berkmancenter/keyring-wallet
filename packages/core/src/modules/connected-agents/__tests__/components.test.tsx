@@ -66,7 +66,13 @@ describe('ConnectedAgents words', () => {
     expect(SECTION_6.length).toBeGreaterThan(10000)
     expect(settled('ApproveOwnTerminal')).toBe(true)
     // Control: a proposal's words are not in §6, and a key word-for-word in §6 inside a longer string is not "quoted".
-    expect(settled('SeeDetails')).toBe(false)
+    // The control's subject is a string still proposed. Guarded first, so the day none is left (or this one settles)
+    // the failure is here and says so ("Received array" without it), not a confusing one below: repoint it then.
+    expect(Object.keys(PROPOSED_COPY)).toContain('MemoryChangeFailed')
+    expect(settled('MemoryChangeFailed')).toBe(false)
+    // Control that never runs out: a sentence the plan does not say is not settled, and a settled key reads true.
+    expect(settled('SeeDetails')).toBe(true)
+    expect(quotedIn6('Keyring never says this sentence anywhere.')).toBe(false)
     expect(quotedIn6('It will be able to read and change it.')).toBe(false)
   })
 
