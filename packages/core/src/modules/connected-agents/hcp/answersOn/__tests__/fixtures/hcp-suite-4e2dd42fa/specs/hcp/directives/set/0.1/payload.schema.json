@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/directives/set/0.1",
+  "title": "HCP — Set Directive — payload",
+  "description": "The request payload of the HCP 2.0-draft-3 Set directive operation (HCP 6.4, 5.4; `POST /v2/directives` in HCP 9.2, 9.4.15): a Management Client, acting for the Context Subject or a delegate, sets a directive telling clients what they may do with context they receive, or on the person's behalf. HCP defines no request schema for this operation; the members come from HCP 9.4.15 and the directive of HCP 6.4. The provider sets `directiveId`, `setBy` and `createdAt`; none is taken from the request. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, proof) are owned by the framework — SPEC §6.3. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["action", "effect", "text"],
+  "properties": {
+    "action": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^(share|sign|transact|[a-zA-Z][a-zA-Z0-9+.-]*:\\S+)$",
+      "description": "HCP `action` (HCP 6.4, 9.4.15): what the directive governs: `share` (passing received context to another agent, HCP 3.12), `sign` (signing, agreeing to or committing to anything on the Context Subject's behalf), `transact` (spending, buying or entering a contract on their behalf), or an absolute URI naming another action (HCP A.3)."
+    },
+    "effect": {
+      "type": "string",
+      "enum": ["deny", "ask-first", "permit"],
+      "description": "HCP `effect` (HCP 6.4, 9.4.15): `deny`, the client MUST NOT take the action; `ask-first`, the client MUST obtain the Context Subject's confirmation each time before taking it; `permit`, the client may take it without asking. HCP's own values, carried verbatim."
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "description": "HCP `text` (HCP 6.4, 9.4.15): the directive in the Context Subject's words, shown to them when it is set and delivered to every client it applies to. The maxLength is a framework bound, not an HCP requirement."
+    },
+    "categories": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": { "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Category" },
+      "description": "HCP `categories` (HCP 6.4, 9.4.15): the categories whose context the directive governs. Absent means every category, held now or later. A delegate's directive must stay within the delegation's scope (HCP 6.4, 17.4). The maxItems is a framework bound, not an HCP requirement."
+    },
+    "operators": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": { "type": "string", "minLength": 1, "maxLength": 2048 },
+      "description": "HCP `operators` (HCP 6.4, 9.4.15): the Client Operators the directive applies to, each a DNS domain or an operator identifier, matched as for standing rules (HCP 6.3). Absent means every operator. The maxItems is a framework bound, not an HCP requirement."
+    },
+    "accessToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "The Management Client's HCP access token (HCP 9.3), carried unchanged. HCP's HTTP Binding sends it as a Bearer token; this member carries it in the document. The provider validates it exactly as over HTTP and treats it as opaque. The maxLength is a framework bound, not an HCP requirement. OPTIONAL: where it is absent, the provider authenticates the request's `issuer` VID, by the REQUIRED request proof, as a Management Client the Authorizing Principal enrolled (HCP 3.2.3), and refuses any other issuer with permissionDenied; where it is present, the token rules apply unchanged. Pending HCP confirmation (question 56)."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "HCP — Set Directive — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["directive"],
+      "description": "The directive is set. Carries HCP's `201` result, the directive with its `directiveId` and `createdAt` (HCP 9.4.15), wrapped in `directive`. Failures use trust-task-error, not this shape.",
+      "properties": {
+        "directive": {
+          "$ref": "../../../_shared/0.1/directive.schema.json#/$defs/Directive",
+          "description": "The directive as the provider holds it (HCP 6.4, 9.4.15): the requested `action`, `effect`, `text`, `categories` and `operators`, with `directiveId`, `setBy` and `createdAt` set by the provider."
+        }
+      }
+    }
+  }
+}
