@@ -15,6 +15,9 @@ Feature branch tip when this was written: `feat/agent-connect` at `75e544a58c21e
 - **No generic failure line** where any case it covers would make it false: use the per-case message.
 - **A refusal spends the action: the words and the control both.** After a refusal, never offer a retry in the
   copy and never leave the button that sent it live. Only an unreachable answer leaves the action offered again.
+- **A repair names its caller.** A part that builds a repair it may not wire (a sweep, a reconcile step) says in
+  its PR which function must call it. A part that does the wiring lists, in its PR, every such repair it calls.
+  A repair with no caller does not run, however well it is tested.
 - **Review feedback arrives only as formal GitHub reviews.** A review that clears a PR starts with
   "CLEARED at <full sha>"; one that does not starts with "NOT CLEARED at <full sha>", and "waits on #N" when a PR
   beneath it is not cleared.
