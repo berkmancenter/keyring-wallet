@@ -47,6 +47,14 @@ function fakeServices(over: Partial<ConnectedAgentsServices> = {}) {
     driver: async () => {
       throw new Error('no driver in this test')
     },
+    actions: {
+      widen: async () => ({ ok: true }),
+      narrow: async () => ({ ok: true }),
+      restore: async () => ({ ok: true }),
+      retryPending: async () => ({ ok: true }),
+      extend: async () => ({ ok: true }),
+      remove: async () => ({ ok: true }),
+    },
     reachability: (id) => (id === RECORD_FOR_STATUS.unreachable.record.id ? { reachable: false } : undefined),
     ...over,
   }

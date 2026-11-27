@@ -82,6 +82,7 @@ export interface AgentAccessPort {
   narrowOrWidenCapabilities(change: {
     subject: string
     act?: { from: readonly string[]; to: readonly string[] }
+    expiresAt?: string
   }): Promise<unknown>
 }
 

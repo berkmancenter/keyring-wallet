@@ -33,6 +33,8 @@ const K_A = 'did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp'
 const ID = 'q3Vn7Zk2Xo9Rt1LwPb4HdA'
 const MIN = 60 * 1000
 const T0 = Date.parse('2026-11-25T12:00:00Z')
+/** The entry's expiry as every grant here sets it (approved at T0): carried by each cleanup (#1060 finding 24, 3A). */
+const GRANTED_UNTIL = new Date(T0 + TEMPORARY_GRANT_MS).toISOString()
 /** What the fakes put where a careless machine would copy it: it must never reach a state. */
 const NUMBER_SENTINEL = '7391'
 
@@ -477,7 +479,10 @@ describe('cancel and decline', () => {
     const t = setup()
     await toApproval(t)
     await t.machine.approve()
-    expect(await t.machine.cancel()).toEqual({ phase: 'cancelled', cleanup: { vtaDid: VTA, subject: K_T } })
+    expect(await t.machine.cancel()).toEqual({
+      phase: 'cancelled',
+      cleanup: { vtaDid: VTA, subject: K_T, expiresAt: GRANTED_UNTIL },
+    })
   })
 })
 
@@ -508,7 +513,7 @@ describe('a grant that reports contexts the owner did not choose', () => {
     expect(await t.machine.approve()).toEqual({
       phase: 'failed',
       reason: 'grant-refused',
-      cleanup: { vtaDid: VTA, subject: K_T },
+      cleanup: { vtaDid: VTA, subject: K_T, expiresAt: GRANTED_UNTIL },
     })
   })
 
@@ -519,7 +524,7 @@ describe('a grant that reports contexts the owner did not choose', () => {
     expect(await t.machine.approve()).toEqual({
       phase: 'failed',
       reason: 'grant-refused',
-      cleanup: { vtaDid: VTA, subject: K_T },
+      cleanup: { vtaDid: VTA, subject: K_T, expiresAt: GRANTED_UNTIL },
     })
   })
 
@@ -557,6 +562,9 @@ describe('step 10: the entry as the VTA lists it', () => {
     t.entries.entry = rotated(t.transport.grants[0], over as Partial<ListedEntry>)
     const s = await t.machine.checkEnrolment()
     expect(s).toMatchObject({ phase: 'failed', reason: 'rotation-lost-limits', cleanup: { vtaDid: VTA, subject: K_A } })
+    // the rotated entry's own expiry, exactly: none when it lost it, the later one when moved, the grant's otherwise
+    const expected = 'expiresAt' in over ? (over as { expiresAt?: string }).expiresAt : GRANTED_UNTIL
+    expect((s as { cleanup?: { expiresAt?: string } }).cleanup?.expiresAt).toBe(expected)
   })
 
   it('control: the same entry with every limit kept is confirmed', async () => {
@@ -573,7 +581,7 @@ describe('step 10: the entry as the VTA lists it', () => {
     t.advance(1)
     expect(await t.machine.checkEnrolment()).toEqual({
       phase: 'notFinished',
-      cleanup: { vtaDid: VTA, subject: K_T, deviceId: 'dev-1' },
+      cleanup: { vtaDid: VTA, subject: K_T, deviceId: 'dev-1', expiresAt: GRANTED_UNTIL },
     })
   })
 
@@ -581,6 +589,12 @@ describe('step 10: the entry as the VTA lists it', () => {
     const t = await granted()
     t.entries.reachable = false
     expect((await t.machine.checkEnrolment()).phase).toBe('awaitingEnrolment')
+    // still unreachable 10 minutes on: Not finished, with the entry named for removal and the grant's expiry
+    t.advance(NOT_FINISHED_AFTER_MS)
+    expect(await t.machine.checkEnrolment()).toEqual({
+      phase: 'notFinished',
+      cleanup: { vtaDid: VTA, subject: K_T, expiresAt: GRANTED_UNTIL },
+    })
   })
 
   it('a handle collision at six characters fails the pairing with the entry to remove', async () => {
@@ -592,7 +606,7 @@ describe('step 10: the entry as the VTA lists it', () => {
     expect(await t.machine.checkEnrolment()).toMatchObject({
       phase: 'failed',
       reason: 'handle-collision',
-      cleanup: { subject: K_A },
+      cleanup: { subject: K_A, expiresAt: GRANTED_UNTIL },
     })
   })
 })

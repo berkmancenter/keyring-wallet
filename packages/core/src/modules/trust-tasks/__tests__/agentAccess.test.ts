@@ -263,6 +263,23 @@ describe('narrowOrWidenCapabilities: narrow through acl/revoke 0.3, widen throug
     ])
   })
 
+  it("a new expiry is one acl/update 0.3 expiresAt; a value that isn't a time is refused, and nothing sends a null", () => {
+    const at = '2026-11-27T05:00:00.000Z'
+    expect(agentAccessWrites({ subject: K_A, expiresAt: at })).toEqual([
+      { type: VTA_TASK.aclUpdate03, payload: { subject: K_A, expiresAt: at } },
+    ])
+    // with a widening, both in the one update
+    expect(agentAccessWrites({ subject: K_A, act: { from: ['a'], to: ['a', 'b'] }, expiresAt: at })).toEqual([
+      {
+        type: VTA_TASK.aclUpdate03,
+        payload: { subject: K_A, act: { scope: 'contexts', contexts: ['a', 'b'] }, expiresAt: at },
+      },
+    ])
+    expect(() => agentAccessWrites({ subject: K_A, expiresAt: 'tomorrow' })).toThrow('not a time')
+    // control: no expiry asked, none sent
+    expect(agentAccessWrites({ subject: K_A, capabilities: [] })[0].payload).not.toHaveProperty('expiresAt')
+  })
+
   it('nothing to change sends nothing', async () => {
     const { vta, sent } = withVta(answerFor(['a']))
     await expect(vta.narrowOrWidenCapabilities({ subject: K_A, act: { from: ['a'], to: ['a'] } })).rejects.toThrow(
