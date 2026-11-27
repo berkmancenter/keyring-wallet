@@ -51,6 +51,25 @@ export type HcpCallOutcome<T> =
   | { ok: false; unreachable: true }
   | { ok: false; off: true }
 
+/** An {@link HcpCallOutcome} that is not `ok`. */
+export type HcpCallFailure = Exclude<HcpCallOutcome<unknown>, { ok: true }>
+
+/**
+ * Read a failed {@link HcpCallOutcome} by case, one handler per member. Every caller names every member, and a member
+ * added to the union fails the type check here (the `never` below) until it has its handler, and then at every caller
+ * until each gives one: no new member can fall into another's branch unnoticed, as `in` tests with an `else` let it.
+ */
+export function onHcpFailure<R>(
+  outcome: HcpCallFailure,
+  on: { refused: (code: string) => R; unreachable: () => R; off: () => R }
+): R {
+  if ('refused' in outcome) return on.refused(outcome.refused)
+  if ('unreachable' in outcome) return on.unreachable()
+  if ('off' in outcome) return on.off()
+  const unhandled: never = outcome
+  throw new Error(`an HCP outcome with no handler: ${Object.keys(unhandled as object).join(', ')}`)
+}
+
 /**
  * One HCP task, its outcome as a value: a VTA refusal (`name === 'VtiRefusal'`) gives `refused` with its `code`
  * (`'unknown'` if it carries none); the HCP flags off (`HcpOffError`) gives `off`, which no retry changes; anything

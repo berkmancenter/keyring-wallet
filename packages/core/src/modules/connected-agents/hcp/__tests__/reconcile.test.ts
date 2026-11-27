@@ -13,7 +13,7 @@ import { setHcpEnabled } from '../hcpFlag'
 import { reconcileHcpApprovals, type HcpReconcileDeps } from '../reconcile'
 import { beginHcpApproval, HcpConnectionStore, recordHcpApproval } from '../store'
 import { HCP_GRANTS_REVOKE, type HcpApprovalInFlight, type HcpApprovalView, type HcpConnection } from '../types'
-import type { HcpVtaPort } from '../vtaPort'
+import { HcpOffError, type HcpVtaPort } from '../vtaPort'
 import { expectValid, hcpSchemas } from './fixtures/hcpSchemas'
 import { CLIENT_VID, GRANT, HELD_AT, hcpApproval, OTHER_VID, THREAD } from './fixtures/hcpApproval'
 
@@ -330,6 +330,42 @@ describe('reconcileHcpApprovals', () => {
       expect(await store.listRetiring()).toEqual([])
     })
 
+    // The review's case: the reconcile reads the connection as still naming the retiring grant, then a complete(B)
+    // retires that grant again and writes B before the reconcile removes the record. Decided under the lock, the
+    // record of a live grant is never removed: the grant is revoked instead.
+    it('a complete between the reading and the removing of a current retiring grant cannot leave it unnamed', async () => {
+      const { deps, store, task } = await setup({ now: STARTED + MINUTE })
+      const current: HcpConnection = {
+        id: CLIENT_VID,
+        name: 'My notes agent',
+        grantId: GRANT,
+        threadId: THREAD,
+        approvedAt: iso(STARTED),
+        expiresAt: iso(STARTED + 4 * 60 * MINUTE),
+      }
+      await store.put(current)
+      await store.complete({ ...current, grantId: SECOND_GRANT, approvedAt: iso(STARTED + 1000) })
+      await store.put(current)
+      // complete(B) starts as soon as the reconcile has listed the retiring grants, before it decides on any.
+      let completing: Promise<void> | undefined
+      deps.store = Object.assign(Object.create(store) as HcpConnectionStore, {
+        listRetiring: async () => {
+          const listed = await store.listRetiring()
+          completing = store.complete({ ...current, grantId: SECOND_GRANT, approvedAt: iso(STARTED + 2000) })
+          return listed
+        },
+      })
+      const results = await reconcileHcpApprovals(deps)
+      await completing
+
+      expect((await store.get(CLIENT_VID))?.grantId).toBe(SECOND_GRANT)
+      // Grant A is revoked, or still named by a retiring record: never neither.
+      const revoked = task.mock.calls.some((c) => c[1].grantId === GRANT)
+      const named = (await store.listRetiring()).some((r) => r.grantId === GRANT)
+      expect(revoked || named).toBe(true)
+      expect(results).toEqual([{ id: CLIENT_VID, grantId: GRANT, retiring: true, outcome: 'revoked' }])
+    })
+
     it('a retiring grant whose revoke fails is kept for the next reconcile; notFound removes it', async () => {
       for (const [revoke, expected, left] of [
         [async () => Promise.reject(new Error('timeout')), { outcome: 'kept', unreachable: true }, 1],
@@ -344,6 +380,19 @@ describe('reconcileHcpApprovals', () => {
         expect(await store.listRetiring()).toHaveLength(left)
       }
     })
+  })
+
+  // The flags turned off during a reconcile: the port answers `off`, which is not a failed revoke (`kept`,
+  // `unreachable`), whose premise of a later retry cannot hold with the flags off.
+  it('a revoke answered off keeps the record, is not counted as kept or unreachable, and stops the reconcile', async () => {
+    const { deps, store, task } = await setup({
+      flights: [inFlight(), inFlight({ grantId: OLD_GRANT, approvalId: 'consent-0', startedAt: iso(STARTED - 1000) })],
+      revoke: async () => Promise.reject(new HcpOffError()),
+      now: REQUEST_ENDS + MINUTE,
+    })
+    expect(await reconcileHcpApprovals(deps)).toEqual([{ id: CLIENT_VID, grantId: GRANT, outcome: 'off' }])
+    expect(task).toHaveBeenCalledTimes(1)
+    expect((await store.listInFlight()).map((f) => f.grantId).sort()).toEqual([GRANT, OLD_GRANT].sort())
   })
 
   it('does nothing with the HCP flag off', async () => {

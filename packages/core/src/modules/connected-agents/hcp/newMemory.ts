@@ -12,7 +12,7 @@
  */
 import type { VtaSession } from '../services'
 import { HCP_ENTRIES_CREATE } from './types'
-import { callHcp, type HcpVtaPort } from './vtaPort'
+import { callHcp, type HcpVtaPort, onHcpFailure } from './vtaPort'
 
 /** The app's language tags. */
 export type HcpMemoryLanguage = 'en' | 'fr' | 'pt-BR'
@@ -56,6 +56,11 @@ export type HcpAddMemoryResult =
   | { ok: false; refused: string; message: { key: 'MemoryRefused' } }
   | { ok: false; unreachable: true; message: { key: 'MemoryNotSaved' } }
   | { ok: false; noManager: true; message: { key: 'MemoryNoVta' } }
+  /**
+   * The HCP flags are off: nothing was saved. No copy, on purpose: with the flags off the new-memory screen is not
+   * reachable, so a string here would only show when something is already wrong.
+   */
+  | { ok: false; off: true }
 
 /** The `refused` code given when the VTA answers without `entry`. */
 export const HCP_NO_ENTRY = 'noEntry'
@@ -86,8 +91,11 @@ export async function addHcpMemory(deps: HcpAddMemoryDeps, input: HcpAddMemoryIn
   const payload = hcpCreatePayload({ text: input.text, language: input.language, managerDid, now: input.now })
   const outcome = await callHcp<unknown>(deps.port, HCP_ENTRIES_CREATE, payload)
   if (!outcome.ok) {
-    if ('refused' in outcome) return { ok: false, refused: outcome.refused, message: { key: 'MemoryRefused' } }
-    return { ok: false, unreachable: true, message: { key: 'MemoryNotSaved' } }
+    return onHcpFailure<HcpAddMemoryResult>(outcome, {
+      refused: (code) => ({ ok: false, refused: code, message: { key: 'MemoryRefused' } }),
+      unreachable: () => ({ ok: false, unreachable: true, message: { key: 'MemoryNotSaved' } }),
+      off: () => ({ ok: false, off: true }),
+    })
   }
   const value = outcome.value
   if (typeof value === 'object' && value !== null && 'entry' in value && (value as { entry: unknown }).entry != null) {

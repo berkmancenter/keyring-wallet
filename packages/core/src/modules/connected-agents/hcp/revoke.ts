@@ -20,7 +20,7 @@ import { useEffect, useRef, useState } from 'react'
 import { isHcpEnabled } from './hcpFlag'
 import type { HcpConnectionReader } from './store'
 import { HCP_DISCLOSURES_SUMMARY, HCP_GRANTS_REVOKE, type HcpConnection, type HcpNoticeState } from './types'
-import { callHcp, type HcpVtaPort } from './vtaPort'
+import { callHcp, type HcpVtaPort, onHcpFailure } from './vtaPort'
 
 export interface HcpRevokeDeps {
   port: HcpVtaPort
@@ -33,6 +33,11 @@ export type HcpRevokeResult =
   | { ok: false; missing: true }
   | { ok: false; refused: string; message: { key: 'RevokeRefused'; params: { name: string } } }
   | { ok: false; unreachable: true; message: { key: 'RevokeUnreachable'; params: { name: string } } }
+  /**
+   * The HCP flags are off: nothing was sent and the record is unchanged. No copy, on purpose: with the flags off no
+   * screen that revokes is reachable, so a string here would only show when something is already wrong.
+   */
+  | { ok: false; off: true }
 
 /** Poll every 5 s for the first 2 minutes after the revoke. */
 export const HCP_POLL_FAST_MS = 5000
@@ -52,10 +57,15 @@ export async function revokeHcpGrant(deps: HcpRevokeDeps, id: string): Promise<H
   if (c.revokedAt) return { ok: true, connection: c }
   const outcome = await callHcp<unknown>(deps.port, HCP_GRANTS_REVOKE, { grantId: c.grantId })
   if (!outcome.ok) {
-    if ('refused' in outcome) {
-      return { ok: false, refused: outcome.refused, message: { key: 'RevokeRefused', params: { name: c.name } } }
-    }
-    return { ok: false, unreachable: true, message: { key: 'RevokeUnreachable', params: { name: c.name } } }
+    return onHcpFailure<HcpRevokeResult>(outcome, {
+      refused: (code) => ({ ok: false, refused: code, message: { key: 'RevokeRefused', params: { name: c.name } } }),
+      unreachable: () => ({
+        ok: false,
+        unreachable: true,
+        message: { key: 'RevokeUnreachable', params: { name: c.name } },
+      }),
+      off: () => ({ ok: false, off: true }),
+    })
   }
   const revokedAt = deps.clock().toISOString()
   const updated = await deps.store.update(id, (r) =>
@@ -119,6 +129,10 @@ export async function pollHcpNotice(deps: HcpRevokeDeps, id: string): Promise<Hc
   const c = await deps.store.get(id)
   if (!hcpNoticePending(c)) return { connection: c }
   const outcome = await callHcp<unknown>(deps.port, HCP_DISCLOSURES_SUMMARY, { client: c.id })
+  // The HCP flags off is no answer about the notice, not even a missed one: the record is left as it is (an
+  // unanswered poll past the stop would settle it `notTold`). A refusal or an unreachable VTA reads no summary.
+  const off = !outcome.ok && onHcpFailure(outcome, { refused: () => false, unreachable: () => false, off: () => true })
+  if (off) return { connection: c }
   const now = deps.clock()
   const summary = outcome.ok ? readClientSummary(outcome.value, c.id) : undefined
   const read = summary?.usableUntil ?? undefined

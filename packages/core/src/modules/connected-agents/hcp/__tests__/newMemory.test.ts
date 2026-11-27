@@ -10,7 +10,7 @@ import {
   type HcpNewMemoryInput,
 } from '../newMemory'
 import { HCP_ENTRIES_CREATE } from '../types'
-import type { HcpVtaPort } from '../vtaPort'
+import { HcpOffError, type HcpVtaPort } from '../vtaPort'
 import { expectValid, hcpSchemas } from './fixtures/hcpSchemas'
 
 const S = hcpSchemas()
@@ -153,6 +153,11 @@ describe('addHcpMemory', () => {
       refused: HCP_NO_ENTRY,
       message: { key: 'MemoryRefused' },
     })
+  })
+
+  it('the HCP flags off gives off, with no message: not MemoryNotSaved', async () => {
+    const result = await addHcpMemory(fakePort(async () => Promise.reject(new HcpOffError())).deps, screenInput())
+    expect(result).toEqual({ ok: false, off: true })
   })
 
   it('reads the manager DID from the session at each save, so a rotated key is followed', async () => {

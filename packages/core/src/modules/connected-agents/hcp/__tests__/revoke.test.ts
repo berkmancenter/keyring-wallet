@@ -21,7 +21,7 @@ import {
 } from '../revoke'
 import { HcpConnectionStore } from '../store'
 import { HCP_DISCLOSURES_SUMMARY, HCP_GRANTS_REVOKE, type HcpConnection } from '../types'
-import type { HcpVtaPort } from '../vtaPort'
+import { HcpOffError, type HcpVtaPort } from '../vtaPort'
 import { expectValid, hcpSchemas } from './fixtures/hcpSchemas'
 import { CLIENT_VID, GRANT, OTHER_VID, THREAD } from './fixtures/hcpApproval'
 
@@ -126,6 +126,14 @@ describe('revokeHcpGrant', () => {
       unreachable: true,
       message: { key: 'RevokeUnreachable', params: { name: 'My notes agent' } },
     })
+    expect(task).toHaveBeenCalledTimes(1)
+    expect(await store.get(CLIENT_VID)).toEqual(connection())
+  })
+
+  it('the HCP flags off changes nothing and gives off, with no message: not RevokeUnreachable', async () => {
+    const vta = fakeVta({ revoke: async () => Promise.reject(new HcpOffError()) })
+    const { deps, store, task } = await setup(connection(), vta)
+    expect(await revokeHcpGrant(deps, CLIENT_VID)).toEqual({ ok: false, off: true })
     expect(task).toHaveBeenCalledTimes(1)
     expect(await store.get(CLIENT_VID)).toEqual(connection())
   })
@@ -319,6 +327,14 @@ describe('the 24-hour stop', () => {
       await pollHcpNotice(deps, CLIENT_VID)
       expect((await store.get(CLIENT_VID))?.notice).toEqual({ state: 'notTold', usableUntil: iso(REVOKED_AT) })
     }
+  })
+
+  // The opposite of the unreachable case above: the HCP flags off is no answer, so even the stop poll settles nothing.
+  it('the HCP flags off at the stop leaves the record as it is, not notTold', async () => {
+    const off = fakeVta({ summaries: [async () => Promise.reject(new HcpOffError())] })
+    const { deps, store } = await setup(revoked(), off, STOP)
+    expect(await pollHcpNotice(deps, CLIENT_VID)).toEqual({ connection: revoked() })
+    expect(await store.get(CLIENT_VID)).toEqual(revoked())
   })
 
   // control: one millisecond before the stop, the same answer keeps telling.

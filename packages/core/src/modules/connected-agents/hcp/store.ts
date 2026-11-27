@@ -112,6 +112,20 @@ export class HcpConnectionStore {
   }
 
   /**
+   * If client `id`'s connection still names `grantId` (the app stopped inside {@link complete}, between writing the
+   * retiring grant and the new connection), remove the retiring grant `grantId` and return true: the grant is the
+   * connection, not retiring. Otherwise remove nothing and return false. Decided and done as one step under the
+   * client's lock, so a `complete` that retires the grant again in between cannot have its record removed.
+   */
+  public removeRetiringIfCurrent(id: string, grantId: string): Promise<boolean> {
+    return this.locked(id, async () => {
+      if ((await this.get(id))?.grantId !== grantId) return false
+      await this.drop(HCP_RETIRING_KIND, id, grantId)
+      return true
+    })
+  }
+
+  /**
    * Make a confirmed approval the client's connection, as one step under the client's lock: write `connection`, then
    * remove the approval in flight for its grant. Stopping between the two leaves both, which the reconcile resolves
    * by removing the approval in flight (the connection already names its grant).

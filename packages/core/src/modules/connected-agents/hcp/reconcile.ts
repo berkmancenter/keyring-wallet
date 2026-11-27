@@ -16,11 +16,13 @@
  *   or expired): nothing is done yet (`waiting`), so a grant still to come is not left without a record;
  * - otherwise the grant is revoked by `grantId`, sent once: revoked, or refused `notFound` (the VTA holds no such
  *   grant, so there is nothing to revoke), removes the approval in flight (`revoked`, `absent`); any other refusal,
- *   or an unreachable VTA, keeps it for the next reconcile (`kept`).
+ *   or an unreachable VTA, keeps it for the next reconcile (`kept`). The HCP flags turned off meanwhile (`off`) is not
+ *   a failed revoke: the record is kept and the reconcile stops there.
  *
  * Then each retiring grant (a connection a newer one replaced, see `./store.ts`), marked `retiring: true`: if its
  * client's connection still names it (the app stopped inside `complete`, before the newer connection was written), it
- * is removed and nothing is sent (`current`); otherwise its grant is revoked as above (`revoked`, `absent`, `kept`).
+ * is removed and nothing is sent (`current`), decided and removed in one step under the client's lock; otherwise its
+ * grant is revoked as above (`revoked`, `absent`, `kept`, `off`).
  *
  * Does nothing unless both HCP flags are on. Nothing here logs a payload or a response.
  *
@@ -30,7 +32,7 @@ import type { HcpApprovalSource } from './approvals'
 import { isHcpEnabled } from './hcpFlag'
 import type { HcpConnectionStore } from './store'
 import { HCP_GRANTS_REVOKE, type HcpApprovalInFlight, type HcpConnection, type HcpRetiringGrant } from './types'
-import { callHcp, type HcpVtaPort } from './vtaPort'
+import { callHcp, type HcpVtaPort, onHcpFailure } from './vtaPort'
 
 /** The refusal code of a revoke for a grant the VTA does not hold. */
 export const HCP_GRANT_NOT_FOUND = 'notFound'
@@ -38,7 +40,13 @@ export const HCP_GRANT_NOT_FOUND = 'notFound'
 export interface HcpReconcileDeps {
   store: Pick<
     HcpConnectionStore,
-    'listInFlight' | 'get' | 'complete' | 'removeInFlight' | 'listRetiring' | 'removeRetiring'
+    | 'listInFlight'
+    | 'get'
+    | 'complete'
+    | 'removeInFlight'
+    | 'listRetiring'
+    | 'removeRetiring'
+    | 'removeRetiringIfCurrent'
   >
   source: Pick<HcpApprovalSource, 'list'>
   port: HcpVtaPort
@@ -49,6 +57,7 @@ type RevokeOutcome =
   | { outcome: 'revoked' }
   | { outcome: 'absent' }
   | { outcome: 'kept'; refused?: string; unreachable?: true }
+  | { outcome: 'off' }
 
 export type HcpReconcileOutcome = { id: string; grantId: string } & (
   | { outcome: 'completed' }
@@ -80,11 +89,17 @@ async function revokeGrant(
     await remove()
     return { outcome: 'revoked' }
   }
-  if ('refused' in outcome && outcome.refused === HCP_GRANT_NOT_FOUND) {
-    await remove()
-    return { outcome: 'absent' }
-  }
-  return 'refused' in outcome ? { outcome: 'kept', refused: outcome.refused } : { outcome: 'kept', unreachable: true }
+  return onHcpFailure<Promise<RevokeOutcome>>(outcome, {
+    refused: async (code) => {
+      if (code !== HCP_GRANT_NOT_FOUND) return { outcome: 'kept', refused: code }
+      await remove()
+      return { outcome: 'absent' }
+    },
+    unreachable: async () => ({ outcome: 'kept', unreachable: true }),
+    // Not a failed revoke: the flags went off during the reconcile, which with them off does nothing. The record is
+    // left as it is, for the first reconcile with the flags on.
+    off: async () => ({ outcome: 'off' }),
+  })
 }
 
 async function reconcileOne(deps: HcpReconcileDeps, flight: HcpApprovalInFlight): Promise<HcpReconcileOutcome> {
@@ -113,8 +128,9 @@ async function reconcileOne(deps: HcpReconcileDeps, flight: HcpApprovalInFlight)
 
 async function reconcileRetiring(deps: HcpReconcileDeps, retiring: HcpRetiringGrant): Promise<HcpReconcileOutcome> {
   const { id, grantId } = retiring
-  if ((await deps.store.get(id))?.grantId === grantId) {
-    await deps.store.removeRetiring(id, grantId)
+  // Read and removed in one locked step: a `complete` between a separate read and remove could retire this grant
+  // again and have its record removed while the grant is live.
+  if (await deps.store.removeRetiringIfCurrent(id, grantId)) {
     return { id, grantId, retiring: true, outcome: 'current' }
   }
   const outcome = await revokeGrant(deps, grantId, () => deps.store.removeRetiring(id, grantId))
@@ -132,7 +148,15 @@ export async function reconcileHcpApprovals(deps: HcpReconcileDeps): Promise<Hcp
   const flights = [...(await deps.store.listInFlight())].sort(
     (a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt)
   )
-  for (const flight of flights) results.push(await reconcileOne(deps, flight))
-  for (const retiring of await deps.store.listRetiring()) results.push(await reconcileRetiring(deps, retiring))
+  // A revoke answered `off` (the flags went off meanwhile) ends the reconcile there: with the flags off it does nothing.
+  const off = () => results[results.length - 1]?.outcome === 'off'
+  for (const flight of flights) {
+    results.push(await reconcileOne(deps, flight))
+    if (off()) return results
+  }
+  for (const retiring of await deps.store.listRetiring()) {
+    results.push(await reconcileRetiring(deps, retiring))
+    if (off()) return results
+  }
   return results
 }
