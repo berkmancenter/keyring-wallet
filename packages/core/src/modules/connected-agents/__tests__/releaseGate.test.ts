@@ -21,7 +21,9 @@
  * - the module's state changed by anything but its setter and its initialiser;
  * - a caller more than two imports below a navigator file (a deeper one does not count: put the call in the routed
  *   container rather than loosen this);
- * - imports matched by file name, not resolved paths: two files of one name are not told apart.
+ * - an import through a package specifier (`@bifold/core`) or a path alias: only relative imports are resolved, by
+ *   path, so a caller reached only through one does not count. This fails closed (a real caller is missed, and the
+ *   gate stays red), never open: two files of one name are told apart;
  * - the one way it can admit a caller it should not: any file containing `.Screen` (or creating a navigator) counts as
  *   a navigator and seeds the search, so a stray `.Screen` token outside navigation would count a file as routed. It
  *   over-counts navigators, which fails open on "is Revoke wired"; 14 navigator files is right for this app today.
@@ -29,7 +31,7 @@
  * None of these exists today; a new way of turning the flag on must come through the setter or be added here.
  */
 import { existsSync, readdirSync, readFileSync } from 'fs'
-import { join, relative, sep } from 'path'
+import { dirname, join, relative, resolve, sep } from 'path'
 
 type SourceFile = { path: string; text: string }
 
@@ -43,31 +45,37 @@ const ACCEPTANCE_TYPE = 'keyring/agent/vdc-acceptance/1.0'
 
 const NAVIGATOR = /\.Screen\b|create(?:Native)?StackNavigator\s*\(|createBottomTabNavigator\s*\(/
 
-/** The file names a source imports (the last segment of each specifier, without extension). */
-const importedNames = (text: string): Set<string> =>
-  new Set(
-    [...text.matchAll(/(?:from\s+|require\(\s*|import\(\s*)['"]([^'"]+)['"]/g)].map((m) =>
-      (m[1].split('/').pop() ?? '').replace(/\.(tsx?|jsx?)$/, '')
-    )
-  )
+const IMPORT = /(?:from\s+|require\(\s*|import\(\s*)['"]([^'"]+)['"]/g
+const EXTENSIONS = ['', '.ts', '.tsx', '.js', '.jsx', `${sep}index.ts`, `${sep}index.tsx`]
 
-const baseName = (path: string) => (path.split(sep).pop() ?? '').replace(/\.tsx?$/, '')
+/**
+ * The files a source imports, by resolved path. Only relative specifiers are followed: a package specifier
+ * (`@bifold/core`, `react-native`) is not, so a caller reached only through one does not count (it fails closed).
+ */
+function importedFiles(from: SourceFile, byPath: Map<string, SourceFile>): SourceFile[] {
+  const found: SourceFile[] = []
+  for (const m of from.text.matchAll(IMPORT)) {
+    if (!m[1].startsWith('.')) continue
+    const base = resolve(dirname(from.path), m[1])
+    const hit = EXTENSIONS.map((ext) => byPath.get(base + ext)).find((f) => f !== undefined)
+    if (hit) found.push(hit)
+  }
+  return found
+}
 
 /** The files a navigator reaches within two imports: navigators, what they import, and what those import. */
 function routed(code: SourceFile[]): Set<string> {
-  const byName = new Map<string, SourceFile[]>()
-  for (const f of code) byName.set(baseName(f.path), [...(byName.get(baseName(f.path)) ?? []), f])
+  const byPath = new Map(code.map((f) => [resolve(f.path), f] as const))
   let frontier = code.filter((f) => NAVIGATOR.test(f.text))
   const reached = new Set(frontier.map((f) => f.path))
   for (let hop = 0; hop < 2; hop++) {
     const next: SourceFile[] = []
     for (const f of frontier)
-      for (const name of importedNames(f.text))
-        for (const g of byName.get(name) ?? [])
-          if (!reached.has(g.path)) {
-            reached.add(g.path)
-            next.push(g)
-          }
+      for (const g of importedFiles(f, byPath))
+        if (!reached.has(g.path)) {
+          reached.add(g.path)
+          next.push(g)
+        }
     frontier = next
   }
   return reached
@@ -243,6 +251,33 @@ describe('control: the gate bites', () => {
     expect(releaseGate([flag, devRow, revokeExport, deeper, middle, container, nav, acceptance]).missing).toEqual([
       expect.stringMatching(/Revoke \(step 7\.10\)/),
     ])
+  })
+
+  it('a file that only shares its name with one a screen imports is not routed', () => {
+    const screen: SourceFile = {
+      path: join('/r', 'packages', 'core', 'src', 'screens', 'AgentDetailsScreen.tsx'),
+      text: "import AgentRevoke from '../hooks/AgentRevoke'",
+    }
+    const sameNameHook: SourceFile = {
+      path: join('/r', 'packages', 'core', 'src', 'hooks', 'AgentRevoke.ts'),
+      text: 'export const useNothing = () => undefined',
+    }
+    const unroutedCaller: SourceFile = {
+      path: join('/r', 'packages', 'core', 'src', 'screens', 'AgentRevoke.tsx'),
+      text: 'export default () => <Sheet onRevoke={() => revokeAgentConnection(id)} />',
+    }
+    const nav: SourceFile = {
+      ...navigator,
+      text: "import AgentDetailsScreen from '../screens/AgentDetailsScreen'\n<Stack.Screen component={AgentDetailsScreen} />",
+    }
+    expect(
+      releaseGate([flag, devRow, revokeExport, screen, sameNameHook, unroutedCaller, nav, acceptance]).missing
+    ).toEqual([expect.stringMatching(/Revoke \(step 7\.10\)/)])
+    // Control: the screen importing the caller itself, by its own path, does count.
+    const importsCaller = { ...screen, text: "import AgentRevoke from './AgentRevoke'" }
+    expect(
+      releaseGate([flag, devRow, revokeExport, importsCaller, sameNameHook, unroutedCaller, nav, acceptance]).missing
+    ).toEqual([])
   })
 
   it('a setter called only from a test does not make the flag reachable', () => {
