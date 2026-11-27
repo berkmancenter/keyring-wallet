@@ -13,6 +13,8 @@ Feature branch tip when this was written: `feat/agent-connect` at `75e544a58c21e
 - **Merge, never rebase.** Never force-push a branch once a PR is open on it.
 - **Intent record first** when a remote call cannot be undone or re-read: write the local record, then send.
 - **No generic failure line** where any case it covers would make it false: use the per-case message.
+- **A refusal spends the action: the words and the control both.** After a refusal, never offer a retry in the
+  copy and never leave the button that sent it live. Only an unreachable answer leaves the action offered again.
 - **Review feedback arrives only as formal GitHub reviews.** A review that clears a PR starts with
   "CLEARED at <full sha>"; one that does not starts with "NOT CLEARED at <full sha>", and "waits on #N" when a PR
   beneath it is not cleared.
