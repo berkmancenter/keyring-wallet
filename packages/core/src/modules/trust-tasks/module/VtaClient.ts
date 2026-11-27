@@ -724,7 +724,9 @@ export type AgentAccessChange = {
   capabilities?: readonly string[]
   /**
    * A new expiry (ISO 8601) for a temporary agent, sent as `acl/update` 0.3's `expiresAt` (Extend, §7.7). Only a time:
-   * the null that would make the entry permanent is a separate act (step 7.28), never sent from here.
+   * the null that would make the entry permanent is a separate act (step 7.28), never sent from here. The schema says
+   * why: an explicit null is "a privilege increase, which a consumer SHOULD gate at least as strictly as the original
+   * grant" (`specs/acl/update/0.3/payload.schema.json`, trust-tasks at `2a66a0351`).
    */
   expiresAt?: string
 }

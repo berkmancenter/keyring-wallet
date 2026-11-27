@@ -311,6 +311,25 @@ describe('Remove (§3.10, §7.7)', () => {
     expect(t.revoked).toEqual([])
   })
 
+  it('no deviceId and nothing listed by its key: it may have rotated, so the record is kept (goneUnproven)', async () => {
+    const leftover = agentRecord({
+      id: 'did:key:z6MkLeftover',
+      agentDid: 'did:key:z6MkLeftover',
+      deviceId: '',
+      state: 'notFinished',
+    })
+    const t = setup(leftover)
+    await t.connections.put(leftover)
+    // the entry registered and rotated to another key: listed by key alone, it is not found
+    t.vta.put('did:key:z6MkRotatedAway', ['keyring-agent-own'], {}, 'device-registered-later')
+    expect(await t.actions.remove(leftover.id)).toEqual({ ok: false, code: 'goneUnproven' })
+    expect(await t.connections.get(leftover.id)).toBeDefined()
+    // control: with its deviceId known, the same empty listing by key, and nothing on the device, does prove it gone
+    const known = agentRecord({ ...leftover, deviceId: 'device-never-registered' })
+    await t.connections.put(known)
+    expect(await t.actions.remove(known.id)).toEqual({ ok: true })
+  })
+
   it('a leftover with no deviceId is found by its subject', async () => {
     const leftover = agentRecord({
       id: 'did:key:z6MkLeftover',

@@ -44,6 +44,11 @@ export type ActionFailure =
   | 'revokeUnavailable'
   /** Step 7.10's revoke ran, and a full listing does not show the entry gone. */
   | 'revokeNotConfirmed'
+  /**
+   * The record has no `deviceId`, so the VTA was asked by key alone, and an entry that rotated to another key would
+   * not be listed: an empty listing does not show it gone, and the record is kept.
+   */
+  | 'goneUnproven'
 
 export type ActionResult = { ok: true } | { ok: false; code: ActionFailure }
 
@@ -229,6 +234,9 @@ export class AgentActions {
       })
       // A partial listing cannot show the entry gone: treat it as still there.
       listed = !found.complete || found.matches.length > 0
+      // Asked by key alone, a complete empty listing misses an entry that rotated to another key: the device is what
+      // finds a rotated entry (`accessEntryReader`). So without a deviceId it proves nothing.
+      if (!listed && !record.deviceId) return fail('goneUnproven')
     } catch {
       return fail('unreachable')
     }
