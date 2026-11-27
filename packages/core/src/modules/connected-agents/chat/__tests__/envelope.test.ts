@@ -310,6 +310,20 @@ describe("Keyring's own envelopes", () => {
       expect(act).toHaveBeenCalledTimes(1)
     })
 
+    it("a release that fails too still re-throws the handler's own error, and the claim stays", async () => {
+      const seen = new MemorySeenIdStore()
+      seen.release = async () => {
+        throw new Error('storage unavailable')
+      }
+      const doc = await signEnvelope(keyring.agent, chat(), keyring.did)
+      await expect(
+        receiveEnvelope(verifier, doc, expectation({ seen }), async () => {
+          throw new Error('failed while acting')
+        })
+      ).rejects.toThrow('failed while acting')
+      expect(await seen.seen(agentSide.did, doc.id, NOW)).toBe(true)
+    })
+
     it('a state document whose handler throws is not marked applied, so its next copy is not olderState', async () => {
       const seen = new MemorySeenIdStore()
       const doc = await signEnvelope(

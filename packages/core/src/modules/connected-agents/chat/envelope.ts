@@ -293,7 +293,8 @@ export async function receiveEnvelope<T>(
   try {
     acted = await act(check.envelope)
   } catch (error) {
-    await expect.seen.release(expect.receiver, check.envelope.id)
+    // The act's error is the one the caller needs; a release that fails too leaves the claim, at-most-once.
+    await expect.seen.release(expect.receiver, check.envelope.id).catch(() => undefined)
     throw error
   }
   const base = envelopeBaseType(check.envelope.type)
