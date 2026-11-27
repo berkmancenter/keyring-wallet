@@ -46,9 +46,16 @@ const ROOT = path.resolve(__dirname, '../../../../../..')
  * (each exporting SCREEN_STATES), so a piece of work adds its own pair of files and writes no file another writes. The
  * first is the base file, `agent-connect-screens.json`; the others add states and name the same canvas and kit folders.
  */
-const MANIFEST_FILES = readdirSync(path.join(ROOT, 'e2e/lib'))
-  .filter((name) => /^agent-connect-screens.*\.json$/.test(name))
-  .sort()
+// The base manifest is found by its name, not by sort position: a part's suffix that sorts before "json" (".acting-as",
+// ".delete", ".hcp-…") would otherwise come first and be taken for the base.
+const BASE_MANIFEST = 'agent-connect-screens.json'
+const manifestOrder = (names: string[]) => [
+  ...names.filter((n) => n === BASE_MANIFEST),
+  ...names.filter((n) => n !== BASE_MANIFEST).sort(),
+]
+const MANIFEST_FILES = manifestOrder(
+  readdirSync(path.join(ROOT, 'e2e/lib')).filter((name) => /^agent-connect-screens.*\.json$/.test(name))
+)
 const MANIFESTS: Array<{ file: string } & Manifest> = MANIFEST_FILES.map((file) => ({
   file,
   ...JSON.parse(readFileSync(path.join(ROOT, 'e2e/lib', file), 'utf8')),
@@ -124,7 +131,12 @@ describe('agent connect screen catalogue (a check on words, not 7.11 evidence)',
   })
 
   it('reads every manifest and drawing file, names one canvas and kit folder, and draws no state twice', () => {
-    expect(MANIFEST_FILES[0]).toBe('agent-connect-screens.json')
+    expect(MANIFEST_FILES[0]).toBe(BASE_MANIFEST)
+    // Control: a part whose suffix sorts before ".json" still comes after the base, and a missing base is not invented.
+    expect(
+      manifestOrder(['agent-connect-screens.acting-as.json', BASE_MANIFEST, 'agent-connect-screens.z.json'])
+    ).toEqual([BASE_MANIFEST, 'agent-connect-screens.acting-as.json', 'agent-connect-screens.z.json'])
+    expect(manifestOrder(['agent-connect-screens.acting-as.json'])[0]).not.toBe(BASE_MANIFEST)
     expect(DRAWING_FILES).toContain('screenStates.tsx')
     expect(MANIFESTS.filter((m) => m.canvas !== MANIFEST.canvas || m.kit !== MANIFEST.kit).map((m) => m.file)).toEqual(
       []
