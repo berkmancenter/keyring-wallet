@@ -1752,7 +1752,7 @@
     "DetailsLinkedAt": "Vinculado",
     "BannerAway": "Seu agente está ausente — {{status}}",
     "BannerNotAnswering": "Seu agente não está respondendo a este telefone. Tentando de novo.",
-    "BannerPhoneClock": "A data e a hora do seu telefone parecem estar erradas. Ative a data e hora automáticas nas configurações do telefone e tente de novo.",
+    "BannerPhoneClock": "A data e a hora do seu telefone parecem estar erradas. Ative a data e hora automáticas nas configurações do telefone e depois tente de novo.",
     "OpenYourAgent": "Seu agente",
     "IWasInvited": "Fui convidado",
     "IWasInvitedHint": "O admin de uma comunidade está convidando você. Você envia quem você é e depois entra.",
@@ -2608,7 +2608,7 @@
       "notApproved": "Seu aprovador não aprovou, então seu agente não fez isso. Talvez tenha recusado, ou não respondido a tempo.",
       "noAnswer": "Seu agente não respondeu. Confira Meu agente antes de tentar de novo.",
       "unreachable": "O Keyring não conseguiu falar com seu agente. Confira sua conexão e tente de novo.",
-      "phoneClock": "A data e a hora do seu telefone parecem estar erradas. Ative a data e hora automáticas nas configurações do telefone e tente de novo.",
+      "phoneClock": "A data e a hora do seu telefone parecem estar erradas. Ative a data e hora automáticas nas configurações do telefone e depois tente de novo.",
       "failed": "Seu agente não conseguiu fazer isso.",
       "refused": "Seu agente recusou ({{code}})."
     },

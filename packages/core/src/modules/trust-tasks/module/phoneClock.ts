@@ -14,11 +14,11 @@
  * f7b78e29d, word them the same way.
  *
  * - `malformedRequest` with `FUTURE_ISSUED_AT`, "issuedAt is in the future
- *   beyond the consumer's skew tolerance" (`freshness.rs:322`): `issuedAt`
+ *   beyond the consumer's skew tolerance" (the const at `freshness.rs:322`, its text at `:323`): `issuedAt`
  *   more than 60 s ahead (`DEFAULT_SKEW`, `:49`). The wire message is the
  *   variant's Display, "malformed request: <reason>" (`error.rs:608`).
  * - `expired` with `STALE_WIRE_MESSAGE`, "document is outside the consumer's
- *   acceptance window" (`error.rs:835`): `issuedAt` older than the window plus
+ *   acceptance window" (the const at `error.rs:835`, its text at `:836`): `issuedAt` older than the window plus
  *   60 s, and the VTA's window is 10 min (vti-common `acceptance.rs:61-62`,
  *   `trust_task/mod.rs:66`), checked on every task it is sent
  *   (vta-service `trust_tasks/mod.rs:1978`). Not the `expired` of a reached
@@ -28,6 +28,11 @@
  *   clock-skew allowance)" (affinidi-data-integrity `lib.rs:812`,
  *   `DEFAULT_CLOCK_SKEW` `options.rs:183`): the proof's `created` more than
  *   60 s ahead. The VTA checks `issuedAt` first, so this is the rarer one.
+ *
+ * Each pattern matches only part of the message, on purpose: the words come
+ * after a variant's prefix ("malformed request: ") and go on with a section
+ * reference ("(SPEC §7.2)"), either of which may change on its own. The
+ * tests pin the whole messages these versions send.
  *
  * Anything else, including one of these codes with other words, is not the
  * clock. A VTA that words these differently falls back to what the phone did
