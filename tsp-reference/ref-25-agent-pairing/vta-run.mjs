@@ -506,6 +506,33 @@ add(
   ["keys/sign-document/0.1", "vta/webvh/dids/create/1.2", "vta/credentials/issue/0.2"],
 );
 
+add("own-entry", "Q7: can an agent entry read its own ACL entry, and who created it, through a task it is allowed", async () => {
+  const context = await newContext("Own entry");
+  const agent = mintIdentity();
+  const granted = await call(A, "acl/grant/0.3", { entry: entryFor(agent.did, { contexts: [context], expiresAt: inFourHours() }) });
+  if (!granted.ok) return { grant: code(granted) };
+  const session = await signIn({ ...at, identity: agent });
+  const shown = await call(session, "acl/show/0.3", { subject: agent.did });
+  const listed = await call(session, "acl/list/0.4", { subjectPrefix: agent.did });
+  const who = await call(session, "auth/whoami/0.1");
+  // The control: the same reads by the administrator, so a refusal above is about the caller, not the reads.
+  const asAdmin = await call(A, "acl/show/0.3", { subject: agent.did });
+  const names = (payload) => (payload && typeof payload === "object" ? Object.keys(payload).sort() : []);
+  return {
+    grant: code(granted),
+    asTheAgent: {
+      aclShowOwn: code(shown),
+      aclShowOwnNamesCreator: shown.ok ? JSON.stringify(shown.payload).includes(admin.did) : false,
+      aclListOwn: code(listed),
+      aclListOwnNamesCreator: listed.ok ? JSON.stringify(listed.payload).includes(admin.did) : false,
+      whoami: code(who),
+      whoamiMembers: names(who.payload),
+      whoamiNamesCreator: who.ok ? JSON.stringify(who.payload).includes(admin.did) : false,
+    },
+    control: { aclShowAsAdministrator: code(asAdmin), namesCreator: asAdmin.ok ? JSON.stringify(asAdmin.payload).includes(admin.did) : false },
+  };
+}, ["acl/show/0.3", "acl/list/0.4", "auth/whoami/0.1"]);
+
 // ───────────────────────────────────────────────────────────────── the run
 
 const needed = ["acl/grant/0.3", "vta/memory/put/0.3"];
