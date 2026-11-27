@@ -67,8 +67,10 @@ export class AgentConnectionStore {
    * it stands afterwards.
    *
    * The comparison is by reference, not by value: a callback that returns a copy (`{ ...current }`) with nothing
-   * changed still writes. A caller whose change may be empty (7.10's reconcile when the key has not moved) returns
-   * `current` itself to write nothing, and a caller comparing outcomes compares against the object it returned.
+   * changed still writes. A caller that decides to keep a record as it is (the driver's leftover, finding a connected
+   * agent there) returns `current` itself to write nothing, and a caller comparing outcomes compares against the object
+   * it returned. A caller that always changes something (7.10's reconcile stamps `lastReconciledAt` on every record)
+   * has no unchanged case, and must not return `current` to skip that write.
    */
   public upsert(
     id: string,
