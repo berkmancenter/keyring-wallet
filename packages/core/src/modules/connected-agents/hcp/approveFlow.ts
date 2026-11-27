@@ -8,9 +8,10 @@
  * 5. The person types the four digits from their terminal: one try. A mismatch denies the request and counts one
  *    wrong number on `../lockout.ts`, as the base path's pairing does; while locked out, scanning gives `locked`
  *    before any wait.
- * 6. A match shows the approve view; 7. Approve calls `decide(id, 'approve')`, which runs the phone's owner check
- *    itself; 8. on `approved`, `onApproved` writes part 3's record; 9. Cancel before Approve denies the request if
- *    one was found, and otherwise sends nothing.
+ * 6. A match shows the approve view; 7. Approve first writes part 3's approval in flight (`beforeApprove`, naming the
+ *    grant), then calls `decide(id, 'approve')`, which runs the phone's owner check itself; 8. on `approved`,
+ *    `onApproved` makes it part 3's connection; 9. Cancel before Approve denies the request if one was found, and
+ *    otherwise sends nothing.
  *
  * The match number is never kept: not in a state, a view, a call or a log. The typed digits are compared and dropped.
  *
@@ -56,7 +57,20 @@ export interface HcpApproveFlowDeps {
   /** The base path's lockout (`../lockout.ts`), shared with pairing: the same wrong-number count. */
   lockout: Pick<PairingLockout, 'state' | 'recordWrongNumber'>
   clock: () => Date
-  /** Part 3 writes the record here. `approvedAt` is the clock when `decide(approve)` resolved. */
+  /**
+   * Part 3 writes the approval in flight here, BEFORE `decide(approve)` (`./store.ts`, `beginHcpApproval`): it names
+   * the grant the approval would create, so a failure or a stop from here on leaves a record for the reconcile rather
+   * than a grant with none. If it fails, nothing is approved. `startedAt` is the clock just before the write.
+   */
+  beforeApprove: (
+    view: HcpApprovalView,
+    approval: { id: string; expiresAt: string },
+    startedAt: Date
+  ) => Promise<void> | void
+  /**
+   * Part 3 makes the approval in flight the connection here (`recordHcpApproval`). `approvedAt` is the clock when
+   * `decide(approve)` resolved. If it fails, the approval in flight stays and the reconcile completes it.
+   */
   onApproved: (view: HcpApprovalView, approvedAt: Date) => Promise<void> | void
   /** A timer, for the waits; `setTimeout` by default. Returns its cancel. */
   setTimer?: (run: () => void, ms: number) => () => void
@@ -221,6 +235,14 @@ export function createHcpApproveFlow(deps: HcpApproveFlowDeps): HcpApproveFlow {
       const { id, view } = found
       set({ state: 'approving', view })
       const listed = () => deps.source.list().find((a) => a.id === id)
+      const approval = listed()
+      if (!approval) return set(EXPIRED)
+      try {
+        // The record first, then the approval: from here on a failure leaves a record naming the grant, not a gap.
+        await deps.beforeApprove(view, { id, expiresAt: approval.expiresAt }, deps.clock())
+      } catch (error) {
+        return set({ state: 'failed', error: `not recorded, so not approved: ${errorText(error)}` })
+      }
       try {
         // `decide` runs the phone's owner check (face or fingerprint) itself; none is added here.
         await deps.source.decide(id, 'approve')

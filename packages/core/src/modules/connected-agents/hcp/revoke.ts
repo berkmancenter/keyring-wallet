@@ -31,7 +31,7 @@ export interface HcpRevokeDeps {
 export type HcpRevokeResult =
   | { ok: true; connection: HcpConnection }
   | { ok: false; missing: true }
-  | { ok: false; refused: string }
+  | { ok: false; refused: string; message: { key: 'RevokeRefused'; params: { name: string } } }
   | { ok: false; unreachable: true; message: { key: 'RevokeUnreachable'; params: { name: string } } }
 
 /** Poll every 5 s for the first 2 minutes after the revoke. */
@@ -52,7 +52,9 @@ export async function revokeHcpGrant(deps: HcpRevokeDeps, id: string): Promise<H
   if (c.revokedAt) return { ok: true, connection: c }
   const outcome = await callHcp<unknown>(deps.port, HCP_GRANTS_REVOKE, { grantId: c.grantId })
   if (!outcome.ok) {
-    if ('refused' in outcome) return { ok: false, refused: outcome.refused }
+    if ('refused' in outcome) {
+      return { ok: false, refused: outcome.refused, message: { key: 'RevokeRefused', params: { name: c.name } } }
+    }
     return { ok: false, unreachable: true, message: { key: 'RevokeUnreachable', params: { name: c.name } } }
   }
   const revokedAt = deps.clock().toISOString()
@@ -96,7 +98,7 @@ function readClientSummary(value: unknown, clientVid: string): ClientSummary | u
 export interface HcpPollResult {
   /** The record after the poll, or undefined if there is none. */
   connection?: HcpConnection
-  /** The `usableUntil` this poll read, if any: the caller passes it to the next poll as `lastUsableUntil`. */
+  /** The `usableUntil` this poll read, if any (it is also kept on the record, as `lastUsableUntil`). */
   usableUntil?: string
 }
 
@@ -109,36 +111,35 @@ export function hcpNoticePending(c: HcpConnection | undefined): c is HcpConnecti
  * Ask the VTA whether the client was told of the revoke, and record the answer. Sends nothing for a record that is not
  * revoked or whose notice is already `told` or `notTold`.
  *
- * `lastUsableUntil` is the `usableUntil` an earlier poll read (the record has no place for it). At or after the stop,
- * a notice still `telling` becomes `notTold` with this poll's `usableUntil`, else `lastUsableUntil`, else `revokedAt`.
+ * A `usableUntil` the poll reads is kept on the record as `lastUsableUntil`, so it survives a restart. At or after the
+ * stop, a notice still `telling` becomes `notTold` with this poll's `usableUntil`, else the record's
+ * `lastUsableUntil`, else `revokedAt`: the same answer whether or not the app restarted in between.
  */
-export async function pollHcpNotice(
-  deps: HcpRevokeDeps,
-  id: string,
-  options: { lastUsableUntil?: string } = {}
-): Promise<HcpPollResult> {
+export async function pollHcpNotice(deps: HcpRevokeDeps, id: string): Promise<HcpPollResult> {
   const c = await deps.store.get(id)
   if (!hcpNoticePending(c)) return { connection: c }
   const outcome = await callHcp<unknown>(deps.port, HCP_DISCLOSURES_SUMMARY, { client: c.id })
   const now = deps.clock()
   const summary = outcome.ok ? readClientSummary(outcome.value, c.id) : undefined
   const read = summary?.usableUntil ?? undefined
-  const lastRead = read ?? options.lastUsableUntil
+  const stopped = nextHcpPoll(new Date(c.revokedAt), now) === undefined
 
-  let notice: HcpNoticeState
-  if (summary?.notification === 'delivered') {
-    // `usableUntil` is the time of delivery. Delivered with no time: the poll's own time, the first Keyring knew of it.
-    notice = { state: 'told', at: read ?? now.toISOString() }
-  } else if (summary?.notification === 'abandoned') {
-    notice = { state: 'notTold', usableUntil: lastRead ?? c.revokedAt }
-  } else if (nextHcpPoll(new Date(c.revokedAt), now) === undefined) {
-    notice = { state: 'notTold', usableUntil: lastRead ?? c.revokedAt }
-  } else {
-    notice = { state: 'telling', lastPolledAt: now.toISOString() }
+  const noticeFor = (r: HcpConnection & { revokedAt: string }): HcpNoticeState => {
+    const lastRead = read ?? r.lastUsableUntil
+    if (summary?.notification === 'delivered') {
+      // `usableUntil` is the time of delivery. Delivered with no time: the poll's own time, the first Keyring knew.
+      return { state: 'told', at: read ?? now.toISOString() }
+    }
+    if (summary?.notification === 'abandoned' || stopped) {
+      return { state: 'notTold', usableUntil: lastRead ?? r.revokedAt }
+    }
+    return { state: 'telling', lastPolledAt: now.toISOString() }
   }
-
-  // A notice settled meanwhile (another poll) is never put back to `telling`, nor overwritten.
-  const connection = await deps.store.update(id, (r) => (hcpNoticePending(r) ? { ...r, notice } : r))
+  // Decided on the record as it is under the lock: a notice settled meanwhile (another poll) is never put back to
+  // `telling`, nor overwritten, and the fallback reads the `lastUsableUntil` the poll before this one stored.
+  const connection = await deps.store.update(id, (r) =>
+    hcpNoticePending(r) ? { ...r, notice: noticeFor(r), ...(read !== undefined ? { lastUsableUntil: read } : {}) } : r
+  )
   return { connection, usableUntil: read }
 }
 
@@ -161,7 +162,6 @@ export function useHcpNotice(
     if (!isHcpEnabled()) return undefined
     let stopped = false
     let timer: ReturnType<typeof setTimeout> | undefined
-    let lastUsableUntil: string | undefined
     const current = (): HcpRevokeDeps => ({
       port: depsRef.current.port,
       store: depsRef.current.store,
@@ -179,9 +179,8 @@ export function useHcpNotice(
       timer = undefined
       if (stopped) return
       try {
-        const result = await pollHcpNotice(current(), id, { lastUsableUntil })
+        const result = await pollHcpNotice(current(), id)
         if (stopped) return
-        if (result.usableUntil) lastUsableUntil = result.usableUntil
         setConnection(result.connection)
         schedule(result.connection)
       } catch {

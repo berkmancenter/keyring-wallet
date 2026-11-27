@@ -31,11 +31,19 @@ export type HcpCopyKey =
   | 'Revoke'
   | 'Keep'
   | 'RevokeUnreachable'
+  | 'RevokeRefused'
   | 'NewMemoryTitle'
   | 'NewMemoryField'
   | 'NewMemoryHelper'
   | 'NewMemorySave'
   | 'MemoryNotSaved'
+  | 'MemoryRefused'
+
+/**
+ * The keys for a refusal (added after the brief, at review): unlike `RevokeUnreachable` and `MemoryNotSaved`, the
+ * same request fails the same way every time, so none of these strings may offer another attempt.
+ */
+export const HCP_REFUSAL_KEYS = ['RevokeRefused', 'MemoryRefused'] as const satisfies readonly HcpCopyKey[]
 
 export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string; source: HcpCopySource }> = {
   ApproveTitle: {
@@ -140,6 +148,14 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     ptBr: 'Não conseguimos falar com seu VTA, então "{{name}}" continua conectado.',
     source: 'plan §6',
   },
+  // Plan §6 has no words for a refused revoke; this follows its "Your VTA refused this connection. Nothing was
+  // connected." A refusal (for example `notFound`, a grant the VTA no longer holds) repeats, so no "try again".
+  RevokeRefused: {
+    en: 'Your VTA refused to revoke "{{name}}", so nothing changed here.',
+    fr: "Votre VTA a refusé de révoquer « {{name}} », donc rien n'a changé ici.",
+    ptBr: 'Seu VTA recusou revogar "{{name}}", então nada mudou aqui.',
+    source: 'PROPOSED',
+  },
   NewMemoryTitle: {
     en: 'Add a memory for "{{name}}"',
     fr: 'Ajouter un souvenir pour « {{name}} »',
@@ -168,6 +184,14 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     en: "We couldn't reach your VTA, so this memory wasn't saved.",
     fr: "Nous n'avons pas pu joindre votre VTA, donc ce souvenir n'a pas été enregistré.",
     ptBr: 'Não conseguimos falar com seu VTA, então esta memória não foi salva.',
+    source: 'PROPOSED',
+  },
+  // Plan §6 has no words for a refused memory; as `RevokeRefused`, it follows "Your VTA refused this connection." and
+  // offers no retry, since the same memory would be refused again.
+  MemoryRefused: {
+    en: "Your VTA refused this memory, so it wasn't saved.",
+    fr: "Votre VTA a refusé ce souvenir, donc il n'a pas été enregistré.",
+    ptBr: 'Seu VTA recusou esta memória, então ela não foi salva.',
     source: 'PROPOSED',
   },
 }

@@ -76,6 +76,35 @@ export type HcpConnection = {
   expiresAt: string
   revokedAt?: string
   notice?: HcpNoticeState
+  /**
+   * The newest `usableUntil` a notice poll read for this client, kept beside `notice` so that the 24-hour stop settles
+   * a notice with the same time whether or not the app restarted while it was polling.
+   */
+  lastUsableUntil?: string
+}
+
+/**
+ * An HCP approval in flight (part 3): written before `decide(approve)` is called, under its own kind in the same
+ * store and keyed like {@link HcpConnection} by the client's VID, so an existing connection for the client is left as
+ * it is until the new one is confirmed. It names the grant the approval would create: if the approval fails, or the
+ * app stops before the connection is written, the reconcile completes it or revokes the grant by `grantId`. Times are
+ * ISO-8601 instants.
+ */
+export type HcpApprovalInFlight = {
+  /** The client's VID. */
+  id: string
+  /** The name the person gave. */
+  name: string
+  /** The grant the approval creates, pre-assigned (the `hcpGrantClient` effect's `grantId`). */
+  grantId: string
+  threadId: string
+  /** The consent request being approved. */
+  approvalId: string
+  /** The consent request's own `expiresAt`: it cannot be approved after this. */
+  approvalExpiresAt: string
+  expiresInSeconds: number
+  /** When this record was written, just before `decide(approve)`. */
+  startedAt: string
 }
 
 // version-pinned: the hcp suite is pinned at 0.1 (suite 4e2dd42fa); the VTA serves this version only
