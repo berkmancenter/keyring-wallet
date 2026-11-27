@@ -17,6 +17,8 @@ import {
 import type { HcpApprovalInFlight, HcpApprovalView, HcpConnection } from '../types'
 import { CLIENT_VID, GRANT, OTHER_VID, THREAD } from './fixtures/hcpApproval'
 
+const SECOND_GRANT = 'urn:uuid:22222222-2222-4222-8222-222222222222'
+
 function fakeAgent() {
   const genericRecords = memoryGenericRecords()
   return { agent: { genericRecords } as unknown as Agent, genericRecords }
@@ -154,11 +156,11 @@ describe('the approval in flight', () => {
     await beginHcpApproval(store)(view(), APPROVAL, STARTED)
     expect(hcpApprovalInFlight(view(), APPROVAL, STARTED)).toEqual(inFlight())
     expect(await store.listInFlight()).toEqual([inFlight()])
-    expect(await store.getInFlight(CLIENT_VID)).toEqual(inFlight())
+    expect(await store.getInFlight(GRANT)).toEqual(inFlight())
     expect(genericRecords.records[0].tags).toEqual({
       recordType: 'keyring/hcp-connection',
       kind: 'approving',
-      key: CLIENT_VID,
+      key: GRANT,
     })
     expect(await store.list()).toEqual([])
   })
@@ -192,4 +194,75 @@ describe('the approval in flight', () => {
     expect(await store.removeInFlight(CLIENT_VID, GRANT)).toBe(true)
     expect(await store.listInFlight()).toEqual([])
   })
+
+  it("a second approval for the same client is written beside the first, never over it; each is its grant's", async () => {
+    const { agent } = fakeAgent()
+    const store = new HcpConnectionStore(agent)
+    const second = { ...inFlight(), grantId: SECOND_GRANT, approvalId: 'consent-2' }
+    await store.putInFlight(inFlight())
+    await store.putInFlight(second)
+    expect(await store.listInFlight()).toEqual(expect.arrayContaining([inFlight(), second]))
+    expect(await store.listInFlight()).toHaveLength(2)
+    expect(await store.getInFlight(GRANT)).toEqual(inFlight())
+    expect(await store.getInFlight(SECOND_GRANT)).toEqual(second)
+    // Removing one, or completing one, leaves the other.
+    expect(await store.removeInFlight(OTHER_VID, GRANT)).toBe(false)
+    await store.complete(connection({ grantId: SECOND_GRANT }))
+    expect(await store.listInFlight()).toEqual([inFlight()])
+  })
 })
+
+describe('a connection replaced while its grant may be live', () => {
+  const NOW = new Date('2026-11-27T12:00:00.000Z')
+
+  it('complete over a live connection for another grant keeps that grant as retiring, in the same step', async () => {
+    const { agent } = fakeAgent()
+    const store = new HcpConnectionStore(agent)
+    await store.put(connection())
+    const newer = connection({ grantId: SECOND_GRANT, approvedAt: '2026-11-27T11:00:00.000Z' })
+    await store.complete(newer, NOW)
+    expect(await store.get(CLIENT_VID)).toEqual(newer)
+    expect(await store.listRetiring()).toEqual([
+      { id: CLIENT_VID, name: 'My notes agent', grantId: GRANT, threadId: THREAD, retiredAt: NOW.toISOString() },
+    ])
+    expect(await store.removeRetiring(OTHER_VID, GRANT)).toBe(false)
+    expect(await store.removeRetiring(CLIENT_VID, GRANT)).toBe(true)
+    expect(await store.listRetiring()).toEqual([])
+  })
+
+  // control: a revoked grant is not live, and completing the same grant again replaces nothing.
+  it('control: nothing is retired over a revoked connection, nor by completing the same grant', async () => {
+    const { agent } = fakeAgent()
+    const store = new HcpConnectionStore(agent)
+    await store.put(connection({ revokedAt: '2026-11-27T10:30:00.000Z' }))
+    await store.complete(connection({ grantId: SECOND_GRANT, approvedAt: '2026-11-27T11:00:00.000Z' }), NOW)
+    await store.complete(connection({ grantId: SECOND_GRANT, approvedAt: '2026-11-27T11:00:00.000Z' }), NOW)
+    expect(await store.listRetiring()).toEqual([])
+    expect((await store.get(CLIENT_VID))?.grantId).toBe(SECOND_GRANT)
+  })
+
+  it('an approval older than the connection does not replace it: its own grant is the one kept as retiring', async () => {
+    const { agent } = fakeAgent()
+    const store = new HcpConnectionStore(agent)
+    const newer = connection({ grantId: SECOND_GRANT, approvedAt: '2026-11-27T11:00:00.000Z' })
+    await store.put(newer)
+    await store.putInFlight(inFlightFor(GRANT))
+    await store.complete(connection(), NOW)
+    expect(await store.get(CLIENT_VID)).toEqual(newer)
+    expect((await store.listRetiring()).map((r) => r.grantId)).toEqual([GRANT])
+    expect(await store.listInFlight()).toEqual([])
+  })
+})
+
+function inFlightFor(grantId: string): HcpApprovalInFlight {
+  return {
+    id: CLIENT_VID,
+    name: 'My notes agent',
+    grantId,
+    threadId: THREAD,
+    approvalId: 'consent-1',
+    approvalExpiresAt: '2026-11-27T10:05:00.000Z',
+    expiresInSeconds: 14400,
+    startedAt: '2026-11-27T10:00:30.000Z',
+  }
+}

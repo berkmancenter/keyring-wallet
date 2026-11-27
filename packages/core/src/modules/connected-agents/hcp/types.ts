@@ -85,10 +85,10 @@ export type HcpConnection = {
 
 /**
  * An HCP approval in flight (part 3): written before `decide(approve)` is called, under its own kind in the same
- * store and keyed like {@link HcpConnection} by the client's VID, so an existing connection for the client is left as
- * it is until the new one is confirmed. It names the grant the approval would create: if the approval fails, or the
- * app stops before the connection is written, the reconcile completes it or revokes the grant by `grantId`. Times are
- * ISO-8601 instants.
+ * store and keyed by `grantId`, so an existing connection for the client, and an earlier approval in flight for it,
+ * are left as they are until the new one is confirmed. It names the grant the approval would create: if the approval
+ * fails, or the app stops before the connection is written, the reconcile completes it or revokes the grant by
+ * `grantId`. Times are ISO-8601 instants.
  */
 export type HcpApprovalInFlight = {
   /** The client's VID. */
@@ -105,6 +105,21 @@ export type HcpApprovalInFlight = {
   expiresInSeconds: number
   /** When this record was written, just before `decide(approve)`. */
   startedAt: string
+}
+
+/**
+ * A grant whose connection a newer approval for the same client replaced while the grant may still be live (part 3):
+ * written in the same step as the new connection, under its own kind, keyed by `grantId`; the reconcile revokes it.
+ * Times are ISO-8601 instants.
+ */
+export type HcpRetiringGrant = {
+  /** The client's VID. */
+  id: string
+  name: string
+  grantId: string
+  threadId: string
+  /** When the newer connection replaced it. */
+  retiredAt: string
 }
 
 // version-pinned: the hcp suite is pinned at 0.1 (suite 4e2dd42fa); the VTA serves this version only

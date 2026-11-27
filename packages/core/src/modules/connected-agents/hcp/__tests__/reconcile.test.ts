@@ -11,8 +11,8 @@ import type { VtiApproval } from '../../../trust-tasks/module/vtaAgent'
 import { setAgentConnectEnabled } from '../../agentConnectFlag'
 import { setHcpEnabled } from '../hcpFlag'
 import { reconcileHcpApprovals, type HcpReconcileDeps } from '../reconcile'
-import { HcpConnectionStore } from '../store'
-import { HCP_GRANTS_REVOKE, type HcpApprovalInFlight, type HcpConnection } from '../types'
+import { beginHcpApproval, HcpConnectionStore, recordHcpApproval } from '../store'
+import { HCP_GRANTS_REVOKE, type HcpApprovalInFlight, type HcpApprovalView, type HcpConnection } from '../types'
 import type { HcpVtaPort } from '../vtaPort'
 import { expectValid, hcpSchemas } from './fixtures/hcpSchemas'
 import { CLIENT_VID, GRANT, HELD_AT, hcpApproval, OTHER_VID, THREAD } from './fixtures/hcpApproval'
@@ -211,6 +211,139 @@ describe('reconcileHcpApprovals', () => {
         { id: OTHER_VID, grantId: OLD_GRANT, outcome: 'revoked' },
       ])
     )
+  })
+
+  describe('a second approval for the same client', () => {
+    const SECOND_GRANT = 'urn:uuid:22222222-2222-4222-8222-222222222222'
+    const SECOND_STARTED = STARTED + 2 * MINUTE
+    const viewFor = (grantId: string): HcpApprovalView => ({
+      title: { key: 'ApproveTitle', params: { name: 'My notes agent' } },
+      rows: [],
+      warning: { key: 'ApproveOwnTerminal' },
+      approve: { key: 'Approve' },
+      clientVid: CLIENT_VID,
+      grantId,
+      threadId: THREAD,
+      expiresInSeconds: 14400,
+    })
+    const requestA = { id: 'consent-1', expiresAt: iso(REQUEST_ENDS) }
+    const requestB = { id: 'consent-2', expiresAt: iso(SECOND_STARTED + 5 * MINUTE) }
+    const approved = [
+      hcpApproval({ status: 'approved' }),
+      hcpApproval({ id: 'consent-2', status: 'approved', expiresAt: requestB.expiresAt }),
+    ]
+
+    // The review's case: A is approved at the VTA and its onApproved fails; the same client asks again and B
+    // completes. A's grant must still be reachable by the reconcile, which revokes it and leaves B the connection.
+    it('leaves the first grant reachable when onApproved failed for it, and the reconcile revokes it', async () => {
+      const { deps, store, task } = await setup({ approvals: approved, now: SECOND_STARTED + MINUTE })
+      await beginHcpApproval(store)(viewFor(GRANT), requestA, new Date(STARTED))
+      // decide(A) resolves; onApproved(A) throws, so nothing more is written for A.
+      await beginHcpApproval(store)(viewFor(SECOND_GRANT), requestB, new Date(SECOND_STARTED))
+      await recordHcpApproval(store)(viewFor(SECOND_GRANT), new Date(SECOND_STARTED + 5000))
+
+      expect((await store.listInFlight()).map((f) => f.grantId)).toEqual([GRANT])
+      expect(await reconcileHcpApprovals(deps)).toEqual([{ id: CLIENT_VID, grantId: GRANT, outcome: 'revoked' }])
+      expect(task).toHaveBeenCalledTimes(1)
+      expect(task.mock.calls[0][1]).toStrictEqual({ grantId: GRANT })
+      expect((await store.get(CLIENT_VID))?.grantId).toBe(SECOND_GRANT)
+      expect(await store.listInFlight()).toEqual([])
+    })
+
+    it('a completed connection replaced by a newer one is revoked by the reconcile, as retiring', async () => {
+      const { deps, store, task } = await setup({ approvals: approved, now: SECOND_STARTED + MINUTE })
+      await beginHcpApproval(store)(viewFor(GRANT), requestA, new Date(STARTED))
+      await recordHcpApproval(store)(viewFor(GRANT), new Date(STARTED + 5000))
+      await beginHcpApproval(store)(viewFor(SECOND_GRANT), requestB, new Date(SECOND_STARTED))
+      await recordHcpApproval(store)(viewFor(SECOND_GRANT), new Date(SECOND_STARTED + 5000))
+
+      expect(await reconcileHcpApprovals(deps)).toEqual([
+        { id: CLIENT_VID, grantId: GRANT, retiring: true, outcome: 'revoked' },
+      ])
+      expect(task.mock.calls.map((c) => c[1])).toStrictEqual([{ grantId: GRANT }])
+      expect((await store.get(CLIENT_VID))?.grantId).toBe(SECOND_GRANT)
+      expect(await store.listRetiring()).toEqual([])
+    })
+
+    it('two approved approvals in flight, listed oldest first: the newest is completed and the older revoked', async () => {
+      const { deps, store, task } = await setup({
+        flights: [
+          inFlight(),
+          inFlight({ grantId: SECOND_GRANT, approvalId: 'consent-2', startedAt: iso(SECOND_STARTED) }),
+        ],
+        approvals: approved,
+        now: SECOND_STARTED + MINUTE,
+      })
+      expect(await reconcileHcpApprovals(deps)).toEqual([
+        { id: CLIENT_VID, grantId: SECOND_GRANT, outcome: 'completed' },
+        { id: CLIENT_VID, grantId: GRANT, outcome: 'revoked' },
+      ])
+      expect(task.mock.calls.map((c) => c[1])).toStrictEqual([{ grantId: GRANT }])
+      expect((await store.get(CLIENT_VID))?.grantId).toBe(SECOND_GRANT)
+      expect(await store.listInFlight()).toEqual([])
+      expect(await store.listRetiring()).toEqual([])
+    })
+
+    // control: the opposite of the case above: with the older connection approved before this approval started,
+    // the approval in flight is completed over it (and the older grant is the one retired).
+    it('control: an approval newer than the connection completes over it, and the older grant is retired', async () => {
+      const earlier: HcpConnection = {
+        id: CLIENT_VID,
+        name: 'My notes agent',
+        grantId: OLD_GRANT,
+        threadId: THREAD,
+        approvedAt: iso(HELD_AT - 60 * MINUTE),
+        expiresAt: iso(HELD_AT + 3 * 60 * MINUTE),
+      }
+      const { deps, store, task } = await setup({
+        flights: [inFlight()],
+        connections: [earlier],
+        approvals: [hcpApproval({ status: 'approved' })],
+        now: STARTED + MINUTE,
+      })
+      expect(await reconcileHcpApprovals(deps)).toEqual([
+        { id: CLIENT_VID, grantId: GRANT, outcome: 'completed' },
+        { id: CLIENT_VID, grantId: OLD_GRANT, retiring: true, outcome: 'revoked' },
+      ])
+      expect(task.mock.calls.map((c) => c[1])).toStrictEqual([{ grantId: OLD_GRANT }])
+      expect((await store.get(CLIENT_VID))?.grantId).toBe(GRANT)
+    })
+
+    it('a retiring grant still named by the connection (a stop inside complete) is removed, and nothing is sent', async () => {
+      const { deps, store, task } = await setup({ now: STARTED + MINUTE })
+      const current: HcpConnection = {
+        id: CLIENT_VID,
+        name: 'My notes agent',
+        grantId: GRANT,
+        threadId: THREAD,
+        approvedAt: iso(STARTED),
+        expiresAt: iso(STARTED + 4 * 60 * MINUTE),
+      }
+      // complete(B) retired the connection's grant, then stopped before writing B.
+      await store.put(current)
+      await store.complete({ ...current, grantId: SECOND_GRANT, approvedAt: iso(STARTED + 1000) })
+      await store.put(current)
+      expect(await reconcileHcpApprovals(deps)).toEqual([
+        { id: CLIENT_VID, grantId: GRANT, retiring: true, outcome: 'current' },
+      ])
+      expect(task).not.toHaveBeenCalled()
+      expect(await store.listRetiring()).toEqual([])
+    })
+
+    it('a retiring grant whose revoke fails is kept for the next reconcile; notFound removes it', async () => {
+      for (const [revoke, expected, left] of [
+        [async () => Promise.reject(new Error('timeout')), { outcome: 'kept', unreachable: true }, 1],
+        [async () => Promise.reject(refusal('notFound')), { outcome: 'absent' }, 0],
+      ] as const) {
+        const { deps, store } = await setup({ revoke, now: SECOND_STARTED + MINUTE })
+        await recordHcpApproval(store)(viewFor(GRANT), new Date(STARTED))
+        await recordHcpApproval(store)(viewFor(SECOND_GRANT), new Date(SECOND_STARTED))
+        expect(await reconcileHcpApprovals(deps)).toEqual([
+          { id: CLIENT_VID, grantId: GRANT, retiring: true, ...expected },
+        ])
+        expect(await store.listRetiring()).toHaveLength(left)
+      }
+    })
   })
 
   it('does nothing with the HCP flag off', async () => {
