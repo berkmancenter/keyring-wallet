@@ -1,5 +1,5 @@
 /**
- * The vendored `hcp/*` schemas (suite 186773c97) resolve, and every payload part 3 builds validates against them:
+ * The vendored `hcp/*` schemas (suite 4e2dd42fa) resolve, and every payload part 3 builds validates against them:
  * `entries/create` (the brief's exact object), `grants/revoke` `{ grantId }` and `disclosures/summary`
  * `{ client }`, with the answers a fake VTA gives. Each has a control in which one required member is removed.
  */
@@ -60,7 +60,7 @@ describe('the vendored hcp suite', () => {
 
   it('has its pin recorded', () => {
     expect(readFileSync(join(HCP_SUITE_DIR, 'SUITE_COMMIT.sha'), 'utf8')).toBe(
-      '186773c97d43d82d3b1cf33c9d21561d0c87af5b\n'
+      '4e2dd42fae13452fe30f0e077f359110bb2ad414\n'
     )
   })
 })

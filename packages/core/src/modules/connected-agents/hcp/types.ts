@@ -78,13 +78,13 @@ export type HcpConnection = {
   notice?: HcpNoticeState
 }
 
-// version-pinned: the hcp suite is pinned at 0.1 (suite 186773c97); the VTA serves this version only
+// version-pinned: the hcp suite is pinned at 0.1 (suite 4e2dd42fa); the VTA serves this version only
 export const HCP_GRANTS_REQUEST = 'https://trusttasks.org/spec/hcp/grants/request/0.1'
-// version-pinned: the hcp suite is pinned at 0.1 (suite 186773c97); the VTA serves this version only
+// version-pinned: the hcp suite is pinned at 0.1 (suite 4e2dd42fa); the VTA serves this version only
 export const HCP_ENTRIES_CREATE = 'https://trusttasks.org/spec/hcp/entries/create/0.1'
-// version-pinned: the hcp suite is pinned at 0.1 (suite 186773c97); the VTA serves this version only
+// version-pinned: the hcp suite is pinned at 0.1 (suite 4e2dd42fa); the VTA serves this version only
 export const HCP_GRANTS_REVOKE = 'https://trusttasks.org/spec/hcp/grants/revoke/0.1'
-// version-pinned: the hcp suite is pinned at 0.1 (suite 186773c97); the VTA serves this version only
+// version-pinned: the hcp suite is pinned at 0.1 (suite 4e2dd42fa); the VTA serves this version only
 export const HCP_DISCLOSURES_SUMMARY = 'https://trusttasks.org/spec/hcp/disclosures/summary/0.1'
 
 /** The five effect kinds of an HCP grant's consent request, in the order the VTA sends them. */

@@ -1,19 +1,21 @@
-# DRAFT: `hcp/*` schemas from an open upstream pull request
+# DRAFT: `hcp/*` schemas from upstream `main`, not yet published to the registry
 
-**These are a draft's, not a specification's.** They come from
-[trustoverip/dtgwg-trust-tasks-tf #1380](https://github.com/trustoverip/dtgwg-trust-tasks-tf/pull/1380)
-(`feat/hcp-suite`, the `hcp/*` suite carrying the Human Context Protocol 2.0-draft-3 as Trust Tasks), an open pull
-request when step 7.27 track C was briefed, at the commit in `SUITE_COMMIT.sha`
-(`186773c97d43d82d3b1cf33c9d21561d0c87af5b`, fetched 2026-11-27). The VTA side (track A) is being built to the
-same commit, so nothing checked against these is proven against a real service yet.
+**These are draft 0.1 specifications, merged but not yet published.** They come from the `main` branch of
+trustoverip/dtgwg-trust-tasks-tf, at the commit in `SUITE_COMMIT.sha` (`4e2dd42fae13452fe30f0e077f359110bb2ad414`,
+fetched 2026-11-27): the merge of
+[#1380](https://github.com/trustoverip/dtgwg-trust-tasks-tf/pull/1380) (`feat/hcp-suite`, the `hcp/*` suite carrying
+the Human Context Protocol 2.0-draft-3 as Trust Tasks), merged 2026-11-27. No published registry release holds them
+yet. They were first vendored from #1380's head at `186773c97`; the re-vendor at the merge changed description text
+only (no type, bound, `required`, `enum` or `$ref`). Nothing checked against these is proven against a real service
+yet.
 
 They are here for `../../schemas.test.ts` and the part 3 tests of the HCP demo: every payload Keyring builds for
 `hcp/entries/create`, `hcp/grants/revoke` and `hcp/disclosures/summary`, and every answer a fake VTA gives, is
 checked against these. When the suite changes, re-fetch every file here at the new commit, record it in
 `SUITE_COMMIT.sha`, rename this folder, and update the `version-pinned` constants in `../../../types.ts`.
 
-**Not drift-checked.** `expectNoDrift` reads commits from the registry clone at the pin, which does not hold a pull
-request's head.
+**Not drift-checked.** `expectNoDrift` reads commits from the registry clone at the pin (`2a66a0351`), which
+predates this merge. When a pin at or after `4e2dd42fa` lands, these can move under it.
 
 **Layout kept.** The files sit at the suite's own paths under `specs/`, so each relative `$ref` names a file here.
 A payload's `$id` is its directory (`https://trusttasks.org/spec/hcp/grants/revoke/0.1`), not its file, so its
@@ -26,7 +28,7 @@ resolve to those `$id`s: the registry's `$id`s not matching its paths is handled
 **Formatted.** The folder is left to prettier, not listed in `packages/.prettierignore`: the files are JSON-equal to
 the source, not byte-equal.
 
-| File here                                               | Source (#1380 at `186773c97`)                           |
+| File here                                               | Source (`main` at `4e2dd42fa`, merged as #1380)         |
 | ------------------------------------------------------- | ------------------------------------------------------- |
 | `specs/hcp/entries/create/0.1/payload.schema.json`      | `specs/hcp/entries/create/0.1/payload.schema.json`      |
 | `specs/hcp/grants/revoke/0.1/payload.schema.json`       | `specs/hcp/grants/revoke/0.1/payload.schema.json`       |
@@ -52,5 +54,5 @@ name and version number."_
 
 **Attribution:** Trust Tasks specifications, `hcp/entries/create` **0.1**, `hcp/grants/revoke` **0.1**,
 `hcp/disclosures/summary` **0.1** and `hcp/_shared` **0.1** (carrying the Human Context Protocol 2.0-draft-3), from
-https://github.com/trustoverip/dtgwg-trust-tasks-tf at commit `186773c97d43d82d3b1cf33c9d21561d0c87af5b`. Keep this
+https://github.com/trustoverip/dtgwg-trust-tasks-tf at commit `4e2dd42fae13452fe30f0e077f359110bb2ad414`. Keep this
 with the files, and update the versions if a schema is re-vendored from another version.

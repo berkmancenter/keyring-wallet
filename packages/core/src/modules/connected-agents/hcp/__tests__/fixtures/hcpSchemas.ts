@@ -1,5 +1,5 @@
 /**
- * The vendored `hcp/*` schemas (`hcp-suite-186773c97/`, see its README) compiled for the HCP tests: a request and a
+ * The vendored `hcp/*` schemas (`hcp-suite-4e2dd42fa/`, see its README) compiled for the HCP tests: a request and a
  * response validator for each of the three tasks Keyring sends. Each shared file is added under its own `$id`; each
  * payload schema under the URL of its file, since its `$id` is its directory and its relative `$ref`s resolve to the
  * shared `$id`s only from the file.
@@ -10,7 +10,7 @@ import { join } from 'path'
 
 import { HCP_DISCLOSURES_SUMMARY, HCP_ENTRIES_CREATE, HCP_GRANTS_REVOKE } from '../../types'
 
-export const HCP_SUITE_DIR = join(__dirname, 'hcp-suite-186773c97')
+export const HCP_SUITE_DIR = join(__dirname, 'hcp-suite-4e2dd42fa')
 
 const SHARED = [
   'common.schema.json',
