@@ -18,18 +18,24 @@
  * 4. The record goes from `revoking` to `revoked` only once a full listing no longer shows the entry.
  *
  * **What it writes.** Of the `AgentConnection` record (§3.11), exactly `state`, `lastReconciledAt`, `keyChanged` and
- * `agentDid`, always as get, change, put. `keyChanged` and `agentDid` are written by the reconcile alone, when it finds
- * the agent's `deviceId` under a subject other than `agentDid` (§3.9: "it records the new subject, sets
+ * `agentDid`, each write one `connections.update(record.id, r => ({ ...r, ...fields }))`: the store reads, changes and
+ * writes the record under its lock for that `id`, so a member another writer changed meanwhile (the driver's VDC
+ * grant, a rename) is kept. `fields` holds only those four ({@link Written}), and every read that decides a write is
+ * taken inside the callback, on the `r` it is given. `keyChanged` and `agentDid` are written by the reconcile alone,
+ * when it finds the agent's `deviceId` under a subject other than `agentDid` (§3.9: "it records the new subject, sets
  * `keyChanged`"; the plan's 7.10 acceptance: "the app-start reconcile records a changed key"): `agentDid` becomes the
- * new subject and `keyChanged` becomes `true`, in the same get, change, put as `lastReconciledAt`. It also reports it
+ * new subject and `keyChanged` becomes `true`, in the same update as `lastReconciledAt`. It also reports it
  * ({@link ReconcileResult}). Nothing here sets `keyChanged` back to `false`. The record's `id` (its first key, and the
- * store's key), `chatDid`, `chatConnectionId` and `handle` are never written: the chat is not moved.
+ * store's key), `chatDid`, `chatConnectionId` and `handle` are never written: the chat is not moved. They survive
+ * because the callback spreads `r`; the store refuses only an `id` change. 7.10 never calls `put` or `remove`.
  *
- * Revoke always works from the stored `agentDid` as the agent's current key, together with the `deviceId`.
+ * **Keys.** After a key change `id` stays the agent's first key and `agentDid` is its current one. A record is looked
+ * up by `id` (`get`, `update`); the VTA is addressed by `agentDid` (with the `deviceId`); a DID that could be either
+ * goes through `findByKey`. Revoke always works from the stored `agentDid` as the agent's current key.
  *
- * **The store.** Step 7.7's `AgentConnectionStore` (`list`, `get`, `put`, `remove`; no partial update) is in #1065,
- * not merged yet. Until it is, this module names the members it uses ({@link RevokableConnection}) and that store's
- * calls ({@link RevokeConnectionStore}). 7.7's `AgentConnection` and `AgentConnectionStore` satisfy both
+ * **The store.** Step 7.7's `AgentConnectionStore` (`list`, `get`, `put`, `update`, `upsert`, `findByKey`, `remove`)
+ * is in #1065, not merged yet. Until it is, this module names the members it uses ({@link RevokableConnection}) and
+ * that store's calls ({@link RevokeConnectionStore}). 7.7's `AgentConnection` and `AgentConnectionStore` satisfy both
  * structurally; once #1065 merges, the local types can become imports.
  *
  * @module connected-agents/revoke
@@ -48,8 +54,9 @@ export const REVOKABLE_FROM: readonly RevokableState[] = ['active', 'expired']
 
 /**
  * The members of step 7.7's `AgentConnection` this step uses. A record carries more; every other member is kept as it
- * is, since each write re-reads the record and changes only `state`, `lastReconciledAt`, `keyChanged` and
- * `agentDid`. In particular `id`, `chatDid`, `chatConnectionId` and `handle` are never written.
+ * is, since each write is a store `update` that spreads the record read under the lock and changes only `state`,
+ * `lastReconciledAt`, `keyChanged` and `agentDid`. In particular `id`, `chatDid`, `chatConnectionId` and `handle` are
+ * never written.
  */
 export type RevokableConnection = {
   /** The record's key (7.7 keys it by the agent's first DID). Never changed here, even when `agentDid` is. */
@@ -70,11 +77,25 @@ export type RevokableConnection = {
   lastReconciledAt?: string
 }
 
-/** Step 7.7's `AgentConnectionStore` (#1065): `list`, `get`, `put`, `remove`. There is no partial update. */
+/**
+ * The calls of step 7.7's `AgentConnectionStore` (#1065 at d8aadd5b5) this step relies on, with that store's
+ * signatures. 7.10 writes only through `update`; `put` and `remove` are listed as the store has them, and 7.10 calls
+ * neither.
+ */
 export interface RevokeConnectionStore<C extends RevokableConnection = RevokableConnection> {
   list(): Promise<C[]>
+  /** By `id`, the agent's first key. */
   get(id: string): Promise<C | undefined>
   put(record: C): Promise<void>
+  /**
+   * Read, change and write the record `id` as one step under the store's lock for that `id`: `change` gets the record
+   * as it is under the lock and returns the whole record to write. Returning the record it was given writes nothing.
+   * A change to `id` is refused (it throws); nothing else is checked, so a caller spreads the record it is given.
+   * Resolves to the record afterwards, or undefined when there is none (and `change` is not called).
+   */
+  update(id: string, change: (record: C) => C): Promise<C | undefined>
+  /** The record whose `id` or current key (`agentDid`) is `did`, if any. */
+  findByKey(did: string): Promise<C | undefined>
   remove(id: string): Promise<void>
 }
 
@@ -169,17 +190,19 @@ export function revokeAgentConnection<C extends RevokableConnection>(
 
 async function runRevoke<C extends RevokableConnection>(deps: RevokeDeps<C>, id: string): Promise<RevokeOutcome> {
   const now = deps.now ?? Date.now
-  const record = await deps.store.get(id)
+  // active or expired -> revoking, before any VTA call: a restart from here on shows "Revoke not confirmed" and
+  // retries, and no VDC is re-issued (`shouldReissueVdc` wants `active`). The state that decides it is read inside the
+  // update, under the store's lock; a `revoking` or `revoked` record is not written.
+  const record = await write(deps.store, id, (r) => {
+    if (r.state === 'revoking' || r.state === 'revoked') return undefined
+    if (!REVOKABLE_FROM.includes(r.state))
+      throw new Error(`[connected-agents] a ${r.state} agent connection cannot be revoked`)
+    return { state: 'revoking' }
+  })
   if (!record) throw new Error(`[connected-agents] no agent connection ${id}`)
   if (record.state === 'revoked') return { kind: 'revoked' }
-  if (record.state !== 'revoking' && !REVOKABLE_FROM.includes(record.state))
-    throw new Error(`[connected-agents] a ${record.state} agent connection cannot be revoked`)
 
-  // active or expired -> revoking, before any VTA call: a restart from here on shows "Revoke not confirmed" and
-  // retries, and no VDC is re-issued (`shouldReissueVdc` wants `active`).
-  if (record.state !== 'revoking') await write(deps.store, id, { state: 'revoking' })
-
-  // 1. The ACL entry, first.
+  // 1. The ACL entry, first: by the record's `deviceId` and its current key, `agentDid` (never by its `id`).
   const outcome = await removeAgentEntries(deps.vta, record)
   if (outcome.kind !== 'revoked') return outcome
 
@@ -194,32 +217,36 @@ async function runRevoke<C extends RevokableConnection>(deps: RevokeDeps<C>, id:
   }
 
   // 4. revoking -> revoked: a full listing no longer shows the entry.
-  await write(deps.store, id, { state: 'revoked', lastReconciledAt: iso(now()) })
+  await write(deps.store, id, (r) =>
+    r.state === 'revoking' ? { state: 'revoked', lastReconciledAt: iso(now()) } : undefined
+  )
   return outcome
 }
 
-/** The only members this step writes. `keyChanged` only ever to `true`. */
+/**
+ * The only members this step writes. `keyChanged` only ever to `true`: nothing in 7.10 clears it; clearing it (for
+ * example once the owner has seen the change) is left to the record's owner (step 7.7).
+ */
 type Written = { state?: RevokableState; lastReconciledAt?: string; keyChanged?: true; agentDid?: string }
 
 /**
- * Get, change `state`, `lastReconciledAt`, `keyChanged` and `agentDid` only, put: a member another step wrote
- * meanwhile is kept.
+ * Every write of this step: `store.update(id, r => ({ ...r, ...fields }))`. `decide` runs inside the update, on the
+ * record `r` as the store holds it under its lock, and answers the {@link Written} fields to set, or undefined to write
+ * nothing (the update then returns `r` itself). Every other member of `r` (the grant, the chat, `handle`, `id`) is
+ * kept as `r` has it. Answers the record `decide` saw, before the change, or undefined when there is no record.
  */
 async function write<C extends RevokableConnection>(
   store: RevokeConnectionStore<C>,
   id: string,
-  changes: Written
-): Promise<void> {
-  const current = await store.get(id)
-  if (!current) return
-  const next: C = { ...current }
-  if (changes.state !== undefined) next.state = changes.state
-  if (changes.lastReconciledAt !== undefined) next.lastReconciledAt = changes.lastReconciledAt
-  if (changes.agentDid !== undefined) next.agentDid = changes.agentDid
-  // `keyChanged` is set-only in 7.10: it is only ever written `true`, and nothing in 7.10 clears it. Clearing it (for
-  // example once the owner has seen the change) is left to the record's owner (step 7.7).
-  if (changes.keyChanged) next.keyChanged = true
-  await store.put(next)
+  decide: (r: C) => Written | undefined
+): Promise<C | undefined> {
+  const seen: { record?: C } = {}
+  await store.update(id, (r) => {
+    seen.record = r
+    const fields = decide(r)
+    return fields ? { ...r, ...fields } : r
+  })
+  return seen.record
 }
 
 /**
@@ -242,8 +269,8 @@ export type ReconcileResult =
  * The reconcile at app start, and on opening the list or the details (§3.9), for every record not `revoked`:
  * - `revoking`: the revoke runs again, and the record becomes `revoked` once a full listing shows no entry;
  * - `active` or `expired`: one full listing, stamped as `lastReconciledAt`. The agent's `deviceId` under a subject
- *   other than `agentDid` is recorded as the new `agentDid` and `keyChanged: true`, in the same get, change, put as
- *   the stamp, and reported as `keyChanged` (""<name>" changed its key. Revoke it if you did not expect that."). The
+ *   other than `agentDid` is recorded as the new `agentDid` and `keyChanged: true`, in the same update as the
+ *   stamp, and reported as `keyChanged` (""<name>" changed its key. Revoke it if you did not expect that."). The
  *   record's `id` and the chat (`chatDid`, `chatConnectionId`, `handle`) are not moved, since a rotation Keyring did
  *   not witness proves nothing about who holds the new key. No entry at all is reported as `gone`.
  * `pairing` and `notFinished` records are the pairing's (§3.10) and are left alone. One record at a time.
@@ -272,18 +299,25 @@ export async function reconcileAgents<C extends RevokableConnection>(
       results.push({ id: record.id, kind: 'unknown' })
       continue
     }
-    const moved = found.matches.find((m) => m.deviceId === record.deviceId && m.entry.subject !== record.agentDid)
-    // One get, change, put: the stamp and, when the key changed, the new subject as `agentDid` and `keyChanged: true`.
-    const changes: Written = { lastReconciledAt: iso(now()) }
-    if (moved) {
-      changes.agentDid = moved.entry.subject
-      // Set-only in 7.10: nothing in 7.10 clears `keyChanged`; clearing it is left to the record's owner (step 7.7).
-      changes.keyChanged = true
-    }
-    await write(deps.store, record.id, changes)
-    if (moved) results.push({ id: record.id, kind: 'keyChanged', subject: moved.entry.subject })
-    else if (found.matches.length === 0) results.push({ id: record.id, kind: 'gone' })
-    else results.push({ id: record.id, kind: 'unchanged' })
+    const listing = found
+    let result: ReconcileResult = { id: record.id, kind: 'unknown' }
+    // One update, decided on the record under the store's lock: the stamp and, when the key changed, the new subject
+    // as `agentDid` and `keyChanged: true`. If the record moved on while the VTA was asked (it left active or expired,
+    // or its `agentDid` or `deviceId` is no longer the one the listing asked about), nothing is concluded or written.
+    await write(deps.store, record.id, (r) => {
+      if (!REVOKABLE_FROM.includes(r.state) || r.agentDid !== record.agentDid || r.deviceId !== record.deviceId)
+        return undefined
+      const lastReconciledAt = iso(now())
+      const moved = listing.matches.find((m) => m.deviceId === r.deviceId && m.entry.subject !== r.agentDid)
+      if (moved) {
+        result = { id: r.id, kind: 'keyChanged', subject: moved.entry.subject }
+        // Set-only in 7.10: nothing in 7.10 clears `keyChanged`; clearing it is left to the record's owner (step 7.7).
+        return { lastReconciledAt, agentDid: moved.entry.subject, keyChanged: true }
+      }
+      result = { id: r.id, kind: listing.matches.length === 0 ? 'gone' : 'unchanged' }
+      return { lastReconciledAt }
+    })
+    results.push(result)
   }
   return results
 }

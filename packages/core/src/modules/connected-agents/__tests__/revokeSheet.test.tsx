@@ -143,6 +143,16 @@ describe('RevokeAgentSheet', () => {
       put: async (record) => {
         records.set(record.id, { ...record })
       },
+      update: async (key, change) => {
+        const current = records.get(key)
+        if (!current) return undefined
+        const next = change({ ...current })
+        if (next.id !== key) throw new Error('an update cannot change a record id')
+        records.set(key, { ...next })
+        return { ...next }
+      },
+      findByKey: async (did) =>
+        [...records.values()].map((r) => ({ ...r })).find((r) => r.id === did || r.agentDid === did),
       remove: async (key) => {
         records.delete(key)
       },

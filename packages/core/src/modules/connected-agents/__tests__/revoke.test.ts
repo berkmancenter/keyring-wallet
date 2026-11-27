@@ -111,22 +111,69 @@ function lab() {
   return { vta, vtaState, entries, devices, register, swap, sent, revokes }
 }
 
-type Conn = RevokableConnection & { chatDid: string; chatConnectionId: string; handle: string }
+type Conn = RevokableConnection & {
+  chatDid: string
+  chatConnectionId: string
+  handle: string
+  /** Written by another step (the driver's VDC grant), never by 7.10. */
+  vdcGrant?: Record<string, unknown>
+}
 
-/** The app's storage: survives a "restart" (a new store over the same map), and returns copies. */
+type TestStore = RevokeConnectionStore<Conn> & {
+  /** Every record written through this handle, by `put` or `update`, in order. */
+  writes: Conn[]
+  /** The store calls made through this handle, by name. */
+  calls: string[]
+}
+
+/**
+ * The app's storage: survives a "restart" (a new store over the same map), and returns copies. `update` behaves as
+ * #1065's `AgentConnectionStore.update`: it reads the record inside the call, applies `change` to that read and writes
+ * the result in the same step (no `await` between them, so nothing lands in between), writes nothing when `change`
+ * returns the record it was given, and refuses a change to `id`.
+ */
 function storage() {
   const disk = new Map<string, string>()
-  const open = (): RevokeConnectionStore<Conn> & { writes: Conn[] } => {
+  const read = (id: string) => (disk.has(id) ? (JSON.parse(disk.get(id) as string) as Conn) : undefined)
+  const all = () => [...disk.values()].map((v) => JSON.parse(v) as Conn)
+  const open = (): TestStore => {
     const writes: Conn[] = []
+    const calls: string[] = []
+    const write = (record: Conn) => {
+      writes.push(record)
+      disk.set(record.id, JSON.stringify(record))
+    }
     return {
       writes,
-      list: async () => [...disk.values()].map((v) => JSON.parse(v) as Conn),
-      get: async (id) => (disk.has(id) ? (JSON.parse(disk.get(id) as string) as Conn) : undefined),
+      calls,
+      list: async () => {
+        calls.push('list')
+        return all()
+      },
+      get: async (id) => {
+        calls.push('get')
+        return read(id)
+      },
       put: async (record) => {
-        writes.push(record)
-        disk.set(record.id, JSON.stringify(record))
+        calls.push('put')
+        write(record)
+      },
+      update: async (id, change) => {
+        calls.push('update')
+        const current = read(id)
+        if (!current) return undefined
+        const next = change(current)
+        if (next === current) return current
+        if (next.id !== id) throw new Error('an update cannot change a record id')
+        write(next)
+        return next
+      },
+      findByKey: async (did) => {
+        calls.push('findByKey')
+        return all().find((r) => r.id === did || r.agentDid === did)
       },
       remove: async (id) => {
+        calls.push('remove')
         disk.delete(id)
       },
     }
@@ -155,6 +202,8 @@ async function setup(over: Partial<Conn> = {}) {
   const disk = storage()
   const store = disk.open()
   await store.put(connection(over))
+  // From here on, `store.calls` are 7.10's (and any a test makes itself).
+  store.calls.length = 0
   const order: string[] = []
   const tellAgent = jest.fn(async () => {
     order.push('tell')
@@ -167,11 +216,13 @@ describe('order: the ACL entry first', () => {
   it('writes revoking before any VTA call, revokes the entry, tells the agent, and only then writes revoked', async () => {
     const s = await setup()
     const events: string[] = []
-    const put = s.store.put
-    s.store.put = async (record) => {
-      events.push(`put:${record.state}`)
-      await put(record)
-    }
+    const update = s.store.update
+    s.store.update = (id, change) =>
+      update(id, (r) => {
+        const next = change(r)
+        if (next !== r) events.push(`write:${next.state}`)
+        return next
+      })
     const task = s.vta.task as jest.Mock
     const real = task.getMockImplementation() as (...args: unknown[]) => Promise<unknown>
     task.mockImplementation(async (...args: unknown[]) => {
@@ -183,9 +234,9 @@ describe('order: the ACL entry first', () => {
     })
     const out = await revokeAgentConnection(s.deps, K_A)
     expect(out).toEqual({ kind: 'revoked' })
-    expect(events[0]).toBe('put:revoking')
+    expect(events[0]).toBe('write:revoking')
     expect(events.indexOf('vta:revoke')).toBeGreaterThan(0)
-    expect(events.slice(-2)).toEqual(['tell', 'put:revoked'])
+    expect(events.slice(-2)).toEqual(['tell', 'write:revoked'])
     expect(s.store.writes.map((w) => w.state)).toEqual(['active', 'revoking', 'revoked'])
     expect(s.revokes()).toEqual([K_A])
     expect(s.tellAgent).toHaveBeenCalledTimes(1)
@@ -371,6 +422,10 @@ describe("Keyring's 7.10 contract for the record", () => {
       expect(w).toMatchObject(KEPT)
       for (const k of NEVER) expect(w).not.toHaveProperty(k)
     }
+    // Every one of those writes went through `update`; 7.10 never called `put` or `remove`.
+    expect(s.store.calls).toContain('update')
+    expect(s.store.calls).not.toContain('put')
+    expect(s.store.calls).not.toContain('remove')
   })
 
   it('control: without a changed key, neither keyChanged nor agentDid is written', async () => {
@@ -409,15 +464,16 @@ describe("Keyring's 7.10 contract for the record", () => {
     }
   })
 
-  it('a changed key is recorded as the new agentDid and keyChanged: true in one get, change, put', async () => {
+  it('a changed key is recorded as the new agentDid and keyChanged: true in one update', async () => {
     for (const keyChanged of [false, true]) {
       const s = await setup({ keyChanged })
       const original = (await s.store.get(K_A)) as Conn
       s.swap('dev-1', K_B)
       const before = s.store.writes.length
       await reconcileAgents(s.deps)
-      // One put for the stamp, the new subject and the flag together.
+      // One update for the stamp, the new subject and the flag together.
       expect(s.store.writes.length - before).toBe(1)
+      expect(s.store.calls.filter((c) => c === 'update')).toHaveLength(1)
       const written = s.store.writes[before] as Conn
       expect(written).toEqual({
         ...original,
@@ -459,6 +515,9 @@ describe('the app-start reconcile', () => {
     // Still found under its first key: the id is the store's key and does not move.
     const after = (await s.store.get(K_A)) as Conn
     expect(await s.store.get(K_B)).toBeUndefined()
+    // The new key is the record's `agentDid`, not its `id`: only `findByKey` finds the record by either.
+    expect(await s.store.findByKey(K_B)).toEqual(after)
+    expect(await s.store.findByKey(K_A)).toEqual(after)
     expect(after).not.toHaveProperty('currentSubject')
     expect(after).toMatchObject({
       id: K_A,
@@ -505,15 +564,152 @@ describe('the app-start reconcile', () => {
   it('keeps members another step wrote while it ran', async () => {
     const s = await setup()
     s.swap('dev-1', K_B)
+    const other = s.disk.open()
     const real = s.vta.findAgentEntries.bind(s.vta)
     jest.spyOn(s.vta, 'findAgentEntries').mockImplementation(async (q) => {
       const out = await real(q)
-      const current = (await s.store.get(K_A)) as Conn
-      await s.store.put({ ...current, name: 'Renamed meanwhile' })
+      await other.update(K_A, (r) => ({ ...r, name: 'Renamed meanwhile' }))
       return out
     })
     await reconcileAgents(s.deps)
     // The rename survives, and the changed key is recorded on top of it.
     expect(await s.store.get(K_A)).toMatchObject({ name: 'Renamed meanwhile', keyChanged: true, agentDid: K_B })
+  })
+})
+
+describe("7.10 writes through the store's update", () => {
+  const GRANT = { validUntil: '2026-11-26T16:00:00Z', proof: 'grant-proof' }
+
+  it('the test store refuses an id change and writes nothing for an unchanged record, as #1065 does', async () => {
+    const s = await setup()
+    await expect(s.store.update(K_A, (r) => ({ ...r, id: K_B }))).rejects.toThrow('cannot change a record id')
+    await s.store.update(K_A, (r) => r)
+    expect(s.store.writes).toHaveLength(1)
+    expect(await s.store.update('did:key:z6MkNobody', (r) => r)).toBeUndefined()
+  })
+
+  it('a revoke, its retry and the reconciles call update and never put or remove', async () => {
+    const s = await setup()
+    s.swap('dev-1', K_B)
+    await reconcileAgents(s.deps)
+    s.vtaState.revokeThrows = true
+    await revokeAgentConnection(s.deps, K_A)
+    s.vtaState.revokeThrows = false
+    await reconcileAgents(s.deps)
+    expect((await s.store.get(K_A))?.state).toBe('revoked')
+    // One update each: the reconcile's key change, -> revoking, -> revoked. A `revoking` retry writes nothing itself.
+    expect(s.store.calls.filter((c) => c === 'update')).toHaveLength(4)
+    expect(s.store.writes.slice(1).map((w) => w.state)).toEqual(['active', 'revoking', 'revoked'])
+    expect(s.store.calls.filter((c) => c === 'put' || c === 'remove')).toEqual([])
+  })
+
+  it('a grant another writer adds between the reconcile reading the record and writing it is kept', async () => {
+    for (const swapped of [false, true]) {
+      const s = await setup()
+      if (swapped) s.swap('dev-1', K_B)
+      const other = s.disk.open()
+      // The reconcile reads the record (list), then asks the VTA; the driver writes its grant while it waits.
+      const real = s.vta.findAgentEntries.bind(s.vta)
+      jest.spyOn(s.vta, 'findAgentEntries').mockImplementation(async (q) => {
+        const out = await real(q)
+        await other.update(K_A, (r) => ({ ...r, vdcGrant: GRANT }))
+        return out
+      })
+      const read = (await s.store.get(K_A)) as Conn
+      await reconcileAgents(s.deps)
+      const after = (await s.store.get(K_A)) as Conn
+      const changes = { lastReconciledAt: new Date(NOW).toISOString() }
+      expect(after).toEqual({
+        ...read,
+        vdcGrant: GRANT,
+        ...changes,
+        ...(swapped ? { agentDid: K_B, keyChanged: true } : {}),
+      })
+    }
+  })
+
+  it('a write landing right after any read 7.10 makes is kept (the lost update a get, then put allowed)', async () => {
+    const s = await setup()
+    s.swap('dev-1', K_B)
+    const other = s.disk.open()
+    let n = 0
+    // Another writer (the driver) changes the grant right after every `get` or `list` through 7.10's store: with a
+    // get, then put, the put would write the record as read and lose the grant.
+    const land = async () => {
+      n += 1
+      const grant = { ...GRANT, n }
+      await other.update(K_A, (r) => ({ ...r, vdcGrant: grant }))
+    }
+    const get = s.store.get
+    s.store.get = async (id) => {
+      const out = await get(id)
+      await land()
+      return out
+    }
+    const list = s.store.list
+    s.store.list = async () => {
+      const out = await list()
+      await land()
+      return out
+    }
+    await reconcileAgents(s.deps)
+    expect(await revokeAgentConnection(s.deps, K_A)).toEqual({ kind: 'revoked' })
+    expect(n).toBeGreaterThanOrEqual(2)
+    expect(await other.get(K_A)).toEqual({
+      ...connection(),
+      vdcGrant: { ...GRANT, n },
+      agentDid: K_B,
+      keyChanged: true,
+      state: 'revoked',
+      lastReconciledAt: new Date(NOW).toISOString(),
+    })
+  })
+
+  it('a grant another writer adds while the revoke is at the VTA is kept through revoking -> revoked', async () => {
+    const s = await setup()
+    const other = s.disk.open()
+    const real = s.vta.revokeSubject.bind(s.vta)
+    jest.spyOn(s.vta, 'revokeSubject').mockImplementation(async (subject) => {
+      await other.update(K_A, (r) => ({ ...r, vdcGrant: GRANT }))
+      return real(subject)
+    })
+    expect(await revokeAgentConnection(s.deps, K_A)).toEqual({ kind: 'revoked' })
+    expect(await s.store.get(K_A)).toEqual({
+      ...connection(),
+      vdcGrant: GRANT,
+      state: 'revoked',
+      lastReconciledAt: new Date(NOW).toISOString(),
+    })
+  })
+
+  it('the reconcile decides on the record under the lock: one whose agentDid moved meanwhile is not written', async () => {
+    const s = await setup()
+    s.swap('dev-1', K_B)
+    const other = s.disk.open()
+    const real = s.vta.findAgentEntries.bind(s.vta)
+    jest.spyOn(s.vta, 'findAgentEntries').mockImplementation(async (q) => {
+      const out = await real(q)
+      // Another reconcile recorded the change first.
+      await other.update(K_A, (r) => ({ ...r, agentDid: K_B, keyChanged: true }))
+      return out
+    })
+    expect(await reconcileAgents(s.deps)).toEqual([{ id: K_A, kind: 'unknown' }])
+    expect(s.store.writes).toHaveLength(1)
+    expect(await s.store.get(K_A)).toMatchObject({ agentDid: K_B, keyChanged: true })
+    expect(await s.store.get(K_A)).not.toHaveProperty('lastReconciledAt')
+  })
+
+  it('a record revoked meanwhile is not moved back: the reconcile writes nothing on it', async () => {
+    const s = await setup()
+    const other = s.disk.open()
+    const real = s.vta.findAgentEntries.bind(s.vta)
+    jest.spyOn(s.vta, 'findAgentEntries').mockImplementation(async (q) => {
+      const out = await real(q)
+      await other.update(K_A, (r) => ({ ...r, state: 'revoking' }))
+      return out
+    })
+    expect(await reconcileAgents(s.deps)).toEqual([{ id: K_A, kind: 'unknown' }])
+    expect(await s.store.get(K_A)).toMatchObject({ state: 'revoking' })
+    expect(await s.store.get(K_A)).not.toHaveProperty('lastReconciledAt')
   })
 })
