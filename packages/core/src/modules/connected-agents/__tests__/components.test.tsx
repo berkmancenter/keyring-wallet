@@ -60,13 +60,15 @@ describe('ConnectedAgents words', () => {
       .join('(?:<[^>"]+>|\\{\\{\\s*\\w+\\s*\\}\\})')
   // The plan's prose names i18next's {{count}} "<n>"; every other placeholder keeps its name. Measured over §6: "n" is
   // the only name that differs.
+  // An entry is a measured fact about the plan, not an exemption: a new one needs the same enumeration (every settled
+  // string's slot names against §6's), and a test below fails any entry no settled string needs.
   const PLAN_NAME_ALIAS: Readonly<Record<string, string>> = { n: 'count' }
   const placeholderNames = (text: string) => [...text.matchAll(/{{\s*(\w+)\s*}}/g)].map((m) => m[1])
   /**
    * Quoted in `section` with the same words AND the same placeholder names in the same order (after the alias), so a
    * string whose plan line has "<time>" where it has "{{name}}" does not read as settled.
    */
-  const quotedIn = (section: string, text: string) => {
+  const quotedIn = (section: string, text: string, alias: Readonly<Record<string, string>> = PLAN_NAME_ALIAS) => {
     const names = placeholderNames(text)
     const capture = text
       .split(/{{\s*\w+\s*}}/)
@@ -74,7 +76,7 @@ describe('ConnectedAgents words', () => {
       .join('(?:<([^>"]+)>|\\{\\{\\s*(\\w+)\\s*\\}\\})')
     return [...section.matchAll(new RegExp(`"${capture}"`, 'g'))].some((m) => {
       const found = names.map((_, i) => m[1 + 2 * i] ?? m[2 + 2 * i])
-      return found.every((name, i) => (PLAN_NAME_ALIAS[name] ?? name) === names[i])
+      return found.every((name, i) => (alias[name] ?? name) === names[i])
     })
   }
   const quotedIn6 = (text: string) => quotedIn(SECTION_6, text)
@@ -103,6 +105,15 @@ describe('ConnectedAgents words', () => {
     // The one alias: the prose's "<n>" is i18next's {{count}}.
     expect(quotedIn6(EN.MemoryCountRose)).toBe(true)
     expect(quotedIn6('Up {{total}} since you last looked.')).toBe(false)
+  })
+
+  it('keeps no alias that no settled string needs', () => {
+    const unneeded = Object.keys(PLAN_NAME_ALIAS).filter((planName) => {
+      const without = Object.fromEntries(Object.entries(PLAN_NAME_ALIAS).filter(([k]) => k !== planName))
+      // Needed: some string is quoted in §6 with the full map and not without this entry.
+      return !Object.values(EN).some((text) => quotedIn(SECTION_6, text) && !quotedIn(SECTION_6, text, without))
+    })
+    expect(unneeded).toEqual([])
   })
 
   it('carries no words that are neither in the plan nor listed as a proposal', () => {
