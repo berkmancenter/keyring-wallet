@@ -178,6 +178,18 @@ describe('AgentDetailsView', () => {
     expect(waiting.queryByText('ConnectedAgents.MemoryCountFailed')).toBeNull()
   })
 
+  it('counts without a date when the VTA gives no last change', () => {
+    const { tree } = details({
+      counts: {
+        [EDU.id]: { count: 3, failed: false },
+        [HEALTH.id]: { count: 5, lastChange: '26 November', failed: false },
+      },
+    })
+    expect(tree.getAllByText('ConnectedAgents.MemoryCountNoDate')).toHaveLength(1)
+    // Control: the one with a date keeps the dated words.
+    expect(tree.getAllByText('ConnectedAgents.MemoryCount')).toHaveLength(1)
+  })
+
   it('says "No memory." for an agent with none', () => {
     const { tree } = details({ agent: agent({ memories: [] }), counts: {} })
     expect(tree.getByText('ConnectedAgents.NoMemory')).toBeTruthy()

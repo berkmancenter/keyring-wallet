@@ -51,12 +51,13 @@ describe('ConnectedAgents words', () => {
   const PLAN = readFileSync(path.resolve(__dirname, '../../../../../../docs/plans/agent-connect-plan.md'), 'utf8')
   const SECTION_6 = PLAN.slice(PLAN.indexOf('\n## 6. UX'), PLAN.indexOf('\n## 7. Steps'))
   const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  // "{{name}}" in a locale string is "<name>" (or "<n>", "<time>") in the plan.
+  // "{{name}}" in a locale string is "<name>" (or "<n>", "<time>") in the plan's prose, and "{{name}}" itself in its
+  // key list, which quotes the i18n strings as they are written.
   const asPlan = (text: string) =>
     text
       .split(/{{\s*\w+\s*}}/)
       .map(escape)
-      .join('<[^>"]+>')
+      .join('(?:<[^>"]+>|\\{\\{\\s*\\w+\\s*\\}\\})')
   const quotedIn6 = (text: string) => new RegExp(`"${asPlan(text)}"`).test(SECTION_6)
   const partOf6 = (text: string) => new RegExp(asPlan(text)).test(SECTION_6)
   // A plural's "_one" stands or falls with its "_other", which is the form the plan quotes.

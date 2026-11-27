@@ -131,7 +131,7 @@ const ChangeMemoriesView: React.FC<ChangeMemoriesViewProps> = ({
             {ask.kind === 'widen' ? t('ConnectedAgents.WidenBody') : t('ConnectedAgents.NarrowBody', { memory })}
           </ThemedText>
           {failed ? (
-            // TODO(#1060 proposal 17): proposed words for a change the VTA did not make.
+            // TODO: proposed words for a change the VTA did not make (PROPOSED_COPY); not in the plan yet.
             <ConnectNotice
               text={t('ConnectedAgents.MemoryChangeFailed')}
               testID={testIdWithKey('ChangeMemoriesFailed')}

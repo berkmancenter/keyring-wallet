@@ -4081,6 +4081,8 @@
     "ChangeMemories": "Alterar memórias",
     "MemoryCount_one": "{{count}} item, alterado em {{date}}",
     "MemoryCount_other": "{{count}} itens, alterados em {{date}}",
+    "MemoryCountNoDate_one": "{{count}} item",
+    "MemoryCountNoDate_other": "{{count}} itens",
     "MemoryCountRose": "{{count}} a mais desde a última vez que você olhou.",
     "MemoryCountWarning": "\"{{memory}}\" tem mais de {{limit}} itens. Se você não esperava isso, revogue o agente.",
     "MemoryCountFailed": "Não foi possível contar os itens.",
