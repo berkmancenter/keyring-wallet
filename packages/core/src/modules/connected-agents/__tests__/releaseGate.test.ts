@@ -27,16 +27,57 @@
  *   `packages/core/src`, so the Revoke wiring is a relative import: were one in `app/src`, it would import through
  *   `@bifold/core` and the gate could never be satisfied. A test below fails when a navigator appears outside the
  *   package, which is the moment to teach the gate that import;
- * - the one way it can admit a caller it should not: any file containing `.Screen` (or creating a navigator) counts as
- *   a navigator and seeds the search, so a stray `.Screen` token outside navigation would count a file as routed. It
- *   over-counts navigators, which fails open on "is Revoke wired". Every file it seeds from today is a real navigator.
+ * - the one way it can admit a caller it should not: any file whose live code contains `.Screen` (or creates a
+ *   navigator) counts as a navigator and seeds the search, so a stray `.Screen` token in code outside navigation would
+ *   count a file as routed. It over-counts navigators, which fails open on "is Revoke wired". Every file it seeds from
+ *   today is a real navigator. Comments and strings no longer count: each pattern that could count a step as wired, or
+ *   the flag as off, reads the file with its comments blanked, and the revoke call and export with its strings blanked
+ *   too (`blanked`, TypeScript's own parser). The setter is still read raw, since a mention there only errs strict.
  *
  * A new way of turning the flag on must come through the setter or be added here.
  */
 import { existsSync, readdirSync, readFileSync } from 'fs'
 import { dirname, join, relative, resolve, sep } from 'path'
+import ts from 'typescript'
 
 type SourceFile = { path: string; text: string }
+
+/**
+ * `text` with every comment blanked, and with `strings` also every string literal, template part and JSX text: the
+ * same length, newlines kept, so a pattern can match only live code. Read with TypeScript's own parser, so a `//` or a
+ * `/*` inside a string is not a comment.
+ */
+export function blanked(path: string, text: string, strings: boolean): string {
+  const kind = /\.[jt]sx$/.test(path) ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, false, kind)
+  const ranges: [number, number][] = []
+  const comments = (pos: number) => {
+    for (const r of [
+      ...(ts.getLeadingCommentRanges(text, pos) ?? []),
+      ...(ts.getTrailingCommentRanges(text, pos) ?? []),
+    ])
+      ranges.push([r.pos, r.end])
+  }
+  // Every token, punctuation included (`getChildren`), so a comment before a closing `}` with nothing after it is
+  // found too: each comment is in the leading trivia of the token after it, the end-of-file token last.
+  const visit = (node: ts.Node) => {
+    const children = node.getChildren(source)
+    if (children.length === 0) comments(node.pos)
+    const literal =
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node) ||
+      node.kind === ts.SyntaxKind.JsxText
+    if (strings && literal) ranges.push([node.getStart(source), node.end])
+    for (const child of children) visit(child)
+  }
+  visit(source)
+  const out = text.split('')
+  for (const [from, to] of ranges) for (let i = from; i < to; i++) if (out[i] !== '\n') out[i] = ' '
+  return out.join('')
+}
 
 const SETTER = /\bsetAgentConnectEnabled\b/
 const FLAG_FILE = join('connected-agents', 'agentConnectFlag.ts')
@@ -89,18 +130,26 @@ const inModule = (path: string) => path.includes(`connected-agents${sep}`)
 
 /** What the gate finds, as pure facts about a set of source files. */
 export function releaseGate(files: SourceFile[]): { flagReachable: boolean; missing: string[] } {
-  const code = files.filter((f) => !isTest(f.path))
-  const flagFile = code.find((f) => f.path.endsWith(FLAG_FILE))
-  const setterCalls = code.filter((f) => !f.path.endsWith(FLAG_FILE) && SETTER.test(f.text))
+  const raw = files.filter((f) => !isTest(f.path))
+  // Each pattern reads the view where a false match errs strict, never open. The setter: any mention, raw, comments
+  // included (a mention only makes the flag look reachable). Everything that would count a step as wired, or the flag
+  // as off: comments blanked (`live`), and for the revoke call and export also strings blanked (`bare`), so a comment
+  // or a string that names a call is not a call.
+  const live = raw.map((f) => ({ path: f.path, text: blanked(f.path, f.text, false) }))
+  const bare = new Map(raw.map((f) => [f.path, blanked(f.path, f.text, true)]))
+  const flagFile = live.find((f) => f.path.endsWith(FLAG_FILE))
+  const setterCalls = raw.filter((f) => !f.path.endsWith(FLAG_FILE) && SETTER.test(f.text))
   const defaultOn = !!flagFile && !/let agentConnectEnabled = false\b/.test(flagFile.text)
   const flagReachable = setterCalls.length > 0 || defaultOn
   const revokeWired =
-    code.some((f) => inModule(f.path) && REVOKE_EXPORT.test(f.text) && REVOKE_REACHES_VTA.test(f.text)) &&
+    live.some(
+      (f) => inModule(f.path) && REVOKE_EXPORT.test(bare.get(f.path) ?? '') && REVOKE_REACHES_VTA.test(f.text)
+    ) &&
     (() => {
-      const reach = routed(code)
-      return code.some((f) => !inModule(f.path) && REVOKE_CALL.test(f.text) && reach.has(f.path))
+      const reach = routed(live)
+      return live.some((f) => !inModule(f.path) && REVOKE_CALL.test(bare.get(f.path) ?? '') && reach.has(f.path))
     })()
-  const acceptanceWired = code.some((f) => f.text.includes(ACCEPTANCE_TYPE) && /\bverifyVdcPair\s*\(/.test(f.text))
+  const acceptanceWired = live.some((f) => f.text.includes(ACCEPTANCE_TYPE) && /\bverifyVdcPair\s*\(/.test(f.text))
   const missing = flagReachable
     ? [
         ...(revokeWired
@@ -195,6 +244,82 @@ describe('control: the gate bites', () => {
     path: join('/r', 'packages', 'core', 'src', 'modules', 'connected-agents', 'chatControl.ts'),
     text: `if (type === '${ACCEPTANCE_TYPE}') await verifyVdcPair({ grant, acceptance })`,
   }
+
+  const wiredTree = () => [flag, devRow, revokeExport, revokeSheet, navigator, acceptance]
+  const revokeMissing = [expect.stringMatching(/Revoke \(step 7\.10\)/)]
+
+  describe('a comment or a string that names a call is not the call (found by the review lane on #1082)', () => {
+    it('control: the tree wired for real passes', () => {
+      expect(releaseGate(wiredTree()).missing).toEqual([])
+    })
+
+    it('a routed caller whose call is only in a comment, a block comment or a JSX comment is not wired', () => {
+      for (const text of [
+        '// onRevoke calls revokeAgentConnection(agent.id) once 7.10 lands\n<AgentDetailsView />',
+        '/* revokeAgentConnection(agent.id) */\n<AgentDetailsView />',
+        '<View>{/* revokeAgentConnection(agent.id) */}<AgentDetailsView /></View>',
+      ]) {
+        const tree = wiredTree().map((f) => (f === revokeSheet ? { ...f, text } : f))
+        expect([text, releaseGate(tree).missing]).toEqual([text, revokeMissing])
+      }
+    })
+
+    it('a call named in a string, a template or JSX text is not wired either', () => {
+      for (const text of [
+        "const hint = 'revokeAgentConnection(agent.id)'",
+        'const hint = `revokeAgentConnection(${agent.id})`',
+        '<Text>revokeAgentConnection(id) is step 7.10</Text>',
+      ]) {
+        const tree = wiredTree().map((f) => (f === revokeSheet ? { ...f, text } : f))
+        expect([text, releaseGate(tree).missing]).toEqual([text, revokeMissing])
+      }
+    })
+
+    it('an export only in a comment, or reaching the VTA only in a comment, is not wired', () => {
+      const commentedExport = {
+        ...revokeExport,
+        text: '// export async function revokeAgentConnection(id) {}\nclient.revokeSubject(id)',
+      }
+      expect(releaseGate(wiredTree().map((f) => (f === revokeExport ? commentedExport : f))).missing).toEqual(
+        revokeMissing
+      )
+      const noOp = {
+        ...revokeExport,
+        text: 'export async function revokeAgentConnection(id: string) { /* client.revokeSubject(id) */ }',
+      }
+      expect(releaseGate(wiredTree().map((f) => (f === revokeExport ? noOp : f))).missing).toEqual(revokeMissing)
+      // control: an acl/revoke task named in a string still reaches the VTA (strings are kept for that pattern)
+      const byTask = {
+        ...revokeExport,
+        text: "export async function revokeAgentConnection(id: string) { await task('https://trusttasks.org/spec/acl/revoke/0.3', id) }",
+      }
+      expect(releaseGate(wiredTree().map((f) => (f === revokeExport ? byTask : f))).missing).toEqual([])
+    })
+
+    it('a default turned on beside a commented "= false" is still reachable', () => {
+      const hidden = { ...flag, text: '// let agentConnectEnabled = false\nlet agentConnectEnabled = true' }
+      expect(releaseGate([hidden]).flagReachable).toBe(true)
+    })
+
+    it('a .Screen or an import only in a comment seeds and follows nothing', () => {
+      const commentedNav = {
+        ...navigator,
+        text: "// import AgentDetailsContainer from '../screens/AgentDetailsContainer'\n// <Stack.Screen />",
+      }
+      expect(releaseGate(wiredTree().map((f) => (f === navigator ? commentedNav : f))).missing).toEqual(revokeMissing)
+    })
+
+    it('blanked keeps the length and the lines, and a // inside a string is not a comment', () => {
+      const text = "const u = 'https://x.example/a' // note\n/* b */ f()"
+      const out = blanked('a.ts', text, false)
+      expect(out).toHaveLength(text.length)
+      expect(out.split('\n')).toHaveLength(2)
+      expect(out).toContain("'https://x.example/a'")
+      expect(out).not.toContain('note')
+      expect(out).toContain('f()')
+      expect(blanked('a.ts', text, true)).not.toContain('x.example')
+    })
+  })
 
   it('a developer-setting row with neither step wired fails, naming both', () => {
     const { flagReachable, missing } = releaseGate([flag, devRow])
