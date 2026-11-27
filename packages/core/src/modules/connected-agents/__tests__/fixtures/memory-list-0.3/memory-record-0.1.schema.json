@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vta/_shared/0.1/memory-record",
+  "title": "MemoryRecord — shared definition for vta/memory/* from put/delete/list 0.2 and get 0.1",
+  "description": "Agent memory is free-form text an agent stores in a VTA context so it can recall it across sessions. A memory item is addressed by the pair `(contextId, key)`; `MemoryRecord` is the shape every versioned task in the family hands back, defined once here because `list`, `get` and the conflict details of `put` and `delete` all return the same record and an inline copy per task would fork the moment one of them gained a member.\n\nThe version counter is the family's load-bearing invariant and is described once, here, on the same terms as `vta/app-state/*`'s. `version` is a monotonically increasing integer maintained per `contextId`, NOT per item: every write in a context — a put or a delete — takes the next value of that context's counter, and an item's `version` is the counter value its most recent write took. One number therefore serves two purposes: it is the optimistic-concurrency token `expectedVersion` is compared against, and it is the watermark `sinceVersion` is compared against. A per-item counter could do the first but not the second, because two items' counters are not comparable and so no single number could mean \"everything changed after this point\". Consumers MUST treat version numbers as opaque and monotonic: an item's version can jump by any amount between two writes, because writes to other items in the context consumed the intervening values.\n\nThe counter is per context because the context is the family's isolation boundary: memory has no namespace below it, and a counter spanning contexts would let a reader of one context observe how much traffic another carried.\n\nTimestamp invariants (SHOULD-level, prose — not expressible in JSON Schema): when `createdAt` is present, `updatedAt >= createdAt`; when `deletedAt` is present, `deleted` is true and `deletedAt >= createdAt`. Consumers SHOULD reject documents that violate either.",
+  "$defs": {
+    "MemoryKey": {
+      "title": "MemoryKey",
+      "description": "Agent-chosen identifier for an item within a context. Opaque to the maintainer: it MUST NOT be parsed, normalized, or case-folded, and prefix matching in `vta/memory/list` is a byte-prefix comparison over the UTF-8 encoding. Agents SHOULD use `/`-delimited hierarchical keys (`contact/billing`, `preference/timezone`) so that `prefix` can address a family of items, but the delimiter is a convention between an agent and itself. A key is content as well as an address: a key naming a person, a condition or a dispute discloses something to anyone who can list the context, even without its value.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[^\\u0000]+$"
+    },
+    "MemoryValue": {
+      "title": "MemoryValue",
+      "description": "The remembered text: a fact, a summary, a preference. Opaque to the maintainer, which stores it as given and never interprets, rewrites or summarises it. The maintainer enforces a documented per-item cap on its size (see `vta/memory/put`).",
+      "type": "string"
+    },
+    "MemoryVersion": {
+      "title": "MemoryVersion",
+      "description": "A value of the context's monotonic write counter (see this schema's description). Server-assigned; a producer never chooses one.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "MemoryExpectedVersion": {
+      "title": "MemoryExpectedVersion",
+      "description": "Optimistic-concurrency precondition on a write. A positive value requires that the item's current `version` equals it exactly. Zero means \"create only\" — the write applies only if no LIVE item exists at the key. A tombstone is not a live item, so `expectedVersion: 0` succeeds over one; the created item takes the context's next counter value, which is necessarily greater than the tombstone's.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "MemoryRecord": {
+      "title": "MemoryRecord",
+      "description": "A memory item as the maintainer holds it. `value` is absent in two distinct situations and a consumer MUST NOT conflate them: the item is a tombstone (`deleted` is true), or the caller asked for a metadata-only view (`vta/memory/list` without `includeValues`). This is why `deleted` is required rather than defaulted — a consumer that infers deletion from an absent value gets the tombstone case wrong exactly when convergence depends on it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contextId", "key", "version", "deleted", "updatedAt"],
+      "properties": {
+        "contextId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The VTA context the item is scoped to; the isolation boundary."
+        },
+        "key": {
+          "$ref": "#/$defs/MemoryKey"
+        },
+        "version": {
+          "$ref": "#/$defs/MemoryVersion",
+          "description": "The context counter value this item's most recent write took. Supply it as `expectedVersion` on the next write to make that write conditional on nothing having changed in between."
+        },
+        "value": {
+          "$ref": "#/$defs/MemoryValue",
+          "description": "The remembered text. Absent when this is a tombstone or a metadata-only view."
+        },
+        "valueBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Size of the stored value in bytes over its UTF-8 encoding, as the maintainer measures it for the per-item cap. Present in metadata-only views so a consumer can decide what to fetch without fetching it; absent on a tombstone."
+        },
+        "deleted": {
+          "type": "boolean",
+          "description": "True when this is a tombstone: the item was deleted, and this entry exists so that a consumer syncing incrementally learns of the deletion. Tombstones are reaped after the maintainer's retention window; see `vta/memory/list`."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the item was first created at this key. MAY be absent on a tombstone whose body has been discarded, and on an item written before the maintainer kept versions."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the write that produced this `version` was applied. For a tombstone, when the delete was applied."
+        },
+        "deletedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the item was deleted. Present only when `deleted` is true; equal to `updatedAt` for a tombstone the maintainer has not since rewritten."
+        }
+      }
+    },
+    "MemoryPurpose": {
+      "title": "MemoryPurpose",
+      "description": "The one purpose for which the caller will use the memory content a request discloses (VTI-ACL-103): a name registered in the VTI specification's purpose registry (`personalisation`, `taskExecution`, `analytics`, `modelTraining`) or an absolute IRI. The VTA grants it only if the caller's ACL entry does — `any` grants every purpose but `modelTraining` — refuses it otherwise (`purposeNotGranted`), and records it in the audit record of the read. Optional where the entry lists exactly one purpose (that one applies) or states `any` (the read is recorded as for no stated purpose).",
+      "$ref": "../../../acl/_shared/0.3/acl-entry.schema.json#/$defs/Purpose"
+    }
+  }
+}

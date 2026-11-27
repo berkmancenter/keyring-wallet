@@ -6,7 +6,7 @@
  * against the code here.
  */
 import { readFileSync, readdirSync } from 'fs'
-import { join } from 'path'
+import { join, relative } from 'path'
 
 import {
   EMPTY_APPROVALS,
@@ -258,7 +258,7 @@ describe('the phone never sends an offered task', () => {
     expect(callers('VTA_TASK.contextsDelete')).toEqual(['VtaClient.ts'])
     const client = readFileSync(join(moduleDir, 'VtaClient.ts'), 'utf8')
     const uses = client.split('\n').filter((l) => /VTA_TASK\.contexts(Create|Delete)\b/.test(l))
-    // createContext (no caller in the app), sendTestRequest's create, and contexts/delete's versions.
+    // createContext (agent connect's memories, never waiting for consent), sendTestRequest's create, and contexts/delete's versions.
     expect(uses).toHaveLength(3)
   })
 
@@ -358,7 +358,7 @@ describe('the phone never sends an offered task', () => {
     ])
   })
 
-  it('the app has no caller of createContext', () => {
+  it("createContext's only callers are agent connect's memories, and it never waits for consent", () => {
     const src = join(__dirname, '..', '..', '..')
     const walk = (dir: string): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
@@ -370,8 +370,20 @@ describe('the phone never sends an offered task', () => {
             ? [join(dir, e.name)]
             : []
       )
-    // React's createContext is imported and called bare; a VTA client's is a method.
-    expect(walk(src).filter((f) => /\.createContext\(/.test(readFileSync(f, 'utf8')))).toEqual([])
+    // React's createContext is imported and called bare; a VTA client's is a method. Agent connect's memories
+    // (plan §3.15) are the one caller: the phone creates them about itself, so a create an approval rule holds must be
+    // refused, never waited on, or the phone would wait on its own approval (approvalRules.ts, PHONE_SENDS).
+    // What this cannot see: a caller that destructures the method (`const { createContext } = client`) and calls it
+    // bare. A new caller must keep the dot, or be added here by name.
+    expect(
+      walk(src)
+        .filter((f) => /\.createContext\(/.test(readFileSync(f, 'utf8')))
+        .map((f) => relative(src, f))
+    ).toEqual([join('modules', 'connected-agents', 'memories.ts')])
+    const client = readFileSync(join(moduleDir, 'VtaClient.ts'), 'utf8')
+    const body = /\n {2}createContext\(id: string, name: string\) \{([\s\S]*?)\n {2}\}/.exec(client)?.[1] ?? ''
+    expect(body).toMatch(/VTA_TASK\.contextsCreate/)
+    expect(body).toMatch(/waitForConsent: false/)
   })
 })
 
