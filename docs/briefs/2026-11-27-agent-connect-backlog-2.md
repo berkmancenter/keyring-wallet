@@ -46,9 +46,20 @@ to the fork. Skip this section until then.
 
 ## Open for the plan owner (section 11 Q7)
 
-How the agent learns Keyring's chat identity (`chatDid`) and mediator: A, the VTA writes them into redeem's
-`ext`; or B, Keyring's first chat message, signed by `ownerPersonaDid`, names them. fb-C1 builds the carrier
-either way and does not announce `chatDid` until it is answered. Full text in Section A.
+How the agent learns Keyring's chat identity (`chatDid`), the owner's persona and Keyring's mediator. The A/B pair
+below in Section A is superseded: B is circular (the VDC travels over chat). Measured on our lab at VTA 0.84.0 and
+0.87.0: an application-role entry asking about itself gets `permissionDenied` from `acl/show` 0.3 and `acl/list` 0.4,
+and `auth/whoami` 0.1 does not name its creator (control: the administrator's `acl/show` of the same entry names
+`created_by`). The options now put to the plan owner:
+
+1. Redeem carries them. A VTI change, and only on the `deviceEnrol` path (the fallback has no redeem).
+2. An `ext` member in the agent's entry. Two VTI changes: the member, and an own-entry read.
+3. Keyring's first document, signed by the administrator key `created_by` names. Buildable now against a fake; on the
+   fallback path it needs `auth/whoami` to return `created_by` (or an own-entry read for any caller).
+4. Keyring shows the owner an introduction at pairing and the owner pastes it into the plugin. No VTI change; not
+   designed on either side.
+
+Our recommendation is 3. fb-C1 builds the carrier either way and does not announce `chatDid` until it is answered.
 
 ---
 
