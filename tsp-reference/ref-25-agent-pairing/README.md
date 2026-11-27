@@ -48,6 +48,9 @@ lab/mediator.sh down
 node measure-links.mjs <a VTA's DID>    # step 0.1(h)
 ```
 
+`npm test` here: 126 tests, 126 passed, 0 failed, 0 skipped, as read from the TSP reference offline tests CI run
+[46061103199](https://github.com/berkmancenter/keyring-wallet/actions/runs/46061103199).
+
 Node 20 or later, Rust 1.95 (the clone pins it), Redis 7.1 or later and below 9, Python 3.11. The lab keeps its
 keys and state in `~/vti-stack/agent-connect-lab` (`LAB_DIR`), outside the repository; in a git worktree, point
 `MEDIATOR_SRC` at the clone. `npm start` exits 1 when any case differs from
