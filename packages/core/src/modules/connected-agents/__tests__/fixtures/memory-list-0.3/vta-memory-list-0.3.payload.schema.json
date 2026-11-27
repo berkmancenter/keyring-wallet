@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/vta/memory/list/0.3",
+  "title": "VTA Memory List — payload",
+  "description": "Enumerate the memory items in a context. Two modes, distinguished by whether `sinceVersion` is supplied. Without it this is a SNAPSHOT of live items, optionally narrowed by `prefix`. With it this is a CHANGE FEED: every item in the context whose version exceeds the watermark, tombstones included, which is what lets an agent's local cache on another device converge. Pagination is opaque-cursor based.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contextId"],
+  "properties": {
+    "contextId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The VTA context to enumerate; the isolation boundary."
+    },
+    "prefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Restrict to items whose `key` begins with this byte prefix, compared over the UTF-8 encoding. Lets an agent recall one family of items — `contact/`, `preference/` — without dragging the whole context through the response."
+    },
+    "sinceVersion": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Watermark. Selects change-feed mode: only items whose `version` is strictly greater are returned, tombstones included. Supply the `highWatermark` from the previous sync, or 0 for a first full pull in change-feed form."
+    },
+    "includeValues": {
+      "type": "boolean",
+      "description": "When true, each returned item carries its `value`. Defaults to TRUE — unlike vta/app-state/list — because recalling the text is what an agent lists memory for, and 0.1 always returned values. Set it false for the metadata view (key, version, timestamps, `valueBytes`), which makes a scan of a large context cheap."
+    },
+    "includeDeleted": {
+      "type": "boolean",
+      "description": "Snapshot mode only: when true, tombstones still inside the retention window are returned alongside live items. Defaults to false. In change-feed mode tombstones are always returned and this member MUST NOT be set to false — a change feed that omits deletions cannot converge."
+    },
+    "cursor": {
+      "type": "string",
+      "description": "An opaque continuation token from a previous response's `nextCursor`; a responder MUST NOT accept a cursor it did not issue. Consumers MUST treat it as opaque: never construct, decode, mutate, or infer meaning from one."
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "description": "The most items to return; the responder chooses a default and MAY return fewer, which is likely when `includeValues` is in effect and the values are large."
+    },
+    "purpose": {
+      "$ref": "../../../_shared/0.1/memory-record.schema.json#/$defs/MemoryPurpose",
+      "description": "OPTIONAL. The one purpose the caller will use the content this request discloses for (VTI-ACL-103). Granted only as the caller's ACL entry grants it; a purpose the entry does not grant is refused with `purposeNotGranted`. May be omitted where the entry lists exactly one purpose, or states `any`."
+    },
+    "ext": {
+      "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext",
+      "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "VTA Memory List — response payload",
+      "description": "Success response to vta/memory/list. Type https://trusttasks.org/spec/vta/memory/list/0.3#response.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "highWatermark"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "../../../_shared/0.1/memory-record.schema.json#/$defs/MemoryRecord"
+          },
+          "description": "Matching items in ascending key order in snapshot mode, and ascending version order in change-feed mode — the latter so that a consumer applying them in order reaches the same state as the maintainer. May be empty."
+        },
+        "nextCursor": {
+          "type": "string",
+          "description": "Opaque continuation token for the next page, sent back as the request's `cursor`. Present when more matching items exist beyond this page; absent on the last page."
+        },
+        "highWatermark": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The context's current counter value; 0 for a context that has never been written. This is what a consumer stores as its next `sinceVersion` — NOT the maximum version among `items`, which is wrong whenever a `prefix` filtered a later change out, and undefined when the page is empty. A paginating consumer MUST NOT advance its stored watermark until it has drained the final page — the one with no `nextCursor` — because the pages of one feed share this value and adopting it early would skip the items still to come."
+        },
+        "tombstoneRetentionSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How long this maintainer retains tombstones before reaping them. Advisory, so a consumer can schedule its syncs to stay inside the window rather than discovering it has fallen out of it via vta/memory/list:watermarkTooOld."
+        },
+        "ext": {
+          "$ref": "../../../../_framework/0.2/framework.schema.json#/$defs/Ext",
+          "description": "Ecosystem-defined extension members per SPEC.md §4.5.1."
+        }
+      }
+    }
+  }
+}

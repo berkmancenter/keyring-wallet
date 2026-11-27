@@ -93,6 +93,15 @@ export async function getKeyed<T>(agent: Agent, recordType: string, kind: string
   return records[0]?.content as T | undefined
 }
 
+/** Remove every record for (recordType, kind, key), under that key's lock. Removing an absent key does nothing. */
+export function deleteKeyed(agent: Agent, recordType: string, kind: string, key: string): Promise<void> {
+  return withKeyLock(`${recordType}|${kind}|${key}`, async () => {
+    for (const record of await agent.genericRecords.findAllByQuery({ recordType, kind, key })) {
+      await agent.genericRecords.delete(record)
+    }
+  })
+}
+
 /**
  * Every record of `kind`, one per key (the newest). Duplicates found on the way
  * are removed, each under its key's lock so a write in progress is not undone.
