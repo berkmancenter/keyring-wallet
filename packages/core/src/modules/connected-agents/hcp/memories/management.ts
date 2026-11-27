@@ -9,6 +9,10 @@
  * and without one answers `needsToken` having sent nothing: once the token question is answered, C10 is a call site
  * and a token, not a change here.
  *
+ * For that future call site: `entries/withdraw` cannot be undone, so, by the reviewer's rule for every part, the
+ * flow that sends it writes a local intent record first, then sends, then completes the record, so that a failed
+ * local write never leaves the app showing something false. The seam keeps no record itself (the brief: no store).
+ *
  * Nothing here logs a payload, a token or a response.
  *
  * @module connected-agents/hcp/memories/management
