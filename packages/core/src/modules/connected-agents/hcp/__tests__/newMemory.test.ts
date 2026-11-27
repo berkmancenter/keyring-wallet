@@ -53,9 +53,17 @@ const createdEntry = () => ({
   },
 })
 
-function fakePort(answer: () => Promise<unknown>) {
+/** The port, and a VTA session whose state's `managerDid` is `manager` (read at each call). */
+function fakePort(answer: () => Promise<unknown>, manager: { did?: string } = { did: MANAGER }) {
   const task = jest.fn((_type: string, _payload: Record<string, unknown>) => answer())
-  return { port: { task } as HcpVtaPort, task }
+  const getState = jest.fn(() => ({ managerDid: manager.did }))
+  return { deps: { port: { task } as HcpVtaPort, session: { getState } }, task, getState, manager }
+}
+
+/** What the screen gives: the input without the manager DID. */
+const screenInput = (change: Partial<HcpNewMemoryInput> = {}) => {
+  const { managerDid: _ignored, ...rest } = input(change)
+  return rest
 }
 
 /** The brief's object ("A new memory (C3)") for `input()`. */
@@ -100,46 +108,82 @@ describe('addHcpMemory', () => {
   it('sends entries/create once with the payload, and succeeds on a response with entry', async () => {
     const entry = createdEntry()
     expectValid(S[HCP_ENTRIES_CREATE].response, { entry })
-    const { port, task } = fakePort(async () => ({ entry }))
-    expect(await addHcpMemory(port, input())).toEqual({ ok: true, entry })
+    const { deps, task } = fakePort(async () => ({ entry }))
+    expect(await addHcpMemory(deps, screenInput())).toEqual({ ok: true, entry })
     expect(task).toHaveBeenCalledTimes(1)
     expect(task).toHaveBeenCalledWith(HCP_ENTRIES_CREATE, hcpCreatePayload(input()))
   })
 
   it('sends nothing for empty text, text of only spaces, or 4097 characters', async () => {
-    const { port, task } = fakePort(async () => ({ entry: createdEntry() }))
+    const { deps, task } = fakePort(async () => ({ entry: createdEntry() }))
     for (const text of ['', '   \n\t', 'a'.repeat(HCP_MEMORY_MAX_CHARS + 1)]) {
-      expect(await addHcpMemory(port, input({ text }))).toEqual({ ok: false, invalid: true })
+      expect(await addHcpMemory(deps, screenInput({ text }))).toEqual({ ok: false, invalid: true })
     }
     expect(task).not.toHaveBeenCalled()
   })
 
   // control: the opposite of the case above, at the bounds.
   it('control: one character, and 4096 (counting a character outside the BMP as one), are sent', async () => {
-    const { port, task } = fakePort(async () => ({ entry: createdEntry() }))
-    expect((await addHcpMemory(port, input({ text: 'a' }))).ok).toBe(true)
-    expect((await addHcpMemory(port, input({ text: '😀'.repeat(HCP_MEMORY_MAX_CHARS) }))).ok).toBe(true)
-    expect((await addHcpMemory(port, input({ text: ` ${'a'.repeat(HCP_MEMORY_MAX_CHARS)} ` }))).ok).toBe(true)
+    const { deps, task } = fakePort(async () => ({ entry: createdEntry() }))
+    expect((await addHcpMemory(deps, screenInput({ text: 'a' }))).ok).toBe(true)
+    expect((await addHcpMemory(deps, screenInput({ text: '😀'.repeat(HCP_MEMORY_MAX_CHARS) }))).ok).toBe(true)
+    expect((await addHcpMemory(deps, screenInput({ text: ` ${'a'.repeat(HCP_MEMORY_MAX_CHARS)} ` }))).ok).toBe(true)
     expect(task).toHaveBeenCalledTimes(3)
   })
 
-  it('unreachable gives MemoryNotSaved; a refusal gives its code; an answer without entry is not a success', async () => {
+  it('unreachable gives MemoryNotSaved; a refusal gives its code and MemoryRefused; no entry is refused', async () => {
     expect(
       await addHcpMemory(
         fakePort(async () => {
           throw new Error('socket closed')
-        }).port,
-        input()
+        }).deps,
+        screenInput()
       )
     ).toEqual({ ok: false, unreachable: true, message: { key: 'MemoryNotSaved' } })
     expect(
       await addHcpMemory(
         fakePort(async () => {
           throw Object.assign(new Error('no'), { name: 'VtiRefusal', code: 'permissionDenied' })
-        }).port,
-        input()
+        }).deps,
+        screenInput()
       )
-    ).toEqual({ ok: false, refused: 'permissionDenied' })
-    expect(await addHcpMemory(fakePort(async () => ({})).port, input())).toEqual({ ok: false, refused: HCP_NO_ENTRY })
+    ).toEqual({ ok: false, refused: 'permissionDenied', message: { key: 'MemoryRefused' } })
+    expect(await addHcpMemory(fakePort(async () => ({})).deps, screenInput())).toEqual({
+      ok: false,
+      refused: HCP_NO_ENTRY,
+      message: { key: 'MemoryRefused' },
+    })
+  })
+
+  it('reads the manager DID from the session at each save, so a rotated key is followed', async () => {
+    const { deps, task, getState, manager } = fakePort(async () => ({ entry: createdEntry() }))
+    await addHcpMemory(deps, screenInput())
+    const ROTATED = 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK'
+    manager.did = ROTATED
+    await addHcpMemory(deps, screenInput())
+    expect(getState).toHaveBeenCalledTimes(2)
+    expect(task.mock.calls[0][1]).toStrictEqual(hcpCreatePayload(input()))
+    expect(task.mock.calls[1][1]).toStrictEqual(hcpCreatePayload(input({ managerDid: ROTATED })))
+  })
+
+  it('with no manager DID on the session, sends nothing and gives MemoryNotSaved, never a subject of undefined', async () => {
+    for (const did of [undefined, '']) {
+      const { deps, task } = fakePort(async () => ({ entry: createdEntry() }), { did })
+      expect(await addHcpMemory(deps, screenInput())).toEqual({
+        ok: false,
+        noManager: true,
+        message: { key: 'MemoryNotSaved' },
+      })
+      expect(task).not.toHaveBeenCalled()
+    }
+  })
+
+  it('takes no manager DID from the screen: one passed in anyway is not used', async () => {
+    const { deps, task } = fakePort(async () => ({ entry: createdEntry() }))
+    const sneaked = { ...screenInput(), managerDid: 'did:key:z6MkNotThePhone' } as unknown as Parameters<
+      typeof addHcpMemory
+    >[1]
+    await addHcpMemory(deps, sneaked)
+    expect(task.mock.calls[0][1]).toStrictEqual(hcpCreatePayload(input()))
   })
 })

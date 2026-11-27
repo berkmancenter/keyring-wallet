@@ -7,8 +7,14 @@ import type { Agent } from '@credo-ts/core'
 import { memoryGenericRecords } from '../../../../../__tests__/modules/vrc/fixtures/memoryGenericRecords'
 import { AgentConnectionStore } from '../../store'
 import { agentRecord } from '../../testing/fixtures'
-import { hcpConnectionFromApproval, HcpConnectionStore, recordHcpApproval } from '../store'
-import type { HcpApprovalView, HcpConnection } from '../types'
+import {
+  beginHcpApproval,
+  hcpApprovalInFlight,
+  hcpConnectionFromApproval,
+  HcpConnectionStore,
+  recordHcpApproval,
+} from '../store'
+import type { HcpApprovalInFlight, HcpApprovalView, HcpConnection } from '../types'
 import { CLIENT_VID, GRANT, OTHER_VID, THREAD } from './fixtures/hcpApproval'
 
 function fakeAgent() {
@@ -125,5 +131,65 @@ describe('the record written on approval', () => {
     const store = new HcpConnectionStore(agent)
     await recordHcpApproval(store)(view(), new Date('2026-11-27T10:01:00.000Z'))
     expect(await store.list()).toEqual([connection()])
+  })
+})
+
+describe('the approval in flight', () => {
+  const APPROVAL = { id: 'consent-1', expiresAt: '2026-11-27T10:05:00.000Z' }
+  const STARTED = new Date('2026-11-27T10:00:30.000Z')
+  const inFlight = (): HcpApprovalInFlight => ({
+    id: CLIENT_VID,
+    name: 'My notes agent',
+    grantId: GRANT,
+    threadId: THREAD,
+    approvalId: 'consent-1',
+    approvalExpiresAt: '2026-11-27T10:05:00.000Z',
+    expiresInSeconds: 14400,
+    startedAt: '2026-11-27T10:00:30.000Z',
+  })
+
+  it('beginHcpApproval writes it under its own kind, naming the grant, and lists no connection', async () => {
+    const { agent, genericRecords } = fakeAgent()
+    const store = new HcpConnectionStore(agent)
+    await beginHcpApproval(store)(view(), APPROVAL, STARTED)
+    expect(hcpApprovalInFlight(view(), APPROVAL, STARTED)).toEqual(inFlight())
+    expect(await store.listInFlight()).toEqual([inFlight()])
+    expect(await store.getInFlight(CLIENT_VID)).toEqual(inFlight())
+    expect(genericRecords.records[0].tags).toEqual({
+      recordType: 'keyring/hcp-connection',
+      kind: 'approving',
+      key: CLIENT_VID,
+    })
+    expect(await store.list()).toEqual([])
+  })
+
+  it('leaves an existing connection for the client as it is until the new approval completes', async () => {
+    const { agent } = fakeAgent()
+    const store = new HcpConnectionStore(agent)
+    const earlier = connection({ grantId: 'urn:uuid:00000000-0000-4000-8000-000000000000' })
+    await store.put(earlier)
+    await beginHcpApproval(store)(view(), APPROVAL, STARTED)
+    expect(await store.get(CLIENT_VID)).toEqual(earlier)
+  })
+
+  it('recordHcpApproval makes it the connection and removes it, as one step', async () => {
+    const { agent } = fakeAgent()
+    const store = new HcpConnectionStore(agent)
+    await beginHcpApproval(store)(view(), APPROVAL, STARTED)
+    await recordHcpApproval(store)(view(), new Date('2026-11-27T10:01:00.000Z'))
+    expect(await store.list()).toEqual([connection()])
+    expect(await store.listInFlight()).toEqual([])
+  })
+
+  // control: completing another grant for the same client does not remove this one.
+  it('control: removeInFlight and complete keep an approval in flight for another grant', async () => {
+    const { agent } = fakeAgent()
+    const store = new HcpConnectionStore(agent)
+    await store.putInFlight(inFlight())
+    expect(await store.removeInFlight(CLIENT_VID, 'urn:uuid:00000000-0000-4000-8000-000000000000')).toBe(false)
+    await store.complete(connection({ grantId: 'urn:uuid:00000000-0000-4000-8000-000000000000' }))
+    expect(await store.listInFlight()).toEqual([inFlight()])
+    expect(await store.removeInFlight(CLIENT_VID, GRANT)).toBe(true)
+    expect(await store.listInFlight()).toEqual([])
   })
 })

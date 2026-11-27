@@ -90,14 +90,18 @@ function setup(options: { approvals?: VtiApproval[]; wrongTimes?: number[] } = {
     recordWrongNumber: jest.fn(() => real.recordWrongNumber()),
   }
   const fake = fakeSource(options.approvals)
+  const beforeApprove = jest.fn(
+    async (_view: HcpApprovalView, _approval: { id: string; expiresAt: string }, _at: Date) => undefined
+  )
   const onApproved = jest.fn(async (_view: HcpApprovalView, _at: Date) => undefined)
-  const flow = createHcpApproveFlow({ source: fake.source, lockout, clock, onApproved, setTimer })
+  const flow = createHcpApproveFlow({ source: fake.source, lockout, clock, beforeApprove, onApproved, setTimer })
   const states: HcpApproveState[] = []
   flow.subscribe(() => states.push(flow.state()))
   return {
     flow,
     fake,
     lockout,
+    beforeApprove,
     onApproved,
     advance,
     states,
@@ -262,6 +266,14 @@ describe('createHcpApproveFlow', () => {
     resolve()
     await approving
     expect(t.fake.decide.mock.calls).toEqual([['consent-1', 'approve']])
+    // The approval in flight was written first, naming the request and its own expiry.
+    expect(t.beforeApprove).toHaveBeenCalledTimes(1)
+    expect(t.beforeApprove).toHaveBeenCalledWith(
+      EXPECTED_VIEW,
+      { id: 'consent-1', expiresAt: hcpApproval().expiresAt },
+      new Date(SCAN_AT)
+    )
+    expect(t.beforeApprove.mock.invocationCallOrder[0]).toBeLessThan(t.fake.decide.mock.invocationCallOrder[0])
     expect(t.onApproved).toHaveBeenCalledTimes(1)
     expect(t.onApproved).toHaveBeenCalledWith(EXPECTED_VIEW, new Date(SCAN_AT))
     expect(t.flow.state()).toEqual({ state: 'approved', view: EXPECTED_VIEW })
@@ -269,6 +281,41 @@ describe('createHcpApproveFlow', () => {
     await t.flow.approve()
     await t.flow.cancel()
     expect(t.fake.decide).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not approve when the approval in flight cannot be written', async () => {
+    const t = setup({ approvals: [hcpApproval()] })
+    t.beforeApprove.mockImplementationOnce(async () => {
+      throw new Error('disk full')
+    })
+    await t.flow.start({ name: 'My helper', link: LINK })
+    await t.flow.typeNumber(NUMBER)
+    await t.flow.approve()
+    expect(t.flow.state()).toEqual({ state: 'failed', error: 'not recorded, so not approved: disk full' })
+    expect(t.fake.decide).not.toHaveBeenCalled()
+    expect(t.onApproved).not.toHaveBeenCalled()
+  })
+
+  // control: the opposite of the case above: with the write in place, the same run approves.
+  it('control: with the approval in flight written, the same run approves', async () => {
+    const t = setup({ approvals: [hcpApproval()] })
+    await t.flow.start({ name: 'My helper', link: LINK })
+    await t.flow.typeNumber(NUMBER)
+    await t.flow.approve()
+    expect(t.flow.state().state).toBe('approved')
+    expect(t.fake.decide).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the approval in flight when onApproved fails after the VTA approved', async () => {
+    const t = setup({ approvals: [hcpApproval()] })
+    t.onApproved.mockImplementationOnce(async () => {
+      throw new Error('store closed')
+    })
+    await t.flow.start({ name: 'My helper', link: LINK })
+    await t.flow.typeNumber(NUMBER)
+    await t.flow.approve()
+    expect(t.beforeApprove).toHaveBeenCalledTimes(1)
+    expect(t.flow.state()).toEqual({ state: 'failed', error: 'approved, but not recorded: store closed' })
   })
 
   it("gives failed with the approval's error when decide fails, and records nothing", async () => {
@@ -358,6 +405,7 @@ describe('createHcpApproveFlow', () => {
         states: t.states,
         final: t.flow.state(),
         decide: t.fake.decide.mock.calls,
+        beforeApprove: t.beforeApprove.mock.calls,
         onApproved: t.onApproved.mock.calls,
         lockoutState: t.lockout.state.mock.calls,
         recordWrongNumber: t.lockout.recordWrongNumber.mock.calls,

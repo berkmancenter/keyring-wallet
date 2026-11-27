@@ -130,14 +130,18 @@ describe('revokeHcpGrant', () => {
     expect(await store.get(CLIENT_VID)).toEqual(connection())
   })
 
-  it('a refusal changes nothing and names its code', async () => {
+  it('a refusal changes nothing, names its code and gives RevokeRefused with the name', async () => {
     const vta = fakeVta({
       revoke: async () => {
         throw refusal('notFound')
       },
     })
     const { deps, store } = await setup(connection(), vta)
-    expect(await revokeHcpGrant(deps, CLIENT_VID)).toEqual({ ok: false, refused: 'notFound' })
+    expect(await revokeHcpGrant(deps, CLIENT_VID)).toEqual({
+      ok: false,
+      refused: 'notFound',
+      message: { key: 'RevokeRefused', params: { name: 'My notes agent' } },
+    })
     expect(await store.get(CLIENT_VID)).toEqual(connection())
   })
 
@@ -282,9 +286,11 @@ describe('the 24-hour stop', () => {
   const none = (usableUntil: string | null = null) =>
     fakeVta({ summaries: [async () => summary([{ notification: 'none', usableUntil }])] })
 
+  const withLastRead = () => ({ ...revoked(), lastUsableUntil: iso(REVOKED_AT + 20 * MINUTE) })
+
   it('a poll at the stop still telling becomes notTold with the last usableUntil read', async () => {
-    const { deps, store } = await setup(revoked(), none(), STOP)
-    await pollHcpNotice(deps, CLIENT_VID, { lastUsableUntil: iso(REVOKED_AT + 20 * MINUTE) })
+    const { deps, store } = await setup(withLastRead(), none(), STOP)
+    await pollHcpNotice(deps, CLIENT_VID)
     expect((await store.get(CLIENT_VID))?.notice).toEqual({
       state: 'notTold',
       usableUntil: iso(REVOKED_AT + 20 * MINUTE),
@@ -292,8 +298,8 @@ describe('the 24-hour stop', () => {
   })
 
   it("the stop poll's own usableUntil wins over an earlier one", async () => {
-    const { deps, store } = await setup(revoked(), none(iso(REVOKED_AT + 30 * MINUTE)), STOP)
-    await pollHcpNotice(deps, CLIENT_VID, { lastUsableUntil: iso(REVOKED_AT + 20 * MINUTE) })
+    const { deps, store } = await setup(withLastRead(), none(iso(REVOKED_AT + 30 * MINUTE)), STOP)
+    await pollHcpNotice(deps, CLIENT_VID)
     expect((await store.get(CLIENT_VID))?.notice).toEqual({
       state: 'notTold',
       usableUntil: iso(REVOKED_AT + 30 * MINUTE),
@@ -317,9 +323,36 @@ describe('the 24-hour stop', () => {
 
   // control: one millisecond before the stop, the same answer keeps telling.
   it('control: at 23:59:59.999 the notice stays telling', async () => {
-    const { deps, store } = await setup(revoked(), none(), STOP - 1)
-    await pollHcpNotice(deps, CLIENT_VID, { lastUsableUntil: iso(REVOKED_AT + 20 * MINUTE) })
+    const { deps, store } = await setup(withLastRead(), none(), STOP - 1)
+    await pollHcpNotice(deps, CLIENT_VID)
     expect((await store.get(CLIENT_VID))?.notice).toEqual({ state: 'telling', lastPolledAt: iso(STOP - 1) })
+  })
+
+  it('a usableUntil read is kept on the record, so the stop settles the same across a restart', async () => {
+    const vta = fakeVta({
+      summaries: [
+        async () => summary([{ notification: 'none', usableUntil: iso(REVOKED_AT + 20 * MINUTE) }]),
+        async () => summary([{ notification: 'none', usableUntil: null }]),
+      ],
+    })
+    const { deps, store, genericRecords, clock } = await setup(revoked(), vta, REVOKED_AT + 20 * MINUTE)
+    await pollHcpNotice(deps, CLIENT_VID)
+    expect((await store.get(CLIENT_VID))?.lastUsableUntil).toBe(iso(REVOKED_AT + 20 * MINUTE))
+    // The app restarts: a new store over the same records, and no memory of the earlier poll.
+    const restarted = new HcpConnectionStore({ genericRecords } as unknown as Agent)
+    clock.now = STOP
+    await pollHcpNotice({ ...deps, store: restarted }, CLIENT_VID)
+    expect((await restarted.get(CLIENT_VID))?.notice).toEqual({
+      state: 'notTold',
+      usableUntil: iso(REVOKED_AT + 20 * MINUTE),
+    })
+  })
+
+  // control: an answer without usableUntil leaves the kept one as it is (it is not cleared).
+  it('control: a later poll with no usableUntil does not clear the kept one', async () => {
+    const { deps, store } = await setup(withLastRead(), none(), REVOKED_AT + 30 * MINUTE)
+    await pollHcpNotice(deps, CLIENT_VID)
+    expect((await store.get(CLIENT_VID))?.lastUsableUntil).toBe(iso(REVOKED_AT + 20 * MINUTE))
   })
 })
 
