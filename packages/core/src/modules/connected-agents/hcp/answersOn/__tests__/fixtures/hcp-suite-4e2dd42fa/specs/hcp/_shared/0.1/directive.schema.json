@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/_shared/0.1/directive.schema.json",
+  "title": "HCP — Directive",
+  "description": "The Human Context Protocol (HCP) 2.0-draft-3 directive (HCP 6.4), shared by the hcp/* tasks. Written for this registry from the HCP 2.0-draft-3 specification text (CC BY 4.0, https://github.com/loyalagents/hcp-spec), with attribution, and checked against the shapes HCP publishes for the same draft; not copied from HCP's own schema files. Open, as HCP's own shapes are. Where this schema and the HCP text differ, the HCP text governs. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty, which an hcp/* party never writes empty. hcp/import applies neither to an export it takes.",
+  "$defs": {
+    "Directive": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["directiveId", "action", "effect", "text", "setBy", "createdAt"],
+      "description": "What a client may do with context it received, or on the Context Subject's behalf (HCP 6.4). A directive only narrows: it never authorizes a disclosure the grant does not. Where two that apply disagree, `deny` prevails over `ask-first`, and `ask-first` over `permit` (HCP 6.4).",
+      "properties": {
+        "directiveId": {
+          "$ref": "common.schema.json#/$defs/Urn",
+          "description": "Stable for the life of the directive (HCP 6.4)."
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "pattern": "^(share|sign|transact|[a-zA-Z][a-zA-Z0-9+.-]*:\\S+)$",
+          "description": "What the directive governs: `share` (passing received context to another agent), `sign` (signing, agreeing to or committing to anything on the Context Subject's behalf), `transact` (spending, buying or entering a contract on their behalf), or an absolute URI naming another action (HCP 6.4, A.3). A client MUST NOT treat an action it does not recognize as a permission; it reads the directive from `text`. The pattern admits the slug or an absolute URI's outline only: it carries no `format: uri`, which would refuse every slug, so checking that a custom value is a well-formed absolute URI, as HCP's prose requires (HCP A.3), is the consumer's check."
+        },
+        "effect": {
+          "type": "string",
+          "enum": ["deny", "ask-first", "permit"],
+          "description": "`deny`: the client MUST NOT take the action. `ask-first`: the client MUST obtain the Context Subject's confirmation each time before taking it. `permit`: the client may take it without asking (HCP 6.4). HCP's own values, carried verbatim."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "The directive in the Context Subject's words (HCP 6.4). A client presents it to a model as data, never as instructions (HCP 7.4). The maxLength is a framework bound, not an HCP requirement."
+        },
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": { "$ref": "common.schema.json#/$defs/Category" },
+          "description": "The categories whose context the directive governs; absent means every category, held now or later (HCP 6.4). The maxItems is a framework bound, not an HCP requirement."
+        },
+        "operators": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": { "type": "string", "minLength": 1, "maxLength": 2048 },
+          "description": "The Client Operators the directive applies to, each a DNS domain or an operator identifier, matched as for standing rules; absent means every operator (HCP 6.4, 6.3). The maxItems is a framework bound, not an HCP requirement."
+        },
+        "setBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Set by the provider: `context-subject`, or the `delegationId` of the delegate who set it (HCP 6.4, 6.3)."
+        },
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/Instant",
+          "description": "Set by the provider: when the directive was set (HCP 6.4)."
+        }
+      }
+    }
+  }
+}
