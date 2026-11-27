@@ -33,6 +33,8 @@ const K_A = 'did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp'
 const ID = 'q3Vn7Zk2Xo9Rt1LwPb4HdA'
 const MIN = 60 * 1000
 const T0 = Date.parse('2026-11-25T12:00:00Z')
+/** The entry's expiry as every grant here sets it (approved at T0): carried by each cleanup (#1060 finding 24, 3A). */
+const GRANTED_UNTIL = new Date(T0 + TEMPORARY_GRANT_MS).toISOString()
 /** What the fakes put where a careless machine would copy it: it must never reach a state. */
 const NUMBER_SENTINEL = '7391'
 
@@ -477,7 +479,10 @@ describe('cancel and decline', () => {
     const t = setup()
     await toApproval(t)
     await t.machine.approve()
-    expect(await t.machine.cancel()).toEqual({ phase: 'cancelled', cleanup: { vtaDid: VTA, subject: K_T } })
+    expect(await t.machine.cancel()).toEqual({
+      phase: 'cancelled',
+      cleanup: { vtaDid: VTA, subject: K_T, expiresAt: GRANTED_UNTIL },
+    })
   })
 })
 
@@ -508,7 +513,7 @@ describe('a grant that reports contexts the owner did not choose', () => {
     expect(await t.machine.approve()).toEqual({
       phase: 'failed',
       reason: 'grant-refused',
-      cleanup: { vtaDid: VTA, subject: K_T },
+      cleanup: { vtaDid: VTA, subject: K_T, expiresAt: GRANTED_UNTIL },
     })
   })
 
@@ -519,7 +524,7 @@ describe('a grant that reports contexts the owner did not choose', () => {
     expect(await t.machine.approve()).toEqual({
       phase: 'failed',
       reason: 'grant-refused',
-      cleanup: { vtaDid: VTA, subject: K_T },
+      cleanup: { vtaDid: VTA, subject: K_T, expiresAt: GRANTED_UNTIL },
     })
   })
 
@@ -573,7 +578,7 @@ describe('step 10: the entry as the VTA lists it', () => {
     t.advance(1)
     expect(await t.machine.checkEnrolment()).toEqual({
       phase: 'notFinished',
-      cleanup: { vtaDid: VTA, subject: K_T, deviceId: 'dev-1' },
+      cleanup: { vtaDid: VTA, subject: K_T, deviceId: 'dev-1', expiresAt: GRANTED_UNTIL },
     })
   })
 
