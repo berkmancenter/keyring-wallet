@@ -160,7 +160,9 @@ describe('the agent-connect release gate (#1060 finding 21)', () => {
       sources(root)
         .filter((f) => !isTest(f.path) && NAVIGATOR.test(f.text))
         .map((f) => relative(join(CORE_SRC, '..', '..', '..'), f.path))
-    // Control: the same reading finds the package's navigators, so an empty app list is a finding, not a blind spot.
+    // Controls, one per root: app/src resolves and holds code (a root that does not exist reads as no files, and then
+    // as no navigators), and the same reading finds the package's navigators. So an empty app list is a measured zero.
+    expect(sources(APP_SRC).length).toBeGreaterThan(0)
     expect(navigators(CORE_SRC).length).toBeGreaterThan(0)
     // A navigator in app/src reaches the package through `@bifold/core`, which the gate does not follow: teach it that
     // import before adding one, or Revoke can never count as wired.
