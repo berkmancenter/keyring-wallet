@@ -139,6 +139,9 @@ Start after #1103 merges.
     is the connection store and its `vta` is services' `revokeVta`. `tellAgent` stays absent until fb-C3 gives one.
   - `useKeepConnectedOffered(agentId: string): boolean`, from `services.keepConnectedOffered`. It is false while
     loading. "Keep it connected" is offered only through this.
+  - **One path for the act (decided after #1103, ac's note):** screens call `useAgentActions().keepConnected(id)`,
+    after `useKeepConnectedOffered(id)`. This part removes `keepConnected` from the public `ConnectedAgentsServices`
+    (`keepConnectedOffered` stays), so the two can't drift apart.
 - **HCP hooks** (`hcp/hooks.ts`, new): `useHcpConnections()`, `useHcpApproveFlow()` (scan, match, approve, over
   `hcp/approveFlow` and the `vtaAgent` approvals) and `useHcpActions()` (revoke, new memory). Names fixed; shapes are
   the existing functions' results.
