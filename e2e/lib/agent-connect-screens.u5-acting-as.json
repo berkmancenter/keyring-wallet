@@ -1,5 +1,5 @@
 {
-  "about": "The \"Acting as\" states of the connect form (finding 18, docs/plans/agent-connect-plan.md §7.7, canvas frame 58), added to the base manifest agent-connect-screens.json; the same rules apply. Drawn in packages/core/src/modules/connected-agents/__tests__/fixtures/screenStatesActingAs.tsx with two personas, the only case that draws the row.",
+  "about": "The \"Acting as\" states of the connect form (finding 18, docs/plans/agent-connect-plan.md §7.7, canvas frame 58), added to the base manifest agent-connect-screens.json; the same rules apply. Named \".u5-acting-as\" rather than \".acting-as\" so the base file still sorts first, as the catalogue requires. Drawn in packages/core/src/modules/connected-agents/__tests__/fixtures/screenStatesActingAs.tsx with two personas, the only case that draws the row.",
   "canvas": "docs/plans/agent-connect-plan/canvas/",
   "kit": "docs/plans/agent-connect-plan/mockups/",
   "states": [

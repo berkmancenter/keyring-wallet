@@ -70,11 +70,7 @@ const ActingAsRow: React.FC<ActingAsRowProps> = ({ personas, selected, onSelect 
                 accessibilityState={{ checked }}
                 accessibilityLabel={persona.name}
               >
-                <Icon
-                  name={checked ? 'radiobox-marked' : 'radiobox-blank'}
-                  size={28}
-                  color={AGENT_COLORS.primary}
-                />
+                <Icon name={checked ? 'radiobox-marked' : 'radiobox-blank'} size={28} color={AGENT_COLORS.primary} />
                 <ThemedText style={styles.name}>{persona.name}</ThemedText>
               </TouchableOpacity>
             )

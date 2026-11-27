@@ -1,6 +1,6 @@
 /**
  * The "Acting as" states of the connect form (finding 18, §7.7; canvas frame 58), drawn from props for the screen
- * catalogue: e2e/lib/agent-connect-screens.acting-as.json lists them. Made-up names only, as the canvas draws them.
+ * catalogue: e2e/lib/agent-connect-screens.u5-acting-as.json lists them. Made-up names only, as the canvas draws them.
  */
 import React from 'react'
 

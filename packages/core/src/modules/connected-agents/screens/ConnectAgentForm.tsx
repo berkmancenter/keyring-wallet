@@ -32,7 +32,7 @@ export type ConnectFormChoice = {
 
 const NO_PERSONAS: ActingAsPersona[] = []
 
-const PURPOSE_KEY:Record<AgentPurpose, string> = {
+const PURPOSE_KEY: Record<AgentPurpose, string> = {
   personalisation: 'ConnectedAgents.PurposePersonalisation',
   taskExecution: 'ConnectedAgents.PurposeTaskExecution',
 }
@@ -114,7 +114,8 @@ const ConnectAgentForm: React.FC<ConnectAgentFormProps> = ({
   // With several personas the connect asks, so "Continue" waits for a choice that is still in the list (§7.7).
   const asksPersona = personas.length > 1
   const ownerPersonaDid = asksPersona ? personas.find((p) => p.did === personaDid)?.did : undefined
-  const ready = trimmed.length > 0 && !naming && memories !== undefined && (!asksPersona || ownerPersonaDid !== undefined)
+  const ready =
+    trimmed.length > 0 && !naming && memories !== undefined && (!asksPersona || ownerPersonaDid !== undefined)
   const choice = (): ConnectFormChoice => ({
     name: trimmed,
     memoryContexts: selected,
