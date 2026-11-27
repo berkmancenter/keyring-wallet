@@ -1,0 +1,56 @@
+{
+ "limitBytes": 251,
+ "didBytes": 56,
+ "rows": [
+  {
+   "name": "nothing asked",
+   "scope": null,
+   "bytes": 170,
+   "fits": true,
+   "spare": 81,
+   "qrVersion": 9,
+   "qrModules": 53,
+   "qrDecodes": true
+  },
+  {
+   "name": "one purpose, no capability",
+   "scope": "~personalisation",
+   "bytes": 194,
+   "fits": true,
+   "spare": 57,
+   "qrVersion": 10,
+   "qrModules": 57,
+   "qrDecodes": true
+  },
+  {
+   "name": "memory, both purposes",
+   "scope": "rw~personalisation.taskExecution",
+   "bytes": 210,
+   "fits": true,
+   "spare": 41,
+   "qrVersion": 10,
+   "qrModules": 57,
+   "qrDecodes": true
+  },
+  {
+   "name": "memory and rooms, no purpose",
+   "scope": "rwpo",
+   "bytes": 182,
+   "fits": true,
+   "spare": 69,
+   "qrVersion": 9,
+   "qrModules": 53,
+   "qrDecodes": true
+  },
+  {
+   "name": "memory and rooms, both purposes",
+   "scope": "rwpo~personalisation.taskExecution",
+   "bytes": 212,
+   "fits": true,
+   "spare": 39,
+   "qrVersion": 10,
+   "qrModules": 57,
+   "qrDecodes": true
+  }
+ ]
+}

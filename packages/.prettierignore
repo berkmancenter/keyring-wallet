@@ -28,3 +28,8 @@ core/src/modules/sedi/__tests__/fixtures/**
 # break the generator --check and the byte-identical sources.
 core/src/modules/chat/emoji/emoji-data.json
 core/scripts/emoji/sources/
+
+# Agent connect control-message vectors, written by scripts/agent-connect/control_message_vectors.py: kept exactly as
+# the generator writes them, so a regeneration reproduces the committed bytes, and the copy in the agent plugin's
+# tests stays the same file. Each proof is over the documents' JCS form, not these bytes, so the layout is not signed.
+core/src/modules/connected-agents/vectors/*.json

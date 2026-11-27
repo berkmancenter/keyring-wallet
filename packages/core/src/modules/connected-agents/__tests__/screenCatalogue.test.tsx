@@ -5,12 +5,14 @@
  * failure names the state and its frame.
  *
  * The manifest is a curated list of the states chosen for the catalogue. Its agreement with the drawings, which this
- * checks both ways, is not coverage of every state the screens have.
+ * checks both ways, is not coverage of every state the screens have. And it proves a state shows the words the
+ * manifest lists, not that those are the right words for that state: a settled string shown in the wrong case passes
+ * the copy test and this one alike (the Revoke notice's title was such a case, settled by the plan owner).
  *
  * This is a check on words and states before the emulator walk of step 7.11, not 7.11's evidence: that is the
  * screenshot pairs on the emulator and the simulator. The walk reads the same manifest.
  */
-import { fireEvent, render } from '@testing-library/react-native'
+import { act, fireEvent, render } from '@testing-library/react-native'
 import { existsSync, readFileSync } from 'fs'
 import path from 'path'
 import React from 'react'
@@ -62,10 +64,13 @@ const shownKeys = (node: unknown, out: string[] = []): string[] => {
   return out
 }
 
-const draw = (state: ScreenState) => {
+// A step may start work that answers later (Revoke's outcome): each is followed by a flush, so the state the manifest
+// names is the one on screen when its words are read.
+const draw = async (state: ScreenState) => {
   const tree = render(<BasicAppContext>{SCREEN_STATES[state.id]()}</BasicAppContext>)
   for (const step of state.steps ?? []) {
     if (step.press) fireEvent.press(tree.getByTestId(id(step.press), { includeHiddenElements: true }))
+    await act(async () => undefined)
     if (step.pressLabel) {
       const target = tree
         .getAllByTestId(id(step.within ?? ''), { includeHiddenElements: true })
@@ -114,20 +119,23 @@ describe('agent connect screen catalogue (a check on words, not 7.11 evidence)',
     expect(missing).toEqual([])
   })
 
-  it.each(MANIFEST.states.map((s) => [s.id, s] as const))('%s shows exactly its words, with its marker', (_, state) => {
-    const tree = draw(state)
-    const where = { state: state.id, frame: state.frame ?? `(no frame: ${state.noFrame})` }
-    expect({
-      ...where,
-      marker: tree.queryAllByTestId(id(state.marker), { includeHiddenElements: true }).length > 0,
-    }).toEqual({
-      ...where,
-      marker: true,
-    })
-    expect({ ...where, words: [...shownKeys(tree.toJSON())].sort() }).toEqual({
-      ...where,
-      words: [...state.words].sort(),
-    })
-    tree.unmount()
-  })
+  it.each(MANIFEST.states.map((s) => [s.id, s] as const))(
+    '%s shows exactly its words, with its marker',
+    async (_, state) => {
+      const tree = await draw(state)
+      const where = { state: state.id, frame: state.frame ?? `(no frame: ${state.noFrame})` }
+      expect({
+        ...where,
+        marker: tree.queryAllByTestId(id(state.marker), { includeHiddenElements: true }).length > 0,
+      }).toEqual({
+        ...where,
+        marker: true,
+      })
+      expect({ ...where, words: [...shownKeys(tree.toJSON())].sort() }).toEqual({
+        ...where,
+        words: [...state.words].sort(),
+      })
+      tree.unmount()
+    }
+  )
 })

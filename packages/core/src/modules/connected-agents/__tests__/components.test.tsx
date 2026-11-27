@@ -51,13 +51,35 @@ describe('ConnectedAgents words', () => {
   const PLAN = readFileSync(path.resolve(__dirname, '../../../../../../docs/plans/agent-connect-plan.md'), 'utf8')
   const SECTION_6 = PLAN.slice(PLAN.indexOf('\n## 6. UX'), PLAN.indexOf('\n## 7. Steps'))
   const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  // "{{name}}" in a locale string is "<name>" (or "<n>", "<time>") in the plan.
+  // "{{name}}" in a locale string is "<name>" (or "<n>", "<time>") in the plan's prose, and "{{name}}" itself in its
+  // key list, which quotes the i18n strings as they are written.
   const asPlan = (text: string) =>
     text
       .split(/{{\s*\w+\s*}}/)
       .map(escape)
-      .join('<[^>"]+>')
-  const quotedIn6 = (text: string) => new RegExp(`"${asPlan(text)}"`).test(SECTION_6)
+      .join('(?:<[^>"]+>|\\{\\{\\s*\\w+\\s*\\}\\})')
+  // The plan's prose names i18next's {{count}} "<n>"; every other placeholder keeps its name. Measured over §6: "n" is
+  // the only name that differs.
+  // An entry is a measured fact about the plan, not an exemption: a new one needs the same enumeration (every settled
+  // string's slot names against §6's), and a test below fails any entry no settled string needs.
+  const PLAN_NAME_ALIAS: Readonly<Record<string, string>> = { n: 'count' }
+  const placeholderNames = (text: string) => [...text.matchAll(/{{\s*(\w+)\s*}}/g)].map((m) => m[1])
+  /**
+   * Quoted in `section` with the same words AND the same placeholder names in the same order (after the alias), so a
+   * string whose plan line has "<time>" where it has "{{name}}" does not read as settled.
+   */
+  const quotedIn = (section: string, text: string, alias: Readonly<Record<string, string>> = PLAN_NAME_ALIAS) => {
+    const names = placeholderNames(text)
+    const capture = text
+      .split(/{{\s*\w+\s*}}/)
+      .map(escape)
+      .join('(?:<([^>"]+)>|\\{\\{\\s*(\\w+)\\s*\\}\\})')
+    return [...section.matchAll(new RegExp(`"${capture}"`, 'g'))].some((m) => {
+      const found = names.map((_, i) => m[1 + 2 * i] ?? m[2 + 2 * i])
+      return found.every((name, i) => (alias[name] ?? name) === names[i])
+    })
+  }
+  const quotedIn6 = (text: string) => quotedIn(SECTION_6, text)
   const partOf6 = (text: string) => new RegExp(asPlan(text)).test(SECTION_6)
   // A plural's "_one" stands or falls with its "_other", which is the form the plan quotes.
   const settled = (key: string) => quotedIn6(EN[key.endsWith('_one') ? `${key.slice(0, -4)}_other` : key])
@@ -66,8 +88,32 @@ describe('ConnectedAgents words', () => {
     expect(SECTION_6.length).toBeGreaterThan(10000)
     expect(settled('ApproveOwnTerminal')).toBe(true)
     // Control: a proposal's words are not in §6, and a key word-for-word in §6 inside a longer string is not "quoted".
-    expect(settled('SeeDetails')).toBe(false)
+    // The control's subject is a string still proposed. Guarded first, so the day none is left (or this one settles)
+    // the failure is here and says so ("Received array" without it), not a confusing one below: repoint it then.
+    expect(Object.keys(PROPOSED_COPY)).toContain('MemoryChangeFailed')
+    expect(settled('MemoryChangeFailed')).toBe(false)
+    // Control that never runs out: a sentence the plan does not say is not settled, and a settled key reads true.
+    expect(settled('SeeDetails')).toBe(true)
+    expect(quotedIn6('Keyring never says this sentence anywhere.')).toBe(false)
     expect(quotedIn6('It will be able to read and change it.')).toBe(false)
+  })
+
+  it('binds placeholder names, not only words: a plan line with another placeholder name does not settle a string', () => {
+    // §6 quotes "Connected until <time>": the same words with a different name are not that line.
+    expect(quotedIn6(EN.ConnectedUntil)).toBe(true)
+    expect(quotedIn6('Connected until {{owner}}')).toBe(false)
+    // The one alias: the prose's "<n>" is i18next's {{count}}.
+    expect(quotedIn6(EN.MemoryCountRose)).toBe(true)
+    expect(quotedIn6('Up {{total}} since you last looked.')).toBe(false)
+  })
+
+  it('keeps no alias that no settled string needs', () => {
+    const unneeded = Object.keys(PLAN_NAME_ALIAS).filter((planName) => {
+      const without = Object.fromEntries(Object.entries(PLAN_NAME_ALIAS).filter(([k]) => k !== planName))
+      // Needed: some string is quoted in §6 with the full map and not without this entry.
+      return !Object.values(EN).some((text) => quotedIn(SECTION_6, text) && !quotedIn(SECTION_6, text, without))
+    })
+    expect(unneeded).toEqual([])
   })
 
   it('carries no words that are neither in the plan nor listed as a proposal', () => {
@@ -88,7 +134,7 @@ describe('ConnectedAgents words', () => {
       return start < 0 ? '' : PLAN.slice(start, PLAN.indexOf('\n#', start + 1))
     }
     for (const [key, where] of Object.entries(SETTLED_ELSEWHERE)) {
-      const quoted = new RegExp(`"${asPlan(EN[key])}"`).test(section(where))
+      const quoted = quotedIn(section(where), EN[key])
       expect([key, where, quoted, settled(key), key in PROPOSED_COPY]).toEqual([key, where, true, false, false])
     }
     // Control: the section reader finds §3.15 and not a string it lacks.
