@@ -41,7 +41,7 @@ node scripts/openvtc/setup-external.mjs                  # once, at the reposito
 
 cd tsp-reference/ref-25-agent-pairing
 npm install
-npm test                                # 77 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, and the recordings
+npm test                                # 91 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, the recordings, and the notification checks
 lab/mediator.sh up mailbox              # or: open, deny
 npm start                               # every case for that mode, against the recorded result
 lab/mediator.sh down
@@ -114,13 +114,29 @@ holds it to that producer's own test vector.
 | `auth/oob`, `_from` a `did:peer:2` of 504 bytes | 612 | over by 361 | 19 | yes |
 | Fallback `agent-connect`, `_from` a `did:key` (56 bytes), no scope | 170 | 81 | 9 | yes |
 | The same with the widest scope, `&_scope=rwpo` | 182 | 69 | 9 | yes |
+| The same with one purpose and no capability, `&_scope=~personalisation` | 194 | 57 | 10 | yes |
+| The same with memory and both purposes, `&_scope=rw~personalisation.taskExecution` | 210 | 41 | 10 | yes |
+| The same with every capability and both purposes, `&_scope=rwpo~personalisation.taskExecution` | 212 | 39 | 10 | yes |
 
 - **Item (h) holds for any VTA DID of 143 bytes or less, by construction.** The link is 108 bytes plus the DID, and 251 bytes is the capacity of a version 11 code at level M, so the lab VTA's DID is one instance and not the proof.
 - **The longest VTA DID an `auth/oob` link can carry is 143 bytes.** For a `did:webvh` with a 46-character SCID
   that leaves 86 bytes for the host and any path.
 - **The scope fits.** The plan left its encoding to this step. The rung encodes capabilities as one letter each
   (`r` memory read, `w` memory write, `p` room present, `o` room open) and purposes as names after `~`, in a
-  flow member `_scope`; that costs 8 bytes plus the scope, against 81 spare.
+  flow member `_scope`; that costs 8 bytes plus the scope, against 81 spare. The fallback rows are recorded in
+  `fixtures/links-scopes.json` (`node measure-links.mjs --scopes`: a `did:key` from a fixed seed, so the output is
+  the same on every run), and a test holds the record to the code and the purposes to the names Keyring grants.
+- **The widest ask is 212 bytes, 39 spare**: every capability and both purposes.
+- **An agent that asks for nothing writes no `_scope`.** The member is never present with an empty value. A purpose
+  with no capability is an ask and is written with empty letters (`~personalisation`).
+- **The link carries no duration for the grant.** `_exp` is the code's own deadline.
+- **This form carries a purpose as a registered name, and cannot carry a purpose IRI.** The specification lets a
+  purpose in an ACL entry be either (`specs/acl/_shared/0.3/acl-entry.schema.json`, `$defs.Purpose`, at the pin
+  `2a66a0351`: a lowerCamelCase name of at most 64 characters, or an absolute IRI). So the link can ask for a
+  strict subset of what an entry can hold. `.` separates the names here and an IRI contains it, so `encodeScope`
+  refuses a purpose that is not a registered name by that schema's own pattern; a test holds that.
+  Separately, two IRIs of about 60 characters each would pass the 251-byte limit whatever the separator (that part
+  is arithmetic, not measured).
 - A `did:peer:2` cannot be the `_from` of a link at this limit.
 
 ## The plan's tables are held to the recordings

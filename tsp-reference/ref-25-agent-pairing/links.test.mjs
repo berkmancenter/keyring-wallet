@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { identityFromSeed } from "./identity.mjs";
 import {
   AGENT_CONNECT_FLOW,
+  AGENT_PURPOSES,
   MAX_LINK_BYTES_LEVEL_M,
   REQUEST_ID_LENGTH,
   agentConnectLink,
@@ -18,6 +19,7 @@ import {
   measureLink,
   oobLink,
   qrAtLevelM,
+  scopeRows,
 } from "./links.mjs";
 
 const REQUEST_ID = "q3Vn7Zk2Xo9Rt1LwPb4HdA";
@@ -115,4 +117,79 @@ test("step 0.1(h) as recorded: the link carrying the lab VTA's own DID fits, and
     assert.equal(link.fits, true);
     assert.equal(link.qrDecodes, true);
   }
+});
+
+test("an agent that asks for nothing writes no _scope member, never an empty one", () => {
+  const agent = identityFromSeed(new Uint8Array(32).fill(9));
+  const bare = agentConnectLink({ agentDid: agent.did, requestId: REQUEST_ID, deadline: DEADLINE });
+  for (const scope of [{ capabilities: [], purposes: [] }, {}, undefined]) {
+    const link = agentConnectLink({ agentDid: agent.did, requestId: REQUEST_ID, deadline: DEADLINE, scope });
+    assert.equal(link, bare);
+    assert.ok(!link.includes("_scope"));
+  }
+  // A purpose alone is an ask, and is written: the letters are empty, the member is not.
+  const purposeOnly = agentConnectLink({
+    agentDid: agent.did,
+    requestId: REQUEST_ID,
+    deadline: DEADLINE,
+    scope: { capabilities: [], purposes: ["personalisation"] },
+  });
+  assert.ok(purposeOnly.endsWith("&_scope=~personalisation"));
+  assert.deepEqual(decodeScope("~personalisation"), { capabilities: [], purposes: ["personalisation"] });
+});
+
+test("the scopes of the plan's contract as recorded: each fits, and the record is what the code gives", () => {
+  // fixtures/links-scopes.json is `node measure-links.mjs --scopes`, as printed.
+  const recorded = JSON.parse(readFileSync(new URL("./fixtures/links-scopes.json", import.meta.url), "utf8"));
+  const agent = identityFromSeed(new Uint8Array(32).fill(9));
+  assert.equal(recorded.limitBytes, MAX_LINK_BYTES_LEVEL_M);
+  assert.equal(recorded.didBytes, byteLength(agent.did));
+  assert.deepEqual(recorded.rows, scopeRows({ agentDid: agent.did, requestId: REQUEST_ID, deadline: DEADLINE }));
+
+  // The numbers the plan quotes, as literals: a change to the encoding has to change them here by hand.
+  assert.deepEqual(
+    recorded.rows.map((row) => [row.scope, row.bytes]),
+    [
+      [null, 170],
+      ["~personalisation", 194],
+      ["rw~personalisation.taskExecution", 210],
+      ["rwpo", 182],
+      ["rwpo~personalisation.taskExecution", 212],
+    ],
+  );
+  for (const row of recorded.rows) {
+    assert.equal(row.fits, true, row.name);
+    assert.equal(row.qrDecodes, true, row.name);
+    assert.ok(row.qrVersion <= 11, row.name);
+    assert.equal(row.spare, MAX_LINK_BYTES_LEVEL_M - row.bytes, row.name);
+    if (row.scope !== null) assert.equal(encodeScope(decodeScope(row.scope)), row.scope, row.name);
+  }
+});
+
+test("the purposes the rung measures are the ones Keyring grants", () => {
+  // The rung is outside the workspaces and cannot import the app. It reads the one line instead, so a purpose
+  // renamed, added or removed in the app fails here and the recorded sizes are measured again.
+  const source = readFileSync(
+    new URL("../../packages/core/src/modules/connected-agents/pairing.ts", import.meta.url),
+    "utf8",
+  );
+  const line = source.match(/export const AGENT_PURPOSES = \[([^\]]*)\] as const/);
+  assert.ok(line, "pairing.ts no longer declares AGENT_PURPOSES as a bracketed `as const` list");
+  const names = [...line[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  assert.deepEqual(names, AGENT_PURPOSES);
+});
+
+test("a purpose the form cannot carry is refused when the link is built, never written wrongly", () => {
+  // `.` separates purposes, so an IRI would read back as several names that are not purposes.
+  const iri = "https://registry.example/purpose/personalisation/1";
+  assert.throws(() => encodeScope({ capabilities: ["memory-read"], purposes: [iri] }), /cannot carry/);
+  // The other refusals are the specification's pattern for a registered name (acl-entry.schema.json 0.3,
+  // `$defs.Purpose`): a lower-case first letter, letters and digits, 64 characters at most.
+  for (const name of ["a.b", "a~b", "a&b", "a=b", "a b", "", "Personalisation", "not-a-purpose", "9lives", "a".repeat(65)]) {
+    assert.throws(() => encodeScope({ capabilities: [], purposes: [name] }), /cannot carry/, JSON.stringify(name));
+  }
+  // What the refusal prevents: split on the separator, the IRI is not one purpose.
+  assert.notDeepEqual(decodeScope(`r~${iri}`).purposes, [iri]);
+  assert.equal(encodeScope({ capabilities: [], purposes: ["taskExecution"] }), "~taskExecution");
+  assert.equal(encodeScope({ capabilities: [], purposes: ["a".repeat(64)] }), `~${"a".repeat(64)}`);
 });
