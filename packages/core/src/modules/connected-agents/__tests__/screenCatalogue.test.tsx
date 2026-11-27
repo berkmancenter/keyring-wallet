@@ -21,6 +21,8 @@ import { BasicAppContext } from '../../../../__tests__/helpers/app'
 import en from '../../../localization/en/en.json'
 import { testIdWithKey } from '../../../utils/testable'
 
+import type { WordSource } from './fixtures/wordSource'
+
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
 type Step = { press?: string; pressLabel?: string; within?: string }
@@ -60,13 +62,18 @@ const FIXTURES = path.join(__dirname, 'fixtures')
 const DRAWING_FILES = readdirSync(FIXTURES)
   .filter((name) => /^screenStates.*\.tsx$/.test(name))
   .sort()
-const DRAWINGS: Array<{ file: string; states: Record<string, () => React.ReactElement> }> = DRAWING_FILES.map(
-  (file) => ({
-    file,
+// A drawing file may also export WORD_SOURCES (see fixtures/wordSource.ts): words that do not come through t().
+type DrawingFile = {
+  SCREEN_STATES: Record<string, () => React.ReactElement>
+  WORD_SOURCES?: WordSource[]
+}
+const DRAWINGS: Array<{ file: string; states: Record<string, () => React.ReactElement>; sources: WordSource[] }> =
+  DRAWING_FILES.map((file) => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    states: require(path.join(FIXTURES, file)).SCREEN_STATES as Record<string, () => React.ReactElement>,
+    const loaded = require(path.join(FIXTURES, file)) as DrawingFile
+    return { file, states: loaded.SCREEN_STATES, sources: loaded.WORD_SOURCES ?? [] }
   })
-)
+const WORD_SOURCES: WordSource[] = DRAWINGS.flatMap((d) => d.sources)
 const SCREEN_STATES: Record<string, () => React.ReactElement> = Object.assign({}, ...DRAWINGS.map((d) => d.states))
 const id = (key: string) => testIdWithKey(key)
 
@@ -75,18 +82,19 @@ const id = (key: string) => testIdWithKey(key)
  * i18n returns keys). It checks words, not literal content: a name, a digit or the "7 / 64" counter is not collected,
  * so a wrong counter or a wrong name passes here.
  */
-const shownKeys = (node: unknown, out: string[] = []): string[] => {
+const shownKeys = (node: unknown, out: string[] = [], sources: WordSource[] = WORD_SOURCES): string[] => {
   if (node == null) return out
   if (typeof node === 'string') {
-    if (/^[A-Z]\w*\.[A-Z]\w*$/.test(node) && !out.includes(node)) out.push(node)
+    const word = /^[A-Z]\w*\.[A-Z]\w*$/.test(node) ? node : sources.map((s) => s.wordOf(node)).find(Boolean)
+    if (word && !out.includes(word)) out.push(word)
     return out
   }
   if (Array.isArray(node)) {
-    node.forEach((child) => shownKeys(child, out))
+    node.forEach((child) => shownKeys(child, out, sources))
     return out
   }
   const children = (node as { children?: unknown }).children
-  if (children) shownKeys(children, out)
+  if (children) shownKeys(children, out, sources)
   return out
 }
 
@@ -145,10 +153,24 @@ describe('agent connect screen catalogue (a check on words, not 7.11 evidence)',
     expect(existsSync(path.join(ROOT, MANIFEST.canvas, '99-not-a-frame.png'))).toBe(false)
   })
 
-  it('lists only words that exist in the English strings', () => {
+  it('collects words from a word source as it does t() keys, and only what the source names', () => {
+    const fake: WordSource = {
+      prefix: 'Fake.',
+      wordOf: (text) => (text === 'Hello there.' ? 'Fake.Hello' : undefined),
+      exists: (word) => word === 'Fake.Hello',
+    }
+    const tree = { children: ['ConnectedAgents.Revoke', 'Hello there.', 'Some name', { children: ['Hello there.'] }] }
+    expect(shownKeys(tree, [], [fake])).toEqual(['ConnectedAgents.Revoke', 'Fake.Hello'])
+    // Control: without the source, the finished text is not a word.
+    expect(shownKeys(tree, [], [])).toEqual(['ConnectedAgents.Revoke'])
+  })
+
+  it('lists only words that exist in the English strings, or in the word source their prefix names', () => {
     const missing = MANIFEST.states.flatMap((s) =>
       s.words
         .filter((key) => {
+          const source = WORD_SOURCES.find((w) => key.startsWith(w.prefix))
+          if (source) return !source.exists(key)
           const [section, name] = key.split('.')
           const strings = (en as unknown as Record<string, Record<string, string>>)[section] ?? {}
           return !(name in strings) && !(`${name}_other` in strings)
