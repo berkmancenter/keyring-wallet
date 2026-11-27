@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/_shared/0.1/entry-write.schema.json",
+  "title": "HCP — Entry write members",
+  "description": "The members an HCP Client supplies when it creates or revises an entry under the Human Context Protocol (HCP) 2.0-draft-3 (HCP 5.2.3, 5.2.4), shared by the hcp/* write tasks. Written for this registry from the HCP 2.0-draft-3 specification text (CC BY 4.0, https://github.com/loyalagents/hcp-spec), with attribution, and checked against the shapes HCP publishes for the same draft; not copied from HCP's own schema files. Open, as HCP's own shapes are: a member the provider assigns is never taken from a request (HCP 5.2.3, 4.7.4). Where this schema and the HCP text differ, the HCP text governs. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty, which an hcp/* party never writes empty. hcp/import applies neither to an export it takes.",
+  "$defs": {
+    "WriteSubject": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id"],
+      "description": "HCP `subject`, as a create supplies it (HCP 5.2.3): `subject.id` only. HCP reserves `subject.relationship` (HCP 4.2, 11.3); a request that carries it is passed through unchanged.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "HCP `subject.id`: a URI identifying the Context Subject, which for a Context Client is the per-client pseudonym from its grant (HCP 3.4, 4.2)."
+        }
+      }
+    },
+    "WriteClassification": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["categories"],
+      "description": "The classification a create supplies (HCP 5.2.3). `classification.permittedPurposes` is set only by the Authorizing Principal, through a governance operation (HCP 4.2.1, 4.2.6), so a create that carries it is refused with `malformedRequest`, pending HCP confirmation (question 7); not checked by the schema.",
+      "properties": {
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/Category"
+          },
+          "description": "HCP `classification.categories`: one or more categories, each one the grant authorizes the caller to write (HCP 4.5, 5.2.3). The bound of 256 is a framework bound, not an HCP requirement."
+        },
+        "dimension": {
+          "type": ["string", "null"],
+          "maxLength": 2048,
+          "description": "HCP `classification.dimension`: the dimension within the entry's categories (HCP 4.2)."
+        }
+      }
+    },
+    "RevisionAssertion": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "The assertion members a revision may supply (HCP 5.2.4). `declarationType` omitted means unchanged. `confidence` is REQUIRED and non-null when the revised declaration type is `model-inferred`, and null or absent otherwise (HCP 4.2, 5.2.3); not checked by the schema, since the registry's Rust generator does not support `if`/`then`/`else`.",
+      "properties": {
+        "declarationType": {
+          "type": "string",
+          "enum": ["person-declared", "model-inferred", "issuer-attested"],
+          "description": "The declaration type of the revised assertion (HCP 4.4). HCP's own values, carried verbatim."
+        },
+        "confidence": {
+          "type": ["string", "null"],
+          "enum": ["high", "medium", "low", null],
+          "description": "As for create (HCP 5.2.3)."
+        },
+        "validUntil": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "As for create: when the content stops holding (HCP 4.2)."
+        },
+        "basis": {
+          "$ref": "context-entry.schema.json#/$defs/Basis",
+          "description": "As for create: what the assertion was drawn from (HCP 4.2.5)."
+        },
+        "permittedPurposes": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/PurposeCode"
+          },
+          "description": "As for create: the purposes the asserter permits the entry to be used for (HCP 4.2.6). The bound of 256 is a framework bound."
+        }
+      }
+    },
+    "AssertedBy": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id"],
+      "description": "HCP `record.provenance.assertedBy`, as a request supplies it: the Context Asserter's identifier only. The provider assigns `assurance` (HCP 3.5, 5.2.3).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The Context Asserter (HCP 3.2.6)."
+        }
+      }
+    },
+    "WriteProvenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "HCP `record.provenance`, as a revision supplies it (HCP 5.2.4): the members are as for create, for the revised assertion, and the provider assigns every other provenance member (HCP 3.5). The create rules for `source` and `assertedBy.id` apply to the revised assertion (HCP 5.2.3, 5.2.4); they depend on the content and are not checked by the schema.",
+      "properties": {
+        "assertedBy": {
+          "$ref": "#/$defs/AssertedBy",
+          "description": "The Context Asserter."
+        },
+        "assertedAt": {
+          "$ref": "common.schema.json#/$defs/Instant",
+          "description": "When the assertion was made. Omitted means the provider records `recordedAt` (HCP 5.2.3)."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The origin of the entry: a conversation or document identifier, `person-input` or `integration` (HCP 4.2, 5.2.3)."
+        }
+      }
+    },
+    "Proposal": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["act", "entry", "rationale", "weighed"],
+      "description": "A proposal for resolving a conflict the client asserts, carried on a `contradicts` relationship (HCP 4.7.4). It changes nothing until the Context Subject acts. `proposedBy` and `proposedAt` are set by the provider, never taken from a request (HCP 4.7.4).",
+      "properties": {
+        "act": {
+          "type": "string",
+          "enum": ["reject", "accept", "supersede"],
+          "description": "The act proposed (HCP 4.7.3)."
+        },
+        "entry": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The entry the act applies to: its `ref` for a Context Client, its `id` for a Management Client (HCP 5.2.3)."
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "description": "Why, in words the Context Subject can read (HCP 4.7.4)."
+        },
+        "weighed": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "description": "What the proposal considered: an open set, of which HCP defines `basis`, `declarationType`, `standing`, `permittedPurposes`, `recency` and `confidence` (HCP 4.7.4)."
+        }
+      }
+    },
+    "WriteRelationship": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type", "target"],
+      "description": "A relationship to assert (HCP 4.2.3, 5.2.3). Only a `contradicts` relationship may carry a `proposal` (HCP 4.7.4); not checked by the schema. The provider assigns `assertedBy` and `recordedAt` (HCP 5.2.3).",
+      "properties": {
+        "type": {
+          "$ref": "common.schema.json#/$defs/RelationshipType",
+          "description": "The kind of relationship."
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The related entry: its `ref` for a Context Client, its `id` for a Management Client (HCP 5.2.3)."
+        },
+        "proposal": {
+          "$ref": "#/$defs/Proposal",
+          "description": "A proposal for resolving the conflict, on a `contradicts` relationship only (HCP 4.7.4)."
+        }
+      }
+    },
+    "CreateProvenance": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["source"],
+      "description": "HCP `record.provenance`, as a create supplies it (HCP 5.2.3): `source` is REQUIRED, and `assertedBy.id` is REQUIRED unless the declaration type is `person-declared` or the content is a credential (HCP 5.2.3); that rule depends on the content and is not checked by the schema.",
+      "properties": {
+        "assertedBy": {
+          "$ref": "#/$defs/AssertedBy",
+          "description": "The Context Asserter."
+        },
+        "assertedAt": {
+          "$ref": "common.schema.json#/$defs/Instant",
+          "description": "When the assertion was made. Omitted means the provider records `recordedAt` (HCP 5.2.3)."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "The origin of the entry: a conversation or document identifier, `person-input` or `integration` (HCP 4.2, 5.2.3)."
+        }
+      }
+    },
+    "CreateRecord": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["provenance"],
+      "description": "HCP `record`, as a create supplies it: provenance and relationships only. The provider assigns `status`, `version` and the rest (HCP 5.2.3).",
+      "properties": {
+        "provenance": {
+          "$ref": "#/$defs/CreateProvenance",
+          "description": "The provenance the client supplies (HCP 5.2.3)."
+        },
+        "relationships": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/WriteRelationship"
+          },
+          "description": "Relationships to assert (HCP 4.2.3). The bound of 256 is a framework bound."
+        }
+      }
+    },
+    "WriteRecord": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "HCP `record`, as a revision supplies it: provenance and relationships only (HCP 5.2.4). The provider assigns `status`, `version` and the rest.",
+      "properties": {
+        "provenance": {
+          "$ref": "#/$defs/WriteProvenance",
+          "description": "The provenance the client supplies (HCP 5.2.3)."
+        },
+        "relationships": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/WriteRelationship"
+          },
+          "description": "Relationships to assert (HCP 4.2.3). The bound of 256 is a framework bound."
+        }
+      }
+    }
+  }
+}

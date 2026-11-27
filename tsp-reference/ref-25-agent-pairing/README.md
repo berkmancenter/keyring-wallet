@@ -41,7 +41,7 @@ node scripts/openvtc/setup-external.mjs                  # once, at the reposito
 
 cd tsp-reference/ref-25-agent-pairing
 npm install
-npm test                                # 91 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, the recordings, and the notification checks
+npm test                                # 126 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, the recordings, the notification checks, and track C's HCP interfaces
 lab/mediator.sh up mailbox              # or: open, deny
 npm start                               # every case for that mode, against the recorded result
 lab/mediator.sh down
@@ -150,6 +150,32 @@ A last test reads both tables whole and fails if any row of either is quoted by 
 table is not left unmeasured.
 
 It reads those rows only: not the plan's prose and not this README. CI does not run it; `npm test` here does.
+
+## Track C's interfaces, checked offline
+
+Step 7.27 track C (the Keyring side of the HCP demo) fixed three interfaces with the CLI and the VTA. `hcp/` holds a
+second implementation of each, written from the track C brief rather than from Keyring's TypeScript, and
+`hcp/hcp.test.mjs` holds each to Keyring's:
+
+- `hcp/link.mjs`: the connect link the CLI shows as a QR,
+  `https://link.trustoverip.org/t#_from=<clientVid>&_id=<uuid>&_type=/vti/flow/hcp-connect/0.1`. Exactly those
+  three members in any order, `_type` relative or absolute, an Ed25519 `did:key` and a lower-case v4 UUID, at most
+  251 bytes. The vectors' first link is 166 bytes. The test reads the link back, refuses each malformed form, and
+  refuses one extra member.
+- `hcp/number.mjs`: the four-digit match number, `SHA-256(threadId || 0x00 || clientVid)`'s first four bytes,
+  modulo 10000. `fixtures/hcp-match-number.json` is Keyring's `hcp/__tests__/vectors/match-number.json`. The test
+  computes every vector and requires the two files to be equal; a missing Keyring file fails, never skips.
+- `hcp/consent.mjs`: the `task-consent/request/0.1` payload the VTA sends Keyring for an HCP grant: the five effects
+  with their `summary` and `detail`, `expiresAt` 5 minutes after the VTA holds the request, and the framework
+  members (`sideEffects: "mutating"`, `exposure` `secret` and not acting as the subject, `approverSet: "owner"`,
+  `minApprovals: 1`, `excludeRequester: true`). The test requires the effect kinds to equal Keyring's
+  `HCP_EFFECT_KINDS`, read from `hcp/types.ts`. `node hcp/consent.mjs --record` rewrites
+  `fixtures/hcp-consent-request.json` from fixed inputs (the vectors' first thread and `did:key`), and the test
+  requires the file to equal what the code gives.
+
+The other direction is Keyring's `hcp/__tests__/rungConsent.test.ts`: it validates `fixtures/hcp-consent-request.json`
+against VTI's own `task-consent/request/0.1` schema (vendored at `97fda9813`, vta-service-v0.84.0) and runs track C's
+`readHcpEffects` and `findHcpApproval` on it, which accept it for the vectors' first link.
 
 ## What it does not prove
 

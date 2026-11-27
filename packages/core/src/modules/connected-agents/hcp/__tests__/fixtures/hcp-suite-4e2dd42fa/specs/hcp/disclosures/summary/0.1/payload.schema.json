@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/disclosures/summary/0.1",
+  "title": "HCP — Disclosure Summary — payload",
+  "description": "The request payload of the HCP 2.0-draft-3 Disclosure summary operation (HCP 8.6, 5.4; `GET /v2/disclosures` in HCP 9.2, 9.4.12, which MAY be paginated per HCP 9.5): a Management Client, acting for the Authorizing Principal, asks for a summary of what each HCP Client has received, filtered as asked. The filters come from HCP 9.4.12 and the paging members from HCP 9.5; the result follows HCP 8.6 and the disclosure-summary-result shape HCP publishes for the same draft. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, proof) are owned by the framework — SPEC §6.3. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "accessToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "The Management Client's HCP access token (HCP 9.3), carried unchanged. HCP's HTTP Binding sends it as a Bearer token; this member carries it in the document. The provider validates it exactly as over HTTP and treats it as opaque. The maxLength is a framework bound, not an HCP requirement. OPTIONAL: where it is absent, the provider authenticates the request's `issuer` VID, by the REQUIRED request proof, as a Management Client the Authorizing Principal enrolled (HCP 3.2.3), and refuses any other issuer with permissionDenied; where it is present, the token rules apply unchanged. Pending HCP confirmation (question 56)."
+    },
+    "client": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "description": "HCP query parameter `client` (HCP 9.4.12, 8.6): only the summary for this HCP Client, by its client identifier. The maxLength is a framework bound, not an HCP requirement."
+    },
+    "category": {
+      "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Category",
+      "description": "HCP query parameter `category` (HCP 9.4.12, 8.6): only disclosures in this category."
+    },
+    "from": {
+      "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Instant",
+      "description": "HCP query parameter `from` (HCP 9.4.12, 8.6): only disclosures at or after this instant. Inclusive, pending HCP confirmation (question 30)."
+    },
+    "to": {
+      "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Instant",
+      "description": "HCP query parameter `to` (HCP 9.4.12, 8.6): only disclosures at or before this instant. Inclusive, pending HCP confirmation (question 30)."
+    },
+    "cursor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "description": "HCP `cursor` (HCP 9.5, 9.4.12): the opaque continuation token from a previous response's `nextCursor`. Absent asks for the first page. The maxLength is a framework bound, not an HCP requirement."
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "description": "HCP `limit` (HCP 9.5, 9.4.12): the most client summaries to return in this page. Absent leaves the page size to the provider. The maximum of 1000 is a framework bound, not an HCP requirement (pending HCP confirmation, question 3)."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "HCP — Disclosure Summary — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clients"],
+      "description": "The disclosure summary, one member per HCP Client (HCP 8.6, 9.4.12). Failures use trust-task-error, not this shape.",
+      "properties": {
+        "clients": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ClientSummary" },
+          "description": "HCP `clients` (HCP 9.4.12): one summary per HCP Client that has received context, within the filters. Empty when no client has."
+        },
+        "nextCursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "HCP `nextCursor` (HCP 9.5, 9.4.12): an opaque token for the next page, which encodes no credential or entry content and stays valid for at least 300 seconds. Absent, never null, when the result set is exhausted or the provider does not paginate: a departure from HCP 9.5's null, pending HCP confirmation (question 3). The maxLength is a framework bound, not an HCP requirement."
+        }
+      }
+    },
+    "ClientSummary": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "client",
+        "grants",
+        "categories",
+        "purposes",
+        "entries",
+        "retrievals",
+        "firstAt",
+        "lastAt",
+        "usableUntil",
+        "notification"
+      ],
+      "description": "What one HCP Client has received (HCP 8.6), computed from the audit log (HCP 8.2). Open, as HCP's own shapes are.",
+      "properties": {
+        "client": {
+          "$ref": "../../../_shared/0.1/context-entry.schema.json#/$defs/ClientDescription",
+          "description": "HCP `client` (HCP 8.6): the client's `id` and `name`, and its `operator`, with `id` and `name` (HCP 3.2.8)."
+        },
+        "grants": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/GrantStatus" },
+          "description": "HCP `grants` (HCP 8.6): the grants under which the client received context, each with its `grantId` and `status`."
+        },
+        "categories": {
+          "type": "array",
+          "items": { "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Category" },
+          "description": "HCP `categories` (HCP 8.6): the categories disclosed to the client."
+        },
+        "purposes": {
+          "type": "array",
+          "items": { "$ref": "../../../_shared/0.1/common.schema.json#/$defs/PurposeCode" },
+          "description": "HCP `purposes` (HCP 8.6, 6.1.5.2): the purpose codes declared for those disclosures."
+        },
+        "entries": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "HCP `entries` (HCP 8.6): how many distinct entries were disclosed to the client."
+        },
+        "retrievals": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "HCP `retrievals` (HCP 8.6): how many retrievals there were."
+        },
+        "firstAt": {
+          "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Instant",
+          "description": "HCP `firstAt` (HCP 8.6): the start of the period over which the disclosures took place."
+        },
+        "lastAt": {
+          "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Instant",
+          "description": "HCP `lastAt` (HCP 8.6): the end of that period."
+        },
+        "usableUntil": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "HCP `usableUntil` (HCP 8.6, 6.2.4): the latest `useUntil` among the copies disclosed to the client (HCP 7.6) or, where a revocation notice was delivered, the time of delivery. Required, and admitting null, as in the result shape HCP publishes; HCP's text does not say when it is null."
+        },
+        "notification": {
+          "type": "string",
+          "enum": ["delivered", "abandoned", "none"],
+          "description": "HCP `notification` (HCP 8.6, 6.2.4): the outcome of the most recent revocation notice to the client, or `none` where there was none. HCP's own values, carried verbatim."
+        },
+        "legalRetention": {
+          "$ref": "../../../_shared/0.1/grant.schema.json#/$defs/LegalRetention",
+          "description": "HCP `legalRetention` (HCP 8.6, 6.1.5, 6.2.5): the record, obligation and period the client declared at registration, as in the grant. Present only where the client declared one."
+        }
+      }
+    },
+    "GrantStatus": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["grantId", "status"],
+      "description": "One grant under which a client received context, and its status (HCP 8.6, 6.1.5).",
+      "properties": {
+        "grantId": {
+          "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Urn",
+          "description": "HCP `grantId` (HCP 8.6, 6.1.5)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "revoked", "expired"],
+          "description": "HCP `status` (HCP 8.6, 6.1.5). HCP's own values, carried verbatim."
+        }
+      }
+    }
+  }
+}
