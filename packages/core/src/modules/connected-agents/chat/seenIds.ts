@@ -4,7 +4,8 @@
  *
  * Kept as keyed records (`trust-tasks/module/keyedRecords`), one per (receiver, id), so a restart does not forget
  * them: a replay after a restart is still refused. An id is claimed and recorded in one step, under a lock of its own,
- * so two deliveries of one document at once cannot both find it unseen.
+ * so two deliveries of one document at once cannot both find it unseen. A claim whose act then failed with an error is
+ * released under that same lock, so a later copy is acted on; a crash before the release keeps it.
  *
  * An id is kept only while its document could still be accepted: once its `issuedAt` is more than the 7-day window
  * behind the receiver's clock, the document is refused as `stale` on its own, so the record is dropped. A claim never
@@ -49,6 +50,11 @@ export interface SeenIdStore {
    * recorded now (the caller may act on the document), `false` when it had been seen (a replay).
    */
   claim(receiver: string, id: string, issuedAt: string, now: Date): Promise<boolean>
+  /**
+   * Drop the claim on `id`: its act was observed to fail, so the document was not acted on and a later copy may be.
+   * Never called after a crash, which keeps the claim (at-most-once for a document that may have half-applied).
+   */
+  release(receiver: string, id: string): Promise<void>
   /** Whether `id` is recorded within the window, without recording it. */
   seen(receiver: string, id: string, now: Date): Promise<boolean>
   /** Drop every id whose document is past the window; returns how many were dropped. */
@@ -61,6 +67,8 @@ export interface SeenIdStore {
 
 const seenKey = (receiver: string, id: string) => `${receiver} ${id}`
 const appliedKey = (receiver: string, type: string) => `${receiver} ${type}`
+/** The lock a claim and a release of one id share: not the record's own lock, which `putKeyed` and `deleteKeyed` take. */
+const claimLock = (key: string) => `${RECORD_TYPE}|${SEEN_KIND}-claim|${key}`
 
 /** Whether a document issued at `issuedAt` is still inside the window at `now` (and so its id must be kept). */
 export function insideWindow(issuedAt: string, now: Date): boolean {
@@ -77,7 +85,7 @@ export class KeyedSeenIdStore implements SeenIdStore {
   public async claim(receiver: string, id: string, issuedAt: string, now: Date): Promise<boolean> {
     const key = seenKey(receiver, id)
     // A lock of its own: `putKeyed` takes the key's record lock, so taking that one here would wait on itself.
-    const claimed = await withKeyLock(`${RECORD_TYPE}|${SEEN_KIND}-claim|${key}`, async () => {
+    const claimed = await withKeyLock(claimLock(key), async () => {
       const existing = await getKeyed<SeenIdContent>(this.agent, RECORD_TYPE, SEEN_KIND, key)
       if (existing && insideWindow(existing.issuedAt, now)) return false
       const content: SeenIdContent = { receiver, id, issuedAt }
@@ -86,6 +94,12 @@ export class KeyedSeenIdStore implements SeenIdStore {
     })
     if (now.getTime() - this.lastPruned >= PRUNE_EVERY_MS) await this.prune(now).catch(() => 0)
     return claimed
+  }
+
+  public async release(receiver: string, id: string): Promise<void> {
+    const key = seenKey(receiver, id)
+    // Under the claim's own lock, so a release cannot interleave with a concurrent claim of the same id.
+    await withKeyLock(claimLock(key), () => deleteKeyed(this.agent, RECORD_TYPE, SEEN_KIND, key))
   }
 
   public async seen(receiver: string, id: string, now: Date): Promise<boolean> {
@@ -131,6 +145,10 @@ export class MemorySeenIdStore implements SeenIdStore {
     if (existing && insideWindow(existing.issuedAt, now)) return false
     this.ids.set(seenKey(receiver, id), { receiver, id, issuedAt })
     return true
+  }
+
+  public async release(receiver: string, id: string): Promise<void> {
+    this.ids.delete(seenKey(receiver, id))
   }
 
   public async seen(receiver: string, id: string, now: Date): Promise<boolean> {

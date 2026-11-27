@@ -294,14 +294,61 @@ describe("Keyring's own envelopes", () => {
       expect(seenWhenActing).toBe(true)
     })
 
-    it('a handler that throws still leaves the id recorded: the document never acts twice', async () => {
+    it('a handler that throws releases the id, re-throws, and the next copy of the document is acted on', async () => {
       const seen = new MemorySeenIdStore()
       const doc = await signEnvelope(keyring.agent, chat(), keyring.did)
       await expect(
         receiveEnvelope(verifier, doc, expectation({ seen }), async () => {
-          throw new Error('crashed while acting')
+          throw new Error('failed while acting')
         })
-      ).rejects.toThrow('crashed')
+      ).rejects.toThrow('failed while acting')
+      expect(await seen.seen(agentSide.did, doc.id, NOW)).toBe(false)
+      const act = jest.fn(async () => 'done')
+      const again = await receiveEnvelope(verifier, doc, expectation({ seen }), act)
+      expect(again.check.result).toBe('ok')
+      expect(again.acted).toBe('done')
+      expect(act).toHaveBeenCalledTimes(1)
+    })
+
+    it('a state document whose handler throws is not marked applied, so its next copy is not olderState', async () => {
+      const seen = new MemorySeenIdStore()
+      const doc = await signEnvelope(
+        keyring.agent,
+        buildEnvelope({
+          type: ENVELOPE_TYPE.settings,
+          recipient: agentSide.did,
+          payload: { answersOthers: true },
+          now: NOW,
+        }),
+        keyring.did
+      )
+      await expect(
+        receiveEnvelope(verifier, doc, expectation({ seen }), async () => {
+          throw new Error('failed while acting')
+        })
+      ).rejects.toThrow()
+      expect(await seen.lastApplied(agentSide.did, 'keyring/agent/settings')).toBeUndefined()
+      expect((await receiveEnvelope(verifier, doc, expectation({ seen }), async () => undefined)).check.result).toBe(
+        'ok'
+      )
+    })
+
+    it('control: after a handler that returns, the next copy is repeated and does not act', async () => {
+      const seen = new MemorySeenIdStore()
+      const doc = await signEnvelope(keyring.agent, chat(), keyring.did)
+      expect((await receiveEnvelope(verifier, doc, expectation({ seen }), async () => 'done')).check.result).toBe('ok')
+      const act = jest.fn(async () => undefined)
+      expect((await receiveEnvelope(verifier, doc, expectation({ seen }), act)).check.result).toBe('repeated')
+      expect(act).not.toHaveBeenCalled()
+    })
+
+    it('control: a handler that refuses the document by returning, not throwing, keeps the claim', async () => {
+      const seen = new MemorySeenIdStore()
+      const doc = await signEnvelope(keyring.agent, chat(), keyring.did)
+      const refuse = async () => ({ refused: 'not for this room' })
+      expect((await receiveEnvelope(verifier, doc, expectation({ seen }), refuse)).acted).toEqual({
+        refused: 'not for this room',
+      })
       const act = jest.fn(async () => undefined)
       expect((await receiveEnvelope(verifier, doc, expectation({ seen }), act)).check.result).toBe('repeated')
       expect(act).not.toHaveBeenCalled()

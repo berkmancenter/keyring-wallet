@@ -56,6 +56,19 @@ describe.each([
     expect(await store.seen(K_C, ID, NOW)).toBe(false)
   })
 
+  it('release drops a claim, so the id can be claimed again; it touches no other id', async () => {
+    const store = make()
+    const other = 'urn:uuid:00000000-0000-4000-8000-000000000002'
+    await store.claim(K_C, ID, ISSUED, NOW)
+    await store.claim(K_C, other, ISSUED, NOW)
+    await store.release(K_C, ID)
+    expect(await store.seen(K_C, ID, NOW)).toBe(false)
+    expect(await store.seen(K_C, other, NOW)).toBe(true)
+    expect(await store.claim(K_C, ID, ISSUED, NOW)).toBe(true)
+    await store.release(K_A, ID)
+    expect(await store.seen(K_C, ID, NOW)).toBe(true)
+  })
+
   it('the last applied state only moves forward', async () => {
     const store = make()
     const type = 'keyring/agent/settings'
@@ -81,6 +94,16 @@ describe('KeyedSeenIdStore in the app storage', () => {
     const store = new KeyedSeenIdStore(agent)
     const results = await Promise.all([1, 2, 3].map(() => store.claim(K_C, ID, ISSUED, NOW)))
     expect(results.filter(Boolean)).toHaveLength(1)
+    expect(genericRecords.records.filter((r) => r.tags.kind === 'seen-id')).toHaveLength(1)
+  })
+
+  it('a release and a claim of one id at once share the claim lock: the record ends in a consistent state', async () => {
+    const { agent, genericRecords } = fakeAgent()
+    const store = new KeyedSeenIdStore(agent)
+    await store.claim(K_C, ID, ISSUED, NOW)
+    const [, reclaimed] = await Promise.all([store.release(K_C, ID), store.claim(K_C, ID, ISSUED, NOW)])
+    // The release was queued first on the lock, so the claim finds the id unseen and records it once.
+    expect(reclaimed).toBe(true)
     expect(genericRecords.records.filter((r) => r.tags.kind === 'seen-id')).toHaveLength(1)
   })
 

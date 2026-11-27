@@ -15,9 +15,12 @@
  *  - **state:** a `keyring/agent/settings` or `keyring/agent/room-offer` not newer than the last of its type applied
  *    is `olderState`;
  *  - **seen ids:** an id already seen within the window is `repeated`. The id is recorded when the envelope is
- *    accepted, before anything acts on it, so a crash while acting cannot let the same document act twice. The
- *    price is at-most-once: a document whose handler failed is not acted on again, and a resend, which keeps its
- *    `id`, is `repeated`.
+ *    accepted, before anything acts on it, so a crash while acting cannot let the same document act twice. The claim
+ *    is then settled by the outcome: if the act throws, an observed failure in which nothing was marked applied, the
+ *    id is released and the error re-thrown, so a later copy (a resend, which keeps its `id`, or a carrier's next
+ *    drain) is acted on. An act that returns, whatever it returns, keeps the claim. The price is at-most-once only
+ *    for a crash mid-act: that document is not acted on again. That is the one case replay protection exists for,
+ *    since a crash is the only way a document can have half-applied.
  *
  * The checks run in that order, cheapest refusals of an unproven document last: nothing about a document is believed,
  * and no id is recorded, until its proof verifies. So a forged document can neither burn a genuine id nor move the
@@ -275,7 +278,8 @@ function checkVersion(envelope: SignedEnvelope): EnvelopeCheck | undefined {
 /**
  * Verify `doc` and, only when it is accepted, run `act` on it: after its id is recorded, never before. For the state
  * types, the document's `issuedAt` is recorded as the last applied once `act` returns, so a later older one is
- * `olderState`. A refusal returns the check and does not run `act`.
+ * `olderState`. A refusal returns the check and does not run `act`. If `act` throws, the id is released and the error
+ * re-thrown: the caller sees the failure (a carrier withholds its acknowledgement), and the next copy is acted on.
  */
 export async function receiveEnvelope<T>(
   agent: Agent,
@@ -285,7 +289,13 @@ export async function receiveEnvelope<T>(
 ): Promise<{ check: EnvelopeCheck; acted?: T }> {
   const check = await verifyEnvelope(agent, doc, expect)
   if (check.result !== 'ok') return { check }
-  const acted = await act(check.envelope)
+  let acted: T
+  try {
+    acted = await act(check.envelope)
+  } catch (error) {
+    await expect.seen.release(expect.receiver, check.envelope.id)
+    throw error
+  }
   const base = envelopeBaseType(check.envelope.type)
   if (STATE_TYPES.includes(base)) await expect.seen.markApplied(expect.receiver, base, check.envelope.issuedAt)
   return { check, acted }
