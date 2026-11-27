@@ -237,7 +237,7 @@ export class AgentActions {
       listed = !found.complete || found.matches.length > 0
       // Asked by key alone, a complete empty listing misses an entry that rotated to another key: the device is what
       // finds a rotated entry (`accessEntryReader`). So without a deviceId it proves nothing, until the entry's own
-      // expiry, recorded with the leftover, has passed: a rotated entry keeps it (#1060 finding 24, 3A).
+      // expiry, recorded with the leftover, has passed: `acl/swap-key` 0.1 preserves it verbatim (`PairingCleanup`).
       if (!listed && !record.deviceId && expiresAtMs(record) > clock()) return fail('goneUnproven')
     } catch {
       return fail('unreachable')

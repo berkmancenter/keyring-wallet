@@ -562,6 +562,9 @@ describe('step 10: the entry as the VTA lists it', () => {
     t.entries.entry = rotated(t.transport.grants[0], over as Partial<ListedEntry>)
     const s = await t.machine.checkEnrolment()
     expect(s).toMatchObject({ phase: 'failed', reason: 'rotation-lost-limits', cleanup: { vtaDid: VTA, subject: K_A } })
+    // the rotated entry's own expiry, exactly: none when it lost it, the later one when moved, the grant's otherwise
+    const expected = 'expiresAt' in over ? (over as { expiresAt?: string }).expiresAt : GRANTED_UNTIL
+    expect((s as { cleanup?: { expiresAt?: string } }).cleanup?.expiresAt).toBe(expected)
   })
 
   it('control: the same entry with every limit kept is confirmed', async () => {
@@ -597,7 +600,7 @@ describe('step 10: the entry as the VTA lists it', () => {
     expect(await t.machine.checkEnrolment()).toMatchObject({
       phase: 'failed',
       reason: 'handle-collision',
-      cleanup: { subject: K_A },
+      cleanup: { subject: K_A, expiresAt: GRANTED_UNTIL },
     })
   })
 })

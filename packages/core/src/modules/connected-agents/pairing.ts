@@ -212,8 +212,12 @@ export type PairingCleanup = {
   subject: string
   deviceId?: string
   /**
-   * The entry's expiry as the grant set it (`aclScopeFor`). A rotated entry keeps it, since losing it fails the pairing
-   * (§3.10), so once it has passed the entry is gone under whichever key it is now (#1060 finding 24, 3A).
+   * The entry's expiry: as the grant set it (`aclScopeFor`), or, for a rotated entry, as the VTA lists it. Once it has
+   * passed, the entry is gone under whichever key it holds (#1060 finding 24, 3A): `acl/swap-key` 0.1 step 6 says the
+   * entry's `expiresAt` "MUST be preserved verbatim", so a rotation Keyring never saw (after it gave up on the
+   * pairing) cannot move it; and `acl/update` 0.3 bounds an amendment by the granter's own authority, expiry included
+   * (`delegationExceedsGranter`), so the agent cannot extend its own entry. What is left is the owner's own VTA
+   * extending the entry on purpose, which this does not defend against (trust-tasks at `2a66a0351`).
    */
   expiresAt?: string
 }
@@ -566,7 +570,9 @@ export class PairingMachine {
       vtaDid: s.vtaDid,
       subject: entry.subject,
       ...(entry.deviceId ? { deviceId: entry.deviceId } : {}),
-      expiresAt: s.scope.expiresAt,
+      // The rotated entry's own expiry, as the VTA holds it now: a rotation that changed it is why some of these fail,
+      // and an entry that lost it has none to prove it gone by.
+      ...(entry.expiresAt ? { expiresAt: entry.expiresAt } : {}),
     }
     if (!entryKeptLimits(entry, { ...s.scope, contexts: s.grantedContexts }))
       return this.fail('rotation-lost-limits', { cleanup: rotatedCleanup })
