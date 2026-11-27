@@ -1,0 +1,298 @@
+{
+  "about": "Agent connect step 7.16, deleting a memory (docs/plans/agent-connect-plan.md §3.15): the memories list (frame 57) and the delete sheet (frame 23), with what Delete came to. Same form as agent-connect-screens.json, which the catalogue (screenCatalogue.test.tsx) reads with this file; the drawings are __tests__/fixtures/screenStatesDelete.tsx. The views are behind the flag and unreachable until the wiring places them.",
+  "canvas": "docs/plans/agent-connect-plan/canvas/",
+  "kit": "docs/plans/agent-connect-plan/mockups/",
+  "states": [
+    {
+      "id": "memories-list",
+      "step": "7.16",
+      "marker": "MemoriesList",
+      "frame": "57-memories-list.png",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.MemoriesTitle",
+        "ConnectedAgents.MemoryCount",
+        "ConnectedAgents.MemoryCountWarning",
+        "ConnectedAgents.MemoryCountFailed",
+        "ConnectedAgents.Delete"
+      ]
+    },
+    {
+      "id": "memories-list-count-failed",
+      "step": "7.16",
+      "marker": "MemoriesList",
+      "frame": "57-memories-list.png",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.MemoriesTitle",
+        "ConnectedAgents.MemoryCountFailed",
+        "ConnectedAgents.Delete"
+      ],
+      "frameOnly": [
+        {
+          "what": "the counts of Education and Healthcare, and Healthcare's warning",
+          "why": "no count came back for any memory, so every row says it couldn't count (frame 57 draws this line on Housing)"
+        }
+      ]
+    },
+    {
+      "id": "memories-list-no-date",
+      "step": "7.16",
+      "marker": "MemoriesList",
+      "frame": "57-memories-list.png",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.MemoriesTitle",
+        "ConnectedAgents.MemoryCountNoDate",
+        "ConnectedAgents.Delete"
+      ],
+      "frameOnly": [
+        {
+          "what": "\", changed <date>\" on the count line, and the Healthcare and Housing rows",
+          "why": "a memory with no live items has no last change: the count line is MemoryCountNoDate, the same as the agent details"
+        }
+      ]
+    },
+    {
+      "id": "memories-list-counting",
+      "step": "7.16",
+      "marker": "MemoriesList",
+      "frame": "57-memories-list.png",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.MemoriesTitle",
+        "ConnectedAgents.Delete"
+      ],
+      "frameOnly": [
+        {
+          "what": "the count lines and Healthcare's warning",
+          "why": "drawn once the counts come back; they are counted once when the list opens (§3.15)"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "a small spinner in place of each count line",
+          "why": "the wait while the counts are read, as the agent details draw it"
+        }
+      ]
+    },
+    {
+      "id": "delete-memory",
+      "step": "7.16",
+      "marker": "DeleteMemorySheet",
+      "frame": "23-delete-memory.png",
+      "kit": "21-delete-memory.svg",
+      "words": [
+        "ConnectedAgents.DeleteMemoryTitle",
+        "ConnectedAgents.DeleteMemoryBody",
+        "ConnectedAgents.Delete",
+        "ConnectedAgents.Keep"
+      ],
+      "frameOnly": [
+        {
+          "what": "the list of memories behind the sheet, and the sheet's frame",
+          "why": "the view is the sheet's contents; the caller presents it over the memories list (MemoriesListView, frame 57)"
+        }
+      ]
+    },
+    {
+      "id": "delete-memory-no-agents",
+      "step": "7.16",
+      "marker": "DeleteMemorySheet",
+      "frame": "23-delete-memory.png",
+      "kit": "21-delete-memory.svg",
+      "words": [
+        "ConnectedAgents.DeleteMemoryTitle",
+        "ConnectedAgents.DeleteMemoryBodyNoAgents",
+        "ConnectedAgents.Delete",
+        "ConnectedAgents.Keep"
+      ],
+      "frameOnly": [
+        {
+          "what": "the list of memories behind the sheet, and the sheet's frame",
+          "why": "the view is the sheet's contents; the caller presents it over the memories list (MemoriesListView, frame 57)"
+        },
+        {
+          "what": "\"and removes the memory from Notes helper\"",
+          "why": "no agent's entry names this memory: the body is DeleteMemoryBodyNoAgents"
+        }
+      ]
+    },
+    {
+      "id": "delete-memory-unnamed-agent",
+      "step": "7.16",
+      "marker": "DeleteMemorySheet",
+      "frame": "23-delete-memory.png",
+      "kit": "21-delete-memory.svg",
+      "words": [
+        "ConnectedAgents.DeleteMemoryTitle",
+        "ConnectedAgents.DeleteMemoryBody",
+        "ConnectedAgents.Delete",
+        "ConnectedAgents.Keep"
+      ],
+      "frameOnly": [
+        {
+          "what": "the list of memories behind the sheet, and the sheet's frame",
+          "why": "the view is the sheet's contents; the caller presents it over the memories list (MemoriesListView, frame 57)"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "\"Notes helper, an agent with no name\" in the body (ConnectedAgents.UnnamedAgent for an agent with no name)",
+          "why": "a second agent whose record and entry have no name; UnnamedAgent is inside the body's {{agents}}, so this catalogue (which sees each translated string whole) cannot list it: deleteMemoryViews.test.tsx checks it"
+        }
+      ]
+    },
+    {
+      "id": "delete-memory-over-limit",
+      "step": "7.16",
+      "marker": "DeleteMemorySheet",
+      "frame": "23-delete-memory.png",
+      "kit": "21-delete-memory.svg",
+      "words": [
+        "ConnectedAgents.DeleteMemoryTitle",
+        "ConnectedAgents.DeleteMemoryBody",
+        "ConnectedAgents.MemoryCountWarning",
+        "ConnectedAgents.Delete",
+        "ConnectedAgents.Keep"
+      ],
+      "frameOnly": [
+        {
+          "what": "the list of memories behind the sheet, and the sheet's frame",
+          "why": "the view is the sheet's contents; the caller presents it over the memories list (MemoriesListView, frame 57)"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "the warning box under the body, ConnectedAgents.MemoryCountWarning",
+          "why": "§3.15: the confirmation calls out a memory above the limit; frame 23 draws one under it (12 items), and the box is frame 57's"
+        }
+      ]
+    },
+    {
+      "id": "delete-memory-preview-unreachable",
+      "step": "7.16",
+      "marker": "DeleteMemorySheet",
+      "frame": "23-delete-memory.png",
+      "kit": "21-delete-memory.svg",
+      "words": [
+        "ConnectedAgents.DeleteMemoryTitle",
+        "ConnectedAgents.FailUnreachable",
+        "ConnectedAgents.Keep"
+      ],
+      "frameOnly": [
+        {
+          "what": "the list of memories behind the sheet, and the sheet's frame",
+          "why": "the view is the sheet's contents; the caller presents it over the memories list (MemoriesListView, frame 57)"
+        },
+        {
+          "what": "the body and \"Delete\"",
+          "why": "the preview could not be read, so there is no count to state and nothing to confirm: Keep only"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "ConnectedAgents.FailUnreachable in place of the body",
+          "why": "the preview's listing or count failed (previewDelete answers unreachable)"
+        }
+      ]
+    },
+    {
+      "id": "delete-memory-held",
+      "step": "7.16",
+      "marker": "DeleteMemoryOutcome",
+      "steps": [
+        {
+          "press": "DeleteMemoryConfirm"
+        }
+      ],
+      "frame": "23-delete-memory.png",
+      "kit": "21-delete-memory.svg",
+      "words": [
+        "ConnectedAgents.DeleteMemoryTitle",
+        "ConnectedAgents.DeleteMemoryHeld",
+        "Global.Close"
+      ],
+      "frameOnly": [
+        {
+          "what": "the list of memories behind the sheet, and the sheet's frame",
+          "why": "the view is the sheet's contents; the caller presents it over the memories list (MemoriesListView, frame 57)"
+        },
+        {
+          "what": "the body, \"Delete\" and \"Keep\"",
+          "why": "an approval rule held the delete: a retry would be held the same way, so the sheet never offers one, only Close"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "the outcome: ConnectedAgents.DeleteMemoryHeld with Global.Close",
+          "why": "§3.15, a held delete (#1060 finding 20); frame 23 draws the sheet before Delete is pressed"
+        }
+      ]
+    },
+    {
+      "id": "delete-memory-records-left",
+      "step": "7.16",
+      "marker": "DeleteMemoryOutcome",
+      "steps": [
+        {
+          "press": "DeleteMemoryConfirm"
+        }
+      ],
+      "frame": "23-delete-memory.png",
+      "kit": "21-delete-memory.svg",
+      "words": [
+        "ConnectedAgents.DeleteMemoryTitle",
+        "ConnectedAgents.DeleteMemoryRecordsLeft",
+        "Global.Close"
+      ],
+      "frameOnly": [
+        {
+          "what": "the list of memories behind the sheet, and the sheet's frame",
+          "why": "the view is the sheet's contents; the caller presents it over the memories list (MemoriesListView, frame 57)"
+        },
+        {
+          "what": "the body, \"Delete\" and \"Keep\"",
+          "why": "the memory is deleted; only how many agents still list it, and Close"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "the outcome: ConnectedAgents.DeleteMemoryRecordsLeft with Global.Close",
+          "why": "deleted, but some records could not be written until the reconcile clears them (deleteMemory's recordsNotUpdated); frame 23 draws the sheet before Delete is pressed"
+        }
+      ]
+    },
+    {
+      "id": "delete-memory-unreachable",
+      "step": "7.16",
+      "marker": "DeleteMemoryOutcome",
+      "steps": [
+        {
+          "press": "DeleteMemoryConfirm"
+        }
+      ],
+      "frame": "23-delete-memory.png",
+      "kit": "21-delete-memory.svg",
+      "words": [
+        "ConnectedAgents.DeleteMemoryTitle",
+        "ConnectedAgents.DeleteMemoryBody",
+        "ConnectedAgents.FailUnreachable",
+        "ConnectedAgents.Delete",
+        "ConnectedAgents.Keep"
+      ],
+      "frameOnly": [
+        {
+          "what": "the list of memories behind the sheet, and the sheet's frame",
+          "why": "the view is the sheet's contents; the caller presents it over the memories list (MemoriesListView, frame 57)"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "the outcome: ConnectedAgents.FailUnreachable above the buttons, with Delete still there",
+          "why": "the VTA was not reached, so nothing changed and pressing Delete again may work; frame 23 draws the sheet before Delete is pressed"
+        }
+      ]
+    }
+  ]
+}
