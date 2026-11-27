@@ -22,13 +22,13 @@ type Found = Awaited<ReturnType<AgentAccessPort['findAgentEntries']>>
 type Query = Parameters<AgentAccessPort['findAgentEntries']>[0]
 
 /** A port answering `answer` (or throwing it), recording every query. */
-function port(answer: Found | Error | ((q: Query) => Found)) {
+function port(answer: Found | Error) {
   const queries: Query[] = []
   const access: Pick<AgentAccessPort, 'findAgentEntries'> = {
     async findAgentEntries(query) {
       queries.push(query)
       if (answer instanceof Error) throw answer
-      return typeof answer === 'function' ? answer(query) : answer
+      return answer
     },
   }
   return { access, queries }
