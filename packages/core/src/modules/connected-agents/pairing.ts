@@ -207,7 +207,21 @@ export const lockedCopy = (minutesLeft: number): string =>
   `Too many wrong numbers. Try again in ${minutesLeft} minutes.`
 
 /** What a failed or unfinished pairing leaves at the VTA, for the driver to remove (by `deviceId` first, §3.9). */
-export type PairingCleanup = { vtaDid: string; subject: string; deviceId?: string }
+export type PairingCleanup = {
+  vtaDid: string
+  subject: string
+  deviceId?: string
+  /**
+   * The entry's expiry: as the grant set it (`aclScopeFor`), or, for a rotated entry, as the VTA lists it. Once it has
+   * passed, the entry is gone under whichever key it holds (#1060 finding 24, 3A): `acl/swap-key` 0.1 step 6 says the
+   * entry's `expiresAt` "MUST be preserved verbatim", so a rotation Keyring never saw (after it gave up on the
+   * pairing) cannot move it. `acl/update` 0.3 step 6 refuses "an amendment whose subject is the amending party itself"
+   * (`permissionDenied`), so the agent cannot amend its own entry at all, and step 5 bounds anyone else's lift of an
+   * expiry by their own authority ("grants, bounded like one"). What is left is the owner's own granting side lifting
+   * the expiry on purpose, which this does not defend against (trust-tasks at `2a66a0351`).
+   */
+  expiresAt?: string
+}
 
 /** A connected agent, ready to be stored as an `AgentConnection` in state `active` once its VDC pair verifies. */
 export type ConfirmedAgent = {
@@ -509,7 +523,10 @@ export class PairingMachine {
       (granted.grantedContexts.length === 0 || !granted.grantedContexts.every((c) => scope.contexts.includes(c)))
     ) {
       const subject = granted.subject ?? s.subject
-      return this.fail('grant-refused', subject ? { cleanup: { vtaDid: s.vtaDid, subject } } : {})
+      return this.fail(
+        'grant-refused',
+        subject ? { cleanup: { vtaDid: s.vtaDid, subject, expiresAt: scope.expiresAt } } : {}
+      )
     }
     return this.set({
       phase: 'awaitingEnrolment',
@@ -534,7 +551,9 @@ export class PairingMachine {
     const now = this.deps.clock()
     const overdue = now - s.grantedAt >= NOT_FINISHED_AFTER_MS
     const cleanup = (deviceId = s.deviceId): PairingCleanup | undefined =>
-      s.subject ? { vtaDid: s.vtaDid, subject: s.subject, ...(deviceId ? { deviceId } : {}) } : undefined
+      s.subject
+        ? { vtaDid: s.vtaDid, subject: s.subject, ...(deviceId ? { deviceId } : {}), expiresAt: s.scope.expiresAt }
+        : undefined
     if (!s.subject) {
       // TODO(§11 Q7(c), step 7.5): how Keyring learns the subject in the auth/oob path if neither prove nor grant names it.
       return overdue ? this.set({ phase: 'notFinished' }) : s
@@ -552,6 +571,9 @@ export class PairingMachine {
       vtaDid: s.vtaDid,
       subject: entry.subject,
       ...(entry.deviceId ? { deviceId: entry.deviceId } : {}),
+      // The rotated entry's own expiry, as the VTA holds it now: a rotation that changed it is why some of these fail,
+      // and an entry that lost it has none to prove it gone by.
+      ...(entry.expiresAt ? { expiresAt: entry.expiresAt } : {}),
     }
     if (!entryKeptLimits(entry, { ...s.scope, contexts: s.grantedContexts }))
       return this.fail('rotation-lost-limits', { cleanup: rotatedCleanup })
@@ -584,7 +606,12 @@ export class PairingMachine {
     if (s.phase === 'awaitingEnrolment') {
       // The entry exists: cancelling now means removing it.
       const cleanup = s.subject
-        ? { vtaDid: s.vtaDid, subject: s.subject, ...(s.deviceId ? { deviceId: s.deviceId } : {}) }
+        ? {
+            vtaDid: s.vtaDid,
+            subject: s.subject,
+            ...(s.deviceId ? { deviceId: s.deviceId } : {}),
+            expiresAt: s.scope.expiresAt,
+          }
         : undefined
       return this.set({ phase: 'cancelled', ...(cleanup ? { cleanup } : {}) })
     }

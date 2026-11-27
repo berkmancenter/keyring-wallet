@@ -20,7 +20,7 @@ import { completeEnrolment } from './carriage'
 import type { ConnectionRecords } from './driver'
 import { personaSigningKeyId } from './driver'
 import { NOT_FINISHED_AFTER_MS, TEMPORARY_GRANT_MS } from './pairing'
-import { memoryDrift, statusOf } from './status'
+import { expiresAtMs, memoryDrift, statusOf } from './status'
 import type { AgentConnection } from './types'
 import { buildVdcGrant, issueVdc, vdcScopeFor, vtaVdcSigner, type VdcSignPort } from './vdc'
 
@@ -46,7 +46,8 @@ export type ActionFailure =
   | 'revokeNotConfirmed'
   /**
    * The record has no `deviceId`, so the VTA was asked by key alone, and an entry that rotated to another key would
-   * not be listed: an empty listing does not show it gone, and the record is kept.
+   * not be listed: an empty listing does not show it gone, and the record is kept until its entry's recorded expiry
+   * has passed (with none recorded, until it is revoked).
    */
   | 'goneUnproven'
 
@@ -235,8 +236,9 @@ export class AgentActions {
       // A partial listing cannot show the entry gone: treat it as still there.
       listed = !found.complete || found.matches.length > 0
       // Asked by key alone, a complete empty listing misses an entry that rotated to another key: the device is what
-      // finds a rotated entry (`accessEntryReader`). So without a deviceId it proves nothing.
-      if (!listed && !record.deviceId) return fail('goneUnproven')
+      // finds a rotated entry (`accessEntryReader`). So without a deviceId it proves nothing, until the entry's own
+      // expiry, recorded with the leftover, has passed: `acl/swap-key` 0.1 preserves it verbatim (`PairingCleanup`).
+      if (!listed && !record.deviceId && expiresAtMs(record) > clock()) return fail('goneUnproven')
     } catch {
       return fail('unreachable')
     }
