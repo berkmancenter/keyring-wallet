@@ -4207,6 +4207,8 @@
     "ChangeMemories": "Change memories",
     "MemoryCount_one": "{{count}} item, changed {{date}}",
     "MemoryCount_other": "{{count}} items, changed {{date}}",
+    "MemoryCountNoDate_one": "{{count}} item",
+    "MemoryCountNoDate_other": "{{count}} items",
     "MemoryCountRose": "Up {{count}} since you last looked.",
     "MemoryCountWarning": "\"{{memory}}\" holds more than {{limit}} items. If you didn't expect that, revoke the agent.",
     "MemoryCountFailed": "Couldn't count its items.",

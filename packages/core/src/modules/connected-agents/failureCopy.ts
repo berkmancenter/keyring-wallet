@@ -17,9 +17,6 @@ export type ConnectEnd =
 
 /**
  * The ConnectedAgents.* key for each end. "locked" takes a count of minutes (`count`).
- *
- * TODO(#1060 proposal 17): the words for spent, not-a-pairing-code, grant-refused, rotation-lost-limits,
- * handle-collision, invalid-choice and vtaTooOld are proposals (PROPOSED_COPY) until the plan owner rules.
  */
 export const CONNECT_END_KEY: Record<ConnectEnd, string> = {
   expired: 'ConnectedAgents.FailExpired',

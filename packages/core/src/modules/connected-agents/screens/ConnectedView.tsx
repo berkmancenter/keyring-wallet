@@ -40,8 +40,6 @@ const styles = StyleSheet.create({
 /**
  * Between Approve and the end, while the agent finishes enrolling (the pairing's awaitingEnrolment phase, up to ten
  * minutes before it reads "Not finished"): "Connecting "<name>"…", busy, with no cancel (seam point 5).
- *
- * TODO(#1060 proposal 17): "Connecting "<name>"…" is a proposed line.
  */
 export const ConnectingView: React.FC<{ name: string }> = ({ name }) => {
   const { t } = useTranslation()

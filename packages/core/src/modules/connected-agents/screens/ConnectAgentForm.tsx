@@ -132,7 +132,6 @@ const ConnectAgentForm: React.FC<ConnectAgentFormProps> = ({
           {AGENT_PURPOSES.map((purpose, i) => (
             <View key={purpose} style={[styles.purpose, i > 0 && styles.rule]} accessible>
               <Icon name="check" size={22} color={AGENT_COLORS.primary} accessibilityElementsHidden />
-              {/* TODO(#1060 P-h): "Personalise" or "Personalize". */}
               <ThemedText style={styles.purposeText}>{t(PURPOSE_KEY[purpose])}</ThemedText>
             </View>
           ))}

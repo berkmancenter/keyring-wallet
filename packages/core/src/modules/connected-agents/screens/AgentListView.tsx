@@ -122,7 +122,6 @@ const AgentListView: React.FC<AgentListViewProps> = ({
   const label: Record<'extend' | 'revoke' | 'remove' | 'connectAgain', string> = {
     extend: t('ConnectedAgents.Extend'),
     revoke: t('ConnectedAgents.Revoke'),
-    // TODO(#1060 findings 12 and 13): "Remove" and "Connect again" are agreed by relay, not yet in the plan.
     remove: t('ConnectedAgents.Remove'),
     connectAgain: t('ConnectedAgents.ConnectAgain'),
   }
@@ -170,7 +169,6 @@ const AgentListView: React.FC<AgentListViewProps> = ({
                   <MemoryAccessNotice extra={agent.drift.extra} missing={agent.drift.missing} compact />
                 ) : null}
                 {agent.status === 'notFinished' ? (
-                  // TODO(#1060 finding 13): agreed by relay, not yet in the plan.
                   <ThemedText style={styles.sub}>{t('ConnectedAgents.NotFinishedLine')}</ThemedText>
                 ) : null}
                 {actions.length > 0 ? (
