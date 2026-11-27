@@ -39,6 +39,11 @@ export type HcpCopyKey =
   | 'MemoryNotSaved'
   | 'MemoryRefused'
   | 'MemoryNoVta'
+  | 'ApproveNotApproved'
+  | 'ApproveNotRecorded'
+  | 'ApproveDeclined'
+  | 'ApproveAnsweredElsewhere'
+  | 'ApproveCancelled'
 
 /**
  * The keys for a refusal (added after the brief, at review): unlike `RevokeUnreachable` and `MemoryNotSaved`, the
@@ -201,6 +206,44 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     en: "This phone isn't signed in to your VTA, so this memory wasn't saved.",
     fr: "Ce téléphone n'est pas identifié auprès de votre VTA, donc ce souvenir n'a pas été enregistré.",
     ptBr: 'Este telefone não está conectado ao seu VTA, então esta memória não foi salva.',
+    source: 'PROPOSED',
+  },
+  // Added at review, the approve flow's `failed` and `cancelled`, one key per case, never the error text. Plan §6 has
+  // words for none of them.
+  // Nothing was approved (the record before `decide` failed, or no name was given): another attempt is safe.
+  ApproveNotApproved: {
+    en: 'Nothing was approved, so nothing was connected. Run the command again.',
+    fr: "Rien n'a été approuvé, donc rien n'a été connecté. Relancez la commande.",
+    ptBr: 'Nada foi aprovado, então nada foi conectado. Execute o comando novamente.',
+    source: 'PROPOSED',
+  },
+  // The VTA approved and the grant exists; only Keyring's record failed, and the reconcile completes it. No other
+  // attempt may be offered: a second approval would create a second grant.
+  ApproveNotRecorded: {
+    en: 'Your VTA approved "{{name}}". It will show as connected the next time Keyring starts.',
+    fr: 'Votre VTA a approuvé « {{name}} ». Il apparaîtra comme connecté au prochain démarrage de Keyring.',
+    ptBr: 'Seu VTA aprovou "{{name}}". Ele vai aparecer como conectado na próxima vez que o Keyring abrir.',
+    source: 'PROPOSED',
+  },
+  // The VTA did not approve (the request settled otherwise, carried its own error, or `decide` failed). It says
+  // nothing about whether something was connected: after a failed `decide` the reconcile may still complete it.
+  ApproveDeclined: {
+    en: "Your VTA didn't approve this connection.",
+    fr: "Votre VTA n'a pas approuvé cette connexion.",
+    ptBr: 'Seu VTA não aprovou esta conexão.',
+    source: 'PROPOSED',
+  },
+  // The request was approved elsewhere in Keyring (the ordinary requests list) while this flow waited: not declined.
+  ApproveAnsweredElsewhere: {
+    en: 'This request was already answered elsewhere in Keyring.',
+    fr: 'Cette demande a déjà reçu une réponse ailleurs dans Keyring.',
+    ptBr: 'Este pedido já foi respondido em outro lugar do Keyring.',
+    source: 'PROPOSED',
+  },
+  ApproveCancelled: {
+    en: 'Cancelled. Nothing was connected.',
+    fr: "Annulé. Rien n'a été connecté.",
+    ptBr: 'Cancelado. Nada foi conectado.',
     source: 'PROPOSED',
   },
 }

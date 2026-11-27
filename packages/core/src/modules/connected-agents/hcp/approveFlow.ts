@@ -49,8 +49,23 @@ export type HcpApproveState =
   | { state: 'approve'; view: HcpApprovalView }
   | { state: 'approving'; view: HcpApprovalView }
   | { state: 'approved'; view: HcpApprovalView }
-  | { state: 'failed'; error: string }
-  | { state: 'cancelled' }
+  | { state: 'failed'; error: string; message: HcpApproveFailure }
+  | { state: 'cancelled'; message: { key: 'ApproveCancelled' } }
+
+/**
+ * What a `failed` state shows, chosen by case, never from the error: `error` is the raw text (a thrown message, the
+ * VTA's own error or status) for logs and tests, and is never what the person reads.
+ * - `ApproveNotApproved`: nothing was approved (no name, or the record before `decide` failed); another try is safe.
+ * - `ApproveNotRecorded`: approved, the grant exists, only the record failed; the reconcile completes it, and no other
+ *   try may be offered (a second approval creates a second grant).
+ * - `ApproveDeclined`: the VTA did not approve (`decide` failed, or the request settled other than approved).
+ * - `ApproveAnsweredElsewhere`: approved outside this flow while it waited.
+ */
+export type HcpApproveFailure =
+  | { key: 'ApproveNotApproved' }
+  | { key: 'ApproveNotRecorded'; params: { name: string } }
+  | { key: 'ApproveDeclined' }
+  | { key: 'ApproveAnsweredElsewhere' }
 
 export interface HcpApproveFlowDeps {
   source: HcpApprovalSource
@@ -101,7 +116,11 @@ const defaultTimer = (run: () => void, ms: number) => {
   return () => clearTimeout(t)
 }
 
+const CANCELLED: HcpApproveState = { state: 'cancelled', message: { key: 'ApproveCancelled' } }
+
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+const failed = (error: string, message: HcpApproveFailure): HcpApproveState => ({ state: 'failed', error, message })
 
 export function createHcpApproveFlow(deps: HcpApproveFlowDeps): HcpApproveFlow {
   const setTimer = deps.setTimer ?? defaultTimer
@@ -164,7 +183,12 @@ export function createHcpApproveFlow(deps: HcpApproveFlowDeps): HcpApproveFlow {
         set(EXPIRED)
       } else if (approval.status !== 'pending') {
         // Decided somewhere else (the ordinary Requests screen): this flow has nothing left to approve.
-        set({ state: 'failed', error: approval.error ?? approval.status })
+        set(
+          failed(
+            approval.error ?? approval.status,
+            approval.status === 'approved' ? { key: 'ApproveAnsweredElsewhere' } : { key: 'ApproveDeclined' }
+          )
+        )
       }
     }
   }
@@ -188,7 +212,7 @@ export function createHcpApproveFlow(deps: HcpApproveFlowDeps): HcpApproveFlow {
       // Nothing runs unless both flags are on.
       if (!isHcpEnabled()) return current
       const given = input.name.trim()
-      if (!given) return set({ state: 'failed', error: 'invalid-name' })
+      if (!given) return set(failed('invalid-name', { key: 'ApproveNotApproved' }))
       starting = true
       try {
         const lock = await deps.lockout.state()
@@ -241,31 +265,36 @@ export function createHcpApproveFlow(deps: HcpApproveFlowDeps): HcpApproveFlow {
         // The record first, then the approval: from here on a failure leaves a record naming the grant, not a gap.
         await deps.beforeApprove(view, { id, expiresAt: approval.expiresAt }, deps.clock())
       } catch (error) {
-        return set({ state: 'failed', error: `not recorded, so not approved: ${errorText(error)}` })
+        return set(failed(`not recorded, so not approved: ${errorText(error)}`, { key: 'ApproveNotApproved' }))
       }
       try {
         // `decide` runs the phone's owner check (face or fingerprint) itself; none is added here.
         await deps.source.decide(id, 'approve')
       } catch (error) {
-        return set({ state: 'failed', error: listed()?.error ?? errorText(error) })
+        return set(failed(listed()?.error ?? errorText(error), { key: 'ApproveDeclined' }))
       }
       const after = listed()
-      if (after?.status !== 'approved') return set({ state: 'failed', error: after?.error ?? 'not approved' })
+      if (after?.status !== 'approved') return set(failed(after?.error ?? 'not approved', { key: 'ApproveDeclined' }))
       const approvedAt = deps.clock()
       try {
         await deps.onApproved(view, approvedAt)
       } catch (error) {
-        return set({ state: 'failed', error: `approved, but not recorded: ${errorText(error)}` })
+        return set(
+          failed(`approved, but not recorded: ${errorText(error)}`, {
+            key: 'ApproveNotRecorded',
+            params: { name: view.title.params.name },
+          })
+        )
       }
       return set({ state: 'approved', view })
     },
 
     async cancel() {
       const s = current.state
-      if (s === 'idle' || s === 'waiting') return set({ state: 'cancelled' })
+      if (s === 'idle' || s === 'waiting') return set(CANCELLED)
       if ((s === 'numberEntry' || s === 'approve') && found) {
         const id = found.id
-        set({ state: 'cancelled' })
+        set(CANCELLED)
         await deny(id, HCP_CANCEL_REASON)
       }
       return current

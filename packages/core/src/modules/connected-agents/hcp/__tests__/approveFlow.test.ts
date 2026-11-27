@@ -22,6 +22,7 @@ jest.mock('../../../trust-tasks/module/vtaAgent', () => ({ vtaAgent: {} }))
 
 const WRONG = '1234'
 const SCAN_AT = HELD_AT + 10 * 1000
+const CANCELLED: HcpApproveState = { state: 'cancelled', message: { key: 'ApproveCancelled' } }
 
 function fakeSource(initial: VtiApproval[] = []) {
   let approvals = initial
@@ -291,7 +292,11 @@ describe('createHcpApproveFlow', () => {
     await t.flow.start({ name: 'My helper', link: LINK })
     await t.flow.typeNumber(NUMBER)
     await t.flow.approve()
-    expect(t.flow.state()).toEqual({ state: 'failed', error: 'not recorded, so not approved: disk full' })
+    expect(t.flow.state()).toEqual({
+      state: 'failed',
+      error: 'not recorded, so not approved: disk full',
+      message: { key: 'ApproveNotApproved' },
+    })
     expect(t.fake.decide).not.toHaveBeenCalled()
     expect(t.onApproved).not.toHaveBeenCalled()
   })
@@ -315,7 +320,12 @@ describe('createHcpApproveFlow', () => {
     await t.flow.typeNumber(NUMBER)
     await t.flow.approve()
     expect(t.beforeApprove).toHaveBeenCalledTimes(1)
-    expect(t.flow.state()).toEqual({ state: 'failed', error: 'approved, but not recorded: store closed' })
+    expect(t.flow.state()).toEqual({
+      state: 'failed',
+      error: 'approved, but not recorded: store closed',
+      // The name the person gave, never the request's: the copy says it will show as connected, not to retry.
+      message: { key: 'ApproveNotRecorded', params: { name: 'My helper' } },
+    })
   })
 
   it("gives failed with the approval's error when decide fails, and records nothing", async () => {
@@ -327,7 +337,11 @@ describe('createHcpApproveFlow', () => {
     await t.flow.start({ name: 'My helper', link: LINK })
     await t.flow.typeNumber(NUMBER)
     await t.flow.approve()
-    expect(t.flow.state()).toEqual({ state: 'failed', error: 'the VTA did not take the decision within 30 s' })
+    expect(t.flow.state()).toEqual({
+      state: 'failed',
+      error: 'the VTA did not take the decision within 30 s',
+      message: { key: 'ApproveDeclined' },
+    })
     expect(t.onApproved).not.toHaveBeenCalled()
   })
 
@@ -337,17 +351,52 @@ describe('createHcpApproveFlow', () => {
     await t.flow.start({ name: 'My helper', link: LINK })
     await t.flow.typeNumber(NUMBER)
     await t.flow.approve()
-    expect(t.flow.state()).toEqual({ state: 'failed', error: 'not approved' })
+    expect(t.flow.state()).toEqual({ state: 'failed', error: 'not approved', message: { key: 'ApproveDeclined' } })
     expect(t.onApproved).not.toHaveBeenCalled()
+  })
+
+  it('a blank name fails before anything is sent, as not approved (another try is safe)', async () => {
+    const t = setup({ approvals: [hcpApproval()] })
+    await t.flow.start({ name: '   ', link: LINK })
+    expect(t.flow.state()).toEqual({ state: 'failed', error: 'invalid-name', message: { key: 'ApproveNotApproved' } })
+    expect(t.lockout.state).not.toHaveBeenCalled()
+  })
+
+  it('a request answered elsewhere while the flow waits: approved there is not declined, denied there is', async () => {
+    for (const [status, key] of [
+      ['approved', 'ApproveAnsweredElsewhere'],
+      ['denied', 'ApproveDeclined'],
+    ] as const) {
+      const t = setup({ approvals: [hcpApproval()] })
+      await t.flow.start({ name: 'My helper', link: LINK })
+      t.fake.change('consent-1', { status })
+      expect(t.flow.state()).toEqual({ state: 'failed', error: status, message: { key } })
+      expect(t.fake.decide).not.toHaveBeenCalled()
+    }
+  })
+
+  it('no failed state carries the raw error in what it shows: the message is a key, never the error text', async () => {
+    const t = setup({ approvals: [hcpApproval()] })
+    t.onApproved.mockImplementationOnce(async () => {
+      throw new Error('store closed')
+    })
+    await t.flow.start({ name: 'My helper', link: LINK })
+    await t.flow.typeNumber(NUMBER)
+    await t.flow.approve()
+    const s = t.flow.state()
+    if (s.state !== 'failed') throw new Error(`expected failed, got ${s.state}`)
+    expect(JSON.stringify(s.message)).not.toContain('store closed')
+    // control: the raw text is still there, for logs and tests.
+    expect(s.error).toContain('store closed')
   })
 
   it('cancel before an approval arrives sends nothing', async () => {
     const t = setup()
     await t.flow.start({ name: 'My helper', link: LINK })
     await t.flow.cancel()
-    expect(t.flow.state()).toEqual({ state: 'cancelled' })
+    expect(t.flow.state()).toEqual(CANCELLED)
     t.fake.push(hcpApproval())
-    expect(t.flow.state()).toEqual({ state: 'cancelled' })
+    expect(t.flow.state()).toEqual(CANCELLED)
     expect(t.fake.decide).not.toHaveBeenCalled()
   })
 
@@ -355,7 +404,7 @@ describe('createHcpApproveFlow', () => {
     const t = setup({ approvals: [hcpApproval()] })
     await t.flow.start({ name: 'My helper', link: LINK })
     await t.flow.cancel()
-    expect(t.flow.state()).toEqual({ state: 'cancelled' })
+    expect(t.flow.state()).toEqual(CANCELLED)
     expect(t.fake.decide.mock.calls).toEqual([['consent-1', 'deny', HCP_CANCEL_REASON]])
   })
 
