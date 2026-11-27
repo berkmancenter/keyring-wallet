@@ -1873,6 +1873,7 @@
     "DetailsLinkedAt": "Linked",
     "BannerAway": "Your agent is away — {{status}}",
     "BannerNotAnswering": "Your agent isn't answering this phone. Retrying.",
+    "BannerPhoneClock": "Your phone's date and time look wrong. Turn on automatic date and time in your phone's settings, then try again.",
     "OpenYourAgent": "Your agent",
     "IWasInvited": "I was invited",
     "IWasInvitedHint": "A community's admin is inviting you. You'll send them who you are, then join.",
@@ -2733,6 +2734,7 @@
       "notApproved": "Your approver didn't approve this, so your agent didn't do it. They may have said no, or not answered in time.",
       "noAnswer": "Your agent didn't answer. Check My Agent before trying again.",
       "unreachable": "Keyring couldn't reach your agent. Check your connection and try again.",
+      "phoneClock": "Your phone's date and time look wrong. Turn on automatic date and time in your phone's settings, then try again.",
       "failed": "Your agent couldn't do that.",
       "refused": "Your agent refused this ({{code}})."
     },
