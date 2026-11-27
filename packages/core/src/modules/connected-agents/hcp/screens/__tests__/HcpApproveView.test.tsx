@@ -7,7 +7,7 @@ import { act, fireEvent, render, renderHook, waitFor } from '@testing-library/re
 import { readFileSync } from 'fs'
 import path from 'path'
 import React from 'react'
-import * as reactI18next from 'react-i18next'
+import type * as reactI18next from 'react-i18next'
 
 import { BasicAppContext } from '../../../../../../__tests__/helpers/app'
 import { testIdWithKey } from '../../../../../utils/testable'
@@ -29,7 +29,8 @@ const en = (key: Parameters<typeof hcpText>[0], params?: Record<string, string>)
 const textsOf = (node: unknown, out: string[] = []): string[] => {
   if (node == null) return out
   if (typeof node === 'string') {
-    out.push(node)
+    // An icon draws as one private-use glyph: not text.
+    if (!/^\p{Co}+$/u.test(node)) out.push(node)
     return out
   }
   if (Array.isArray(node)) {
@@ -59,21 +60,22 @@ describe('HcpApproveView', () => {
 
   it('draws the title, the rows verbatim and in order, the warning box, then Approve', () => {
     const { tree } = approve()
-    expect(tree.getByText(en('ApproveTitle', { name: 'Notes helper' }))).toBeTruthy()
-    const rows = tree.getAllByTestId(id('HcpApproveRow'))
-    expect(rows.map((row) => tree.getByText(HCP_APPROVAL_VIEW.rows[rows.indexOf(row)]))).toHaveLength(5)
-    // In order: each row node holds its own summary.
-    const texts = (tree.toJSON() as unknown as { children: unknown }) && JSON.stringify(tree.toJSON())
-    const positions = HCP_APPROVAL_VIEW.rows.map((row) => texts.indexOf(JSON.stringify(row)))
-    expect(positions.every((p) => p >= 0)).toBe(true)
-    expect([...positions].sort((a, b) => a - b)).toEqual(positions)
-    const warning = tree.getByTestId(id('ConnectNotice'))
-    expect(warning.props.accessibilityLabel).toBe(en('ApproveOwnTerminal'))
+    expect(tree.getAllByTestId(id('HcpApproveRow'))).toHaveLength(5)
+    expect(textsOf(tree.toJSON())).toEqual([
+      en('ApproveTitle', { name: 'Notes helper' }),
+      ...HCP_APPROVAL_VIEW.rows,
+      en('ApproveOwnTerminal'),
+      en('Approve'),
+    ])
+    expect(tree.getByTestId(id('ConnectNotice')).props.accessibilityLabel).toBe(en('ApproveOwnTerminal'))
     expect(tree.getByTestId(id('HcpApproveButton')).props.accessibilityLabel).toBe(en('Approve'))
-    // The warning comes after the last row and before the button.
-    const warnAt = texts.indexOf(JSON.stringify(en('ApproveOwnTerminal')))
-    expect(warnAt).toBeGreaterThan(positions[4])
-    expect(texts.lastIndexOf(JSON.stringify(en('Approve')))).toBeGreaterThan(warnAt)
+  })
+
+  it('draws one row per summary it is given, each in its own row', () => {
+    const view = { ...HCP_APPROVAL_VIEW, rows: ['First.', 'Second.'] }
+    const { tree } = approve({ view })
+    const rows = tree.getAllByTestId(id('HcpApproveRow'))
+    expect(rows.map((row) => textsOf(row))).toEqual([['First.'], ['Second.']])
   })
 
   it('draws a row as plain text, never interpreted', () => {
@@ -178,7 +180,7 @@ describe('HcpConnectFlowView', () => {
   it('numberEntry draws the base number step with four cells, and sends the digits once', async () => {
     const { props, tree } = flow({ state: 'numberEntry' })
     expect(tree.getByText('ConnectedAgents.NumberBodyFourDigits')).toBeTruthy()
-    expect(tree.getAllByTestId(id('ConnectNumberCell'))).toHaveLength(4)
+    expect(tree.getAllByTestId(id('ConnectNumberCell'), { includeHiddenElements: true })).toHaveLength(4)
     fireEvent.changeText(tree.getByTestId(id('ConnectNumberField')), '2644')
     fireEvent.press(tree.getByTestId(id('ConnectNumberContinue')))
     fireEvent.press(tree.getByTestId(id('ConnectNumberContinue')))
@@ -255,7 +257,10 @@ describe('HcpConnectFlowView', () => {
   })
 
   it('draws in the language the app shows', () => {
-    const spy = jest.spyOn(reactI18next, 'useTranslation').mockReturnValue({
+    // The module object the views read (the test's react-i18next mock), not a namespace copy of it.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const i18nModule = require('react-i18next') as typeof reactI18next
+    const spy = jest.spyOn(i18nModule, 'useTranslation').mockReturnValue({
       t: (key: string) => key,
       i18n: { language: 'fr-FR' },
     } as unknown as ReturnType<typeof reactI18next.useTranslation>)
