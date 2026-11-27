@@ -9,7 +9,7 @@ import { setAgentConnectEnabled } from '../../agentConnectFlag'
 import type { VtaSession } from '../../services'
 import { setHcpEnabled } from '../hcpFlag'
 import { HCP_GRANTS_REVOKE } from '../types'
-import { callHcp, HCP_TASK_TIMEOUT_MS, hcpVtaPort, type HcpVtaPort } from '../vtaPort'
+import { callHcp, HCP_TASK_TIMEOUT_MS, HcpOffError, hcpVtaPort, type HcpVtaPort } from '../vtaPort'
 
 const AGENT = { id: 'agent' } as unknown as Agent
 const VTA = 'did:web:vta.example.org'
@@ -59,7 +59,18 @@ describe('hcpVtaPort', () => {
     setAgentConnectEnabled(agentConnectOn)
     setHcpEnabled(hcpOn)
     const { session, withAgentSession } = fakeSession(async () => ({}))
-    await expect(hcpVtaPort(AGENT, VTA, session).task(HCP_GRANTS_REVOKE, { grantId: GRANT })).rejects.toThrow()
+    await expect(hcpVtaPort(AGENT, VTA, session).task(HCP_GRANTS_REVOKE, { grantId: GRANT })).rejects.toBeInstanceOf(
+      HcpOffError
+    )
+    expect(withAgentSession).not.toHaveBeenCalled()
+  })
+
+  it('with the flags off, callHcp gives off, not unreachable', async () => {
+    const { session, withAgentSession } = fakeSession(async () => ({}))
+    await expect(callHcp(hcpVtaPort(AGENT, VTA, session), HCP_GRANTS_REVOKE, { grantId: GRANT })).resolves.toEqual({
+      ok: false,
+      off: true,
+    })
     expect(withAgentSession).not.toHaveBeenCalled()
   })
 })
@@ -97,6 +108,7 @@ describe('callHcp', () => {
     ['a code without the refusal name', { name: 'Error', code: 'permissionDenied' }],
     ['a string', 'boom'],
     ['undefined', undefined],
+    ['an Error only named like the off error', Object.assign(new Error('HCP is off'), { name: 'HcpOffError' })],
   ])('control: %s thrown gives unreachable', async (_name, thrown) => {
     await expect(callHcp(portThrowing(thrown), HCP_GRANTS_REVOKE, { grantId: GRANT })).resolves.toEqual({
       ok: false,

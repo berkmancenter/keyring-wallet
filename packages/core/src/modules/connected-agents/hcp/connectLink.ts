@@ -17,7 +17,10 @@ import { utf8ToBytes } from '@noble/hashes/utils.js'
 import type { HcpConnectLink } from './types'
 
 const PREFIX = 'https://link.trustoverip.org/t#'
-/** The longest link read, in UTF-8 bytes (VTI-LNK-081). */
+/**
+ * The longest link read, in UTF-8 bytes (VTI-LNK-081), inclusive: a link of at most 251 bytes is read, one of 252 or
+ * more is not.
+ */
 export const HCP_LINK_MAX_BYTES = 251
 export const HCP_CONNECT_TYPE = '/vti/flow/hcp-connect/0.1'
 export const HCP_CONNECT_TYPE_ABSOLUTE = 'https://link.trustoverip.org/vti/flow/hcp-connect/0.1'
