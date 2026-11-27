@@ -215,9 +215,10 @@ export type PairingCleanup = {
    * The entry's expiry: as the grant set it (`aclScopeFor`), or, for a rotated entry, as the VTA lists it. Once it has
    * passed, the entry is gone under whichever key it holds (#1060 finding 24, 3A): `acl/swap-key` 0.1 step 6 says the
    * entry's `expiresAt` "MUST be preserved verbatim", so a rotation Keyring never saw (after it gave up on the
-   * pairing) cannot move it; and `acl/update` 0.3 bounds an amendment by the granter's own authority, expiry included
-   * (`delegationExceedsGranter`), so the agent cannot extend its own entry. What is left is the owner's own VTA
-   * extending the entry on purpose, which this does not defend against (trust-tasks at `2a66a0351`).
+   * pairing) cannot move it. `acl/update` 0.3 step 6 refuses "an amendment whose subject is the amending party itself"
+   * (`permissionDenied`), so the agent cannot amend its own entry at all, and step 5 bounds anyone else's lift of an
+   * expiry by their own authority ("grants, bounded like one"). What is left is the owner's own granting side lifting
+   * the expiry on purpose, which this does not defend against (trust-tasks at `2a66a0351`).
    */
   expiresAt?: string
 }
