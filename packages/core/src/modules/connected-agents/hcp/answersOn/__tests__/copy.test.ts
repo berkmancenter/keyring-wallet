@@ -86,6 +86,7 @@ describe('ANSWERS_COPY', () => {
     expect(answersText('AnswersOnTitle', 'en')).toBe('Let "{{name}}" answer other people?')
   })
 
+  // control: the retry, forbidden-word and placeholder checks each match a string that breaks them.
   it('control: the checks bite on a string that breaks them', () => {
     expect("Your VTA didn't accept this change. Try again.").toMatch(RETRY)
     expect('Réessayez plus tard.').toMatch(RETRY)

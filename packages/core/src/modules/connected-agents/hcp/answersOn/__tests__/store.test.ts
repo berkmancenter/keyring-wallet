@@ -98,6 +98,7 @@ describe('HcpAnswersStore', () => {
     expect(order).toEqual(['other', 'first', 'second'])
   })
 
+  // control: the operator-wide lock is per operator: another operator's deny does not lock this one.
   it('control: a deny for another operator leaves this one’s permit on', async () => {
     const { agent } = fakeAgent()
     const store = new HcpAnswersStore(agent)

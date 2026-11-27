@@ -25,9 +25,14 @@ const refusal = (code: string) => Object.assign(new Error('refused'), { name: 'V
 
 type Answer = (payload: Record<string, unknown>, n: number) => unknown
 
-function setup(
-  answer: Answer = (payload, n) => directiveAnswer(payload, `urn:uuid:0000000${n}-0000-4000-8000-000000000000`)
-) {
+/** A valid `directives/set` answer, the n-th directive set. */
+function validAnswer(payload: Record<string, unknown>, n: number): Record<string, unknown> {
+  const answer = directiveAnswer(payload, `urn:uuid:0000000${n}-0000-4000-8000-000000000000`)
+  expectValid(S.response, answer)
+  return answer
+}
+
+function setup(answer: Answer = validAnswer) {
   const genericRecords = memoryGenericRecords()
   const store = new HcpAnswersStore({ genericRecords } as unknown as Agent)
   const sent: Record<string, unknown>[] = []
@@ -179,9 +184,7 @@ describe('changeHcpAnswers', () => {
 
   it('an unreachable VTA writes nothing: a failed Off leaves the switch on and changeable', async () => {
     let fail = false
-    const { deps, store } = setup((payload, n) =>
-      fail ? new Error('timeout') : directiveAnswer(payload, `urn:uuid:0000000${n}-0000-4000-8000-000000000000`)
-    )
+    const { deps, store } = setup((payload, n) => (fail ? new Error('timeout') : validAnswer(payload, n)))
     await changeHcpAnswers(deps, target(true))
     fail = true
     await expect(changeHcpAnswers(deps, target(false))).resolves.toEqual({
@@ -225,6 +228,7 @@ describe('changeHcpAnswers', () => {
     await expect(store.get(CLIENT_VID)).resolves.toBeUndefined()
   })
 
+  // control: the brief's control, a permit sent after a deny is never produced.
   it('control: a permit is never sent after a deny, even when Off and On are asked for at once', async () => {
     const { deps, sent } = setup()
     await changeHcpAnswers(deps, target(true))

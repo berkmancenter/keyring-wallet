@@ -54,6 +54,7 @@ describe('hcpAnswersPayload', () => {
     expect(HCP_DIRECTIVES_SET).toBe('https://trusttasks.org/spec/hcp/directives/set/0.1')
   })
 
+  // control: the schema check bites: a wrong effect, a bare action or an empty operator list each fail it.
   it('control: the schema refuses a payload with an effect HCP does not have, or a bare word as the action', () => {
     const payload = hcpAnswersPayload({ operatorId: OPERATOR, on: true, language: 'en' })
     expect(S.request({ ...payload, effect: 'allow' })).toBe(false)
