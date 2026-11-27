@@ -26,6 +26,7 @@ import { BifoldLogger } from './services/logger'
 import { AttestationMonitor } from './types/attestation'
 import { CredentialProvisioningMonitor } from './types/auto-credential'
 import { Config, HistoryEventsLoggerConfig } from './types/config'
+import { AgentContactCardProps } from './types/agent-contact-card'
 import { ContactCardProps } from './types/contact-card'
 import { ContactDetailsFooterProps } from './types/contact-details-footer'
 import { CredentialListFooterProps } from './types/credential-list-footer'
@@ -96,6 +97,8 @@ export const COMPONENT_TOKENS = {
   // How one exchanged R-Card is drawn in the VRC contacts list. Distinct from
   // COMPONENT_CONTACT_LIST_ITEM above, which draws a DIDComm connection.
   COMPONENT_CONTACT_CARD: 'component.contact-card',
+  // How one of the owner's connected AI agents is drawn among the contacts (agent connect, §3.14): not an R-Card.
+  COMPONENT_AGENT_CONTACT_CARD: 'component.agent-contact-card',
   COMPONENT_CONTACT_DETAILS_CRED_LIST_ITEM: 'component.contact-details-cred-list-item',
   // Extra per-contact content at the bottom of the contact details screen —
   // e.g. a demo profile's own contact-scoped action, distinct from
@@ -273,6 +276,7 @@ export type TokenMapping = {
   [TOKENS.COMPONENT_RECORD]: React.FC
   [TOKENS.COMPONENT_CONTACT_LIST_ITEM]: React.FC<ContactListItemProps>
   [TOKENS.COMPONENT_CONTACT_CARD]: React.FC<ContactCardProps>
+  [TOKENS.COMPONENT_AGENT_CONTACT_CARD]: React.FC<AgentContactCardProps>
   [TOKENS.COMPONENT_CONTACT_DETAILS_CRED_LIST_ITEM]: React.FC<ContactCredentialListItemProps>
   [TOKENS.COMPONENT_CONTACT_DETAILS_FOOTER]: React.FC<ContactDetailsFooterProps>
   [TOKENS.INLINE_ERRORS]: InlineErrorConfig
