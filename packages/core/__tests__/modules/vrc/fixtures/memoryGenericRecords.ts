@@ -30,5 +30,9 @@ export function memoryGenericRecords(initial: MemoryRecord[] = []) {
       const index = records.findIndex((record) => record.id === id)
       if (index >= 0) records.splice(index, 1)
     }),
+    delete: jest.fn(async (record: { id: string }) => {
+      const index = records.findIndex((existing) => existing.id === record.id)
+      if (index >= 0) records.splice(index, 1)
+    }),
   }
 }
