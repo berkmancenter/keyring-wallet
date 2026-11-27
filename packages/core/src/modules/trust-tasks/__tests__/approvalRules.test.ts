@@ -379,7 +379,11 @@ describe('the phone never sends an offered task', () => {
       walk(src)
         .filter((f) => /\.createContext\(/.test(readFileSync(f, 'utf8')))
         .map((f) => relative(src, f))
-    ).toEqual([join('modules', 'connected-agents', 'memories.ts')])
+    ).toEqual([
+      join('modules', 'connected-agents', 'memories.ts'),
+      // The memory port over the VTA session: the same create, through VtaClient.createContext.
+      join('modules', 'connected-agents', 'services.ts'),
+    ])
     const client = readFileSync(join(moduleDir, 'VtaClient.ts'), 'utf8')
     const body = /\n {2}createContext\(id: string, name: string\) \{([\s\S]*?)\n {2}\}/.exec(client)?.[1] ?? ''
     expect(body).toMatch(/VTA_TASK\.contextsCreate/)
