@@ -198,6 +198,11 @@ Start now.
 - **The replay rule, exactly the vectors' `rules`:**
   - refuse `issuedAt` more than **300 s ahead** of, or **604 800 s (7 days) behind**, the receiver's now;
   - refuse an `id` already seen within that window, **recording it before acting**;
+  - **Decided here (after #1116 and #1117 asserted opposite things):** the claim is settled by the outcome. Record
+    the `id` before acting; if the act **throws**, release the claim (one `SeenIdStore` method, one try/catch), so
+    the carrier's "leave it queued for the next drain" is true and the next copy is acted on. A crash mid-act stays
+    at-most-once. A refusal is not a throw: it keeps the claim. #1116 and #1117 each carry one test of this, and
+    neither asserts the opposite.
   - refuse a `recipient` other than the receiver's own chat identity;
   - for `keyring/agent/settings` and `keyring/agent/room-offer`, refuse one not newer than the last applied of its
     type.
@@ -704,7 +709,7 @@ The contract and decisions are in the keyring-wallet repository, branch `feat/ag
     - a wrong `recipient`;
     - an `issuedAt` more than 5 minutes ahead of its clock, or more than 7 days behind;
     - an id it has seen.
-  - **Seen ids** are kept in an owner-only file beside the inbox cursor, for 7 days and 5 minutes. Each id is written **before** the document is acted on. If the store is missing or unreadable, anything issued before the store's own creation time is refused (it fails closed).
+  - **Seen ids** are kept in an owner-only file beside the inbox cursor, for 7 days and 5 minutes. Each id is written **before** the document is acted on. If acting on it fails with an error, the id is released so a later copy is acted on; a crash keeps it. If the store is missing or unreadable, anything issued before the store's own creation time is refused (it fails closed).
   - **State-setting messages** (`settings`, later `room-offer`) are applied only when newer than the last one of their type applied.
 - **The upstream verifier skew:** `vta-sdk`'s verifier (affinidi-data-integrity 0.8.7 and 0.9.2) refuses a proof `created` more than 60 s ahead of the verifier's own clock. Sign with real time; never pin test times in the future.
 
