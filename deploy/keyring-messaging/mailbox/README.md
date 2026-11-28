@@ -190,6 +190,22 @@ accepting anonymous messages": Credo's inner forward layer is anoncrypt, while t
 authenticated and gated by `SEND_FORWARDED`); `trust_task_verification = "enforce"` (every row's Trust Task is
 signed and accepted under it); `enable_inter_mediator_relay = "false"` (the lab ran closed).
 
+**The settled send (2026-11-27).** `VtiMediatorSession.sendToSettled` reads the mediator's refusal of a forward and
+uses a pickup `status-request` sent right after it as a fence. The mediator answers a forward it takes with nothing,
+and one it refuses with a problem-report threaded to it by `pthid`. Measured on the same commit (`f6ed8159`, debug
+build) with this directory's settings, through `tsp-reference/ref-25-agent-pairing/lab/mediator.sh up mailbox` on its
+own loopback port and Redis; the harness is `evidence/settled-send-probe.mjs`, which numbers frames in wire order
+before any decrypt, and its output is `evidence/run-settled-send-f6ed8159.txt`. 20 trials a row:
+
+| Row | Result |
+|---|---|
+| R CONTROL refused | a DID that never set its flag: the refusal `e.p.authorization.send_forwarded` comes before the fence's `status` in 20 of 20 |
+| D CONTROL refused later | flag on, the next hop has no account here: the refusal `e.p.delivery.refused` comes first in 20 of 20 |
+| A CONTROL accepted | flag on, the next hop an account here: the fence answers in 20 of 20 (9 to 41 ms, median 11), no refusal within 5 s, and the addressee receives all 20 |
+| P plain bound | a refusal comes 4 to 13 ms after the forward (median 5, 40 refusals); an accepted forward without a fence draws none within 5 s |
+
+On loopback, so the times are this machine's, not a phone's over a network. The order is what the fence rests on.
+
 Not measured here, and not reachable in this configuration: the real push-gateway path. At v0.53.0 `wake/set`, which only an
 account on this mediator may send (`src/wake/set.rs` requires the `Local` capability), accepts any gateway DID whose
 document has a DIDComm endpoint and a key-agreement key (`gateway_reachable`; there is no allowlist of gateways, only
