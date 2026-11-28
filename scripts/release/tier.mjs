@@ -119,7 +119,11 @@ export const FLAGS = [
   // .remove on a receiver named for storage, the record-removing helpers, and the four device-store deletes whose method
   // names the receiver rule can't see (AsyncStorage.removeItem / .multiRemove / .clear, SecureStore.deleteItemAsync;
   // a stopgap, 10-30: names, not behaviour).
-  { flag: 'deletes stored records', policy: 'store', added: /\bAsyncStorage\.(?:removeItem|multiRemove|clear)\s*\(|\bSecureStore\.deleteItemAsync\s*\(|\.deleteById\s*\(|(?:[Rr]epository|[Ss]torage|[Rr]ecords?|[Ww]allet|[Aa]skar|[Ss]tore)\w*\.(?:delete|remove)\s*\(|\b(?:deleteRecord|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
+  // `deleteKeyed` is in the helper list because the receiver rule cannot see it (11-27): it is a bare call, and the
+  // only file it matched was keyedRecords.ts, which DEFINES it and happens to contain `agent.genericRecords.delete(` —
+  // so every call site added through the framework's own keyed-record delete read publishable. A helper that removes
+  // stored records belongs here by name, beside deleteRecord.
+  { flag: 'deletes stored records', policy: 'store', added: /\bAsyncStorage\.(?:removeItem|multiRemove|clear)\s*\(|\bSecureStore\.deleteItemAsync\s*\(|\.deleteById\s*\(|(?:[Rr]epository|[Ss]torage|[Rr]ecords?|[Ww]allet|[Aa]skar|[Ss]tore)\w*\.(?:delete|remove)\s*\(|\b(?:deleteRecord|deleteKeyed|removeWhere|forget[A-Z]\w*|clear[A-Z]\w*Store|wipe\w*)\s*\(/ },
   { flag: 'sign-in / key handling', policy: 'strict', path: /(oobSignIn|uvKey|SignIn\.tsx|hardware-signing\/|\/keys?\.ts$|KeyRotation|vtaKeyMigration|VtaClient\.ts$|keychain)/i },
   // Case-insensitive: the protocol line's files are named both ways (vtiAgent.ts, VtiMediatorTransport.ts, TspCarriage.ts),
   // and without /i the capitalised ones read plain ota (found 10-29).

@@ -686,3 +686,6 @@ export {
   REQUIRED_DEFAULT_KMS_BACKEND,
   REQUIRED_KMS_BACKENDS,
 } from './modules/trust-tasks/module/vtaKeys'
+// Whether this build carries agent connect at all: false in every store build (decided 2026-11-28). The Developer
+// screen hides agent connect's and the rooms tier's switch rows with it.
+export { agentConnectAvailableInBuild } from './modules/connected-agents/agentConnectBuild'

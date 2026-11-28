@@ -47,6 +47,20 @@ jobs:
             echo "::error::staging.yaml must refuse E2E_CLOCKS in both the Android and the iOS build (found $guards guards)"; exit 1
           fi
 
+      # Agent connect is absent from store builds until Alberto releases it (decided 2026-11-28): only test builds
+      # and the development sample carry it, and staging refuses a .env that does, in both its app jobs.
+      - name: Only test and development builds carry agent connect
+        run: |
+          found=$(grep -l 'KEYRING_AGENT_CONNECT_BUILD[=]' .github/workflows/*.yml .github/workflows/*.yaml \
+            | grep -vx '.github/workflows/test-builds.yml' || true)
+          if [ -n "$found" ]; then
+            echo "::error::Only test-builds.yml may set KEYRING_AGENT_CONNECT_BUILD:"; echo "$found"; exit 1
+          fi
+          guards=$(grep -c 'KEYRING_AGENT_CONNECT_BUILD would be baked into a store build' .github/workflows/staging.yaml || true)
+          if [ "$guards" -lt 2 ]; then
+            echo "::error::staging.yaml must refuse KEYRING_AGENT_CONNECT_BUILD in both the Android and the iOS build (found $guards guards)"; exit 1
+          fi
+
   lint:
     runs-on: ubuntu-22.04
     name: Lint+Format+Types

@@ -41,7 +41,7 @@ node scripts/openvtc/setup-external.mjs                  # once, at the reposito
 
 cd tsp-reference/ref-25-agent-pairing
 npm install
-npm test                                # 131 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, the recordings, the notification checks, and track C's HCP interfaces
+npm test                                # 134 offline tests: packing, forward, refusal reading, the links, a VTA's answers, document proofs, recording under names, the recordings, the notification checks, and track C's HCP interfaces
 lab/mediator.sh up mailbox              # or: open, deny
 npm start                               # every case for that mode, against the recorded result
 lab/mediator.sh down

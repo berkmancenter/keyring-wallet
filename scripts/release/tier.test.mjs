@@ -279,6 +279,32 @@ test('deletes stored records: storage deletes hold, a Map or Set delete does not
     'await walletStorage.remove(key)', 'await store.delete(id)', 'await deleteRecord(r)', 'forgetConnection(id)', 'wipeWallet()']) assert.equal(held(l), true, l);
 });
 
+test('deletes stored records: deleteKeyed, the framework\'s own keyed-record delete, holds at every call site', () => {
+  const F = 'packages/core/src/modules/connected-agents/hcp/store.ts';
+  const held = (line) => flagsOf([F], { [F]: [line] }).some((f) => f.flag === 'deletes stored records');
+  // Found 11-27 on wallet #1093: the flag matched only keyedRecords.ts, which DEFINES deleteKeyed (its body holds
+  // `agent.genericRecords.delete(`), so a PR adding call sites graded plain ota. These must hold.
+  for (const l of [
+    '    await deleteKeyed(this.agent, HCP_CONNECTION_RECORD_TYPE, HCP_APPROVAL_IN_FLIGHT_KIND, id)',
+    'return deleteKeyed(agent, recordType, kind, key)',
+    'void deleteKeyed (agent, t, k, id)',
+  ]) assert.equal(held(l), true, l);
+  // control: the keyed helpers that write or read must NOT hold, nor a longer name that merely starts with it.
+  for (const l of [
+    '    await putKeyed(this.agent, TYPE, KIND, id, record)',
+    '    const r = await getKeyed(this.agent, TYPE, KIND, id)',
+    '    const all = await listKeyed(this.agent, TYPE, KIND)',
+    '    deleteKeyedCache.clear()',
+    '    const name = deleteKeyedLabel',
+  ]) assert.equal(held(l), false, l);
+  // The whole verdict, not just the flag: one added call site holds an otherwise-ota change.
+  const v = verdict([F], { added: { [F]: ['    await deleteKeyed(this.agent, TYPE, KIND, id)'] } });
+  assert.equal(v.tier, 'store');
+  assert.deepEqual(v.held, ['deletes stored records']);
+  // control: the same file with no delete is ota.
+  assert.equal(verdict([F], { added: { [F]: ['    await putKeyed(this.agent, TYPE, KIND, id, r)'] } }).tier, 'ota');
+});
+
 test('tier-exempt: a named, reasoned exemption keeps one line out of one content flag, and is always reported', () => {
   const F = 'packages/core/src/modules/rooms/agentRoomsService.ts';
   const held = (line) => flagsOf([F], { [F]: [line] }).some((f) => f.flag === 'deletes stored records');

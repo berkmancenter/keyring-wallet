@@ -11,16 +11,26 @@ on:
   pull_request:
     # Any base branch, as Code Quality. Deliberately no "edited": this check is not required and is path-filtered, so
     # a retarget need not re-run it; the next push does.
+    # Every file a rung's tests read, not only tsp-reference/: a change to a file a rung reads must run that rung, or
+    # its red surfaces later on whatever merge next touches tsp-reference/. ref-25's ci-paths.test.mjs fails when a
+    # rung reads a file outside tsp-reference/ that neither list below names.
     paths:
       - "tsp-reference/**"
       # A rung's tests may read a plan (ref-25's recordings test quotes the agent connect plan's tables).
       - "docs/plans/**"
+      # ref-25 hcp/hcp.test.mjs: the HCP effect kinds (types.ts) and the match-number vectors.
+      - "packages/core/src/modules/connected-agents/hcp/**"
+      # ref-25 links.test.mjs: AGENT_PURPOSES.
+      - "packages/core/src/modules/connected-agents/pairing.ts"
       - ".github/workflows/tsp-reference.yml"
   push:
     branches: [main]
+    # The same list as pull_request's.
     paths:
       - "tsp-reference/**"
       - "docs/plans/**"
+      - "packages/core/src/modules/connected-agents/hcp/**"
+      - "packages/core/src/modules/connected-agents/pairing.ts"
       - ".github/workflows/tsp-reference.yml"
   workflow_dispatch:
 
