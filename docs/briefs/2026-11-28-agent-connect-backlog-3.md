@@ -532,8 +532,10 @@ export function verifyDelegationRecord(input: { profileBody: Record<string, unkn
   with `handleToMention` and `tier` (`open` or `attributed` only).
 - **Interim (ruling 10):** the plugin's report ("<member> mentioned you in <room>") and each third-party request
   arrive as `keyring/chat/1.0` and are shown as the agent's chat messages, as inert text. Nothing is built for them.
-- **`vectors/others-reply.json`:** `{ en, fr, "pt-br" }` copied from §3.13, with `status: "fr and pt-br drafts, not
-  reviewed (D16)"`. The test checks the locale files' `ConnectedAgents.OthersReply` against it. The plugin's
+- **`vectors/others-reply.json`:** `{ en, fr, "pt-br" }` copied from §3.13, with a structured per-locale source:
+  `"source": { "en": "plan §3.13", "fr": "PROPOSED", "pt-br": "PROPOSED" }`. Each `PROPOSED` becomes
+  `{ "reviewed": "<date>" }` only on Alberto's word, in a PR that says so. No reader is named (the repository is
+  public). The test checks the locale files' `ConnectedAgents.OthersReply` against it. The plugin's
   `src/core/others/messages.json` test is the other side's.
 - Test control: one changed French character fails.
 
@@ -550,12 +552,22 @@ These conditions apply while the P1 switch is reachable: `setAgentRoomsEnabled` 
 3. **Always, switch or not:** no non-test file's `live` text names the capability `room-open` or `roomOpen` in a
    string (`['"]room-open['"]`, `['"]roomOpen['"]`), except the type declaration `AgentRoomCapability` in
    `rooms/types.ts` (`:401`). Nothing may grant `roomOpen` to an agent entry (ruling 1).
+4. **The native read (ruling 2's release gate):** the gate fails while `vectors/others-reply.json`'s `source.fr` or
+   `source["pt-br"]` is `PROPOSED` (anything but `{ "reviewed": "<date>" }` with an ISO date) **and** a store build
+   can carry agent connect, that is, `.github/workflows/staging.yaml` no longer carries both of its refusals ("Refuse
+   agent connect in a store build", #1131). So nothing blocks while agent connect stays out of store builds, and the
+   release that lets it in cannot ship an unread fr or pt-br. The failure names each locale still `PROPOSED`.
 
 - Tests: the wired tree passes. Removing either call fails and names it. A call that exists only in a comment or a
   string does not count. Control: `vdc.ts`'s `'keyring.agent.room-present'` does not trip condition 1.
 - Condition 3's tests: a fixture source that writes `capabilities: ['room-present', 'room-open']` fails and names
   its file. Controls: the `AgentRoomCapability` declaration passes, and a comment naming `roomOpen` passes.
   Mutation: drop the exception's file path, and the wired tree fails on `rooms/types.ts`.
+- Condition 4's tests: the wired tree passes (`PROPOSED`, with both refusals present). A fixture `staging.yaml` with
+  the refusals removed and `fr` `PROPOSED` fails and names `fr`; with both `PROPOSED` it names both. Controls: the same
+  fixture with both locales `{ "reviewed": "2026-12-01" }` passes; `{ "reviewed": "soon" }` fails (not a date); and a
+  missing `source` fails rather than passing. Mutation: drop the `PROPOSED` check, and the fixture that names `fr`
+  goes green, so its test goes red.
 
 ## fb-C5: mount the agent chat service (makes Message and Open chat reachable)
 
