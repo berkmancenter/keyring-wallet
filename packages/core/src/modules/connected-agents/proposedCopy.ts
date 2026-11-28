@@ -35,6 +35,22 @@ export const PROPOSED_COPY: Readonly<Record<string, string>> = {
     'backlog 3 (step 7.13, decided 11-28): agents work in open rooms only; the add is off in an attributed room',
   AnswersOthersPending:
     'backlog 3 ruling 3 (step 7.14): the change is stored, not yet sent; `settings` has no acknowledgement',
+  ActionGone: '#1122 obligation 1: an action on an agent whose record is gone (noRecord)',
+  ActionNotOffered: '#1122 obligation 1: an action the agent status no longer offers (notOffered)',
+  ActionNotListed: '#1122 obligation 1: an action on an agent the VTA no longer lists (notListed)',
+  ActionNotConfirmed:
+    '#1122 obligation 1: an action the VTA did not confirm: not reached, refused, or sent with no answer (unreachable)',
+  ActionNotApplied: '#1122 obligation 1: an action the VTA answered whose read-back does not show it (notApplied)',
+  RestoreLastMemory: '#1122 obligation 1: a Restore or memory change that would leave no memory (lastMemory)',
+  ExtendNoCredential: '#1122 obligation 1: an Extend done whose new credential was not issued (vdc)',
+  RemoveNotAvailable:
+    '#1122 obligation 1: a Remove the VTA still lists, with the step 7.10 revoke absent (revokeUnavailable)',
+  RemoveNotConfirmed:
+    '#1122 obligation 1: a Remove whose revoke a full listing does not show done (revokeNotConfirmed)',
+  RemoveGoneUnproven: '#1122 obligation 1: a Remove with no deviceId, the entry absence unproven (goneUnproven)',
+  KeepNotSaved: '#1122 obligation 1: a Keep it connected whose intent was not saved, so nothing was sent (notSaved)',
+  KeepNotRecorded: '#1122 obligation 1: a Keep it connected the VTA made and the phone did not record (notRecorded)',
+  KeepNoCredential: '#1122 obligation 1: a Keep it connected made whose new credential was not issued (vdc)',
 }
 
 /**

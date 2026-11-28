@@ -6,11 +6,16 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { testIdWithKey } from '../../../utils/testable'
 import { AGENT_COLORS } from '../components/agentStyle'
+import AgentActionNotice, { AgentActionLine } from '../components/AgentActionNotice'
 import ConnectNotice from '../components/ConnectNotice'
 import MemoryPicker, { CreateMemoryResult, PickerMemory } from '../components/MemoryPicker'
 
-/** A widen or narrow, as the logic answers it; the view re-reads the agent's memories after either. */
-export type MemoryChangeResult = { ok: true } | { ok: false; code: string }
+/**
+ * A widen or narrow, as the logic answers it; the view re-reads the agent's memories after either. A failure carries
+ * the line the logic's `agentActionLine('addMemory' | 'removeMemory', code)` gives it (ac's #1122 obligation 1); one
+ * without a line is drawn as before, with MemoryChangeFailed, until every caller passes one.
+ */
+export type MemoryChangeResult = { ok: true } | { ok: false; code: string; line?: AgentActionLine }
 
 export interface ChangeMemoriesViewProps {
   agentName: string
@@ -64,6 +69,9 @@ const ChangeMemoriesView: React.FC<ChangeMemoriesViewProps> = ({
   const [ask, setAsk] = useState<Ask | undefined>()
   const [working, setWorking] = useState(false)
   const [failed, setFailed] = useState(false)
+  // The line the last change left. It spends the change: the sheet then offers only its closing button, and choosing
+  // the memory again opens a new sheet, a new action, not a retry inside this one.
+  const [line, setLine] = useState<AgentActionLine | undefined>()
   // Memories made here, until the next listing carries them: the picker ticks a new one at once, before any re-read.
   const made = useRef<PickerMemory[]>([])
   const known = () => [...memories, ...made.current.filter((m) => !memories.some((n) => n.id === m.id))]
@@ -73,6 +81,7 @@ const ChangeMemoriesView: React.FC<ChangeMemoriesViewProps> = ({
     const memory = known().find((m) => m.id === id)
     if (!memory) return
     setFailed(false)
+    setLine(undefined)
     setAsk({ kind: current.includes(id) ? 'narrow' : 'widen', memory })
   }
 
@@ -86,9 +95,11 @@ const ChangeMemoriesView: React.FC<ChangeMemoriesViewProps> = ({
   const answer = async (yes: boolean) => {
     if (!ask || working) return
     if (!yes) {
+      setLine(undefined)
       setAsk(undefined)
       return
     }
+    if (line) return
     setWorking(true)
     try {
       // Only widening takes the face or fingerprint check (D34): it gives the agent more. Narrowing only takes access
@@ -104,9 +115,11 @@ const ChangeMemoriesView: React.FC<ChangeMemoriesViewProps> = ({
       }
       const result = await (ask.kind === 'widen' ? onWiden(ask.memory.id) : onNarrow(ask.memory.id))
       if (result.ok) setAsk(undefined)
+      else if (result.line) setLine(result.line)
       else setFailed(true)
     } catch {
-      setFailed(true)
+      // A throw is no answer: true whatever happened, the VTA did not confirm the change.
+      setLine({ key: 'ActionNotConfirmed' })
     } finally {
       setWorking(false)
     }
@@ -130,6 +143,7 @@ const ChangeMemoriesView: React.FC<ChangeMemoriesViewProps> = ({
           <ThemedText style={styles.line}>
             {ask.kind === 'widen' ? t('ConnectedAgents.WidenBody') : t('ConnectedAgents.NarrowBody', { memory })}
           </ThemedText>
+          {line ? <AgentActionNotice line={line} testID={testIdWithKey('ChangeMemoriesLine')} /> : null}
           {failed ? (
             // TODO: proposed words for a change the VTA did not make (PROPOSED_COPY); not in the plan yet.
             <ConnectNotice
@@ -137,14 +151,16 @@ const ChangeMemoriesView: React.FC<ChangeMemoriesViewProps> = ({
               testID={testIdWithKey('ChangeMemoriesFailed')}
             />
           ) : null}
-          <Button
-            title={ask.kind === 'widen' ? t('ConnectedAgents.Allow') : t('ConnectedAgents.StopUsing')}
-            buttonType={ask.kind === 'widen' ? ButtonType.Primary : ButtonType.Critical}
-            onPress={() => answer(true)}
-            disabled={working}
-            testID={testIdWithKey('ChangeMemoriesYes')}
-            accessibilityLabel={ask.kind === 'widen' ? t('ConnectedAgents.Allow') : t('ConnectedAgents.StopUsing')}
-          />
+          {line ? null : (
+            <Button
+              title={ask.kind === 'widen' ? t('ConnectedAgents.Allow') : t('ConnectedAgents.StopUsing')}
+              buttonType={ask.kind === 'widen' ? ButtonType.Primary : ButtonType.Critical}
+              onPress={() => answer(true)}
+              disabled={working}
+              testID={testIdWithKey('ChangeMemoriesYes')}
+              accessibilityLabel={ask.kind === 'widen' ? t('ConnectedAgents.Allow') : t('ConnectedAgents.StopUsing')}
+            />
+          )}
           <Button
             title={ask.kind === 'widen' ? t('Global.NotNow') : t('ConnectedAgents.Keep')}
             buttonType={ButtonType.Secondary}
