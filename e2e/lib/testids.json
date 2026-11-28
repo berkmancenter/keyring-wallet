@@ -822,6 +822,12 @@
     "GuardianCardResult": ["src/modules/sedi/holder/GuardianCardReceive.ids.ts"],
     "HardwareAttestation": ["src/screens/Settings.tsx"],
     "HardwareAttestationChangedEnterPIN": ["src/screens/PINVerify.tsx"],
+    "HcpApprove": ["src/modules/connected-agents/hcp/screens/HcpApproveView.tsx"],
+    "HcpApproveButton": ["src/modules/connected-agents/hcp/screens/HcpApproveView.tsx"],
+    "HcpApproveRow": ["src/modules/connected-agents/hcp/screens/HcpApproveView.tsx"],
+    "HcpConnectEnd": ["src/modules/connected-agents/hcp/screens/HcpConnectFlowView.tsx"],
+    "HcpConnectEndClose": ["src/modules/connected-agents/hcp/screens/HcpConnectFlowView.tsx"],
+    "HcpConnectWaiting": ["src/modules/connected-agents/hcp/screens/HcpConnectFlowView.tsx"],
     "HeaderText": [
       "src/components/listItems/NotificationListItem.tsx",
       "src/components/misc/InfoBox.tsx",
