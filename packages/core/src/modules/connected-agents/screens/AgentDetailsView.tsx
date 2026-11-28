@@ -6,8 +6,8 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { testIdWithKey } from '../../../utils/testable'
-import { AgentAvatar, AgentTag } from '../components/AgentMark'
 import AgentActionNotice, { AgentActionLine, AgentActionName } from '../components/AgentActionNotice'
+import { AgentAvatar, AgentTag } from '../components/AgentMark'
 import { AgentStatusChip } from '../components/AgentStatusChip'
 import { AGENT_COLORS } from '../components/agentStyle'
 import MemoryAccessNotice, { NoticeMemory } from '../components/MemoryAccessNotice'
@@ -226,7 +226,7 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
             </View>
           )
         })}
-        {agent.pending.map((memory) => (
+        {agent.pending.map((memory, i) => (
           <View key={`pending-${memory.id}`} style={styles.memory} testID={testIdWithKey('AgentDetailsPending')}>
             <ThemedText style={styles.small}>{t('ConnectedAgents.PendingMemory', { memory: memory.name })}</ThemedText>
             {/* §6 keeps "Try again" after a failed retry; only a retry the logic says is gone or no longer offered
@@ -242,11 +242,15 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
                 <ThemedText style={styles.link}>{t('ConnectedAgents.TryAgain')}</ThemedText>
               </TouchableOpacity>
             )}
+            {/* One line for the one retry, under the last pending memory. */}
+            {actionLines.retryPending && i === agent.pending.length - 1 ? (
+              <AgentActionNotice
+                line={actionLines.retryPending}
+                testID={testIdWithKey('AgentDetailsRetryPendingLine')}
+              />
+            ) : null}
           </View>
         ))}
-        {actionLines.retryPending ? (
-          <AgentActionNotice line={actionLines.retryPending} testID={testIdWithKey('AgentDetailsRetryPendingLine')} />
-        ) : null}
         {agent.memories.length > 0 ? (
           <View style={[styles.fact, styles.rule]} accessible>
             <Icon name="check" size={22} color={AGENT_COLORS.primary} accessibilityElementsHidden />
