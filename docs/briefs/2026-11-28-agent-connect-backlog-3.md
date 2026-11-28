@@ -1491,9 +1491,8 @@ Each part below names the ruling it waits on, if any. Parts with none can start 
    - Every fr and pt-br string, the fixed reply's included, stays **PROPOSED**, and the release gate stays **closed** until they have read them.
    - **Where the gate lives, proposed by c5:** beside Keyring's existing locale checks, which the plugin can reach by copy.
      - Keyring's copy tables give every string a `source` (`PROPOSED`, `plan §6`, a companion finding), and their tests hold it. Examples: `packages/core/src/modules/connected-agents/hcp/answersOn/copy.ts`, and `hcp/__tests__/copy.test.ts` at `be8436117`.
-     - The fixed reply's three texts and their `source` go in that same form, in the shared fixed-reply vector Keyring's `ConnectedAgents.OthersReply` is held to (PLAN:759). Keyring's own release gate (`connected-agents/__tests__/releaseGate.test.ts`) then fails while fr or pt-br is `PROPOSED`.
-     - The plugin carries the vector byte-identically in `tests/fixtures/agent-connect/`, and RM4's `tests/release_gate.rs` fails while its copy says `PROPOSED` for either. So one record, Keyring's, closes both gates, and the plugin needs no checklist of its own.
-     - If the plugin's release cannot read that copy, `RELEASE_CHECKLIST.md` on the fork is the fallback.
+     - The fixed reply's three texts are in the shared vector `packages/core/src/modules/connected-agents/vectors/others-reply.json` (#1132), which Keyring's `ConnectedAgents.OthersReply` is held to (PLAN:759). It carries one structured `source` per locale: `"source": { "en": "plan §3.13", "fr": "PROPOSED", "pt-br": "PROPOSED" }`. Each `PROPOSED` becomes `{ "reviewed": "<YYYY-MM-DD>" }`, **set only on Alberto's word**. No reader names appear anywhere, because the repositories are public. Keyring's own release gate (`connected-agents/__tests__/releaseGate.test.ts`) then fails while fr or pt-br is `PROPOSED`.
+     - The plugin carries the vector byte-identically in `tests/fixtures/agent-connect/`, and RM4's `tests/release_gate.rs` fails while its copy's `source.fr` or `source["pt-br"]` is not a `{ "reviewed": <date> }` object. That is the same field, read the same way, as Keyring's gate and fb's P1h gate. So one record, Keyring's, closes both gates, and the plugin needs no checklist of its own.
 3. **"Answers other people" On, with the hook as the only control (§3.13 items 1-3, PLAN:771-774; D23, D46). Brendan's, as plan owner.**
    - The plan says D23's condition is met by step 0.3(f)'s measurement, so the switch is offered in P1. The owner's approval through the VTA's consent flow (item 3) stays unrelied on until VTI-Q35 runs.
    - RM5 builds exactly that.
@@ -1547,7 +1546,7 @@ As of 2026-11-27, track 4 has **no pull request and no branch on the fork** (`gh
 - **RM files that c5's own PRs also write:**
   - `src/config.rs`: RM1 adds an `offered` block, and c5's PR-4 writes the `K_a` configuration. RM1 starts after PR-4 has merged, so they are not concurrent.
   - Nothing else: c5's PR-6 owns `src/connect/mediator.rs` (new), which no RM part writes.
-- **Names that could clash, checked:** the RM files are `room_offer.rs`, `room_write.rs`, `mentions.rs`, `room_events.rs`, `others/`, `turn_trust.rs`, `profile.rs`, `src/hook_gate.rs`, `RELEASE_CHECKLIST.md`, `hooks/hooks.json`, and their tests. None is a P1-P6 file name. VAM's `src/rooms.rs` (recall) is written by no part.
+- **Names that could clash, checked:** the RM files are `room_offer.rs`, `room_write.rs`, `mentions.rs`, `room_events.rs`, `others/`, `turn_trust.rs`, `profile.rs`, `src/hook_gate.rs`, `hooks/hooks.json`, and their tests. None is a P1-P6 file name. VAM's `src/rooms.rs` (recall) is written by no part.
 
 ## What the parts build on
 
@@ -1641,7 +1640,6 @@ As of 2026-11-27, track 4 has **no pull request and no branch on the fork** (`gh
 - **Start after:** RM2 and RM3; P1 merged (the owner's report goes over the chat); c5's PR-6 merged (`Outbox`). **Rulings:** 2 (decided) and 6 (open, for the owner's report only; the fixed reply and its limits do not wait).
 - **Files:**
   - `src/connect/others/mod.rs`, `src/connect/others/limiter.rs` and `src/connect/others/messages.json`. The plan's working path `src/core/others/messages.json` (PLAN:758) becomes `src/connect/others/`, the core's actual folder;
-  - `RELEASE_CHECKLIST.md` at the fork's root (the record of native review);
   - `tests/connect_others.rs` and `tests/release_gate.rs`.
 - **Interface:**
   - `others::fixed_reply(locale: &str) -> &'static str`: the three texts of §3.13 (PLAN:752-756), falling back to `en`.
@@ -1655,8 +1653,8 @@ As of 2026-11-27, track 4 has **no pull request and no branch on the fork** (`gh
   - **The owner's report (WAITING on ruling 6; written here as option (b), and under (a) it becomes one `mention-report/1.0` per author per room per hour, with `count` and `replied`):** one line per author per room per hour, "<member> mentioned you in <room>" with a count, sent over the chat by `outbox`, including mentions the limiter did not answer (PLAN:761).
   - **Fixed reply sent:** "Sent the fixed reply to <member> in <room>." That is a different line, because "Sent" would be false for a limited one.
   - **No write leaf:** no reply, and the owner's line says so.
-- **The shared vector:** `messages.json` and Keyring's `ConnectedAgents.OthersReply` are held to one shared vector file in each repository (PLAN:759). The keyring-wallet side's vector is outside this brief. This part copies it byte-identically into `tests/fixtures/agent-connect/` with a README naming the wallet commit, as track 4's fixtures do.
-- **The release gate** (ruling 2): `tests/release_gate.rs` fails while `RELEASE_CHECKLIST.md` lacks a named reviewer and a date for fr and for pt-br, and the plugin's `version` bump is checked against it.
+- **The shared vector:** `messages.json` and Keyring's `ConnectedAgents.OthersReply` are held to one shared vector file in each repository (PLAN:759). The keyring-wallet side's vector is `packages/core/src/modules/connected-agents/vectors/others-reply.json` (#1132, Brendan's side; its per-locale `source` as in ruling 2). This part copies it byte-identically into `tests/fixtures/agent-connect/` with a README naming the wallet commit, as track 4's fixtures do.
+- **The release gate** (ruling 2): `tests/release_gate.rs` reads the byte-identical copy of `others-reply.json` in `tests/fixtures/agent-connect/`. It fails unless `source.fr` and `source["pt-br"]` are each a `{ "reviewed": "<YYYY-MM-DD>" }` object with a valid date, so `"PROPOSED"`, a missing field or any other shape fails. This is the field Keyring's gate and fb's P1h gate read, read the same way. The field holds no names, and only Alberto's word sets a date. Its tests give one row per shape, including a control that passes with both dates set.
 - **Tests:**
   - en, fr and pt-br picked by locale, and an unknown locale gives en;
   - the 61st minute allows and the 59th does not;
