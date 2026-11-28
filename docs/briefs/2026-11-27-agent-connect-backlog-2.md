@@ -787,6 +787,11 @@ Every new behaviour gets a test with a control that fails when the behaviour is 
 
 ### P1: the signed envelope and the seen-id store
 
+**Wire contract with Keyring (decided on Keyring's side in track 1, #1121):** each DIDComm message's body is the
+signed envelope itself, and the DIDComm message's `type` and `id` are the envelope's own `type` and `id`. The
+plugin reads it the same way: take the body as the envelope, and refuse a message whose DIDComm `type` or `id`
+differs from the envelope's.
+
 - **Files:** `src/connect/envelope.rs`, `src/connect/seen.rs`, `tests/connect_envelope.rs`, and the two `pub mod` lines in `src/connect/mod.rs`.
 - **Interface:**
   - `envelope::verify(raw: &[u8], me: &Receiver, now: DateTime<Utc>, seen: &mut SeenIds) -> Result<Accepted, Refusal>`, where `Receiver { own_did, expected_issuer }`.
