@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "threadId": "urn:uuid:7c2a9e41-5b3d-4f6a-8e1c-0a9b8d7c6e51",
+      "clientVid": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+      "number": "2644"
+    },
+    {
+      "threadId": "urn:uuid:0f8c1d2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f",
+      "clientVid": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+      "number": "2828"
+    },
+    {
+      "threadId": "urn:uuid:7c2a9e41-5b3d-4f6a-8e1c-0a9b8d7c6e51",
+      "clientVid": "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp",
+      "number": "2054"
+    },
+    {
+      "threadId": "urn:uuid:00000000-0000-4000-8000-000000000000",
+      "clientVid": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+      "number": "0961"
+    },
+    {
+      "threadId": "urn:uuid:10000000-0000-4000-8000-000000000001",
+      "clientVid": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+      "number": "0550"
+    }
+  ]
+}

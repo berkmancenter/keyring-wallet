@@ -177,6 +177,11 @@ describe('HcpRevokeSheet', () => {
     unreachable: true,
     message: { key: 'RevokeUnreachable', params: { name: 'Notes helper' } },
   }
+  const refused: HcpRevokeResult = {
+    ok: false,
+    refused: 'notFound',
+    message: { key: 'RevokeRefused', params: { name: 'Notes helper' } },
+  }
   const sheet = (onRevoke: HcpRevokeSheetProps['onRevoke']) => {
     const props: HcpRevokeSheetProps = {
       name: 'Notes helper',
@@ -231,16 +236,47 @@ describe('HcpRevokeSheet', () => {
     await waitFor(() => expect(props.onRevoke).toHaveBeenCalledTimes(2))
   })
 
+  it("refused: shows the result's own RevokeRefused line, not FailGeneric, and the sheet is spent", async () => {
+    const { props, tree } = sheet(async () => refused)
+    press(tree)
+    await waitFor(() => expect(tree.getByTestId(id('HcpRevokeOutcome'))).toBeTruthy())
+    expect(tree.getByTestId(id('HcpRevokeOutcome')).props.accessibilityLabel).toBe(
+      en('RevokeRefused', { name: 'Notes helper' })
+    )
+    expect(tree.queryByText('ConnectedAgents.FailGeneric')).toBeNull()
+    expect(tree.queryByText(/notFound/)).toBeNull()
+    expect(props.onDone).not.toHaveBeenCalled()
+    // A refusal repeats: Revoke is spent, and a press sends nothing. Keep still closes the sheet.
+    expect(disabled(tree, 'HcpRevokeConfirm')).toBe(true)
+    press(tree)
+    await act(async () => undefined)
+    expect(props.onRevoke).toHaveBeenCalledTimes(1)
+    expect(disabled(tree, 'HcpRevokeKeep')).toBe(false)
+    fireEvent.press(tree.getByTestId(id('HcpRevokeKeep')))
+    expect(props.onKeep).toHaveBeenCalledTimes(1)
+  })
+
+  it('missing: calls onDone once and closes with no line, and Revoke stays disabled', async () => {
+    const { props, tree } = sheet(async () => ({ ok: false, missing: true }))
+    press(tree)
+    await waitFor(() => expect(props.onDone).toHaveBeenCalledTimes(1))
+    expect(tree.queryByTestId(id('HcpRevokeOutcome'))).toBeNull()
+    expect(disabled(tree, 'HcpRevokeConfirm')).toBe(true)
+    press(tree)
+    await act(async () => undefined)
+    expect(props.onRevoke).toHaveBeenCalledTimes(1)
+    expect(props.onDone).toHaveBeenCalledTimes(1)
+  })
+
+  // control: of the answers that are not `ok`, only `missing` closes; a refusal keeps the sheet open on its line.
+  it('control: refused does not call onDone', async () => {
+    const { props, tree } = sheet(async () => refused)
+    press(tree)
+    await waitFor(() => expect(tree.getByTestId(id('HcpRevokeOutcome'))).toBeTruthy())
+    expect(props.onDone).not.toHaveBeenCalled()
+  })
+
   it.each<[string, () => Promise<HcpRevokeResult>]>([
-    ['missing', async () => ({ ok: false, missing: true })],
-    [
-      'refused',
-      async () => ({
-        ok: false,
-        refused: 'notFound',
-        message: { key: 'RevokeRefused', params: { name: 'Notes helper' } },
-      }),
-    ],
     ['off (not in the brief)', async () => ({ ok: false, off: true })],
     ['a revoke that throws (not in the brief)', async () => Promise.reject(new Error('store'))],
   ])('%s: shows ConnectedAgents.FailGeneric, and does not close', async (_, onRevoke) => {
@@ -248,7 +284,7 @@ describe('HcpRevokeSheet', () => {
     press(tree)
     await waitFor(() => expect(tree.getByTestId(id('HcpRevokeOutcome'))).toBeTruthy())
     expect(tree.getByTestId(id('HcpRevokeOutcome')).props.accessibilityLabel).toBe('ConnectedAgents.FailGeneric')
-    expect(tree.queryByText(/notFound|store/)).toBeNull()
+    expect(tree.queryByText(/store/)).toBeNull()
     expect(props.onDone).not.toHaveBeenCalled()
   })
 

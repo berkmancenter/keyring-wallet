@@ -5,7 +5,8 @@
  *
  * Derived, never written out: `wordOf` is built from `HCP_COPY`'s English texts alone, each `{{x}}` a wildcard. A
  * table where two keys' English texts match one another (identical, or one template matching the other's text) fails
- * to build, naming both keys, so the catalogue never resolves to whichever key came first.
+ * to build, naming both keys, so the catalogue never resolves to whichever key came first. A rendered string that two
+ * templates both match makes `wordOf` throw, naming the string and both keys; it is never read as no word.
  */
 import { HCP_COPY } from '../../hcp/copy'
 
@@ -29,12 +30,7 @@ const patternOf = (text: string) =>
 
 /** Builds a word source over `table`'s English texts; throws, naming both keys, when two of them match one another. */
 export function buildHcpWordSource(table: Table): WordSource {
-  const entries = Object.entries(table).map(([key, { en }]) => ({
-    key,
-    text: en,
-    pattern: patternOf(en),
-    plain: en.match(PLACEHOLDER) === null,
-  }))
+  const entries = Object.entries(table).map(([key, { en }]) => ({ key, text: en, pattern: patternOf(en) }))
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
       const a = entries[i]
@@ -46,11 +42,17 @@ export function buildHcpWordSource(table: Table): WordSource {
   }
   return {
     prefix: PREFIX,
+    // Three cases. No match: not an HCP word. One match: that key. Two or more: a throw naming the string and the keys,
+    // because a string read as no word is invisible to the catalogue, and if the manifest also left it out it would
+    // pass unchecked. Two matches can only be two templates (say "Hello {{a}} x" and "Hello y {{b}}" on "Hello y x"):
+    // a string matching a key with no placeholders is that key's own text, so a template matching it too is a pair the
+    // build above has already refused.
     wordOf: (text) => {
       const matches = entries.filter((e) => e.pattern.test(text))
-      // If two keys match, the one with no placeholders; two templates that both match one text are not certified.
-      const plain = matches.find((e) => e.plain)
-      if (plain) return PREFIX + plain.key
+      if (matches.length > 1) {
+        const keys = matches.map((e) => PREFIX + e.key).join(' and ')
+        throw new Error(`hcpWordSource: "${text}" matches ${keys}; it is no one word`)
+      }
       return matches.length === 1 ? PREFIX + matches[0].key : undefined
     },
     exists: (word) => word.startsWith(PREFIX) && Object.prototype.hasOwnProperty.call(table, word.slice(PREFIX.length)),

@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "inputs": {
+    "clientVid": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+    "clientName": "hcp-cli",
+    "operator": {
+      "id": "did:web:labs.example",
+      "name": "Example Labs"
+    },
+    "threadId": "urn:uuid:7c2a9e41-5b3d-4f6a-8e1c-0a9b8d7c6e51",
+    "grantId": "urn:uuid:3f1c2b4a-5d6e-4f70-8a9b-0c1d2e3f4a5b",
+    "access": [
+      {
+        "actions": [
+          "read"
+        ],
+        "categories": [
+          "general_preferences"
+        ],
+        "purposes": [
+          {
+            "code": "personalization",
+            "description": "tailor its answers"
+          }
+        ]
+      }
+    ],
+    "maxUseSeconds": 600,
+    "heldAt": "2026-11-27T10:00:00.000Z",
+    "challenge": "hcp-rung-challenge-7c2a9e41-5b3d",
+    "payloadDigest": "zQmbWqxBEKC3P8tqsKc98xmWNzrzDtRLMiMPL8wBuTGsMnR"
+  },
+  "payload": {
+    "challenge": "hcp-rung-challenge-7c2a9e41-5b3d",
+    "taskType": "https://trusttasks.org/spec/hcp/grants/request/0.1",
+    "payloadDigest": "zQmbWqxBEKC3P8tqsKc98xmWNzrzDtRLMiMPL8wBuTGsMnR",
+    "sideEffects": "mutating",
+    "exposure": {
+      "discloses": "secret",
+      "actsAsSubject": false
+    },
+    "effects": [
+      {
+        "kind": "hcpGrantClient",
+        "summary": "Run by Example Labs.",
+        "detail": {
+          "clientVid": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+          "clientName": "hcp-cli",
+          "operator": {
+            "id": "did:web:labs.example",
+            "name": "Example Labs"
+          },
+          "threadId": "urn:uuid:7c2a9e41-5b3d-4f6a-8e1c-0a9b8d7c6e51",
+          "grantId": "urn:uuid:3f1c2b4a-5d6e-4f70-8a9b-0c1d2e3f4a5b"
+        }
+      },
+      {
+        "kind": "hcpGrantAccess",
+        "summary": "It can read general preferences to tailor its answers.",
+        "detail": {
+          "access": [
+            {
+              "actions": [
+                "read"
+              ],
+              "categories": [
+                "general_preferences"
+              ],
+              "purposes": [
+                {
+                  "code": "personalization",
+                  "description": "tailor its answers"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "kind": "hcpGrantUseUntil",
+        "summary": "It can keep what it reads for up to 10 minutes after reading it.",
+        "detail": {
+          "maxUseSeconds": 600
+        }
+      },
+      {
+        "kind": "hcpGrantTerm",
+        "summary": "For 4 hours from when you approve.",
+        "detail": {
+          "grantType": "temporary",
+          "expiresInSeconds": 14400
+        }
+      },
+      {
+        "kind": "hcpGrantNotSignIn",
+        "summary": "Approving gives access. It is not signing in.",
+        "detail": {}
+      }
+    ],
+    "requester": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+    "approverSet": "owner",
+    "minApprovals": 1,
+    "excludeRequester": true,
+    "expiresAt": "2026-11-27T10:05:00.000Z"
+  }
+}
