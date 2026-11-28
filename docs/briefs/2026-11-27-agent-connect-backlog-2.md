@@ -10,7 +10,9 @@ Feature branch tip when this was written: `feat/agent-connect` at `75e544a58c21e
 
 - **Start from the feature tip.** Where a part depends on another, it says "start after PR X merges": wait for that
   merge and start from the tip then. Do not stack on an open PR unless the part says so.
-- **Merge, never rebase.** Never force-push a branch once a PR is open on it.
+- **Merge, never rebase.** Never force-push a branch once a PR is open on it. Every merge commit carries a
+  sign-off too, because the DCO check reads every commit in the PR: `git merge -S --signoff` (not `-s`, which is
+  `--strategy`).
 - **Intent record first** when a remote call cannot be undone or re-read: write the local record, then send.
 - **No generic failure line** where any case it covers would make it false: use the per-case message.
 - **A refusal spends the action: the words and the control both.** After a refusal, never offer a retry in the
@@ -754,7 +756,7 @@ The contract and decisions are in the keyring-wallet repository, branch `feat/ag
 
 ### The common rules
 
-- **Merge, never rebase.** Take the integration head into your branch with a signed merge (`git merge -S`). Never force-push or rewrite a pushed branch.
+- **Merge, never rebase.** Take the integration head into your branch with a signed, signed-off merge (`git merge -S --signoff`). Never force-push or rewrite a pushed branch.
 - **Write an intent record before an irreversible call.** Before any call that cannot be taken back (an ACL change, a key swap, a send that sets state on the other side), first write a durable record of what is about to happen, owner-only, so a restart can tell "did not happen" from "happened, answer lost".
 - **No generic failure line where a case contradicts it.** A refusal Keyring or the VTA words specifically is said in its own words. A catch-all line ("couldn't reach …") is only for a failure that really is unknown. If a test shows the catch-all printed for a case it misdescribes, that is a bug.
 - **Formal reviews only.** A review is ac's written line on a named head sha, never a reading of chat or a thumbs-up. Content and checks are separate halves, and both must hold on the same sha.
