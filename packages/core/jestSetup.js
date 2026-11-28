@@ -38,6 +38,15 @@ mockRNDeviceInfo.getBuildNumber = jest.fn(() => '1')
 
 jest.mock('react-native', () => jest.requireActual('react-native'))
 
+// The package's tests are a development build: agent connect is in the build (KEYRING_AGENT_CONNECT_BUILD=1, see
+// src/modules/connected-agents/agentConnectBuild.ts), as in app/.env.sample. Every other value is the module's own, as
+// before. A suite that needs a store build mocks react-native-config itself (agentConnectBuild.test.ts does).
+jest.mock('react-native-config', () => {
+  const actual = jest.requireActual('react-native-config')
+  const config = { ...(actual.default ?? actual.Config ?? {}), KEYRING_AGENT_CONNECT_BUILD: '1' }
+  return { __esModule: true, ...actual, default: config, Config: config }
+})
+
 // RNGH's own jest mocks render buttons without children (RawButton discards
 // them), which blanks out labels of gesture-handler touchables under test.
 // Map the touchables to their RN equivalents so children render normally.

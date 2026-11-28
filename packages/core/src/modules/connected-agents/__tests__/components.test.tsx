@@ -186,6 +186,9 @@ describe('ConnectedAgents words', () => {
     )
     expect(reaches.sort()).toEqual([
       'container-impl.ts -> components/AgentContactCard',
+      // The build setting (agentConnectBuild.ts), exported for the Developer screen to hide the switch rows: a switch,
+      // like agentConnectFlag, with no words.
+      'index.ts -> agentConnectBuild',
       'modules/rooms/components/AgentPickerSheet.tsx -> components/AgentMark',
       'modules/rooms/components/AgentPickerSheet.tsx -> components/agentStyle',
       'modules/rooms/components/AgentRoomSection.tsx -> components/AgentMark',
