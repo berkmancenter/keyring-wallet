@@ -864,7 +864,7 @@ differs from the envelope's.
   - an unknown-major `settings` keeps the last one;
   - an older `settings` after a newer one changes nothing;
   - each with a control.
-- **Owner:** **c5** (taken 2026-11-28, in progress). It depends on P1's signature only.
+- **Owner:** **c5** (taken 2026-11-28, fork pull request #6). It depends on P1's signature only.
 
 ### P3: the VDC grant check and the acceptance
 
