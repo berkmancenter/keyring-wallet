@@ -4,11 +4,18 @@
  *
  * - {@link revokeHcpGrant} sends `hcp/grants/revoke/0.1` `{ grantId }` once (never retried on its own). On success the
  *   record reads revoked, with the notice `telling`; on a refusal or an unreachable VTA it is unchanged.
- * - {@link pollHcpNotice} sends `hcp/disclosures/summary/0.1` `{ client }` and reads the client's `notification`:
- *   `delivered` is `told`, `abandoned` is `notTold`, anything else keeps `telling`.
+ * - {@link pollHcpNotice} sends `hcp/disclosures/summary/0.1` `{ client }` and reads it by our grant (backlog 2,
+ *   track 5):
+ *   - an OK answer with no `clients` entry for the client, or an entry whose `grants` does not list our `grantId`:
+ *     nothing was disclosed under our grant, so `nothingDisclosed` ("Revoked." alone);
+ *   - `delivered` is `told` only if its `usableUntil` (the time of delivery) is at or after our `revokedAt`; an
+ *     earlier one is a retired grant's notice and keeps `telling`;
+ *   - `abandoned` is `notTold` only while `grants` lists our `grantId` as `revoked`; otherwise it keeps `telling`;
+ *   - `none`, a refusal and an unreachable VTA keep `telling` (no answer is not "nothing disclosed"); the HCP flags
+ *     off leaves the record as it is.
  * - {@link nextHcpPoll} is the schedule: every 5 s for 2 minutes after the revoke, then every minute until 24 hours
  *   after it, then stop. A poll at or after the stop that leaves the notice `telling` settles it as `notTold`.
- * - `told` and `notTold` never go back to `telling`.
+ * - `told`, `notTold` and `nothingDisclosed` never go back to `telling`.
  * - {@link useHcpNotice} polls on that schedule while mounted. Exported from the hcp folder only; nothing imports it.
  *
  * Nothing here logs a payload or a response.
@@ -82,27 +89,57 @@ export function nextHcpPoll(revokedAt: Date, now: Date): number | undefined {
   return undefined
 }
 
-/** One client's entry in a `disclosures/summary` answer, as far as the poll reads it. */
-interface ClientSummary {
-  notification: 'delivered' | 'abandoned' | 'none'
-  usableUntil: string | null
-}
+/**
+ * A `disclosures/summary` answer read for one client and one grant:
+ * - `nothingDisclosed`: the answer has no entry for the client, or the client's entry does not list the grant;
+ * - `entry`: the client's entry, with the status its `grants` gives the grant.
+ */
+type ClientSummary =
+  | { kind: 'nothingDisclosed' }
+  | {
+      kind: 'entry'
+      notification: 'delivered' | 'abandoned' | 'none'
+      usableUntil: string | null
+      grantStatus: 'active' | 'revoked' | 'expired'
+    }
 
-/** The first `clients[]` entry whose `client.id` is `clientVid`, if the answer has one of the expected shape. */
-function readClientSummary(value: unknown, clientVid: string): ClientSummary | undefined {
+/**
+ * The answer read for `clientVid` and `grantId`, from the first `clients[]` entry whose `client.id` is `clientVid`.
+ * Undefined, so no answer, for anything not of the expected shape: no `clients` array, an entry with no valid
+ * `notification` or no `grants` array, and an answer with a `nextCursor` and no entry for the client on this page (the
+ * entry may be on the next one, so it does not show that nothing was disclosed).
+ */
+function readClientSummary(value: unknown, clientVid: string, grantId: string): ClientSummary | undefined {
   if (typeof value !== 'object' || value === null) return undefined
-  const clients = (value as { clients?: unknown }).clients
+  const { clients, nextCursor } = value as { clients?: unknown; nextCursor?: unknown }
   if (!Array.isArray(clients)) return undefined
   for (const entry of clients) {
     if (typeof entry !== 'object' || entry === null) continue
     const client = (entry as { client?: { id?: unknown } }).client
     if (client?.id !== clientVid) continue
-    const { notification, usableUntil } = entry as { notification?: unknown; usableUntil?: unknown }
+    const { notification, usableUntil, grants } = entry as {
+      notification?: unknown
+      usableUntil?: unknown
+      grants?: unknown
+    }
     if (notification !== 'delivered' && notification !== 'abandoned' && notification !== 'none') return undefined
+    if (!Array.isArray(grants)) return undefined
+    const ours = grants.find(
+      (g): g is { status: unknown } =>
+        typeof g === 'object' && g !== null && (g as { grantId?: unknown }).grantId === grantId
+    )
+    if (!ours) return { kind: 'nothingDisclosed' }
+    const grantStatus = ours.status
+    if (grantStatus !== 'active' && grantStatus !== 'revoked' && grantStatus !== 'expired') return undefined
     const until = typeof usableUntil === 'string' && !Number.isNaN(Date.parse(usableUntil)) ? usableUntil : null
-    return { notification, usableUntil: until }
+    return { kind: 'entry', notification, usableUntil: until, grantStatus }
   }
-  return undefined
+  return nextCursor === undefined ? { kind: 'nothingDisclosed' } : undefined
+}
+
+/** A `delivered` notice is ours only if delivered (its `usableUntil`) at or after our `revokedAt`. */
+function deliveredAfter(usableUntil: string | null, revokedAt: string): usableUntil is string {
+  return usableUntil !== null && Date.parse(usableUntil) >= Date.parse(revokedAt)
 }
 
 export interface HcpPollResult {
@@ -119,9 +156,10 @@ export function hcpNoticePending(c: HcpConnection | undefined): c is HcpConnecti
 
 /**
  * Ask the VTA whether the client was told of the revoke, and record the answer. Sends nothing for a record that is not
- * revoked or whose notice is already `told` or `notTold`.
+ * revoked or whose notice is already `told`, `notTold` or `nothingDisclosed`. The answer is read by our grant, as the
+ * module comment says.
  *
- * A `usableUntil` the poll reads is kept on the record as `lastUsableUntil`, so it survives a restart. At or after the
+ * A `usableUntil` the poll reads from our client's entry (not a retired grant's delivery time) is kept on the record as `lastUsableUntil`, so it survives a restart. At or after the
  * stop, a notice still `telling` becomes `notTold` with this poll's `usableUntil`, else the record's
  * `lastUsableUntil`, else `revokedAt`: the same answer whether or not the app restarted in between.
  */
@@ -134,18 +172,24 @@ export async function pollHcpNotice(deps: HcpRevokeDeps, id: string): Promise<Hc
   const off = !outcome.ok && onHcpFailure(outcome, { refused: () => false, unreachable: () => false, off: () => true })
   if (off) return { connection: c }
   const now = deps.clock()
-  const summary = outcome.ok ? readClientSummary(outcome.value, c.id) : undefined
-  const read = summary?.usableUntil ?? undefined
+  const summary = outcome.ok ? readClientSummary(outcome.value, c.id, c.grantId) : undefined
+  const entry = summary?.kind === 'entry' ? summary : undefined
+  // Where a notice was delivered, `usableUntil` is its time of delivery, not a time anything stops being usable: one
+  // before our revoke (a retired grant's notice) is not kept for the stop's "stops being usable at".
+  const staleDelivery = entry?.notification === 'delivered' && !deliveredAfter(entry.usableUntil, c.revokedAt)
+  const read = staleDelivery ? undefined : (entry?.usableUntil ?? undefined)
   const stopped = nextHcpPoll(new Date(c.revokedAt), now) === undefined
 
   const noticeFor = (r: HcpConnection & { revokedAt: string }): HcpNoticeState => {
-    const lastRead = read ?? r.lastUsableUntil
-    if (summary?.notification === 'delivered') {
-      // `usableUntil` is the time of delivery. Delivered with no time: the poll's own time, the first Keyring knew.
-      return { state: 'told', at: read ?? now.toISOString() }
+    // An answer showing nothing disclosed under our grant settles the notice, at the stop as before it.
+    if (summary?.kind === 'nothingDisclosed') return { state: 'nothingDisclosed' }
+    if (entry?.notification === 'delivered' && deliveredAfter(entry.usableUntil, r.revokedAt)) {
+      // `usableUntil` is the time of delivery.
+      return { state: 'told', at: entry.usableUntil }
     }
-    if (summary?.notification === 'abandoned' || stopped) {
-      return { state: 'notTold', usableUntil: lastRead ?? r.revokedAt }
+    // An abandoned notice is ours only while the summary lists our grant revoked (Option 1).
+    if ((entry?.notification === 'abandoned' && entry.grantStatus === 'revoked') || stopped) {
+      return { state: 'notTold', usableUntil: read ?? r.lastUsableUntil ?? r.revokedAt }
     }
     return { state: 'telling', lastPolledAt: now.toISOString() }
   }

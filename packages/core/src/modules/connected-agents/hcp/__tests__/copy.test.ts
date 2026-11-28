@@ -38,6 +38,8 @@ const KEYS: HcpCopyKey[] = [
   'ApproveDeclined',
   'ApproveAnsweredElsewhere',
   'ApproveCancelled',
+  // Added for backlog 2, track 5: nothing was disclosed under the grant, so "Revoked." alone.
+  'RevokeNothingDisclosed',
 ]
 const APPROVE_ENDINGS = [
   'ApproveNotApproved',
@@ -74,6 +76,23 @@ describe('HCP_COPY', () => {
     expect(HCP_COPY.RevokeTold.en).toBe('Revoked. "{{name}}" was told at {{time}}.')
     expect(HCP_COPY.RevokeTelling.en).toBe('Revoked. Telling "{{name}}"…')
     expect(HCP_COPY.MemoryNotSaved.source).toBe('PROPOSED')
+  })
+
+  it('"Revoked." alone is PROPOSED, names no one, and is the opening of the other notice lines in each language', () => {
+    const line = HCP_COPY.RevokeNothingDisclosed
+    expect(line.en).toBe('Revoked.')
+    expect(line.source).toBe('PROPOSED')
+    expect(hcpPlaceholders(line.en)).toEqual([])
+    for (const lang of ['en', 'fr', 'ptBr'] as const) {
+      for (const key of ['RevokeTelling', 'RevokeTold', 'RevokeNotTold'] as const) {
+        expect(HCP_COPY[key][lang].startsWith(`${line[lang]} `)).toBe(true)
+      }
+    }
+  })
+
+  // control: the opening check bites on a line that does not open with "Revoked.".
+  it('control: the opening check fails for a line that is not the notice’s', () => {
+    expect(HCP_COPY.RevokeTitle.en.startsWith(`${HCP_COPY.RevokeNothingDisclosed.en} `)).toBe(false)
   })
 
   it('control: the checks bite on a string that breaks them', () => {

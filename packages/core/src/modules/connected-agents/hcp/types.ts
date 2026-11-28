@@ -61,6 +61,11 @@ export type HcpNoticeState =
   /** `at`: `usableUntil` from the summary, the time of delivery. */
   | { state: 'told'; at: string }
   | { state: 'notTold'; usableUntil: string }
+  /**
+   * The client's `disclosures/summary` shows nothing disclosed to it under this grant (no entry for the client, or this
+   * `grantId` not in its `grants`): there is nothing to tell it, so the line reads only "Revoked.".
+   */
+  | { state: 'nothingDisclosed' }
 
 /** The record Keyring keeps of an approved HCP grant (part 3). Times are ISO-8601 instants. */
 export type HcpConnection = {

@@ -11,6 +11,8 @@ export type HcpNoticeLine =
   | { key: 'RevokeTelling'; params: { name: string } }
   | { key: 'RevokeTold'; params: { name: string; time: string } }
   | { key: 'RevokeNotTold'; params: { name: string; time: string } }
+  /** Nothing was disclosed to the client under the grant: "Revoked." alone. */
+  | { key: 'RevokeNothingDisclosed' }
 
 export type HcpStatus =
   | { key: 'StatusRevoked'; notice: HcpNoticeLine }
@@ -23,6 +25,7 @@ export function hcpNoticeLine(c: HcpConnection): HcpNoticeLine {
   const notice = c.notice
   if (notice?.state === 'told') return { key: 'RevokeTold', params: { name, time: notice.at } }
   if (notice?.state === 'notTold') return { key: 'RevokeNotTold', params: { name, time: notice.usableUntil } }
+  if (notice?.state === 'nothingDisclosed') return { key: 'RevokeNothingDisclosed' }
   return { key: 'RevokeTelling', params: { name } }
 }
 
