@@ -1,0 +1,178 @@
+{
+  "about": "\"Answers other people\" and the P1 lines in the details and the list (docs/plans/agent-connect-plan.md §3.13 and §6, step 7.14, canvas frames 12 to 16; backlog 3 Section B, part T3), added to the base manifest agent-connect-screens.json; the same rules apply. Drawn in packages/core/src/modules/connected-agents/__tests__/fixtures/screenStatesAnswers.tsx from props shaped as useAnswersOthers and the record's handle, persona and actNames. Views only: until the P1 containers land, the walk of step 7.11 cannot reach these states.",
+  "canvas": "docs/plans/agent-connect-plan/canvas/",
+  "kit": "docs/plans/agent-connect-plan/mockups/",
+  "states": [
+    {
+      "id": "answers-off",
+      "step": "7.14",
+      "marker": "AnswersOthers",
+      "frame": "14-agent-sheet.png",
+      "kit": "07-agent-sheet.svg",
+      "words": [
+        "ConnectedAgents.AnswersOthers",
+        "ConnectedAgents.AnswersOff",
+        "ConnectedAgents.AnswersOffHelp",
+        "ConnectedAgents.WhatOthersSee",
+        "ConnectedAgents.OthersReply"
+      ],
+      "frameOnly": [
+        {
+          "what": "the members tab behind the sheet, with its Agents section",
+          "why": "part T4's (frame 38); this state is the setting's card alone"
+        },
+        {
+          "what": "the sheet's head: the avatar, the name with \"AI agent\", \"Belongs to Ada\" and \"Mention it as\"",
+          "why": "part T4's AgentIdentityBody draws the head of the own-agent sheet and this card under it"
+        },
+        {
+          "what": "\"What others see\" outside the card",
+          "why": "one card for the sheet and the details: frame 16 draws it inside the card, and the card is drawn that way in both"
+        }
+      ]
+    },
+    {
+      "id": "answers-on-confirm",
+      "step": "7.14",
+      "marker": "AnswersOnConfirm",
+      "frame": "15-answers-on.png",
+      "kit": "08-answers-others-confirm.svg",
+      "words": [
+        "ConnectedAgents.AnswersOnTitle",
+        "ConnectedAgents.AnswersOnBody",
+        "ConnectedAgents.KeepItOff",
+        "ConnectedAgents.TurnOn"
+      ],
+      "frameOnly": [
+        {
+          "what": "the members tab behind the sheet, with its Agents section",
+          "why": "part T4's (frame 38); the caller presents this sheet's contents in a bottom sheet"
+        }
+      ]
+    },
+    {
+      "id": "agent-details-rooms",
+      "step": "7.14",
+      "marker": "AgentDetails",
+      "frame": "16-agent-details.png",
+      "kit": "11-agent-details.svg",
+      "words": [
+        "Rooms.AgentBadge",
+        "ConnectedAgents.BelongsTo",
+        "ConnectedAgents.MentionAs",
+        "ConnectedAgents.ConnectedUntil",
+        "ConnectedAgents.AnswersOthers",
+        "ConnectedAgents.AnswersOff",
+        "ConnectedAgents.AnswersOffHelp",
+        "ConnectedAgents.WhatOthersSee",
+        "ConnectedAgents.OthersReply",
+        "ConnectedAgents.Memories",
+        "ConnectedAgents.MemoryCount",
+        "ConnectedAgents.MemoryCountRose",
+        "ConnectedAgents.MemoryCountWarning",
+        "ConnectedAgents.CanUseInEveryRoom",
+        "ConnectedAgents.VtaKeepsItToThese",
+        "ConnectedAgents.ChangeMemories",
+        "ConnectedAgents.CanUseEveryRoomAs",
+        "ConnectedAgents.Extend"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Can read all of Campus notes\" and \"Can read all of Clinic team\", one line per room",
+          "why": "replaced by one \"It can use every open room you're in as Ada.\" line (backlog 3 ruling 6): per-room lines would imply only those rooms"
+        },
+        {
+          "what": "\"Message\"",
+          "why": "the chat is step 7.9, and the details draw it only when the caller passes it"
+        },
+        {
+          "what": "\"Keep it connected\"",
+          "why": "step 7.28"
+        },
+        {
+          "what": "\"Add a credential\"",
+          "why": "P1 (step 7.23), not this part"
+        },
+        {
+          "what": "\"Revoke\"",
+          "why": "drawn only when the caller passes it (step 7.10's wiring), as in the base \"details\" state"
+        },
+        {
+          "what": "the <title> stand-in",
+          "why": "the header title is the agent's name, set by the navigator (#1060 finding 9)"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "ConnectedAgents.MemoryCount, MemoryCountRose, MemoryCountWarning",
+          "why": "drawn in canvas v43 frame 56-memory-use.png (in #1060), not v40"
+        }
+      ]
+    },
+    {
+      "id": "agent-list-answers",
+      "step": "7.14",
+      "marker": "AgentRowAnswersOthers",
+      "frame": "12-agent-list.png",
+      "kit": "06-agent-list.svg",
+      "words": [
+        "ConnectedAgents.ConnectedUntil",
+        "ConnectedAgents.AnswersOthersOffLine",
+        "ConnectedAgents.Extend",
+        "ConnectedAgents.StatusExpired",
+        "ConnectedAgents.ConnectAgain",
+        "ConnectedAgents.Remove",
+        "ConnectedAgents.StatusUnreachable",
+        "ConnectedAgents.AnswersOthersOnLine",
+        "ConnectedAgents.ConnectAnAgent"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Revoke\" on each row",
+          "why": "drawn only when the caller passes it (step 7.10's wiring), as in the base \"list\" state"
+        },
+        {
+          "what": "\"Extend\" on the Expired row",
+          "why": "the VTA sweeps an expired entry (measured); Connect again and Remove instead (#1060 finding 12)"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "ConnectedAgents.ConnectAgain, ConnectedAgents.Remove on the Expired row",
+          "why": "#1060 finding 12"
+        }
+      ]
+    },
+    {
+      "id": "answers-not-offered",
+      "step": "7.14",
+      "marker": "AnswersOthersValue",
+      "frame": null,
+      "noFrame": "the setting when the plugin's hook check failed (D23, PLAN:774): \"Off\" with no switch; the canvas does not draw it, and fb returns offered true today",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.AnswersOthers",
+        "ConnectedAgents.AnswersOff",
+        "ConnectedAgents.AnswersOffHelp",
+        "ConnectedAgents.WhatOthersSee",
+        "ConnectedAgents.OthersReply"
+      ]
+    },
+    {
+      "id": "answers-pending",
+      "step": "7.14",
+      "marker": "AnswersOthersPending",
+      "frame": null,
+      "noFrame": "the change stored but not yet sent to the agent (backlog 3 ruling 3, PROPOSED words); the canvas does not draw it",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.AnswersOthers",
+        "ConnectedAgents.AnswersOn",
+        "ConnectedAgents.AnswersOnHelp",
+        "ConnectedAgents.AnswersOthersPending",
+        "ConnectedAgents.WhatOthersSee",
+        "ConnectedAgents.OthersReply"
+      ]
+    }
+  ]
+}

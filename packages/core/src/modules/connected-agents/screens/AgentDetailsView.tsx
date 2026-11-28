@@ -7,6 +7,7 @@ import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { testIdWithKey } from '../../../utils/testable'
 import { AgentAvatar, AgentTag } from '../components/AgentMark'
+import AnswersOthersRow, { AnswersOthersRowProps } from '../components/AnswersOthersRow'
 import { AgentStatusChip } from '../components/AgentStatusChip'
 import { AGENT_COLORS } from '../components/agentStyle'
 import MemoryAccessNotice, { NoticeMemory } from '../components/MemoryAccessNotice'
@@ -48,6 +49,16 @@ export interface AgentDetailsViewProps {
   onKeepConnected?: () => void
   /** "Revoke": left out until step 7.10 wires the revoke sheet (#1060 P-f). */
   onRevoke?: () => void
+  // P1 (step 7.14; canvas frame 16). The caller gives each only when `isAgentRoomsEnabled()`; with all four left out,
+  // the details are as in P0.
+  /** The agent's handle, from its record (`useAgentConnection(id)`): "Mention it as @<handle>." under the owner. */
+  handle?: string
+  /** The name of the persona whose rooms the agent can use; absent while it has been added to no room (ruling 6). */
+  persona?: string
+  /** Every context in the entry's `act`, by name, so the persona's context shows (PLAN:1361). Drawn with `persona`. */
+  actNames?: string[]
+  /** "Answers other people": `useAnswersOthers(id)`'s state with the caller's handlers (a base-path agent only). */
+  answersOthers?: AnswersOthersRowProps
 }
 
 const styles = StyleSheet.create({
@@ -67,6 +78,7 @@ const styles = StyleSheet.create({
   rule: { borderTopWidth: 1, borderTopColor: '#E7E7E9' },
   factText: { flex: 1, fontFamily: 'SourceSans3-Regular', fontSize: 17, lineHeight: 23, color: AGENT_COLORS.text },
   bold: { fontFamily: 'SourceSans3-Bold' },
+  mention: { fontFamily: 'SourceSans3-Regular', fontSize: 15, lineHeight: 20, color: AGENT_COLORS.muted },
   memory: { paddingLeft: 36, paddingVertical: 10, gap: 4 },
   small: { fontFamily: 'SourceSans3-Regular', fontSize: 15, lineHeight: 20, color: AGENT_COLORS.muted },
   warn: {
@@ -87,9 +99,14 @@ const styles = StyleSheet.create({
 
 /**
  * An agent's details (§6 "Agent bottom sheet and agent details"; canvas frame 11 in its no-room form, frame 11d for
- * the counts). The header title is the agent's name, set by the navigator (§6, #1060 finding 9). P0 has
- * no rooms, so neither "in every room it is in" nor any "Can read all of <room>" line is drawn, and the P1 lines
- * ("Mention it as", "Answers other people", "Add a credential") are left out.
+ * the counts). The header title is the agent's name, set by the navigator (§6, #1060 finding 9).
+ *
+ * The P1 lines (step 7.14; frame 16) are drawn only from their props: "Mention it as" with `handle`, "Answers other
+ * people" with `answersOthers`, and with `persona` the room form of the access lines: "Can use memory <names> in every
+ * room it is in." from `actNames`, and one "It can use every open room you're in as <persona>." in place of §6's
+ * per-room "Can read all of <room>" lines (ruling 6). Without `persona` the no-room form is drawn: "in every room it is
+ * in" is never said of an agent in no room, where it would claim rooms that do not exist. "Add a credential" is step
+ * 7.23 and is left out.
  */
 const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
   agent,
@@ -104,10 +121,17 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
   onMessage,
   onKeepConnected,
   onRevoke,
+  handle,
+  persona,
+  actNames,
+  answersOthers,
 }) => {
   const { t } = useTranslation()
   const actions = rowActions(agent)
   const names = agent.memories.map((m) => m.name).join(', ')
+  // The room form's access line names every context the entry can use, the persona's included (PLAN:1361). Without
+  // `actNames` it falls back to the bound memories, which are part of `act`.
+  const roomNames = (actNames ?? agent.memories.map((m) => m.name)).join(', ')
   const chip =
     agent.status === 'connectedUntil' ? (
       <AgentStatusChip status="connectedUntil" until={agent.until ?? ''} />
@@ -127,6 +151,7 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
             <AgentTag />
           </View>
           <ThemedText style={styles.line}>{t('ConnectedAgents.BelongsTo', { owner: agent.ownerName })}</ThemedText>
+          {handle ? <ThemedText style={styles.mention}>{t('ConnectedAgents.MentionAs', { handle })}</ThemedText> : null}
           <View style={{ paddingTop: 4 }}>{chip}</View>
         </View>
       </View>
@@ -164,6 +189,8 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
           onRevoke={onRevoke}
         />
       ) : null}
+
+      {answersOthers ? <AnswersOthersRow {...answersOthers} /> : null}
 
       <View style={styles.group} testID={testIdWithKey('AgentDetailsMemories')}>
         <View style={styles.fact} accessible>
@@ -224,7 +251,16 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
             </TouchableOpacity>
           </View>
         ))}
-        {agent.memories.length > 0 ? (
+        {persona !== undefined ? (
+          roomNames ? (
+            <View style={[styles.fact, styles.rule]} accessible>
+              <Icon name="check" size={22} color={AGENT_COLORS.primary} accessibilityElementsHidden />
+              <ThemedText style={styles.factText}>
+                {t('ConnectedAgents.CanUseInEveryRoom', { names: roomNames })}
+              </ThemedText>
+            </View>
+          ) : null
+        ) : agent.memories.length > 0 ? (
           <View style={[styles.fact, styles.rule]} accessible>
             <Icon name="check" size={22} color={AGENT_COLORS.primary} accessibilityElementsHidden />
             <ThemedText style={styles.factText}>{t('ConnectedAgents.CanUseMemory', { names })}</ThemedText>
@@ -247,6 +283,12 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
             <Icon name="chevron-right" size={22} color="#8E8E93" accessibilityElementsHidden />
           </TouchableOpacity>
         )}
+        {persona !== undefined ? (
+          <View style={[styles.fact, styles.rule]} accessible>
+            <Icon name="eye-outline" size={22} color={AGENT_COLORS.primary} accessibilityElementsHidden />
+            <ThemedText style={styles.factText}>{t('ConnectedAgents.CanUseEveryRoomAs', { persona })}</ThemedText>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.two}>

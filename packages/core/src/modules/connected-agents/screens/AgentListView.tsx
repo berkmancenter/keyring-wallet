@@ -21,6 +21,11 @@ export type AgentRowData = {
   temporary: boolean
   keyChanged: boolean
   drift?: { extra: NoticeMemory[]; missing: NoticeMemory[] }
+  /**
+   * P1 (step 7.14; canvas frame 12): the record's `answersOthers`, given by the caller only when
+   * `isAgentRoomsEnabled()`. Drawn as "Answers other people: Off" or "On" under the status; left out, no line.
+   */
+  answersOthers?: boolean
 }
 
 /** Which actions a row offers (§6 "Agent list rows"; #1060 findings 12 and 13 for Expired and Not finished). */
@@ -107,7 +112,8 @@ export interface AgentListViewProps {
  * "AI agents" (§6 "Agent list rows"; canvas frames 6 and 6b): one dashed card per agent with the robot, its name and
  * its status in words; "changed its key" as a warning line; a changed memory set as the notice, without its buttons
  * (they are on the details); and the actions the status allows. "Connect an agent" at the bottom. A tap on a card
- * opens the agent's details. The "Answers other people" line is P1 (step 7.14) and is not drawn here.
+ * opens the agent's details. The "Answers other people" line is P1 (step 7.14; frame 12): drawn under the status only
+ * for a row whose `answersOthers` is given. This list is the base path's; the HCP list is its own.
  */
 const AgentListView: React.FC<AgentListViewProps> = ({
   agents,
@@ -152,6 +158,13 @@ const AgentListView: React.FC<AgentListViewProps> = ({
                   </View>
                   <Icon name="chevron-right" size={24} color="#8E8E93" accessibilityElementsHidden />
                 </TouchableOpacity>
+                {agent.answersOthers !== undefined ? (
+                  <ThemedText style={styles.sub} testID={testIdWithKey('AgentRowAnswersOthers')}>
+                    {agent.answersOthers
+                      ? t('ConnectedAgents.AnswersOthersOnLine')
+                      : t('ConnectedAgents.AnswersOthersOffLine')}
+                  </ThemedText>
+                ) : null}
                 {agent.keyChanged ? (
                   <View
                     style={styles.warn}
