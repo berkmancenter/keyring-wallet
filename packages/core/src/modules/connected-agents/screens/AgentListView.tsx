@@ -8,6 +8,7 @@ import { ThemedText } from '../../../components/texts/ThemedText'
 import { testIdWithKey } from '../../../utils/testable'
 import { AgentAvatar } from '../components/AgentMark'
 import { AgentStatus, AgentStatusChip, AgentStatusChipProps } from '../components/AgentStatusChip'
+import AgentActionNotice, { AgentActionLine } from '../components/AgentActionNotice'
 import { AGENT_COLORS } from '../components/agentStyle'
 import MemoryAccessNotice, { NoticeMemory } from '../components/MemoryAccessNotice'
 
@@ -96,6 +97,11 @@ export interface AgentListViewProps {
   agents?: AgentRowData[]
   onOpen: (id: string) => void
   onConnect: () => void
+  /**
+   * Per agent id, the line Extend's or Remove's last outcome left (ac's #1122 obligation 1), from the logic's
+   * `agentActionLine`. A row draws the line in place of that action: the line spends it. Left out, rows are as before.
+   */
+  actionLines?: Record<string, Partial<Record<'extend' | 'remove', AgentActionLine>>>
   onExtend: (id: string) => void
   onRemove: (id: string) => void
   onConnectAgain: (id: string) => void
@@ -113,6 +119,7 @@ const AgentListView: React.FC<AgentListViewProps> = ({
   agents,
   onOpen,
   onConnect,
+  actionLines,
   onExtend,
   onRemove,
   onConnectAgain,
@@ -134,7 +141,11 @@ const AgentListView: React.FC<AgentListViewProps> = ({
       ) : (
         <ScrollView contentContainerStyle={styles.body}>
           {agents.map((agent) => {
-            const actions = rowActions(agent).filter((a) => handler[a] !== undefined)
+            const lines = actionLines?.[agent.id] ?? {}
+            // An action whose outcome left a line is spent: its line is drawn, and it is not offered again here.
+            const actions = rowActions(agent).filter(
+              (a) => handler[a] !== undefined && !((a === 'extend' || a === 'remove') && lines[a])
+            )
             const ended = agent.status === 'expired' || agent.status === 'revoked' || agent.status === 'notFinished'
             return (
               <View key={agent.id} style={[styles.card, ended && styles.cardEnded]} testID={testIdWithKey('AgentRow')}>
@@ -170,6 +181,12 @@ const AgentListView: React.FC<AgentListViewProps> = ({
                 ) : null}
                 {agent.status === 'notFinished' ? (
                   <ThemedText style={styles.sub}>{t('ConnectedAgents.NotFinishedLine')}</ThemedText>
+                ) : null}
+                {lines.extend ? (
+                  <AgentActionNotice line={lines.extend} testID={testIdWithKey('AgentRowExtendLine')} />
+                ) : null}
+                {lines.remove ? (
+                  <AgentActionNotice line={lines.remove} testID={testIdWithKey('AgentRowRemoveLine')} />
                 ) : null}
                 {actions.length > 0 ? (
                   <View style={styles.actions}>

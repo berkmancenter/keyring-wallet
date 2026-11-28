@@ -4302,6 +4302,19 @@
     "AddToRoomBodyAlready": "It can already use every open room you're in as {{persona}}. Here, it is asked to act only when you mention it, but nothing in the room enforces that.",
     "AgentsUseEveryRoom": "Agents added here can use every open room you're in as {{persona}}, and read everything in them, not only messages that mention them.",
     "CanUseEveryRoomAs": "It can use every open room you're in as {{persona}}.",
-    "AgentsNotInAttributed": "Agents can't read or answer in attributed rooms. They work only in open rooms."
+    "AgentsNotInAttributed": "Agents can't read or answer in attributed rooms. They work only in open rooms.",
+    "ActionGone": "This agent is no longer on this phone.",
+    "ActionNotOffered": "This isn't available for \"{{name}}\" any more.",
+    "ActionNotListed": "Your VTA doesn't list \"{{name}}\" any more.",
+    "ActionNotConfirmed": "Your VTA didn't confirm this change.",
+    "ActionNotApplied": "Your VTA answered, but it doesn't show this change.",
+    "RestoreLastMemory": "An agent can't be left with no memory, so nothing was changed.",
+    "ExtendNoCredential": "It's extended, but its new credential couldn't be issued, so it keeps the old one.",
+    "RemoveNotAvailable": "Your VTA still lists \"{{name}}\", and this version of Keyring can't remove it.",
+    "RemoveNotConfirmed": "\"{{name}}\" may still have access, so it wasn't removed.",
+    "RemoveGoneUnproven": "Keyring can't show yet that \"{{name}}\" is gone from your VTA, so it stays here for now.",
+    "KeepNotSaved": "Nothing was sent, because this phone couldn't save the request.",
+    "KeepNotRecorded": "Your VTA now keeps \"{{name}}\" connected, but this phone hasn't recorded that yet.",
+    "KeepNoCredential": "It's kept connected, but its new credential couldn't be issued."
   }
 }

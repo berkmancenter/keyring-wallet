@@ -4260,6 +4260,19 @@
     "AddToRoomBodyAlready": "Il peut déjà utiliser tous les salons ouverts où vous êtes en tant que {{persona}}. Ici, on lui demande d'agir seulement quand vous le mentionnez, mais rien dans le salon ne l'impose.",
     "AgentsUseEveryRoom": "Les agents ajoutés ici peuvent utiliser tous les salons ouverts où vous êtes en tant que {{persona}}, et tout y lire, pas seulement les messages qui les mentionnent.",
     "CanUseEveryRoomAs": "Il peut utiliser tous les salons ouverts où vous êtes en tant que {{persona}}.",
-    "AgentsNotInAttributed": "Les agents ne peuvent ni lire ni répondre dans les salons attribués. Ils fonctionnent seulement dans les salons ouverts."
+    "AgentsNotInAttributed": "Les agents ne peuvent ni lire ni répondre dans les salons attribués. Ils fonctionnent seulement dans les salons ouverts.",
+    "ActionGone": "Cet agent n'est plus sur ce téléphone.",
+    "ActionNotOffered": "Ce n'est plus possible pour « {{name}} ».",
+    "ActionNotListed": "Votre VTA ne liste plus « {{name}} ».",
+    "ActionNotConfirmed": "Votre VTA n'a pas confirmé ce changement.",
+    "ActionNotApplied": "Votre VTA a répondu, mais il n'indique pas ce changement.",
+    "RestoreLastMemory": "Un agent ne peut pas rester sans mémoire, donc rien n'a été modifié.",
+    "ExtendNoCredential": "Il est prolongé, mais sa nouvelle attestation n'a pas pu être émise, il garde donc l'ancienne.",
+    "RemoveNotAvailable": "Votre VTA liste encore « {{name}} », et cette version de Keyring ne peut pas le retirer.",
+    "RemoveNotConfirmed": "« {{name}} » a peut-être encore accès, il n'a donc pas été retiré.",
+    "RemoveGoneUnproven": "Keyring ne peut pas encore montrer que « {{name}} » a disparu de votre VTA, il reste donc ici pour l'instant.",
+    "KeepNotSaved": "Rien n'a été envoyé, car ce téléphone n'a pas pu enregistrer la demande.",
+    "KeepNotRecorded": "Votre VTA garde maintenant « {{name}} » connecté, mais ce téléphone ne l'a pas encore enregistré.",
+    "KeepNoCredential": "Il reste connecté, mais sa nouvelle attestation n'a pas pu être émise."
   }
 }

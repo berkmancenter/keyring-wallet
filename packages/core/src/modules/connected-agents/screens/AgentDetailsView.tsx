@@ -6,6 +6,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { testIdWithKey } from '../../../utils/testable'
+import AgentActionNotice, { AgentActionLine, AgentActionName } from '../components/AgentActionNotice'
 import { AgentAvatar, AgentTag } from '../components/AgentMark'
 import { AgentStatusChip } from '../components/AgentStatusChip'
 import { AGENT_COLORS } from '../components/agentStyle'
@@ -36,6 +37,12 @@ export interface AgentDetailsViewProps {
   counts?: Record<string, MemoryCountData>
   /** The count above which a memory is called out (MEMORY_COUNT_WARNING; #1060 P-c proposes 1,000). */
   warnAbove: number
+  /**
+   * The line each action's last outcome left (ac's #1122 obligation 1), from the logic's `agentActionLine`. An action
+   * with a line draws the line where its control was, and not the control: the line spends the action. Left out, the
+   * details are as before.
+   */
+  actionLines?: Partial<Record<AgentActionName, AgentActionLine>>
   onChangeMemories: () => void
   onRestore: () => void
   onRetryPending: () => void
@@ -49,6 +56,8 @@ export interface AgentDetailsViewProps {
   /** "Revoke": left out until step 7.10 wires the revoke sheet (#1060 P-f). */
   onRevoke?: () => void
 }
+
+export type { AgentActionLine, AgentActionLineKey, AgentActionName } from '../components/AgentActionNotice'
 
 const styles = StyleSheet.create({
   body: { padding: 16, gap: 14, paddingBottom: 28 },
@@ -95,6 +104,7 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
   agent,
   counts,
   warnAbove,
+  actionLines = {},
   onChangeMemories,
   onRestore,
   onRetryPending,
@@ -140,7 +150,10 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
           accessibilityLabel={t('ConnectedAgents.Message')}
         />
       ) : null}
-      {onKeepConnected && agent.temporary && actions.includes('extend') ? (
+      {/* Drawn whatever the record now says: "It's kept connected, but…" is shown once the agent is persistent. */}
+      {actionLines.keepConnected ? (
+        <AgentActionNotice line={actionLines.keepConnected} testID={testIdWithKey('AgentDetailsKeepConnectedLine')} />
+      ) : onKeepConnected && agent.temporary && actions.includes('extend') ? (
         <Button
           title={t('ConnectedAgents.KeepConnected')}
           buttonType={ButtonType.Secondary}
@@ -160,9 +173,12 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
         <MemoryAccessNotice
           extra={agent.drift.extra}
           missing={agent.drift.missing}
-          onRestore={onRestore}
+          onRestore={actionLines.restore ? undefined : onRestore}
           onRevoke={onRevoke}
         />
+      ) : null}
+      {actionLines.restore ? (
+        <AgentActionNotice line={actionLines.restore} testID={testIdWithKey('AgentDetailsRestoreLine')} />
       ) : null}
 
       <View style={styles.group} testID={testIdWithKey('AgentDetailsMemories')}>
@@ -210,18 +226,29 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
             </View>
           )
         })}
-        {agent.pending.map((memory) => (
+        {agent.pending.map((memory, i) => (
           <View key={`pending-${memory.id}`} style={styles.memory} testID={testIdWithKey('AgentDetailsPending')}>
             <ThemedText style={styles.small}>{t('ConnectedAgents.PendingMemory', { memory: memory.name })}</ThemedText>
-            <TouchableOpacity
-              onPress={onRetryPending}
-              accessibilityRole="button"
-              accessibilityLabel={t('ConnectedAgents.TryAgain')}
-              testID={testIdWithKey('AgentDetailsRetryPending')}
-              style={{ minHeight: 44, justifyContent: 'center' }}
-            >
-              <ThemedText style={styles.link}>{t('ConnectedAgents.TryAgain')}</ThemedText>
-            </TouchableOpacity>
+            {/* §6 keeps "Try again" after a failed retry; only a retry the logic says is gone or no longer offered
+                leaves a line, and then the retry is spent. */}
+            {actionLines.retryPending ? null : (
+              <TouchableOpacity
+                onPress={onRetryPending}
+                accessibilityRole="button"
+                accessibilityLabel={t('ConnectedAgents.TryAgain')}
+                testID={testIdWithKey('AgentDetailsRetryPending')}
+                style={{ minHeight: 44, justifyContent: 'center' }}
+              >
+                <ThemedText style={styles.link}>{t('ConnectedAgents.TryAgain')}</ThemedText>
+              </TouchableOpacity>
+            )}
+            {/* One line for the one retry, under the last pending memory. */}
+            {actionLines.retryPending && i === agent.pending.length - 1 ? (
+              <AgentActionNotice
+                line={actionLines.retryPending}
+                testID={testIdWithKey('AgentDetailsRetryPendingLine')}
+              />
+            ) : null}
           </View>
         ))}
         {agent.memories.length > 0 ? (
@@ -250,7 +277,7 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
       </View>
 
       <View style={styles.two}>
-        {actions.includes('extend') ? (
+        {actions.includes('extend') && !actionLines.extend ? (
           <View style={styles.half}>
             <Button
               title={t('ConnectedAgents.Extend')}
@@ -272,7 +299,7 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
             />
           </View>
         ) : null}
-        {actions.includes('remove') ? (
+        {actions.includes('remove') && !actionLines.remove ? (
           <View style={styles.half}>
             <Button
               title={t('ConnectedAgents.Remove')}
@@ -295,6 +322,12 @@ const AgentDetailsView: React.FC<AgentDetailsViewProps> = ({
           </View>
         ) : null}
       </View>
+      {actionLines.extend ? (
+        <AgentActionNotice line={actionLines.extend} testID={testIdWithKey('AgentDetailsExtendLine')} />
+      ) : null}
+      {actionLines.remove ? (
+        <AgentActionNotice line={actionLines.remove} testID={testIdWithKey('AgentDetailsRemoveLine')} />
+      ) : null}
     </ScrollView>
   )
 }
