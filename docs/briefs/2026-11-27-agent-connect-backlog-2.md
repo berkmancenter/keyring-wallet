@@ -12,7 +12,9 @@ Feature branch tip when this was written: `feat/agent-connect` at `75e544a58c21e
   merge and start from the tip then. Do not stack on an open PR unless the part says so.
 - **Merge, never rebase.** Never force-push a branch once a PR is open on it. Every merge commit carries a
   sign-off too, because the DCO check reads every commit in the PR: `git merge -S --signoff` (not `-s`, which is
-  `--strategy`).
+  `--strategy`). If a merge commit in an open PR slips without one, do not rewrite it: open a fresh branch from the
+  feature tip, bring the PR's changes over as one signed, signed-off commit, open it as a new PR, and the old one is
+  closed as superseded.
 - **Intent record first** when a remote call cannot be undone or re-read: write the local record, then send.
 - **No generic failure line** where any case it covers would make it false: use the per-case message.
 - **A refusal spends the action: the words and the control both.** After a refusal, never offer a retry in the
