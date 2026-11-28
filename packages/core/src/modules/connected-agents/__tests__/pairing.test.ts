@@ -3,7 +3,7 @@
  * `auth/oob` transport (a fake until VTI serves `deviceEnrol`, ledger AC-36; the real one is step 7.5), the
  * VTA's listing, the spent-request store and the lockout's store.
  */
-import { LockoutStore, PairingLockout } from '../lockout'
+import { LOCKOUT_THRESHOLD, LockoutStore, PairingLockout } from '../lockout'
 import {
   AgentAclScope,
   AgentConnectChoice,
@@ -663,6 +663,16 @@ describe('a connect with no memory chosen (§3.3: the agent gets a new empty con
     expect(createAgentContext).not.toHaveBeenCalled()
     expect(state).toMatchObject({ phase: 'awaitingScan' })
     expect((state as Extract<PairingState, { phase: 'awaitingScan' }>).choice.agentContext).toBeUndefined()
+  })
+
+  it('while locked, nothing is made at the VTA: the lock is read before the context is', async () => {
+    const createAgentContext = jest.fn(async () => ({ ok: true as const, id: 'keyring-agent-aaaaaaaaaa' }))
+    const t = setup({ createAgentContext })
+    const lockout = new PairingLockout(t.lockoutStore, () => T0)
+    for (let i = 0; i < LOCKOUT_THRESHOLD; i++) await lockout.recordWrongNumber()
+    expect(await t.rebuild().start(choice(noMemory))).toMatchObject({ phase: 'locked' })
+    // A lockout is for stopping writes at the person's VTA: a reorder that made the context first would write one here.
+    expect(createAgentContext).not.toHaveBeenCalled()
   })
 
   it('CONTROL: without the means to make a context, a choice with no memory still ends invalid-choice', async () => {

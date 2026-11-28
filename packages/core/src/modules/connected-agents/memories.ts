@@ -91,6 +91,12 @@ export type CreateAgentContextResult = { ok: true; id: string } | { ok: false; c
  * agent. It is no memory, so the picker never offers it (`isMemoryContext`) and no memory's name can collide with it.
  * Like a memory create (step 5), it is sent without waiting for consent: one an approval rule holds is
  * `heldForApproval`, never retried. A collision with an existing id is a redraw.
+ *
+ * **Left by an unfinished pairing (an obligation, not yet built):** the id lives only in the pairing machine's memory,
+ * and the leftover cleanup acts by subject (`PairingCleanup`), so a pairing that ends before its grant leaves an empty
+ * `keyring-agent-*` context that nothing names and the picker hides. Its repair is a sweep findable by prefix alone:
+ * list the contexts, and remove each `keyring-agent-*` one no ACL entry's `act` holds. Its caller is to be
+ * `services.reconcile()`, after `sweepNotFinished`. Tracked in the review of the PR that adds this function.
  */
 export async function createAgentContext(
   port: Pick<MemoryPort, 'listContexts' | 'createContext'>,
