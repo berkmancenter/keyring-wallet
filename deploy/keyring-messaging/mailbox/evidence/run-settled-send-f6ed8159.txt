@@ -1,0 +1,12 @@
+settled-send-probe — affinidi-messaging-mediator v0.53.0 f6ed8159 (debug), lab mode mailbox, mediator did:peer:2.Vz6Mkm2…RzcCJ9, 20 trials a row, bound 5000 ms
+      refusal before fence in 20/20; code e.p.authorization.send_forwarded
+  ✓ R CONTROL refused (no SEND_FORWARDED): every refusal arrives on the wire before the fence's status
+  ✓ set SEND_FORWARDED on the sender (messaging/account/update, the self-grant)
+      code e.p.delivery.refused
+      refusal before fence in 20/20
+  ✓ D CONTROL refused later in the handler (flag on, next hop has no account): refusal before the fence's status
+      addressee received 20 of 20; fence answered: n=20 min=9 median=11 max=41 ms
+  ✓ A CONTROL accepted (flag on, next hop an account here): the fence's status, no refusal within 5000 ms, and the addressee gets every forward
+      refusal after the forward: n=40 min=4 median=5 max=13 ms
+  ✓ P plain bound: how long a refusal takes (R and D), and an accepted forward without a fence draws no refusal within 5000 ms
+settled-send-probe: 5 passed, 0 failed
