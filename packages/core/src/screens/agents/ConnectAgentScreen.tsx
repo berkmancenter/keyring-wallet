@@ -31,6 +31,8 @@ import {
   useAgentActions,
   usePersonas,
 } from '../../modules/connected-agents/ConnectedAgentsProvider'
+import { lineOfAction } from '../../modules/connected-agents/actionLine'
+import type { AgentActionLine } from '../../modules/connected-agents/components/AgentActionNotice'
 import { MATCH_NUMBER_DIGITS, aclScopeFor, pairingLinkFromTrigger } from '../../modules/connected-agents/pairing'
 import ApproveView from '../../modules/connected-agents/screens/ApproveView'
 import ConnectAgentForm, { type ConnectFormChoice } from '../../modules/connected-agents/screens/ConnectAgentForm'
@@ -83,12 +85,20 @@ const Connected: React.FC<{ agentId: string; name: string; until: string; onSeeD
 }) => {
   const offered = useKeepConnectedOffered(agentId)
   const actions = useAgentActions()
+  // Keep it connected's line, kept for this visit: it spends the control, and a re-read does not bring it back.
+  const [keepConnectedLine, setKeepConnectedLine] = useState<AgentActionLine>()
+  const keepConnected = useCallback(() => {
+    void lineOfAction('keepConnected', actions.keepConnected(agentId), name).then((line) => {
+      if (line) setKeepConnectedLine(line)
+    })
+  }, [actions, agentId, name])
   return (
     <ConnectedView
       name={name}
       until={until}
       onSeeDetails={onSeeDetails}
-      onKeepConnected={offered ? () => void actions.keepConnected(agentId).catch(() => undefined) : undefined}
+      onKeepConnected={offered ? keepConnected : undefined}
+      keepConnectedLine={keepConnectedLine}
     />
   )
 }

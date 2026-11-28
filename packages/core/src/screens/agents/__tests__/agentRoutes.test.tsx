@@ -251,6 +251,24 @@ describe('AgentDetailsScreen', () => {
     await waitFor(() => expect(agentActions.keepConnected).toHaveBeenCalledWith('did:key:agent-1'))
   })
 
+  it('a Keep it connected that did not fully happen draws its line in place of the control (#1122 obligation 1)', async () => {
+    mockHooks.useKeepConnectedOffered = jest.fn(() => true)
+    agentActions.keepConnected = jest.fn(async () => ({ ok: false as const, code: 'notRecorded' as const }))
+    const view = details()
+    fireEvent.press(view.getByTestId(id('AgentDetailsKeepConnected')))
+    await waitFor(() => expect(view.getByTestId(id('AgentDetailsKeepConnectedLine'))).toBeTruthy())
+    expect(view.queryByTestId(id('AgentDetailsKeepConnected'))).toBeNull()
+  })
+
+  it('CONTROL: a Keep it connected that succeeded draws no line', async () => {
+    mockHooks.useKeepConnectedOffered = jest.fn(() => true)
+    agentActions.keepConnected = jest.fn(async () => ({ ok: true as const }))
+    const view = details()
+    fireEvent.press(view.getByTestId(id('AgentDetailsKeepConnected')))
+    await waitFor(() => expect(agentActions.keepConnected).toHaveBeenCalled())
+    expect(view.queryByTestId(id('AgentDetailsKeepConnectedLine'))).toBeNull()
+  })
+
   it('Revoke calls revokeAgentConnection with the deps and the id, and closes on revoked', async () => {
     ;(revokeAgentConnection as jest.Mock).mockResolvedValue({ kind: 'revoked' })
     const view = details()
@@ -365,6 +383,18 @@ describe('ConnectAgentScreen draws each pairing phase', () => {
     expect(view.getByTestId(id('ConnectConnected'))).toBeTruthy()
     fireEvent.press(view.getByTestId(id('ConnectSeeDetails')))
     expect(nav.replace).toHaveBeenCalledWith(Screens.AgentDetails, { agentId: 'did:key:agent-1', name: 'Notes helper' })
+  })
+
+  it("Connected's Keep it connected that did not fully happen draws its line, where it used to be swallowed", async () => {
+    pairingIn({
+      phase: 'confirmed',
+      agent: { name: 'Notes helper', agentDid: 'did:key:agent-1', expiresAt: new Date(NOW + 3_600_000).toISOString() },
+    })
+    mockHooks.useKeepConnectedOffered = jest.fn(() => true)
+    agentActions.keepConnected = jest.fn(async () => ({ ok: false as const, code: 'unreachable' as const }))
+    const view = connect(navigation())
+    fireEvent.press(view.getByTestId(id('ConnectKeepConnected')))
+    await waitFor(() => expect(view.getByTestId(id('ConnectKeepConnectedLine'))).toBeTruthy())
   })
 
   it.each([[{ phase: 'cancelled' }], [{ phase: 'notFinished' }]])('%j goes back to AI agents', (state) => {

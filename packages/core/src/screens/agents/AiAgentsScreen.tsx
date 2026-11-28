@@ -15,6 +15,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useAgentActions, useAgentConnections } from '../../modules/connected-agents/ConnectedAgentsProvider'
 import AgentListView from '../../modules/connected-agents/screens/AgentListView'
+import { lineOfAction } from '../../modules/connected-agents/actionLine'
+import type { AgentActionLine } from '../../modules/connected-agents/components/AgentActionNotice'
 import { MyAgentStackParams, Screens } from '../../types/navigators'
 
 import { AgentExtendSheet, AgentRevokeSheet, agentRow } from './AgentDetailsScreen'
@@ -27,6 +29,13 @@ const AiAgentsScreen: React.FC<AiAgentsScreenProps> = ({ navigation }) => {
   const { agents, loading, refresh } = useAgentConnections()
   const actions = useAgentActions()
   const [sheet, setSheet] = useState<Sheet>()
+  // Each agent's Extend and Remove lines, kept for this visit: a re-read never brings back a control a line spent.
+  const [lines, setLines] = useState<Record<string, Partial<Record<'extend' | 'remove', AgentActionLine>>>>({})
+  const note = useCallback(
+    (id: string, action: 'extend' | 'remove') => (line: AgentActionLine) =>
+      setLines((held) => ({ ...held, [id]: { ...held[id], [action]: line } })),
+    []
+  )
 
   // Read again on each return (the details may have changed or removed one); the first focus is the mount's own read.
   const focused = useRef(false)
@@ -49,6 +58,7 @@ const AiAgentsScreen: React.FC<AiAgentsScreenProps> = ({ navigation }) => {
     <>
       <AgentListView
         agents={loading && agents.length === 0 ? undefined : agents.map(agentRow)}
+        actionLines={lines}
         onOpen={(id) => {
           const agent = agents.find((a) => a.id === id)
           if (agent) navigation.navigate(Screens.AgentDetails, { agentId: id, name: agent.name })
@@ -56,15 +66,19 @@ const AiAgentsScreen: React.FC<AiAgentsScreenProps> = ({ navigation }) => {
         onConnect={() => navigation.navigate(Screens.ConnectAgent)}
         onExtend={(id) => setSheet({ kind: 'extend', id })}
         onRemove={(id) => {
-          void actions
-            .remove(id)
-            .catch(() => undefined)
+          const name = agents.find((a) => a.id === id)?.name
+          void lineOfAction('remove', actions.remove(id), name)
+            .then((line) => {
+              if (line) note(id, 'remove')(line)
+            })
             .finally(() => void refresh())
         }}
         onConnectAgain={(id) => navigation.navigate(Screens.ConnectAgent, { againFrom: id })}
         onRevoke={(id) => setSheet({ kind: 'revoke', id })}
       />
-      {open && sheet?.kind === 'extend' ? <AgentExtendSheet agent={open} onClose={close} /> : null}
+      {open && sheet?.kind === 'extend' ? (
+        <AgentExtendSheet agent={open} onClose={close} onLine={note(open.id, 'extend')} />
+      ) : null}
       {open && sheet?.kind === 'revoke' ? (
         <AgentRevokeSheet agentId={open.id} name={open.name} onClose={close} />
       ) : null}

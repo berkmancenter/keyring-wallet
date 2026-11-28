@@ -33,6 +33,9 @@ import AgentDetailsView, {
 } from '../../modules/connected-agents/screens/AgentDetailsView'
 import ApproveView from '../../modules/connected-agents/screens/ApproveView'
 import ChangeMemoriesView from '../../modules/connected-agents/screens/ChangeMemoriesView'
+import { agentActionLine, lineOfAction } from '../../modules/connected-agents/actionLine'
+import type { ActionResult } from '../../modules/connected-agents/actions'
+import type { AgentActionLine, AgentActionName } from '../../modules/connected-agents/components/AgentActionNotice'
 import RevokeAgentSheet from '../../modules/connected-agents/screens/RevokeAgentSheet'
 import { MyAgentStackParams, Screens } from '../../types/navigators'
 import { formatTime } from '../../utils/helpers'
@@ -120,7 +123,12 @@ export const AgentRevokeSheet: React.FC<{
  * Extend (§7.7): the owner re-asks through Approve and the biometric, and only then `actions.extend` runs. The grant
  * runs 4 hours from now, as Extend sets it.
  */
-export const AgentExtendSheet: React.FC<{ agent: ListedAgent; onClose: () => void }> = ({ agent, onClose }) => {
+export const AgentExtendSheet: React.FC<{
+  agent: ListedAgent
+  onClose: () => void
+  /** Extend's line when it did not fully happen (`agentActionLine`), for the screen that opened the sheet to draw. */
+  onLine?: (line: AgentActionLine) => void
+}> = ({ agent, onClose, onLine }) => {
   const { t } = useTranslation()
   const actions = useAgentActions()
   const until = formatAgentTime(Date.now() + TEMPORARY_GRANT_MS)
@@ -133,11 +141,12 @@ export const AgentExtendSheet: React.FC<{ agent: ListedAgent; onClose: () => voi
     [agent.name, agent.id, t, until]
   )
   const onApproved = useCallback(() => {
-    void actions
-      .extend(agent.id)
-      .catch(() => undefined)
+    void lineOfAction('extend', actions.extend(agent.id), agent.name)
+      .then((line) => {
+        if (line) onLine?.(line)
+      })
       .finally(onClose)
-  }, [actions, agent.id, onClose])
+  }, [actions, agent.id, agent.name, onClose, onLine])
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <ApproveView
@@ -169,13 +178,15 @@ const ChangeMemoriesSheet: React.FC<{ agent: ListedAgent; onChanged: () => void;
       }),
     [agent.name, agent.id, t]
   )
+  // A throw is the view's to word (ActionNotConfirmed); a refusal carries its line (`agentActionLine`).
   const changed = useCallback(
-    async (change: Promise<{ ok: true } | { ok: false; code: string }>) => {
+    async (action: 'addMemory' | 'removeMemory', change: Promise<ActionResult>) => {
       const result = await change
       onChanged()
-      return result
+      if (result.ok) return result
+      return { ...result, line: agentActionLine(action, result.code, agent.name) ?? undefined }
     },
-    [onChanged]
+    [onChanged, agent.name]
   )
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -185,8 +196,8 @@ const ChangeMemoriesSheet: React.FC<{ agent: ListedAgent; onChanged: () => void;
         current={agent.memories.map((m) => m.id)}
         onCreateMemory={pickerCreate(create)}
         confirm={confirm}
-        onWiden={(memoryId) => changed(actions.widen(agent.id, memoryId))}
-        onNarrow={(memoryId) => changed(actions.narrow(agent.id, memoryId))}
+        onWiden={(memoryId) => changed('addMemory', actions.widen(agent.id, memoryId))}
+        onNarrow={(memoryId) => changed('removeMemory', actions.narrow(agent.id, memoryId))}
       />
     </Modal>
   )
@@ -204,6 +215,12 @@ const AgentDetailsScreen: React.FC<AgentDetailsScreenProps> = ({ navigation, rou
   const contextIds = useMemo(() => agent?.memories.map((m) => m.id) ?? [], [agent])
   const counted = useMemoryCounts(agentId, contextIds)
   const [sheet, setSheet] = useState<Sheet>()
+  // Each action's line, kept for this visit: a re-read never brings back the control a line spent.
+  const [lines, setLines] = useState<Partial<Record<AgentActionName, AgentActionLine>>>({})
+  const note = useCallback(
+    (action: AgentActionName) => (line: AgentActionLine) => setLines((held) => ({ ...held, [action]: line })),
+    []
+  )
 
   const counts = useMemo(() => {
     // Undefined while they are counted: the hook answers nothing until it has counted every memory.
@@ -226,10 +243,14 @@ const AgentDetailsScreen: React.FC<AgentDetailsScreenProps> = ({ navigation, rou
     void refresh()
   }, [refresh])
   const act = useCallback(
-    (run: Promise<unknown>) => {
-      void run.catch(() => undefined).finally(() => void refresh())
+    (action: AgentActionName, run: Parameters<typeof lineOfAction>[1]) => {
+      void lineOfAction(action, run, agent?.name)
+        .then((line) => {
+          if (line) note(action)(line)
+        })
+        .finally(() => void refresh())
     },
-    [refresh]
+    [refresh, note, agent?.name]
   )
 
   // Not found, or still pairing: nothing to draw (the list does not offer it either).
@@ -241,23 +262,26 @@ const AgentDetailsScreen: React.FC<AgentDetailsScreenProps> = ({ navigation, rou
         counts={counts}
         warnAbove={MEMORY_COUNT_WARNING}
         onChangeMemories={() => setSheet('memories')}
-        onRestore={() => act(actions.restore(agentId))}
-        onRetryPending={() => act(actions.retryPending(agentId))}
+        actionLines={lines}
+        onRestore={() => act('restore', actions.restore(agentId))}
+        onRetryPending={() => act('retryPending', actions.retryPending(agentId))}
         onExtend={() => setSheet('extend')}
         onRemove={() =>
           act(
+            'remove',
             actions.remove(agentId).then((result) => {
               // Removed: the record is gone, and with it what this screen drew.
               if (result.ok) navigation.goBack()
+              return result
             })
           )
         }
         onConnectAgain={() => navigation.navigate(Screens.ConnectAgent, { againFrom: agentId })}
-        onKeepConnected={keepConnectedOffered ? () => act(actions.keepConnected(agentId)) : undefined}
+        onKeepConnected={keepConnectedOffered ? () => act('keepConnected', actions.keepConnected(agentId)) : undefined}
         onRevoke={() => setSheet('revoke')}
       />
       {sheet === 'memories' ? <ChangeMemoriesSheet agent={agent} onChanged={refresh} onClose={close} /> : null}
-      {sheet === 'extend' ? <AgentExtendSheet agent={agent} onClose={close} /> : null}
+      {sheet === 'extend' ? <AgentExtendSheet agent={agent} onClose={close} onLine={note('extend')} /> : null}
       {sheet === 'revoke' ? <AgentRevokeSheet agentId={agentId} name={agent.name} onClose={close} /> : null}
     </>
   )
