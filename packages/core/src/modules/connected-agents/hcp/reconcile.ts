@@ -17,8 +17,10 @@
  *   same client has completed, so this grant is not made the connection but revoked, as below;
  * - the consent request could still be approved (listed or not, its `expiresAt` has not passed, and it is not denied
  *   or expired): nothing is done yet (`waiting`), so a grant still to come is not left without a record;
- * - otherwise the grant is revoked by `grantId`, sent once: revoked, or refused `notFound` (the VTA holds no such
- *   grant, so there is nothing to revoke), removes the approval in flight (`revoked`, `absent`); any other refusal,
+ * - otherwise the grant is revoked by `grantId`, sent once: revoked, or refused as no such grant (`notFound`, or
+ *   `permissionDenied`, which is how TT `hcp/grants/revoke` refuses a grantId the VTA does not hold for this
+ *   Management Client; either way there is nothing to revoke), removes the approval in flight (`revoked`,
+ *   `absent`); any other refusal,
  *   or an unreachable VTA, keeps it for the next reconcile (`kept`). The HCP flags turned off meanwhile (`off`) is not
  *   a failed revoke: the record is kept and the reconcile stops there.
  *
@@ -44,6 +46,16 @@ import { callHcp, type HcpVtaPort, onHcpFailure } from './vtaPort'
 
 /** The refusal code of a revoke for a grant the VTA does not hold. */
 export const HCP_GRANT_NOT_FOUND = 'notFound'
+
+/**
+ * TT `hcp/grants/revoke` refuses an unknown grantId (or one not the Management Client's to revoke) with
+ * `permissionDenied`, not `notFound`, so as not to tell which grants exist. For the reconcile, whose record names a
+ * grant it may never have been issued, that too means there is nothing to revoke: terminal, like `notFound`.
+ */
+export const HCP_REVOKE_NO_SUCH_GRANT = 'permissionDenied'
+
+/** The refusals of a revoke that mean there is no such grant to revoke. */
+const NO_SUCH_GRANT: readonly string[] = [HCP_GRANT_NOT_FOUND, HCP_REVOKE_NO_SUCH_GRANT]
 
 export interface HcpReconcileDeps {
   store: Pick<
@@ -141,7 +153,7 @@ async function sendRevoke(
   }
   return onHcpFailure<Promise<RevokeOutcome>>(outcome, {
     refused: async (code) => {
-      if (code !== HCP_GRANT_NOT_FOUND) return { outcome: 'kept', refused: code }
+      if (!NO_SUCH_GRANT.includes(code)) return { outcome: 'kept', refused: code }
       await remove()
       return { outcome: 'absent' }
     },

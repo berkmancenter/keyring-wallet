@@ -190,7 +190,26 @@ describe('reconcileHcpApprovals', () => {
     expect(await store.listInFlight()).toEqual([])
   })
 
-  // control: the opposite of the two cases above: a revoke that did not happen keeps the record for next time.
+  // TT hcp/grants/revoke refuses an unknown grantId with permissionDenied, not notFound: also no such grant.
+  it('a revoke refused permissionDenied (TT grants/revoke’s "no such grant") removes the record; it is absent', async () => {
+    const { deps, store, task } = await setup({
+      flights: [inFlight()],
+      revoke: async () => {
+        throw refusal('permissionDenied')
+      },
+      now: REQUEST_ENDS,
+    })
+    expect(await reconcileHcpApprovals(deps)).toEqual([
+      { id: CLIENT_VID, threadId: THREAD, grantId: GRANT, outcome: 'absent' },
+    ])
+    expect(task).toHaveBeenCalledTimes(1)
+    expect(await store.listInFlight()).toEqual([])
+    // Terminal: the next reconcile has nothing left to send.
+    expect(await reconcileHcpApprovals(deps)).toEqual([])
+    expect(task).toHaveBeenCalledTimes(1)
+  })
+
+  // control: the opposite of the cases above: a revoke that did not happen keeps the record for next time.
   it('control: an unreachable VTA, or another refusal, keeps the record for the next reconcile', async () => {
     const answers: { revoke: () => Promise<unknown>; expected: Record<string, unknown> }[] = [
       {
@@ -201,9 +220,9 @@ describe('reconcileHcpApprovals', () => {
       },
       {
         revoke: async () => {
-          throw refusal('permissionDenied')
+          throw refusal('internalError')
         },
-        expected: { outcome: 'kept', refused: 'permissionDenied' },
+        expected: { outcome: 'kept', refused: 'internalError' },
       },
     ]
     for (const { revoke, expected } of answers) {
@@ -429,10 +448,11 @@ describe('reconcileHcpApprovals', () => {
       ])
     })
 
-    it('a retiring grant whose revoke fails is kept for the next reconcile; notFound removes it', async () => {
+    it('a retiring grant whose revoke fails is kept for the next reconcile; notFound or permissionDenied removes it', async () => {
       for (const [revoke, expected, left] of [
         [async () => Promise.reject(new Error('timeout')), { outcome: 'kept', unreachable: true }, 1],
         [async () => Promise.reject(refusal('notFound')), { outcome: 'absent' }, 0],
+        [async () => Promise.reject(refusal('permissionDenied')), { outcome: 'absent' }, 0],
       ] as const) {
         const { deps, store } = await setup({ revoke, now: SECOND_STARTED + MINUTE })
         await recordHcpApproval(store)(viewFor(GRANT), new Date(STARTED))
