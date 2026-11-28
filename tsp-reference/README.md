@@ -113,6 +113,11 @@ offline tests (opted-in rungs)"), so a rung opts in by adding the script. Rules 
 - **The rung needs a `package-lock.json`.** CI installs with `npm ci --ignore-scripts` and refuses a rung with a `test`
   script and no lockfile. `ref-05-local-vta` and `ref-06p3-third-party-verify` have none today; one of them adding a
   `test` script turns the job red with that message, which is the guard working.
+- **The job's path filter lists every file the rung's tests read**, not only the rung's own directory. A test that
+  reads a file outside `tsp-reference/` (ref-25 reads Keyring's HCP effect kinds and `AGENT_PURPOSES`) adds that
+  path to both of the workflow's lists, `pull_request` and `push`. Otherwise a pull request that changes the file never
+  runs the rung, and the red appears on the next merge that does. `ref-25-agent-pairing/ci-paths.test.mjs` fails when a
+  `"../…"` path in an opted-in rung's sources resolves outside `tsp-reference/` and either list misses it.
 
 ## What is *not* proven yet
 
