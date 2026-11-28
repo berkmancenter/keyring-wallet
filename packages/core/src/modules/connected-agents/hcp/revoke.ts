@@ -159,9 +159,10 @@ export function hcpNoticePending(c: HcpConnection | undefined): c is HcpConnecti
  * revoked or whose notice is already `told`, `notTold` or `nothingDisclosed`. The answer is read by our grant, as the
  * module comment says.
  *
- * A `usableUntil` the poll reads from our client's entry (not a retired grant's delivery time) is kept on the record as `lastUsableUntil`, so it survives a restart. At or after the
- * stop, a notice still `telling` becomes `notTold` with this poll's `usableUntil`, else the record's
- * `lastUsableUntil`, else `revokedAt`: the same answer whether or not the app restarted in between.
+ * A `usableUntil` the poll reads from the client's entry for our grant (never a retired grant's delivery time) is kept
+ * on the record as `lastUsableUntil`, so it survives a restart. At or after the stop, a notice still `telling` becomes
+ * `notTold` with this poll's `usableUntil`, else the record's `lastUsableUntil`, else `revokedAt`: the same answer
+ * whether or not the app restarted in between.
  */
 export async function pollHcpNotice(deps: HcpRevokeDeps, id: string): Promise<HcpPollResult> {
   const c = await deps.store.get(id)

@@ -70,10 +70,9 @@ describe('hcpStatus', () => {
   // control: a notice still telling, on the same record, is not that line.
   it('control: the same record still telling reads RevokeTelling, not RevokeNothingDisclosed', () => {
     const revoked = connection({ revokedAt: '2026-11-27T11:00:00.000Z', notice: { state: 'telling' } })
-    expect(hcpStatus(revoked, at(-1)).key).toBe('StatusRevoked')
-    expect(hcpStatus(revoked, at(-1))).not.toEqual({
+    expect(hcpStatus(revoked, at(-1))).toEqual({
       key: 'StatusRevoked',
-      notice: { key: 'RevokeNothingDisclosed' },
+      notice: { key: 'RevokeTelling', params: { name: 'My notes agent' } },
     })
   })
 })
