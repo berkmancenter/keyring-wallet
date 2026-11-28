@@ -186,6 +186,11 @@ describe('ConnectedAgents words', () => {
     )
     expect(reaches.sort()).toEqual([
       'container-impl.ts -> components/AgentContactCard',
+      'modules/rooms/components/AgentPickerSheet.tsx -> components/AgentMark',
+      'modules/rooms/components/AgentPickerSheet.tsx -> components/agentStyle',
+      'modules/rooms/components/AgentRoomSection.tsx -> components/AgentMark',
+      'modules/rooms/components/AgentRoomSheet.tsx -> components/AgentMark',
+      'modules/rooms/components/AgentRoomSheet.tsx -> components/agentStyle',
       'modules/rooms/roomLinks.ts -> agentConnectFlag',
       'modules/trust-tasks/module/triggerLink.ts -> agentConnectFlag',
       'modules/trust-tasks/module/vtiLinks.ts -> agentConnectFlag',

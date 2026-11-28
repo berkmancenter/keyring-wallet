@@ -156,10 +156,21 @@
     "AgentOpenDesk": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentOtherWaiting": ["src/modules/trust-tasks/screens/OtherAgentsRequests.tsx"],
     "AgentOthers": ["src/modules/trust-tasks/screens/VtaAgentSettings.ids.ts"],
+    "AgentPickerRow": ["src/modules/rooms/components/AgentPickerSheet.tsx"],
+    "AgentPickerSheet": ["src/modules/rooms/components/AgentPickerSheet.tsx"],
     "AgentRequests": ["src/modules/trust-tasks/screens/RequestsSection.tsx"],
     "AgentRequestsAll": ["src/modules/trust-tasks/screens/RequestsSection.tsx"],
     "AgentRequestsRow": ["src/modules/trust-tasks/screens/RequestsSection.tsx"],
     "AgentRequestsRowCount": ["src/modules/trust-tasks/screens/RequestsSection.tsx"],
+    "AgentRoomAdd": ["src/modules/rooms/components/AgentRoomSection.tsx"],
+    "AgentRoomNote": ["src/modules/rooms/components/AgentRoomSection.tsx"],
+    "AgentRoomRow": ["src/modules/rooms/components/AgentRoomSection.tsx"],
+    "AgentRoomSection": ["src/modules/rooms/components/AgentRoomSection.tsx"],
+    "AgentRoomSetting": ["src/modules/rooms/components/AgentRoomSection.tsx"],
+    "AgentRoomSheet": ["src/modules/rooms/components/AgentRoomSheet.tsx"],
+    "AgentRoomSheetMemory": ["src/modules/rooms/components/AgentRoomSheet.tsx"],
+    "AgentRoomSheetOutcome": ["src/modules/rooms/components/AgentRoomSheet.tsx"],
+    "AgentRoomSheetReach": ["src/modules/rooms/components/AgentRoomSheet.tsx"],
     "AgentRow": ["src/modules/connected-agents/screens/AgentListView.tsx"],
     "AgentRowConnectAgain": ["src/modules/connected-agents/screens/AgentListView.tsx"],
     "AgentRowExtend": ["src/modules/connected-agents/screens/AgentListView.tsx"],
@@ -1959,6 +1970,10 @@
     "WhatAreConnections?": ["src/modules/vrc/components/EmptyListConnections.tsx"],
     "WhatAreContacts?": ["src/modules/vrc/components/EmptyContactsList.tsx"],
     "WhatIsMyAgent": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "WhatItRemembers": ["src/modules/connected-agents/screens/WhatItRemembersSheet.tsx"],
+    "WhatItRemembersConnectAnother": ["src/modules/connected-agents/screens/WhatItRemembersSheet.tsx"],
+    "WhatItRemembersDone": ["src/modules/connected-agents/screens/WhatItRemembersSheet.tsx"],
+    "WhatItRemembersRow": ["src/modules/connected-agents/screens/WhatItRemembersSheet.tsx"],
     "WhereToUseLink": ["src/screens/ScanHelp.tsx"],
     "WitnessChoiceCancel": ["src/modules/vrc/components/WitnessChoiceModal.tsx"],
     "WitnessChoiceProceedWithout": ["src/modules/vrc/components/WitnessChoiceModal.tsx"],
@@ -2532,6 +2547,9 @@
     },
     {
       "src/modules/polls/screens/PollBallot.tsx": "`${PollsIds.castStep}_${state}`"
+    },
+    {
+      "src/modules/rooms/components/AgentRoomSheet.tsx": "testID"
     },
     {
       "src/modules/rooms/components/RoomMembersTab.tsx": "testID"
