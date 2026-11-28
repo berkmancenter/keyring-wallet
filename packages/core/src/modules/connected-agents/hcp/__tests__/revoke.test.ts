@@ -1,8 +1,10 @@
 /**
  * Revoke and the notice state (C6), against a fake VTA port, a fake clock and the real `HcpConnectionStore` over
  * memory records: revoke sends exactly `{ grantId }` and sets `telling`; a refusal or an unreachable VTA changes
- * nothing; each `notification` value; the schedule's boundaries; `told` never overwritten; the 24-hour stop; and the
+ * nothing; the "Telling…" rule over the audit log, one test per row of its state table; the summary fallback (each
+ * `notification` value, read by our grant); the schedule's boundaries; `told` never overwritten; the stops; and the
  * hook that polls while mounted. Every request sent and every answer given validates against the vendored schemas.
+ * Unless a test gives an audit log, the audit read is refused, as an older VTA's would be, so the summary is read.
  */
 import type { Agent } from '@credo-ts/core'
 import { act, renderHook } from '@testing-library/react-native'
@@ -13,6 +15,7 @@ import { setHcpEnabled } from '../hcpFlag'
 import {
   HCP_POLL_FAST_MS,
   HCP_POLL_SLOW_MS,
+  HCP_POLL_STOP_AFTER_MS,
   nextHcpPoll,
   pollHcpNotice,
   revokeHcpGrant,
@@ -23,6 +26,7 @@ import { HcpConnectionStore } from '../store'
 import { HCP_DISCLOSURES_SUMMARY, HCP_GRANTS_REVOKE, type HcpConnection } from '../types'
 import { HcpOffError, type HcpVtaPort } from '../vtaPort'
 import { HCP_AUDIT_READ } from '../whatItSaw/audit'
+import { hcpStatus } from '../status'
 import { auditEvent } from '../whatItSaw/__tests__/fixtures/fakeVta'
 import { whatItSawSchemas } from '../whatItSaw/__tests__/fixtures/whatItSawSchemas'
 import { expectValid, hcpSchemas } from './fixtures/hcpSchemas'
@@ -83,6 +87,9 @@ function summary(
 
 const refusal = (code: string) => Object.assign(new Error('refused'), { name: 'VtiRefusal', code })
 
+/** How many times `type` was sent. */
+const sent = (task: jest.Mock, type: string) => task.mock.calls.filter((c) => c[0] === type).length
+
 /**
  * A fake VTA: answers `grants/revoke` with `{}` (or `revoke()` if given) and `disclosures/summary` with the next of
  * `summaries` (or the last, once they run out). Every request it is sent is checked against the vendored schema.
@@ -91,16 +98,19 @@ function fakeVta(
   options: {
     revoke?: () => Promise<unknown>
     summaries?: (() => Promise<unknown>)[]
-    /** The `hcp/audit/read` answer, given the request; by default no events. */
+    /** The `hcp/audit/read` answer, given the request; by default a refusal (an older VTA). */
     audit?: (payload: Record<string, unknown>) => Promise<unknown>
+    /** Send the audit answer unchecked: for a malformed one. */
+    auditUnchecked?: boolean
   } = {}
 ) {
   let polls = 0
   const task = jest.fn(async (type: string, payload: Record<string, unknown>) => {
     expectValid(S[type].request, payload)
     if (type === HCP_AUDIT_READ) {
-      const answer = options.audit ? await options.audit(payload) : { events: [] }
-      expectValid(S[HCP_AUDIT_READ].response, answer)
+      if (!options.audit) throw refusal('notSupported')
+      const answer = await options.audit(payload)
+      if (!options.auditUnchecked) expectValid(S[HCP_AUDIT_READ].response, answer)
       return answer
     }
     if (type === HCP_GRANTS_REVOKE) {
@@ -157,7 +167,7 @@ describe('revokeHcpGrant', () => {
 
   it('a record with no grantId and no grant.issued yet is refused grantNotIssued, and nothing is revoked', async () => {
     const { grantId: _none, ...noId } = connection()
-    const { deps, store, task } = await setup(noId)
+    const { deps, store, task } = await setup(noId, fakeVta({ audit: async () => ({ events: [] }) }))
     expect(await revokeHcpGrant(deps, CLIENT_VID)).toEqual({
       ok: false,
       refused: 'grantNotIssued',
@@ -225,7 +235,7 @@ describe('pollHcpNotice', () => {
     const { deps, task } = await setup(revoked(), undefined, at)
     await pollHcpNotice(deps, CLIENT_VID)
     expect(task).toHaveBeenCalledWith(HCP_DISCLOSURES_SUMMARY, { client: CLIENT_VID })
-    expect(task.mock.calls[0][1]).toStrictEqual({ client: CLIENT_VID })
+    expect(task.mock.calls.find((c) => c[0] === HCP_DISCLOSURES_SUMMARY)?.[1]).toStrictEqual({ client: CLIENT_VID })
   })
 
   it('delivered: told, at usableUntil (the time of delivery)', async () => {
@@ -237,11 +247,16 @@ describe('pollHcpNotice', () => {
     expect((await store.get(CLIENT_VID))?.notice).toEqual({ state: 'told', at: iso(REVOKED_AT + 4 * SECOND) })
   })
 
-  it('abandoned: notTold, with usableUntil', async () => {
+  it('abandoned, changed since the first answer after the revoke: notTold, with usableUntil', async () => {
     const vta = fakeVta({
-      summaries: [async () => summary([{ notification: 'abandoned', usableUntil: iso(REVOKED_AT + 15 * MINUTE) }])],
+      summaries: [
+        async () => summary([{ notification: 'none', usableUntil: null }]),
+        async () => summary([{ notification: 'abandoned', usableUntil: iso(REVOKED_AT + 15 * MINUTE) }]),
+      ],
     })
-    const { deps, store } = await setup(revoked(), vta, at)
+    const { deps, store, clock } = await setup(revoked(), vta, at)
+    await pollHcpNotice(deps, CLIENT_VID)
+    clock.now += 5 * SECOND
     await pollHcpNotice(deps, CLIENT_VID)
     expect((await store.get(CLIENT_VID))?.notice).toEqual({
       state: 'notTold',
@@ -277,7 +292,9 @@ describe('pollHcpNotice', () => {
     await pollHcpNotice(deps, CLIENT_VID)
     clock.now += 5 * SECOND
     await pollHcpNotice(deps, CLIENT_VID)
-    expect(task).toHaveBeenCalledTimes(1)
+    // One poll: the refused audit read, then the summary.
+    expect(task).toHaveBeenCalledTimes(2)
+    expect(sent(task, HCP_DISCLOSURES_SUMMARY)).toBe(1)
     expect((await store.get(CLIENT_VID))?.notice).toEqual({ state: 'told', at: iso(REVOKED_AT + 4 * SECOND) })
   })
 
@@ -393,8 +410,8 @@ describe('pollHcpNotice: the summary read by our grant', () => {
     }
   })
 
-  // control: the same answer with our grant listed revoked is notTold.
-  it('control: abandoned while our grant is listed revoked: notTold', async () => {
+  // control: the same answer with our grant listed revoked is notTold, once it differs from the first answer.
+  it('control: abandoned while our grant is listed revoked, changed since the revoke: notTold', async () => {
     const value = summary([
       {
         notification: 'abandoned',
@@ -402,7 +419,50 @@ describe('pollHcpNotice: the summary read by our grant', () => {
         grants: [{ grantId: GRANT, status: 'revoked' }],
       },
     ])
-    expect((await noticeAfter(value))?.notice).toEqual({ state: 'notTold', usableUntil: iso(REVOKED_AT + 15 * MINUTE) })
+    const record = { ...revoked(), summaryAtRevoke: { notification: 'none' as const, usableUntil: null } }
+    expect((await noticeAfter(value, record))?.notice).toEqual({
+      state: 'notTold',
+      usableUntil: iso(REVOKED_AT + 15 * MINUTE),
+    })
+  })
+
+  it('a stale abandoned (the same as the first answer after the revoke) keeps telling, until it changes', async () => {
+    const stale = async () => summary([{ notification: 'abandoned', usableUntil: iso(REVOKED_AT - HOUR) }])
+    const vta = fakeVta({
+      summaries: [
+        stale,
+        stale,
+        async () => summary([{ notification: 'abandoned', usableUntil: iso(REVOKED_AT + HOUR) }]),
+      ],
+    })
+    const { deps, store, clock } = await setup(revoked(), vta, at)
+    await pollHcpNotice(deps, CLIENT_VID)
+    const first = await store.get(CLIENT_VID)
+    expect(first?.notice).toEqual(TELLING)
+    expect(first?.summaryAtRevoke).toEqual({ notification: 'abandoned', usableUntil: iso(REVOKED_AT - HOUR) })
+    clock.now += 5 * SECOND
+    await pollHcpNotice(deps, CLIENT_VID)
+    expect((await store.get(CLIENT_VID))?.notice).toEqual({ state: 'telling', lastPolledAt: iso(at + 5 * SECOND) })
+    // A value changed after the revoke: now it is ours.
+    clock.now += 5 * SECOND
+    await pollHcpNotice(deps, CLIENT_VID)
+    expect((await store.get(CLIENT_VID))?.notice).toEqual({ state: 'notTold', usableUntil: iso(REVOKED_AT + HOUR) })
+  })
+
+  it('a stale abandoned still unchanged at 24 hours settles notTold (the fallback’s stop)', async () => {
+    const value = summary([{ notification: 'abandoned', usableUntil: iso(REVOKED_AT + 15 * MINUTE) }])
+    const record = {
+      ...revoked(),
+      summaryAtRevoke: { notification: 'abandoned' as const, usableUntil: iso(REVOKED_AT + 15 * MINUTE) },
+    }
+    expect((await noticeAfter(value, record, REVOKED_AT + 24 * HOUR - 1))?.notice).toEqual({
+      state: 'telling',
+      lastPolledAt: iso(REVOKED_AT + 24 * HOUR - 1),
+    })
+    expect((await noticeAfter(value, record, REVOKED_AT + 24 * HOUR))?.notice).toEqual({
+      state: 'notTold',
+      usableUntil: iso(REVOKED_AT + 15 * MINUTE),
+    })
   })
 
   it('a refusal or an unreachable VTA is no answer, not nothing disclosed: telling', async () => {
@@ -442,8 +502,266 @@ describe('pollHcpNotice: the summary read by our grant', () => {
     await pollHcpNotice(deps, CLIENT_VID)
     clock.now += 5 * SECOND
     await pollHcpNotice(deps, CLIENT_VID)
-    expect(task).toHaveBeenCalledTimes(1)
+    expect(task).toHaveBeenCalledTimes(2)
+    expect(sent(task, HCP_DISCLOSURES_SUMMARY)).toBe(1)
     expect((await store.get(CLIENT_VID))?.notice).toEqual({ state: 'nothingDisclosed' })
+  })
+})
+
+/**
+ * The "Telling…" rule (prep note §1): the notice read from the audit log by our grant. One test per row of its state
+ * table (rows 1–13), each with its control. The fake log answers like a VTA: it filters by `eventType` and `from`, and
+ * leaves the grant to Keyring.
+ */
+describe('pollHcpNotice: the audit log by grant (the "Telling…" rule)', () => {
+  const at = REVOKED_AT + 10 * SECOND
+  const APPROVED_AT = '2026-11-27T10:01:00.000Z'
+  const ENTRY = (n: number) => `urn:uuid:00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
+  const TELLING = (now = at) => ({ state: 'telling', lastPolledAt: iso(now) })
+
+  /** `grant.revoked` for `grantId` at `ms`, initiated by the management client unless `role` says otherwise. */
+  const revokedEvent = (ms: number, role = 'management-client', grantId = GRANT) =>
+    auditEvent('grant.revoked', iso(ms), {
+      grantId,
+      participants: { initiator: { role, id: 'did:key:manager' }, provider: { id: 'did:web:vta.example' } },
+    })
+  /** `context.read` under `grantId` at `ms`, disclosing one entry per `useUntil` given. */
+  const contextRead = (ms: number, useUntils: number[], grantId = GRANT) =>
+    auditEvent('context.read', iso(ms), {
+      grantId,
+      categories: ['general_preferences'],
+      disclosed: useUntils.map((u, i) => ({ entryId: ENTRY(i + 1), version: 1, useUntil: iso(u) })),
+    })
+  /** `revocation.notified` for `grantId` at `ms` with `data`. */
+  const notified = (ms: number, data: Record<string, unknown>, grantId = GRANT) =>
+    auditEvent('revocation.notified', iso(ms), { grantId, data: { attempts: 1, ...data } })
+
+  /** A VTA audit log of `events`: answers each read with those of its `eventType` at or after its `from`. */
+  const auditLog = (events: Record<string, unknown>[]) =>
+    fakeVta({
+      audit: async (payload) => ({
+        events: events.filter(
+          (e) =>
+            (payload.eventType === undefined || e.eventType === payload.eventType) &&
+            (payload.from === undefined || Date.parse(e.timestamp as string) >= Date.parse(payload.from as string))
+        ),
+      }),
+    })
+
+  const DISCLOSED = contextRead(REVOKED_AT - 30 * MINUTE, [REVOKED_AT + 20 * MINUTE])
+  const REVOKE = revokedEvent(REVOKED_AT - SECOND)
+
+  const pollWith = async (events: Record<string, unknown>[], record = revoked(), now = at) => {
+    const vta = auditLog(events)
+    const { deps, store, task } = await setup(record, vta, now)
+    await pollHcpNotice(deps, CLIENT_VID)
+    return { after: await store.get(CLIENT_VID), task }
+  }
+
+  it('row 1: revocation.notified delivered for our grant: told at the event’s timestamp; no summary read', async () => {
+    const { after, task } = await pollWith([
+      DISCLOSED,
+      REVOKE,
+      notified(REVOKED_AT + 3 * SECOND, { outcome: 'delivered' }),
+    ])
+    expect(after?.notice).toEqual({ state: 'told', at: iso(REVOKED_AT + 3 * SECOND) })
+    expect(sent(task, HCP_DISCLOSURES_SUMMARY)).toBe(0)
+    // Each read is filtered by eventType and from: grant.revoked and context.read since the approval (less 60 s),
+    // revocation.notified since R (the provider's grant.revoked) less 60 s.
+    const reads = task.mock.calls.filter((c) => c[0] === HCP_AUDIT_READ).map((c) => c[1])
+    expect(reads).toEqual([
+      { client: CLIENT_VID, limit: 100, eventType: 'grant.revoked', from: iso(Date.parse(APPROVED_AT) - MINUTE) },
+      { client: CLIENT_VID, limit: 100, eventType: 'revocation.notified', from: iso(REVOKED_AT - SECOND - MINUTE) },
+    ])
+  })
+
+  it('row 2: no revocation.notified for our grant yet: telling, with the largest useUntil kept', async () => {
+    const { after } = await pollWith([DISCLOSED, REVOKE])
+    expect(after?.notice).toEqual(TELLING())
+    expect(after?.lastUsableUntil).toBe(iso(REVOKED_AT + 20 * MINUTE))
+  })
+
+  it('row 3: no context.read for our grant: nothingDisclosed (another grant’s reads do not count)', async () => {
+    const other = contextRead(REVOKED_AT - 30 * MINUTE, [REVOKED_AT + 20 * MINUTE], RETIRED_GRANT)
+    expect((await pollWith([REVOKE])).after?.notice).toEqual({ state: 'nothingDisclosed' })
+    expect((await pollWith([other, REVOKE])).after?.notice).toEqual({ state: 'nothingDisclosed' })
+  })
+
+  it('row 4: context.read for our grant with every disclosed empty: nothingDisclosed', async () => {
+    const empty = contextRead(REVOKED_AT - 30 * MINUTE, [])
+    expect((await pollWith([empty, empty, REVOKE])).after?.notice).toEqual({ state: 'nothingDisclosed' })
+  })
+
+  // control: one non-empty disclosed among the empty ones means a notice is due.
+  it('control: rows 3–4: one context.read with a disclosed entry keeps telling', async () => {
+    const empty = contextRead(REVOKED_AT - 30 * MINUTE, [])
+    expect((await pollWith([empty, DISCLOSED, REVOKE])).after?.notice).toEqual(TELLING())
+  })
+
+  it('row 5: an earlier grant’s delivered notice is ignored: telling, then our own outcome', async () => {
+    const earlier = notified(REVOKED_AT + 2 * SECOND, { outcome: 'delivered' }, RETIRED_GRANT)
+    expect((await pollWith([DISCLOSED, REVOKE, earlier])).after?.notice).toEqual(TELLING())
+    // control: the same event for our grant is told.
+    const ours = notified(REVOKED_AT + 2 * SECOND, { outcome: 'delivered' })
+    expect((await pollWith([DISCLOSED, REVOKE, earlier, ours])).after?.notice).toEqual({
+      state: 'told',
+      at: iso(REVOKED_AT + 2 * SECOND),
+    })
+  })
+
+  it('row 5: a notice from before R (less 60 s) is not read, whatever its grant', async () => {
+    const before = notified(REVOKED_AT - SECOND - MINUTE - 1, { outcome: 'delivered' })
+    expect((await pollWith([DISCLOSED, REVOKE, before])).after?.notice).toEqual(TELLING())
+  })
+
+  it('row 6: abandoned for our grant: notTold with data.lastUseUntil', async () => {
+    const event = notified(REVOKED_AT + HOUR, {
+      outcome: 'abandoned',
+      attempts: 9,
+      lastUseUntil: iso(REVOKED_AT + 45 * MINUTE),
+    })
+    expect((await pollWith([DISCLOSED, REVOKE, event])).after?.notice).toEqual({
+      state: 'notTold',
+      usableUntil: iso(REVOKED_AT + 45 * MINUTE),
+    })
+  })
+
+  // control: with no lastUseUntil, the largest useUntil disclosed under the grant.
+  it('control: row 6: abandoned with no lastUseUntil: notTold at the largest disclosed useUntil', async () => {
+    const event = notified(REVOKED_AT + HOUR, { outcome: 'abandoned' })
+    expect((await pollWith([DISCLOSED, REVOKE, event])).after?.notice).toEqual({
+      state: 'notTold',
+      usableUntil: iso(REVOKED_AT + 20 * MINUTE),
+    })
+  })
+
+  it('a revocation.notified with no known outcome is not an outcome: telling', async () => {
+    const event = notified(REVOKED_AT + HOUR, { outcome: 'pending' })
+    expect((await pollWith([DISCLOSED, REVOKE, event])).after?.notice).toEqual(TELLING())
+  })
+
+  it('row 7: no final event by the stop (25 h): notTold at the largest useUntil, in the past tense', async () => {
+    const stop = REVOKED_AT + 25 * HOUR
+    const { after } = await pollWith([DISCLOSED, REVOKE], revoked(), stop)
+    expect(after?.notice).toEqual({ state: 'notTold', usableUntil: iso(REVOKED_AT + 20 * MINUTE) })
+    expect(after && hcpStatus(after, new Date(stop))).toEqual({
+      key: 'StatusRevoked',
+      notice: { key: 'RevokeNotToldPast', params: { name: 'My notes agent', time: iso(REVOKED_AT + 20 * MINUTE) } },
+    })
+  })
+
+  // control: a millisecond before the stop the same log keeps telling; the summary's 24-hour stop does not apply.
+  it('control: row 7: at 24:59:59.999, and at 24:00, the notice stays telling', async () => {
+    for (const now of [REVOKED_AT + 25 * HOUR - 1, REVOKED_AT + 24 * HOUR]) {
+      expect((await pollWith([DISCLOSED, REVOKE], revoked(), now)).after?.notice).toEqual(TELLING(now))
+    }
+  })
+
+  it('row 8: no grant.revoked for our grant, the revoke answered at or after expiresAt: ended', async () => {
+    const expired = connection({ expiresAt: iso(REVOKED_AT), revokedAt: iso(REVOKED_AT), notice: { state: 'telling' } })
+    expect((await pollWith([DISCLOSED], expired, REVOKED_AT + MINUTE)).after?.notice).toEqual({ state: 'ended' })
+  })
+
+  // control: before the log's 60 s delay has passed, or with the grant still live at the revoke, it is not ended.
+  it('control: row 8: within the 60 s delay, or revoked before expiresAt, it is not ended', async () => {
+    const expired = connection({ expiresAt: iso(REVOKED_AT), revokedAt: iso(REVOKED_AT), notice: { state: 'telling' } })
+    expect((await pollWith([DISCLOSED], expired, REVOKED_AT + MINUTE - 1)).after?.notice).toEqual(
+      TELLING(REVOKED_AT + MINUTE - 1)
+    )
+    expect((await pollWith([DISCLOSED], revoked(), REVOKED_AT + MINUTE)).after?.notice).toEqual(
+      TELLING(REVOKED_AT + MINUTE)
+    )
+    // An expired grant that has its grant.revoked was revoked in time: read on.
+    expect((await pollWith([DISCLOSED, REVOKE], expired, REVOKED_AT + MINUTE)).after?.notice).toEqual(
+      TELLING(REVOKED_AT + MINUTE)
+    )
+  })
+
+  it('row 9: grant.revoked for our grant initiated by the context client: disconnected', async () => {
+    const relinquished = revokedEvent(REVOKED_AT - HOUR, 'context-client')
+    expect((await pollWith([DISCLOSED, relinquished])).after?.notice).toEqual({ state: 'disconnected' })
+  })
+
+  // control: the client relinquishing another grant of its own says nothing of ours.
+  it('control: row 9: a context-client grant.revoked for another grant: not disconnected', async () => {
+    const other = revokedEvent(REVOKED_AT - HOUR, 'context-client', RETIRED_GRANT)
+    expect((await pollWith([DISCLOSED, other, REVOKE])).after?.notice).toEqual(TELLING())
+  })
+
+  it('row 10: a retried revoke: R is the first grant.revoked for the grant', async () => {
+    const first = revokedEvent(REVOKED_AT - 10 * MINUTE)
+    const { task } = await pollWith([DISCLOSED, first, REVOKE])
+    const notifiedRead = task.mock.calls.find(
+      (c) => c[0] === HCP_AUDIT_READ && c[1].eventType === 'revocation.notified'
+    )
+    expect(notifiedRead?.[1].from).toBe(iso(REVOKED_AT - 10 * MINUTE - MINUTE))
+  })
+
+  it('row 11: several reads (tokens) under the grant: one notice, usable until the largest useUntil', async () => {
+    const later = contextRead(REVOKED_AT - 10 * MINUTE, [REVOKED_AT + 5 * MINUTE, REVOKED_AT + 50 * MINUTE])
+    const { after } = await pollWith([DISCLOSED, later, REVOKE])
+    expect(after?.lastUsableUntil).toBe(iso(REVOKED_AT + 50 * MINUTE))
+    const event = notified(REVOKED_AT + HOUR, { outcome: 'abandoned' })
+    expect((await pollWith([DISCLOSED, later, REVOKE, event])).after?.notice).toEqual({
+      state: 'notTold',
+      usableUntil: iso(REVOKED_AT + 50 * MINUTE),
+    })
+  })
+
+  it('row 12: after a restart the log is read again and gives the same answer', async () => {
+    const events = [DISCLOSED, REVOKE, notified(REVOKED_AT + 3 * SECOND, { outcome: 'delivered' })]
+    const { deps, genericRecords, clock } = await setup(revoked(), auditLog(events), at)
+    const restarted = new HcpConnectionStore({ genericRecords } as unknown as Agent)
+    clock.now = at + HOUR
+    await pollHcpNotice({ ...deps, store: restarted }, CLIENT_VID)
+    expect((await restarted.get(CLIENT_VID))?.notice).toEqual({ state: 'told', at: iso(REVOKED_AT + 3 * SECOND) })
+  })
+
+  it('row 13: an audit read refused or malformed: the summary is read instead', async () => {
+    const delivered = async () => summary([{ notification: 'delivered', usableUntil: iso(REVOKED_AT + 4 * SECOND) }])
+    const refused = fakeVta({ audit: async () => Promise.reject(refusal('permissionDenied')), summaries: [delivered] })
+    const malformed = fakeVta({ audit: async () => ({ items: [] }), auditUnchecked: true, summaries: [delivered] })
+    for (const vta of [refused, malformed]) {
+      const { deps, store, task } = await setup(revoked(), vta, at)
+      await pollHcpNotice(deps, CLIENT_VID)
+      expect(sent(task, HCP_DISCLOSURES_SUMMARY)).toBe(1)
+      expect((await store.get(CLIENT_VID))?.notice).toEqual({ state: 'told', at: iso(REVOKED_AT + 4 * SECOND) })
+    }
+  })
+
+  // control: an unreachable VTA is no answer: no summary, telling, and at the stop notTold at the last useUntil kept.
+  it('control: row 13: an unreachable audit read reads no summary and keeps telling; the stop settles it', async () => {
+    const unreachable = () => fakeVta({ audit: async () => Promise.reject(new Error('timeout')) })
+    const first = await setup(revoked(), unreachable(), at)
+    await pollHcpNotice(first.deps, CLIENT_VID)
+    expect(sent(first.task, HCP_DISCLOSURES_SUMMARY)).toBe(0)
+    expect((await first.store.get(CLIENT_VID))?.notice).toEqual(TELLING())
+    const kept = { ...revoked(), lastUsableUntil: iso(REVOKED_AT + 20 * MINUTE) }
+    const stop = await setup(kept, unreachable(), REVOKED_AT + 25 * HOUR)
+    await pollHcpNotice(stop.deps, CLIENT_VID)
+    expect((await stop.store.get(CLIENT_VID))?.notice).toEqual({
+      state: 'notTold',
+      usableUntil: iso(REVOKED_AT + 20 * MINUTE),
+    })
+  })
+
+  it('the HCP flags off on the audit read leaves the record as it is', async () => {
+    const off = fakeVta({ audit: async () => Promise.reject(new HcpOffError()) })
+    const { deps, store, task } = await setup(revoked(), off, at)
+    expect(await pollHcpNotice(deps, CLIENT_VID)).toEqual({ connection: revoked() })
+    expect(await store.get(CLIENT_VID)).toEqual(revoked())
+    expect(sent(task, HCP_DISCLOSURES_SUMMARY)).toBe(0)
+  })
+
+  it('ended, disconnected and nothingDisclosed are final: a later poll sends nothing', async () => {
+    for (const notice of [{ state: 'ended' }, { state: 'disconnected' }, { state: 'nothingDisclosed' }] as const) {
+      const { after, task } = await pollWith(
+        [DISCLOSED, REVOKE, notified(at, { outcome: 'delivered' })],
+        revoked(notice)
+      )
+      expect(task).not.toHaveBeenCalled()
+      expect(after?.notice).toEqual(notice)
+    }
   })
 })
 
@@ -457,19 +775,20 @@ describe('nextHcpPoll: the schedule', () => {
   })
 
   // control: the millisecond after the case above.
-  it('control: every minute from 2:00 to 23:59:59.999', () => {
+  it('control: every minute from 2:00 to 24:59:59.999', () => {
     expect(HCP_POLL_SLOW_MS).toBe(60000)
     expect(after(2 * MINUTE)).toBe(60000)
-    expect(after(24 * HOUR - 1)).toBe(60000)
+    expect(after(25 * HOUR - 1)).toBe(60000)
   })
 
-  it('stops at 24:00', () => {
-    expect(after(24 * HOUR)).toBeUndefined()
+  it('stops at 25:00 (the carriage’s 24 hours of attempts, and a margin)', () => {
+    expect(HCP_POLL_STOP_AFTER_MS).toBe(25 * HOUR)
+    expect(after(25 * HOUR)).toBeUndefined()
     expect(after(30 * HOUR)).toBeUndefined()
   })
 })
 
-describe('the 24-hour stop', () => {
+describe('the summary fallback’s 24-hour stop', () => {
   const STOP = REVOKED_AT + 24 * HOUR
   const none = (usableUntil: string | null = null) =>
     fakeVta({ summaries: [async () => summary([{ notification: 'none', usableUntil }])] })
@@ -583,13 +902,13 @@ describe('useHcpNotice', () => {
     expect(result.current).toEqual(revoked())
     expect(task).not.toHaveBeenCalled()
     await advance(HCP_POLL_FAST_MS)
-    expect(task).toHaveBeenCalledTimes(1)
+    expect(sent(task, HCP_DISCLOSURES_SUMMARY)).toBe(1)
     expect(result.current?.notice).toEqual({ state: 'telling', lastPolledAt: iso(REVOKED_AT + 5 * SECOND) })
     await advance(HCP_POLL_FAST_MS)
-    expect(task).toHaveBeenCalledTimes(2)
+    expect(sent(task, HCP_DISCLOSURES_SUMMARY)).toBe(2)
     expect(result.current?.notice).toEqual({ state: 'told', at: iso(REVOKED_AT + 7 * SECOND) })
     await advance(10 * MINUTE)
-    expect(task).toHaveBeenCalledTimes(2)
+    expect(task).toHaveBeenCalledTimes(4)
   })
 
   it('stops polling once the summary shows nothing disclosed', async () => {
@@ -601,7 +920,8 @@ describe('useHcpNotice', () => {
         await jest.advanceTimersByTimeAsync(ms)
       })
     }
-    expect(task).toHaveBeenCalledTimes(1)
+    expect(task).toHaveBeenCalledTimes(2)
+    expect(sent(task, HCP_DISCLOSURES_SUMMARY)).toBe(1)
     expect(result.current?.notice).toEqual({ state: 'nothingDisclosed' })
   })
 

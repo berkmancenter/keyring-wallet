@@ -42,6 +42,10 @@ const KEYS: HcpCopyKey[] = [
   'RevokeNothingDisclosed',
   // Added for the VTI hcp.md §5.1 contract: the request names no purpose, so the person picks one.
   'ApproveChoosePurpose',
+  // Added for the "Telling…" rule: not told with the time past; already expired; already disconnected.
+  'RevokeNotToldPast',
+  'RevokeAlreadyEnded',
+  'RevokeAlreadyDisconnected',
 ]
 const APPROVE_ENDINGS = [
   'ApproveNotApproved',
@@ -86,9 +90,21 @@ describe('HCP_COPY', () => {
     expect(line.source).toBe('PROPOSED')
     expect(hcpPlaceholders(line.en)).toEqual([])
     for (const lang of ['en', 'fr', 'ptBr'] as const) {
-      for (const key of ['RevokeTelling', 'RevokeTold', 'RevokeNotTold'] as const) {
+      for (const key of ['RevokeTelling', 'RevokeTold', 'RevokeNotTold', 'RevokeNotToldPast'] as const) {
         expect(HCP_COPY[key][lang].startsWith(`${line[lang]} `)).toBe(true)
       }
+    }
+  })
+
+  it('the "Telling…" rule’s new lines are PROPOSED and name the agent; the past tense differs from the present', () => {
+    for (const key of ['RevokeNotToldPast', 'RevokeAlreadyEnded', 'RevokeAlreadyDisconnected'] as const) {
+      expect(HCP_COPY[key].source).toBe('PROPOSED')
+      expect(hcpPlaceholders(HCP_COPY[key].en)).toContain('name')
+    }
+    expect(hcpPlaceholders(HCP_COPY.RevokeNotToldPast.en)).toEqual(hcpPlaceholders(HCP_COPY.RevokeNotTold.en))
+    for (const lang of ['en', 'fr', 'ptBr'] as const) {
+      expect(HCP_COPY.RevokeNotToldPast[lang]).not.toBe(HCP_COPY.RevokeNotTold[lang])
+      expect(HCP_COPY.RevokeAlreadyEnded[lang]).not.toBe(HCP_COPY.RevokeAlreadyDisconnected[lang])
     }
   })
 

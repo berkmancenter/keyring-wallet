@@ -102,17 +102,27 @@ export type HcpApprovalView = {
   chosenPurpose?: string
 }
 
-/** Whether the client has been told of a revoke (part 3). Times are ISO-8601 instants. */
+/**
+ * Whether the client has been told of a revoke (part 3). Times are ISO-8601 instants. Read from the audit log by our
+ * grant (`revoke.ts`), else from the summary. Every state but `telling` is final.
+ */
 export type HcpNoticeState =
   | { state: 'telling'; lastPolledAt?: string }
-  /** `at`: `usableUntil` from the summary, the time of delivery. */
+  /** `at`: the `revocation.notified` event's `timestamp`, else the summary's `usableUntil` (the time of delivery). */
   | { state: 'told'; at: string }
+  /** `usableUntil`: the last time anything disclosed under the grant stays usable. */
   | { state: 'notTold'; usableUntil: string }
   /**
-   * The client's `disclosures/summary` shows nothing disclosed to it under this grant (no entry for the client, or this
-   * `grantId` not in its `grants`): there is nothing to tell it, so the line reads only "Revoked.".
+   * Nothing was disclosed to the client under this grant, so no notice is due (HCP 6.2.2): no `context.read` for the
+   * grant with a non-empty `disclosed`, or, from the summary, no entry for the client or this `grantId` not in its
+   * `grants`. The line reads only "Revoked.". The "Telling…" proposal calls this state `nothingToTell`; #1125's name
+   * and copy key (`RevokeNothingDisclosed`) are kept.
    */
   | { state: 'nothingDisclosed' }
+  /** The grant had expired before the revoke reached the VTA: no `grant.revoked` event for it, so no notice. */
+  | { state: 'ended' }
+  /** The client had relinquished the grant itself (`grant.revoked` initiated by the context client): no notice. */
+  | { state: 'disconnected' }
 
 /** The record Keyring keeps of an approved HCP grant (part 3). Times are ISO-8601 instants. */
 export type HcpConnection = {
@@ -139,6 +149,11 @@ export type HcpConnection = {
    * a notice with the same time whether or not the app restarted while it was polling.
    */
   lastUsableUntil?: string
+  /**
+   * The summary fallback's first answer for the client after the revoke (its `notification` and `usableUntil`): an
+   * `abandoned` notice still the same is taken to be stale, from before the revoke, and keeps `telling`.
+   */
+  summaryAtRevoke?: { notification: 'delivered' | 'abandoned' | 'none'; usableUntil: string | null }
 }
 
 /**

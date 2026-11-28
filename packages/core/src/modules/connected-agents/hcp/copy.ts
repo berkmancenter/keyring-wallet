@@ -27,6 +27,9 @@ export type HcpCopyKey =
   | 'RevokeTold'
   | 'RevokeNotTold'
   | 'RevokeNothingDisclosed'
+  | 'RevokeNotToldPast'
+  | 'RevokeAlreadyEnded'
+  | 'RevokeAlreadyDisconnected'
   | 'RevokeTitle'
   | 'RevokeBody'
   | 'Revoke'
@@ -132,6 +135,28 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     en: 'Revoked.',
     fr: 'Révoqué.',
     ptBr: 'Revogado.',
+    source: 'PROPOSED',
+  },
+  // Added for the "Telling…" rule (the notice read from the audit log by grant): not told, and the time anything
+  // it read stays usable has already passed (V0 copies last at most 1 h).
+  RevokeNotToldPast: {
+    en: 'Revoked. We couldn\'t tell "{{name}}". Anything it read stopped being usable at {{time}}.',
+    fr: "Révoqué. Nous n'avons pas pu prévenir « {{name}} ». Ce qu'il a lu a cessé d'être utilisable à {{time}}.",
+    ptBr: 'Revogado. Não conseguimos avisar "{{name}}". O que ele leu deixou de poder ser usado às {{time}}.',
+    source: 'PROPOSED',
+  },
+  // The grant had expired before the revoke reached the VTA: no notice is sent for an expired grant.
+  RevokeAlreadyEnded: {
+    en: '"{{name}}" had already expired, so there was nothing to tell.',
+    fr: "« {{name}} » avait déjà expiré, il n'y avait donc rien à lui dire.",
+    ptBr: '"{{name}}" já tinha expirado, então não havia nada a avisar.',
+    source: 'PROPOSED',
+  },
+  // The client had relinquished the grant itself: no notice follows a relinquishment.
+  RevokeAlreadyDisconnected: {
+    en: '"{{name}}" had already disconnected, so there was nothing to tell.',
+    fr: "« {{name}} » s'était déjà déconnecté, il n'y avait donc rien à lui dire.",
+    ptBr: '"{{name}}" já tinha se desconectado, então não havia nada a avisar.',
     source: 'PROPOSED',
   },
   // Added for the VTI hcp.md §5.1 contract: a request that names no purpose, so the person picks one.
