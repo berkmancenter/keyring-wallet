@@ -102,7 +102,12 @@ and `auth/whoami` 0.1 does not name its creator (control: the administrator's `a
 4. Keyring shows the owner an introduction at pairing and the owner pastes it into the plugin. No VTI change; not
    designed on either side.
 
-Our recommendation is 3. fb-C1 builds the carrier either way and does not announce `chatDid` until it is answered.
+**DECIDED: option 3** (Alberto, coordinator's session, 2026-11-28). Keyring's first document to the agent is signed by
+the administrator key that the agent's `aclEntry.created_by` names. It introduces `chatDid`, the owner's persona and
+Keyring's mediator. The plugin checks it against `created_by`, then checks chat and the VDC against what it
+introduced. Both sides build it now against a fake `auth/whoami` that returns `created_by`. The one VTI change (that
+field in `auth/whoami`) is asked upstream. Until a VTA serves it, the live fallback path stays unannounced. Keyring's
+core lane specifies the introduction document as its own part.
 
 ---
 
