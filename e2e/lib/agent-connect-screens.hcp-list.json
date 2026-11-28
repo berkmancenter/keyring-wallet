@@ -1,0 +1,144 @@
+{
+  "about": "The HCP agent list, its after-revoke notice lines and the HCP Revoke sheet (step 7.27, backlog Section C part U2). Read with agent-connect-screens.json by the screen catalogue, with the same fields. HCP words are the Hcp.<key> ids of hcp/copy.ts, read back through __tests__/fixtures/hcpWordSource.ts. Agent names and times are data, not words, so no entry lists them.",
+  "canvas": "docs/plans/agent-connect-plan/canvas/",
+  "kit": "docs/plans/agent-connect-plan/mockups/",
+  "states": [
+    {
+      "id": "hcp-list",
+      "step": "7.27",
+      "marker": "HcpAgentList",
+      "frame": "52-hcp-agent-list.png",
+      "kit": null,
+      "words": [
+        "Hcp.StatusConnectedUntil",
+        "Hcp.Revoke",
+        "Hcp.StatusExpired",
+        "ConnectedAgents.ConnectAnAgent"
+      ],
+      "frameOnly": [
+        { "what": "\"What it saw\" on the connected row", "why": "P1 (step 7.29), not drawn here" },
+        { "what": "the canvas note box (\"Canvas note, not on the phone\")", "why": "a canvas note, not on the phone" },
+        {
+          "what": "the band \"HCP lane: behind the flag, off by default\"",
+          "why": "a canvas label for the lane, not on the phone"
+        },
+        { "what": "the header \"AI agents\" and the tab bar", "why": "set by the navigator, which the wiring adds" }
+      ]
+    },
+    {
+      "id": "hcp-list-revoked-telling",
+      "step": "7.27",
+      "marker": "HcpNoticeLine",
+      "frame": "55-hcp-revoke-states.png",
+      "kit": null,
+      "words": ["Hcp.StatusRevoked", "Hcp.RevokeTelling", "ConnectedAgents.ConnectAnAgent"],
+      "frameOnly": [
+        {
+          "what": "the line drawn on the details card (\"Belongs to Ada\", the \"AI agent\" badge)",
+          "why": "drawn on the list row; the details placement comes with the wiring"
+        },
+        {
+          "what": "the other two lines, and the labels \"While it is told\", \"Once it has heard\", \"If telling it is abandoned\"",
+          "why": "the frame shows the three lines at once as a sample; the phone shows the one the notice is in"
+        },
+        { "what": "the canvas note box (\"Canvas note, not on the phone\")", "why": "a canvas note, not on the phone" },
+        {
+          "what": "the band \"HCP lane: behind the flag, off by default\", and the \"<title>\" stand-in",
+          "why": "canvas labels, not on the phone; the header is set by the navigator"
+        }
+      ],
+      "appOnly": [{ "what": "\"Connect an agent\" under the row", "why": "the list's bottom bar (frame 52)" }]
+    },
+    {
+      "id": "hcp-list-revoked-told",
+      "step": "7.27",
+      "marker": "HcpNoticeLine",
+      "frame": "55-hcp-revoke-states.png",
+      "kit": null,
+      "words": ["Hcp.StatusRevoked", "Hcp.RevokeTold", "ConnectedAgents.ConnectAnAgent"],
+      "frameOnly": [
+        {
+          "what": "the line drawn on the details card (\"Belongs to Ada\", the \"AI agent\" badge)",
+          "why": "drawn on the list row; the details placement comes with the wiring"
+        },
+        {
+          "what": "the other two lines, and the labels \"While it is told\", \"Once it has heard\", \"If telling it is abandoned\"",
+          "why": "the frame shows the three lines at once as a sample; the phone shows the one the notice is in"
+        },
+        { "what": "the canvas note box (\"Canvas note, not on the phone\")", "why": "a canvas note, not on the phone" },
+        {
+          "what": "the band \"HCP lane: behind the flag, off by default\", and the \"<title>\" stand-in",
+          "why": "canvas labels, not on the phone; the header is set by the navigator"
+        }
+      ],
+      "appOnly": [{ "what": "\"Connect an agent\" under the row", "why": "the list's bottom bar (frame 52)" }]
+    },
+    {
+      "id": "hcp-list-revoked-not-told",
+      "step": "7.27",
+      "marker": "HcpNoticeLine",
+      "frame": "55-hcp-revoke-states.png",
+      "kit": null,
+      "words": ["Hcp.StatusRevoked", "Hcp.RevokeNotTold", "ConnectedAgents.ConnectAnAgent"],
+      "frameOnly": [
+        {
+          "what": "the line drawn on the details card (\"Belongs to Ada\", the \"AI agent\" badge)",
+          "why": "drawn on the list row; the details placement comes with the wiring"
+        },
+        {
+          "what": "the other two lines, and the labels \"While it is told\", \"Once it has heard\", \"If telling it is abandoned\"",
+          "why": "the frame shows the three lines at once as a sample; the phone shows the one the notice is in"
+        },
+        { "what": "the canvas note box (\"Canvas note, not on the phone\")", "why": "a canvas note, not on the phone" },
+        {
+          "what": "the band \"HCP lane: behind the flag, off by default\", and the \"<title>\" stand-in",
+          "why": "canvas labels, not on the phone; the header is set by the navigator"
+        }
+      ],
+      "appOnly": [{ "what": "\"Connect an agent\" under the row", "why": "the list's bottom bar (frame 52)" }]
+    },
+    {
+      "id": "hcp-revoke",
+      "step": "7.27",
+      "marker": "HcpRevokeSheet",
+      "frame": "54-hcp-revoke.png",
+      "kit": null,
+      "words": ["Hcp.RevokeTitle", "Hcp.RevokeBody", "Hcp.Revoke", "Hcp.Keep"],
+      "frameOnly": [
+        {
+          "what": "the dimmed details behind the sheet, and the bottom sheet's frame",
+          "why": "the contents only: the caller presents them in its bottom sheet"
+        },
+        {
+          "what": "the band \"HCP lane: behind the flag, off by default\", and the \"<title>\" stand-in",
+          "why": "canvas labels, not on the phone; the header is set by the navigator"
+        }
+      ]
+    },
+    {
+      "id": "hcp-revoke-unreachable",
+      "step": "7.27",
+      "marker": "HcpRevokeOutcome",
+      "steps": [{ "press": "HcpRevokeConfirm" }],
+      "frame": "54-hcp-revoke.png",
+      "kit": null,
+      "words": ["Hcp.RevokeTitle", "Hcp.RevokeBody", "Hcp.RevokeUnreachable", "Hcp.Revoke", "Hcp.Keep"],
+      "frameOnly": [
+        {
+          "what": "the dimmed details behind the sheet, and the bottom sheet's frame",
+          "why": "the contents only: the caller presents them in its bottom sheet"
+        },
+        {
+          "what": "the band \"HCP lane: behind the flag, off by default\", and the \"<title>\" stand-in",
+          "why": "canvas labels, not on the phone; the header is set by the navigator"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "the line Hcp.RevokeUnreachable above the buttons, with \"Revoke\" still there to press again",
+          "why": "the VTA could not be reached; frame 54 draws the sheet before Revoke is pressed"
+        }
+      ]
+    }
+  ]
+}
