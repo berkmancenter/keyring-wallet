@@ -641,6 +641,17 @@ on ruling 4) and **B3-Z** (the developer switch row, last).
    `AgentsReadEverything`, `CanReadAllOf` and `WidenBodyRooms`) are removed by #1124, and the parts below no longer
    use them.
 
+7. **DECIDED (Alberto, coordinator's session, 11-28; relayed to eb by the coordinator): in P1 an agent reads and
+   answers in open rooms only.** It is Section A's ruling 1, Rule A. The words say so, in #1124's fourth commit:
+   - the four every-room keys say "every open room you're in as {{persona}}";
+   - a new PROPOSED key, `AgentsNotInAttributed`: "Agents can't read or answer in attributed rooms. They work only in
+     open rooms." It names the tier the room's badge shows ("Attributed"), since the plan's copy rules keep
+     "encrypted" out of these words.
+
+   **Decided here:** in an attributed room, the add is **off**, not offered and then refused. Room info's "Add an
+   agent" and the composer's "Add my agent" are drawn disabled, with `AgentsNotInAttributed` under them, and the add
+   sheet is never reached there.
+
 Also relevant: c5's ruling 3 (shipping the switch with the hook alone) decides whether the plugin honours "On". The
 views here follow fb's `offered` value, whatever that ruling says.
 
@@ -663,6 +674,7 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
     offered: boolean,               // false for a private room, or with either switch off
     setting: 'yes' | 'no' | 'notStated',
     persona: string,                // the persona the owner acts as in this room, by its name
+    tier: 'open' | 'attributed',    // a private room is offered: false (ruling 7)
     inRoom: { agentId, name, memoryNames: string[] }[],
     addable: { agentId, name, memoryNames: string[], widens: { context: string } | null }[],
   }
@@ -728,7 +740,7 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
 | Part | Creates | Edits |
 |---|---|---|
 | B3-0 (eb; lands first; **PR #1123**) | `connected-agents/agentRoomsFlag.ts` (only if ruling 1 says a separate switch) | the three locale files (`ConnectedAgents.*` only); `connected-agents/proposedCopy.ts` (PROPOSED and SETTLED_ELSEWHERE entries only) |
-| B3-0b (eb; **PR #1124**, after B3-0) | none | the three locale files (three keys added beside B3-0's block, four removed); `proposedCopy.ts` (three PROPOSED entries) |
+| B3-0b (eb; **PR #1124**, after B3-0) | none | the three locale files (five keys added beside B3-0's block; `NotAgentKind` and the four one-room keys removed; `AddRoomNotAddable` reworded); `proposedCopy.ts` (five PROPOSED entries; `NotAgentKind` out of SETTLED_ELSEWHERE) |
 | T1 7.13 room info and the add flow (frames 34 to 37) | `rooms/components/AgentRoomSection.tsx`, `rooms/components/AgentPickerSheet.tsx`, `rooms/components/AgentRoomSheet.tsx` (the add sheet; the plan's name, PLAN:984), `rooms/components/AddAgentFlow.tsx`, `connected-agents/screens/WhatItRemembersSheet.tsx`, `rooms/__tests__/addAgentToRoom.test.tsx`, `connected-agents/__tests__/fixtures/screenStatesRooms.tsx`, `e2e/lib/agent-connect-screens.rooms.json` | `rooms/screens/RoomInfo.tsx` |
 | T2 7.13 and 7.14 composer (frames 31 to 33) | `rooms/components/ComposerMoreSheet.tsx` (the plan's name, PLAN:991), `rooms/components/MentionSuggestions.tsx`, `rooms/__tests__/composerAgents.test.tsx`, `fixtures/screenStatesComposer.tsx`, `e2e/lib/agent-connect-screens.composer.json` | `rooms/components/RoomComposer.tsx`, `rooms/screens/Room.tsx` |
 | T3 7.14 "Answers other people" and the P1 lines (frames 12 to 16) | `connected-agents/components/AnswersOthersRow.tsx`, `connected-agents/screens/AnswersOthersConfirmSheet.tsx`, `connected-agents/__tests__/answersOthers.test.tsx`, `fixtures/screenStatesAnswers.tsx`, `e2e/lib/agent-connect-screens.answers.json` | `connected-agents/screens/AgentDetailsView.tsx`, `AgentListView.tsx`, `ChangeMemoriesView.tsx`; `screens/agents/AgentDetailsScreen.tsx` and `AiAgentsScreen.tsx` (new props only) |
@@ -899,10 +911,11 @@ Two more apply:
 
 | Key | en (PROPOSED) | fr (PROPOSED) | pt-br (PROPOSED) |
 |---|---|---|---|
-| `AddToRoomBodyAllRooms` | Adding an agent lets it use every room you're in as {{persona}}, not only this one. It is asked to act only when you mention it, but nothing in a room enforces that. | Ajouter un agent lui permet d'utiliser tous les salons où vous êtes en tant que {{persona}}, pas seulement celui-ci. On lui demande d'agir seulement quand vous le mentionnez, mais rien dans un salon ne l'impose. | Adicionar um agente permite que ele use todas as salas em que você está como {{persona}}, não só esta. Pede-se que ele aja só quando você o mencionar, mas nada em uma sala garante isso. |
-| `AgentsUseEveryRoom` | Agents added here can use every room you're in as {{persona}}, and read everything in them, not only messages that mention them. | Les agents ajoutés ici peuvent utiliser tous les salons où vous êtes en tant que {{persona}}, et tout y lire, pas seulement les messages qui les mentionnent. | Os agentes adicionados aqui podem usar todas as salas em que você está como {{persona}} e ler tudo nelas, não só as mensagens que os mencionam. |
-| `AddToRoomBodyAlready` | It can already use every room you're in as {{persona}}. Here, it is asked to act only when you mention it, but nothing in the room enforces that. | Il peut déjà utiliser tous les salons où vous êtes en tant que {{persona}}. Ici, on lui demande d'agir seulement quand vous le mentionnez, mais rien dans le salon ne l'impose. | Ele já pode usar todas as salas em que você está como {{persona}}. Aqui, pede-se que ele aja só quando você o mencionar, mas nada na sala garante isso. |
-| `CanUseEveryRoomAs` | It can use every room you're in as {{persona}}. | Il peut utiliser tous les salons où vous êtes en tant que {{persona}}. | Ele pode usar todas as salas em que você está como {{persona}}. |
+| `AddToRoomBodyAllRooms` | Adding an agent lets it use every open room you're in as {{persona}}, not only this one. It is asked to act only when you mention it, but nothing in a room enforces that. | Ajouter un agent lui permet d'utiliser tous les salons ouverts où vous êtes en tant que {{persona}}, pas seulement celui-ci. On lui demande d'agir seulement quand vous le mentionnez, mais rien dans un salon ne l'impose. | Adicionar um agente permite que ele use todas as salas abertas em que você está como {{persona}}, não só esta. Pede-se que ele aja só quando você o mencionar, mas nada em uma sala garante isso. |
+| `AgentsUseEveryRoom` | Agents added here can use every open room you're in as {{persona}}, and read everything in them, not only messages that mention them. | Les agents ajoutés ici peuvent utiliser tous les salons ouverts où vous êtes en tant que {{persona}}, et tout y lire, pas seulement les messages qui les mentionnent. | Os agentes adicionados aqui podem usar todas as salas abertas em que você está como {{persona}} e ler tudo nelas, não só as mensagens que os mencionam. |
+| `AddToRoomBodyAlready` | It can already use every open room you're in as {{persona}}. Here, it is asked to act only when you mention it, but nothing in the room enforces that. | Il peut déjà utiliser tous les salons ouverts où vous êtes en tant que {{persona}}. Ici, on lui demande d'agir seulement quand vous le mentionnez, mais rien dans le salon ne l'impose. | Ele já pode usar todas as salas abertas em que você está como {{persona}}. Aqui, pede-se que ele aja só quando você o mencionar, mas nada na sala garante isso. |
+| `CanUseEveryRoomAs` | It can use every open room you're in as {{persona}}. | Il peut utiliser tous les salons ouverts où vous êtes en tant que {{persona}}. | Ele pode usar todas as salas abertas em que você está como {{persona}}. |
+| `AgentsNotInAttributed` | Agents can't read or answer in attributed rooms. They work only in open rooms. | Les agents ne peuvent ni lire ni répondre dans les salons attribués. Ils fonctionnent seulement dans les salons ouverts. | Os agentes não podem ler nem responder em salas atribuídas. Eles funcionam só em salas abertas. |
 
 - **Removed:** `AddToRoomBody`, `AgentsReadEverything`, `CanReadAllOf` and `WidenBodyRooms`. No code used them, and
   §6 still quotes them until the plan owner updates it.
@@ -922,6 +935,7 @@ Two more apply:
   agents: { agentId, name, memoryNames }[],
   canAdd: boolean,
   setting: 'yes' | 'no' | 'notStated',
+  tier: 'open' | 'attributed',
   onOpenAgent(agentId),
   onAdd(),
 }
@@ -931,10 +945,12 @@ Two more apply:
 - **Each row** is the robot avatar, the name, `Rooms.AgentBadge`, then `AgentMemory` with the names joined by ", ", or
   `AgentNoMemory`. The row has a chevron and opens `WhatItRemembersSheet` on that agent.
 - **The row "+ Add an agent"** (`AddAnAgent`) is present only when `canAdd`, meaning `addable` is not empty.
+  - With `tier` `'attributed'`, the row is disabled, with `AgentsNotInAttributed` under it (ruling 7). This comes
+    before the setting: an attributed room shows this line only.
   - With `setting` `'no'` or `'notStated'`, the row is disabled, with `CommunityNo` or `CommunityNotStated` under it
     (PLAN:644). There is no "Add anyway".
 - **The note** under the card is `AgentsUseEveryRoom` with `{{persona}}` (ruling 6), with the eye icon. It needs a
-  `persona` prop.
+  `persona` prop. It is not drawn in an attributed room, where `AgentsNotInAttributed` says what applies.
 - **Decided here, on when the section shows:** it is absent when `offered` is false, and when there are no agents in
   the room and none addable. A person with no agent sees today's RoomInfo.
 - testIDs: `AgentRoomSection`, `AgentRoomRow`, `AgentRoomAdd`, `AgentRoomSetting`, `AgentRoomNote`.
@@ -1026,6 +1042,9 @@ mounts `AddAgentFlow`. Nothing else in the file changes.
 - With the switches off, RoomInfo renders as on the tip, compared with a render of the tip's tree. `// control:`
   draw the section unconditionally, and this fails.
 - Each `setting` value: only `'yes'` enables "Add an agent", from this screen (PLAN:1361).
+- An attributed room: "Add an agent" is disabled with `AgentsNotInAttributed`, even with `setting` `'yes'`, there is
+  no `AgentsUseEveryRoom` note, and pressing the row calls nothing. `// control:` drop the tier check, and this
+  fails.
 - One addable agent skips the picker; two show it; an `expired` agent is never offered (fb filters it; the view
   draws only what it's given).
 - The add sheet shows `AddToRoomBodyAllRooms` and the memory notice only with `widensContext`, and
@@ -1046,6 +1065,7 @@ mounts `AddAgentFlow`. Nothing else in the file changes.
 {
   showAddAgent: boolean,
   setting: 'yes' | 'no' | 'notStated',
+  tier: 'open' | 'attributed',
   onAddFile(),
   onAddAgent(),
   onClose(),
@@ -1055,10 +1075,11 @@ mounts `AddAgentFlow`. Nothing else in the file changes.
 - **The rows:** "Add a file" (`AddAFile`), then "Add my agent" (`AddMyAgent`).
 - **"Add my agent"** is present only when `showAddAgent` is true, meaning `addable` is not empty. It is absent when
   every agent is already in the room (PLAN:1361).
+- With `tier` `'attributed'`, it is disabled, with `AgentsNotInAttributed` under it (ruling 7), before the setting.
 - With `setting` `'no'` or `'notStated'`, it is disabled, with `CommunityNo` or `CommunityNotStated` under it.
 - testIDs: `ComposerMoreSheet`, `ComposerMoreAddFile`, `ComposerMoreAddAgent`, `ComposerMoreSetting`.
 
-**`RoomComposer.tsx`** gets two new optional props, `moreSheet?: { showAddAgent, setting }` and `mentionables?: {
+**`RoomComposer.tsx`** gets two new optional props, `moreSheet?: { showAddAgent, setting, tier }` and `mentionables?: {
 name, handle }[]`.
 - **The "+":**
   - with `moreSheet` absent (the switches off, or the owner has no `active` agent), it picks a file at once, labelled
@@ -1093,6 +1114,7 @@ name, handle }[]`.
   "Attach a file". `// control:` always open the sheet, and this fails.
 - With an active agent, "+" opens the sheet and is labelled "Add". "Add a file" still picks a file.
 - "Add my agent" is absent when `showAddAgent` is false, and disabled with the line for `no` and for `notStated`.
+- In an attributed room, "Add my agent" is disabled with `AgentsNotInAttributed`, even with `setting` `'yes'`.
 - The mention:
   - "@no" and a pick give `@notes-helper-7f3k ` in the field;
   - the bare name is never inserted;
