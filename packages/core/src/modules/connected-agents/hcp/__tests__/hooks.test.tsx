@@ -67,7 +67,7 @@ function setup(approvals: VtiApproval[] = [hcpApproval()]) {
     },
     store,
     source,
-    lockout: { state: async () => ({ locked: false }), recordWrongNumber: jest.fn(async () => undefined) },
+    lockout: { state: async () => ({ locked: false }), recordWrongNumber: async () => ({ locked: false }) },
     session: { getState: () => ({ managerDid: MANAGER }) },
     clock: () => new Date(NOW),
   }

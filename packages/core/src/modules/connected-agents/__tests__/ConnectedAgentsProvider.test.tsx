@@ -298,7 +298,7 @@ describe('Keep it connected: one path (fb-W1)', () => {
         return Promise.reject(new Error('the store could not be read'))
       },
     })
-    const { result, rerender } = renderHook(({ id }) => useKeepConnectedOffered(id), {
+    const { result, rerender } = renderHook(({ id }: { id: string }) => useKeepConnectedOffered(id), {
       wrapper: wrap(services),
       initialProps: { id: 'did:key:z6MkA' },
     })
