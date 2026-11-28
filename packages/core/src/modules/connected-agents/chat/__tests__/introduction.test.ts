@@ -9,9 +9,12 @@ import { ed25519 } from '@noble/curves/ed25519.js'
 import { verifyDocumentProof } from '../../../trust-tasks/documentProof'
 import {
   INTRODUCTION_TYPE,
+  IntroductionGranterNotHeld,
   buildIntroduction,
+  checkIntroduction,
   granterOf,
   signIntroduction,
+  type IntroductionReceiver,
   type SignedIntroduction,
 } from '../introduction'
 
@@ -25,7 +28,8 @@ function didKeySigner() {
   const agent = {
     dids: {
       resolveDidDocument: async (d: string) => DidKey.fromDid(d).didDocument,
-      getCreatedDids: async () => [],
+      // The phone holds this DID's key: it created it, as it creates its administrator DID.
+      getCreatedDids: async ({ did: asked }: { did: string }) => (asked === did ? [{ did }] : []),
     },
     dependencyManager: {
       resolve: () => ({
@@ -150,5 +154,83 @@ describe('the granter, as the agent reads it from auth/whoami (a fake until a VT
     expect(await signedBy(signed, named)).toBe(true)
     // Control: createdBy is not the granter here, and the document does not verify against it.
     expect(await signedBy(signed, 'did:example:vta-service')).toBe(false)
+  })
+})
+
+describe('a granter this phone holds no key for (the VTA itself, on an entry it wrote alone)', () => {
+  it('is refused before anything is signed, not left to the key store', async () => {
+    const vta = didKeySigner()
+    // The phone resolves the VTA's DID but did not create it: no created-DID record, so no key of its own for it.
+    const sign = jest.fn()
+    const phone = {
+      dids: { resolveDidDocument: async (d: string) => DidKey.fromDid(d).didDocument, getCreatedDids: async () => [] },
+      dependencyManager: { resolve: () => ({ sign }) },
+    } as never
+    const granter = granterOf({ createdBy: vta.did }) as string
+    const doc = buildIntroduction({ granterDid: granter, agentDid, chatDid: chat.did, ...FIELDS, now: NOW })
+    await expect(signIntroduction(phone, doc, granter)).rejects.toBeInstanceOf(IntroductionGranterNotHeld)
+    expect(sign).not.toHaveBeenCalled()
+  })
+
+  it('CONTROL: the same document is signed once the phone holds the granter, as it does its administrator DID', async () => {
+    const signed = await signIntroduction(granter.agent, introduce(), granter.did)
+    expect(await signedBy(signed, granter.did)).toBe(true)
+  })
+})
+
+describe('checkIntroduction: the receiver rules of the shared vectors, as Keyring reads them', () => {
+  const receiver = (over: Partial<IntroductionReceiver> = {}): IntroductionReceiver => ({
+    did: agentDid,
+    granter: granter.did,
+    vtaDid: FIELDS.vtaDid,
+    now: '2026-11-20T12:01:00Z',
+    ...over,
+  })
+  const signed = async (over: { by?: ReturnType<typeof didKeySigner>; chatDid?: string; at?: Date } = {}) => {
+    const by = over.by ?? granter
+    return signIntroduction(
+      by.agent,
+      buildIntroduction({
+        granterDid: by.did,
+        agentDid,
+        chatDid: over.chatDid ?? chat.did,
+        ...FIELDS,
+        now: over.at ?? NOW,
+      }),
+      by.did
+    )
+  }
+  const reason = async (doc: unknown, r = receiver()) => {
+    const out = await checkIntroduction(verifier, doc, r)
+    return out.result === 'accept' ? 'accept' : out.reason
+  }
+
+  it('accepts an introduction by the granter, for the agent, on the pinned VTA', async () => {
+    expect(await reason(await signed())).toBe('accept')
+  })
+
+  it('CONTROL: a newer one with a different chatDid is accepted after the last applied, and replaces it', async () => {
+    const newer = await signed({ chatDid: otherAdmin.did, at: new Date('2026-11-20T12:00:30Z') })
+    expect(await reason(newer, receiver({ lastIntroduction: '2026-11-20T12:00:00Z' }))).toBe('accept')
+  })
+
+  it("refuses each fault with the vectors' reason", async () => {
+    const ok = await signed()
+    expect(await reason(await signed({ by: otherAdmin }))).toBe('wrong-issuer')
+    expect(await reason({ ...ok, payload: { ...ok.payload, mediatorDid: 'did:web:elsewhere.example' } })).toBe('proof')
+    expect(await reason(ok, receiver({ did: otherAdmin.did }))).toBe('recipient')
+    expect(await reason(ok, receiver({ vtaDid: 'did:webvh:QmOther:example.org:vta' }))).toBe('wrong-vta')
+    expect(await reason(ok, receiver({ now: '2026-11-20T11:54:00Z' }))).toBe('future')
+    expect(await reason(ok, receiver({ now: '2026-11-28T12:00:01Z' }))).toBe('stale')
+    expect(await reason(ok, receiver({ seenIds: [ok.id] }))).toBe('repeated')
+    expect(await reason(ok, receiver({ lastIntroduction: '2026-11-20T12:00:00Z' }))).toBe('older-state')
+    expect(await reason({ ...ok, payload: { version: '1.0', chatDid: chat.did } })).toBe('malformed')
+    expect(await reason({ ...ok, type: 'keyring/chat/1.0' })).toBe('malformed')
+  })
+
+  it("CONTROL: each boundary is the vectors': 300 s ahead and 604800 s behind are still accepted", async () => {
+    const ok = await signed()
+    expect(await reason(ok, receiver({ now: '2026-11-20T11:55:00Z' }))).toBe('accept')
+    expect(await reason(ok, receiver({ now: '2026-11-27T12:00:00Z' }))).toBe('accept')
   })
 })

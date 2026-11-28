@@ -23,9 +23,10 @@
  */
 import type { Agent } from '@credo-ts/core'
 
-import { signDocumentProof, wireTimestamp } from '../../trust-tasks/documentProof'
+import { signDocumentProof, verifyDocumentProof, wireTimestamp } from '../../trust-tasks/documentProof'
 
 import { newEnvelopeId } from './envelope'
+import { ENVELOPE_MAX_AGE_MS, ENVELOPE_MAX_AHEAD_MS } from './seenIds'
 
 export const INTRODUCTION_TYPE = 'keyring/agent/introduction/1.0'
 export const INTRODUCTION_VERSION = '1.0'
@@ -111,9 +112,22 @@ export function buildIntroduction(input: {
   }
 }
 
+/** The granter is not a DID this phone created, so it holds no key to sign as it: nothing was signed. */
+export class IntroductionGranterNotHeld extends Error {
+  public constructor(public readonly granterDid: string) {
+    super(`this phone holds no key for the granter ${granterDid}, so it cannot sign the introduction`)
+    this.name = 'IntroductionGranterNotHeld'
+  }
+}
+
 /**
  * Sign an introduction as the granter, for `assertionMethod`, with eddsa-jcs-2022. A document naming another issuer
  * is refused; a proof already on it is replaced, so a resend may be signed afresh while keeping its `id`.
+ *
+ * Signed only as a DID this phone created (`agent.dids.getCreatedDids`), as the administrator DID it signs grants
+ * with is. A granter it did not create, the VTA itself on an entry it wrote alone (`createdBy` and no `delegatedBy`)
+ * for one, is refused with {@link IntroductionGranterNotHeld} before anything is signed: the proof layer would
+ * otherwise try the key store with the DID document's own key id, and a refusal must not rest on that failing.
  */
 export async function signIntroduction(
   agent: Agent,
@@ -126,6 +140,86 @@ export async function signIntroduction(
   if (unsigned.issuer !== granterDid) {
     throw new Error(`the introduction names ${unsigned.issuer} as its issuer, not the granter ${granterDid}`)
   }
+  const [held] = await agent.dids.getCreatedDids({ did: granterDid })
+  if (!held) throw new IntroductionGranterNotHeld(granterDid)
   const signed = await signDocumentProof(agent, { ...unsigned }, granterDid, { proofPurpose: 'assertionMethod' })
   return signed as unknown as SignedIntroduction
+}
+
+/**
+ * Why a receiver refuses an introduction, spelled as the shared vectors spell their reasons (`vectors/introduction.json`,
+ * kebab-case as in `control-messages.json`). `malformed` is a document missing a member the type needs.
+ */
+export type IntroductionRefusal =
+  | 'wrong-issuer'
+  | 'wrong-vta'
+  | 'recipient'
+  | 'stale'
+  | 'future'
+  | 'repeated'
+  | 'proof'
+  | 'older-state'
+  | 'malformed'
+
+/** What the receiver knows when an introduction arrives: the vectors' `receiver` block. */
+export interface IntroductionReceiver {
+  /** The agent's own identity, `K_a`. */
+  did: string
+  /** Who granted its entry (`granterOf` over what `auth/whoami` answers). */
+  granter: string
+  /** The VTA the agent is pinned to. */
+  vtaDid: string
+  now: string | Date
+  /** Ids already seen within the window. */
+  seenIds?: readonly string[]
+  /** When the last introduction it applied was issued. */
+  lastIntroduction?: string
+}
+
+export type IntroductionCheck =
+  | { result: 'accept'; introduction: SignedIntroduction }
+  | { result: 'refuse'; reason: IntroductionRefusal; detail: string }
+
+const PAYLOAD_MEMBERS = ['chatDid', 'ownerPersonaDid', 'mediatorDid', 'vtaDid'] as const
+
+/**
+ * The receiver's rules, as the shared vectors state them: Keyring's reading of the file, so the file is a check on
+ * this side too and not only a description. The plugin, which receives introductions, applies the same rules. In
+ * order: the shape; the issuer is the granter; a valid `assertionMethod` proof by it; addressed to the receiver; for
+ * the pinned VTA; fresh (300 s ahead, 604800 s behind); not seen; newer than the last introduction applied.
+ */
+export async function checkIntroduction(
+  agent: Agent,
+  doc: unknown,
+  receiver: IntroductionReceiver
+): Promise<IntroductionCheck> {
+  const refuse = (reason: IntroductionRefusal, detail: string): IntroductionCheck => ({
+    result: 'refuse',
+    reason,
+    detail,
+  })
+  const d = doc as Partial<SignedIntroduction> | null
+  if (!d || typeof d !== 'object' || d.type !== INTRODUCTION_TYPE) return refuse('malformed', 'not an introduction')
+  if (typeof d.id !== 'string' || typeof d.issuer !== 'string' || typeof d.recipient !== 'string')
+    return refuse('malformed', 'an envelope member is missing')
+  if (typeof d.issuedAt !== 'string' || !Number.isFinite(Date.parse(d.issuedAt)))
+    return refuse('malformed', 'issuedAt is not a date')
+  const payload = d.payload as Partial<IntroductionPayload> | undefined
+  if (!payload || typeof payload.version !== 'string' || !payload.version.startsWith('1.'))
+    return refuse('malformed', 'no payload at version 1')
+  for (const member of PAYLOAD_MEMBERS)
+    if (typeof payload[member] !== 'string' || !payload[member]) return refuse('malformed', `no ${member}`)
+  if (d.issuer !== receiver.granter) return refuse('wrong-issuer', `issued by ${d.issuer}, not the granter`)
+  if (!(await verifyDocumentProof(agent, d as never, receiver.granter, { proofPurpose: 'assertionMethod' })))
+    return refuse('proof', `no valid assertionMethod proof by the granter`)
+  if (d.recipient !== receiver.did) return refuse('recipient', `addressed to ${d.recipient}`)
+  if (payload.vtaDid !== receiver.vtaDid) return refuse('wrong-vta', `for ${payload.vtaDid}, not the pinned VTA`)
+  const now = new Date(receiver.now).getTime()
+  const at = Date.parse(d.issuedAt)
+  if (at > now + ENVELOPE_MAX_AHEAD_MS) return refuse('future', `issued at ${d.issuedAt}, ahead of the receiver`)
+  if (at < now - ENVELOPE_MAX_AGE_MS) return refuse('stale', `issued at ${d.issuedAt}, too long ago`)
+  if (receiver.seenIds?.includes(d.id)) return refuse('repeated', `${d.id} was already seen`)
+  if (receiver.lastIntroduction !== undefined && at <= Date.parse(receiver.lastIntroduction))
+    return refuse('older-state', `issued at ${d.issuedAt}, not after the last applied ${receiver.lastIntroduction}`)
+  return { result: 'accept', introduction: d as SignedIntroduction }
 }
