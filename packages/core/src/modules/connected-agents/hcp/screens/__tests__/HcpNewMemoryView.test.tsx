@@ -109,19 +109,22 @@ describe('HcpNewMemoryView', () => {
     ['refused', { ok: false, refused: 'badRequest', message: { key: 'MemoryRefused' } }, 'MemoryRefused'],
     ['refused with no entry', { ok: false, refused: 'noEntry', message: { key: 'MemoryRefused' } }, 'MemoryRefused'],
     ['noManager', { ok: false, noManager: true, message: { key: 'MemoryNoVta' } }, 'MemoryNoVta'],
-  ])('%s: shows its own line, keeps the text, does not close, and Save is there to press again', async (_, result, key) => {
-    const { props, tree } = view(async () => result, HCP_MEMORY_SAMPLE)
-    press(tree)
-    await waitFor(() => expect(tree.getByTestId(id('HcpNewMemoryOutcome'))).toBeTruthy())
-    expect(tree.getByTestId(id('HcpNewMemoryOutcome')).props.accessibilityLabel).toBe(en(key))
-    expect(tree.queryByText('ConnectedAgents.FailGeneric')).toBeNull()
-    expect(tree.queryByText(/badRequest|noEntry/)).toBeNull()
-    expect(fieldText(tree)).toBe(HCP_MEMORY_SAMPLE)
-    expect(props.onDone).not.toHaveBeenCalled()
-    expect(saveOff(tree)).toBe(false)
-    press(tree)
-    await waitFor(() => expect(props.onSave).toHaveBeenCalledTimes(2))
-  })
+  ])(
+    '%s: shows its own line, keeps the text, does not close, and Save is there to press again',
+    async (_, result, key) => {
+      const { props, tree } = view(async () => result, HCP_MEMORY_SAMPLE)
+      press(tree)
+      await waitFor(() => expect(tree.getByTestId(id('HcpNewMemoryOutcome'))).toBeTruthy())
+      expect(tree.getByTestId(id('HcpNewMemoryOutcome')).props.accessibilityLabel).toBe(en(key))
+      expect(tree.queryByText('ConnectedAgents.FailGeneric')).toBeNull()
+      expect(tree.queryByText(/badRequest|noEntry/)).toBeNull()
+      expect(fieldText(tree)).toBe(HCP_MEMORY_SAMPLE)
+      expect(props.onDone).not.toHaveBeenCalled()
+      expect(saveOff(tree)).toBe(false)
+      press(tree)
+      await waitFor(() => expect(props.onSave).toHaveBeenCalledTimes(2))
+    }
+  )
 
   // Backstops: none of these has HCP words, and none is expected from a press (see the view's `save`).
   it.each<[string, () => Promise<HcpAddMemoryResult>]>([
