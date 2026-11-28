@@ -43,6 +43,8 @@
     "credential-exchange-query": "node run-credential-exchange-query.js",
     "agent-connect": "node run-agent-connect.js",
     "agent-connect:ios": "PLATFORM=ios node run-agent-connect.js",
+    "agent-connect-walk": "node run-agent-connect-walk.js",
+    "agent-connect-walk:ios": "PLATFORM=ios node run-agent-connect-walk.js",
     "my-agent": "node run-my-agent.js",
     "my-agent:ios": "PLATFORM=ios node run-my-agent.js",
     "lock-probe": "node run-lock-probe.mjs",
