@@ -207,11 +207,11 @@ test file has that case, with switch on as the control.
 
 | Hook | Part | Tests (each with its control) |
 |---|---|---|
-| `useRoomAgents(roomId)` → `{ offered, setting, inRoom, addable }` | fb-P1c | `offered` is false for `private` and `unknown`. `addable` holds only `active` agents not in the room. `widens` is set exactly when the add would add a context to `act` |
+| `useRoomAgents(roomId)` → `{ offered, setting, persona, inRoom, addable }` | fb-P1c | `offered` is false for `private` and `unknown`. `persona` is the name of the persona the owner acts as in the room. `inRoom` holds own agents whose record lists this room. `addable` holds only `active` agents not in it, including agents already added to another room of this persona, with `widens: null`. `widens` is set exactly when the add would add a context to `act`. Control: an agent added to another room of the same persona is in `addable`, not `inRoom` |
 | `useAddAgentToRoom(roomId)` → `{ add(agentId): Promise<AddRoomOutcome> }` | fb-P1c | one case per row of fb-P1c's mapping. The setting is re-read at the call: changed between the list and the press, it is `'settingNo'` |
 | `useRoomMentionables(roomId)` → `{ agentId, name, handle }[]` | fb-P1d | only own agents with this room in `rooms`. Control: an agent in another room is absent |
 | `useAnswersOthers(agentId)` → `{ value, offered, pending, set }` | fb-P1e | `pending` stays true until the intent is `sent`. With `OTHERS_HOOK_CHECK_PASSED` false, `offered` is false |
-| `useAgentConnection(id)` + `rooms`, `actNames` | fb-P1e | `actNames` includes the persona's context after an add. Control: before it, the context is absent |
+| `useAgentConnection(id)` + `persona?`, `actNames` | fb-P1e | `persona` is the name of the persona whose rooms the agent can use, absent before its first room. `actNames` includes the persona's context after an add. Control: before it, both are absent |
 | `useMemberListAgents(roomId)` → `{ own, others }` | fb-P1d | `own` from `rooms` with no network call. `others` stays empty while no profile lists `delegation`; control: a fake verified pair appears |
 | `useAgentIdentity(roomId, did)` | fb-P1d, fb-P1f | `own` for an own agent. `verified` only from `verifyDelegationRecord` `ok`. Otherwise `unverified`, and `none` for a member |
 
@@ -226,6 +226,11 @@ test file has that case, with switch on as the control.
   because those codes are not the VTA's refusal, and `'refused'`'s words would be false for them.
 - **The grant** does not go through `grantAgentAccess`, because it is `notYet` in the real service and does no kind
   check (fb-P1c, decided). The hook's outcomes are unchanged.
+- **`inRoom`, and `useMemberListAgents`' `own`,** are the own agents whose record lists this room, the rooms each was
+  offered, not every room of the persona. `addable` keeps an agent already added to another room of the same persona,
+  with `widens: null`. Its add sends only that room's offer, with no VTA write (fb-P1c, step 3). That is because the
+  agent learns which rooms to watch from each room's offer, so an agent never offered a room would not answer a
+  mention there. The access itself is persona-wide, as ruling 1 says, and `persona` and the copy say so.
 - **`useAgentIdentity`** answers `{ kind: 'own', …, revoked: true }` for a revoked own agent, rather than never `own`.
   That is because `markOwnAgents` still draws the mark on its posts, and `unverified`'s "Keyring can't tell who this
   belongs to." would then be false. The sheet draws it without the setting.
