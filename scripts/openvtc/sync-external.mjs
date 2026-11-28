@@ -38,7 +38,10 @@ function git(repo, cmd) {
   }).trim();
 }
 
+// The branch a pin is digested and advanced on: the entry's own `branch` where it names one (a fork whose work is
+// not on its default branch), otherwise the remote's default branch.
 function defaultBranch(repo) {
+  if (pins.repos[repo]?.branch) return pins.repos[repo].branch;
   try {
     return git(repo, "rev-parse --abbrev-ref origin/HEAD").replace("origin/", "");
   } catch {
