@@ -15,7 +15,8 @@ Backlog 2's common rules hold unchanged (`docs/briefs/2026-11-27-agent-connect-b
 
 - start from the feature tip, or as a track built on the named open PR;
 - merge, never rebase, and every merge commit carries a sign-off: `git merge -S --signoff` (not `-s`, which is
-  `--strategy`), because the DCO check reads every commit in the PR;
+  `--strategy`), because the DCO check reads every commit in the PR. If one slips, don't rewrite it: re-create
+  the PR from the tip as one signed, signed-off commit, and the old one is closed as superseded;
 - intent record first;
 - no generic failure line;
 - a refusal spends the action, the words and the control both;
