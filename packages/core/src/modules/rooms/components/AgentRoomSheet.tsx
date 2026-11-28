@@ -142,7 +142,7 @@ const AgentRoomSheet: React.FC<AgentRoomSheetProps> = ({
       style={[styles.button, styles[kind], disabled ? styles.disabled : null]}
       onPress={onPress}
       disabled={disabled}
-      testID={testIdWithKey(testID)}
+      testID={testID}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled, busy: disabled && kind === 'primary' && running }}
@@ -207,16 +207,27 @@ const AgentRoomSheet: React.FC<AgentRoomSheetProps> = ({
                 (PLAN:1361). It can happen when the VTA's entry was changed outside Keyring; the caller of the repair
                 is `useAgentActions().restore`, from AgentDetails' "Restore", which "See details" opens. */}
             {spent === 'accessChanged'
-              ? button(t('ConnectedAgents.SeeDetails'), onSeeDetails, 'AgentRoomSheetSeeDetails', 'secondary')
+              ? button(
+                  t('ConnectedAgents.SeeDetails'),
+                  onSeeDetails,
+                  testIdWithKey('AgentRoomSheetSeeDetails'),
+                  'secondary'
+                )
               : null}
-            {button(t('Global.Done'), onClose, 'AgentRoomSheetDone', 'primary')}
+            {button(t('Global.Done'), onClose, testIdWithKey('AgentRoomSheetDone'), 'primary')}
           </View>
         </>
       ) : (
         <View style={styles.buttons}>
           {/* Off while the add runs, and once it came back 'added' (the flow then moves on): never a double add. */}
-          {button(t('ConnectedAgents.AddToRoom'), add, 'AgentRoomSheetAdd', 'primary', running || outcome === 'added')}
-          {button(t('Global.NotNow'), onClose, 'AgentRoomSheetNotNow', 'secondary')}
+          {button(
+            t('ConnectedAgents.AddToRoom'),
+            add,
+            testIdWithKey('AgentRoomSheetAdd'),
+            'primary',
+            running || outcome === 'added'
+          )}
+          {button(t('Global.NotNow'), onClose, testIdWithKey('AgentRoomSheetNotNow'), 'secondary')}
         </View>
       )}
     </View>

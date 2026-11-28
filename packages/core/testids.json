@@ -168,9 +168,13 @@
     "AgentRoomSection": ["src/modules/rooms/components/AgentRoomSection.tsx"],
     "AgentRoomSetting": ["src/modules/rooms/components/AgentRoomSection.tsx"],
     "AgentRoomSheet": ["src/modules/rooms/components/AgentRoomSheet.tsx"],
+    "AgentRoomSheetAdd": ["src/modules/rooms/components/AgentRoomSheet.tsx"],
+    "AgentRoomSheetDone": ["src/modules/rooms/components/AgentRoomSheet.tsx"],
     "AgentRoomSheetMemory": ["src/modules/rooms/components/AgentRoomSheet.tsx"],
+    "AgentRoomSheetNotNow": ["src/modules/rooms/components/AgentRoomSheet.tsx"],
     "AgentRoomSheetOutcome": ["src/modules/rooms/components/AgentRoomSheet.tsx"],
     "AgentRoomSheetReach": ["src/modules/rooms/components/AgentRoomSheet.tsx"],
+    "AgentRoomSheetSeeDetails": ["src/modules/rooms/components/AgentRoomSheet.tsx"],
     "AgentRow": ["src/modules/connected-agents/screens/AgentListView.tsx"],
     "AgentRowConnectAgain": ["src/modules/connected-agents/screens/AgentListView.tsx"],
     "AgentRowExtend": ["src/modules/connected-agents/screens/AgentListView.tsx"],
@@ -2547,9 +2551,6 @@
     },
     {
       "src/modules/polls/screens/PollBallot.tsx": "`${PollsIds.castStep}_${state}`"
-    },
-    {
-      "src/modules/rooms/components/AgentRoomSheet.tsx": "testID"
     },
     {
       "src/modules/rooms/components/RoomMembersTab.tsx": "testID"
