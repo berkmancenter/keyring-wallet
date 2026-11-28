@@ -698,8 +698,9 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
     is the plan's rule ("not stated counts as no"), and the views only follow `setting`.
   - `addable` holds only `active` agents that are not yet in the room (frame 34's note). **fb also leaves out** an
     agent whose `ownerPersonaDid` isn't the persona the owner acts as in that room.
-  - `widens` is the persona's context when the add would put it into `act`: the agent's first room, or a room of
-    another persona (PLAN:594).
+  - `widens` (fb's contract, brief after 30c269561): **null exactly when the agent's record already lists a room of
+    this persona**, and `{ context }` otherwise. It is computed from the record's rooms, never from what `act` holds.
+    An agent of another persona is never in `addable`.
 - **For T1:** `useAddAgentToRoom(roomId)` returns `{ add(agentId): Promise<AddRoomOutcome> }`, where `AddRoomOutcome`
   is one of:
   - `'added'`;
@@ -740,6 +741,72 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
   - `{ kind: 'unverified', did, calledName? }`.
 
   `delegationRecord.ts` and its verification are fb's.
+
+### The result types, exactly (to build the views before the hooks exist)
+
+A view track may start before fb's hooks merge. It builds **views only**, prop-driven and unreachable, with tests
+driven by fixtures and each with a `// control:`. It writes no hooks, no fakes and no containers in shared files; the
+containers come as a follow-up once the logic part merges. The views' props are these types, exactly. **Each type is
+declared once, in the view file named beside it**, and later tracks import it from there, so no file is shared. When
+fb's hooks land, they return these types, or fb's "Differs" line says what changed and the container maps it.
+
+```ts
+// rooms/components/AgentRoomSection.tsx (T1)
+export type RoomAgentsSetting = 'yes' | 'no' | 'notStated'
+export type RoomAgentsTier = 'open' | 'attributed'
+export interface RoomAgentInRoom { agentId: string; name: string; memoryNames: string[] }
+export interface RoomAgentAddable {
+  agentId: string
+  name: string
+  memoryNames: string[]
+  widens: { context: string } | null // null exactly when its record lists a room of this persona
+}
+export interface RoomAgents {
+  offered: boolean // false: the section, the "+" sheet's agent row and the mentions are all absent
+  setting: RoomAgentsSetting
+  persona: string
+  tier: RoomAgentsTier // meaningful only when offered
+  inRoom: RoomAgentInRoom[]
+  addable: RoomAgentAddable[]
+}
+
+// rooms/components/AgentRoomSheet.tsx (T1)
+export type AddRoomOutcome =
+  | 'added'
+  | 'refused'
+  | 'unreachable'
+  | 'accessChanged'
+  | 'settingNo'
+  | 'settingNotStated'
+  | 'notAddable'
+
+// rooms/components/MentionSuggestions.tsx (T2)
+export interface RoomMentionable { agentId: string; name: string; handle: string }
+
+// connected-agents/components/AnswersOthersRow.tsx (T3)
+export type AnswersOthersSetResult = 'saved' | 'notSaved'
+export interface AnswersOthersState {
+  value: boolean // as stored on the phone
+  offered: boolean // false: "Off", no switch
+  pending: boolean // stored, not yet sent to the agent
+}
+
+// rooms/components/AgentsSection.tsx (T4)
+export interface AgentRow { did: string; name: string; handle: string; owner: string; agentId?: string }
+
+// connected-agents/screens/AgentIdentityBody.tsx (T4)
+export type AgentIdentity =
+  | { kind: 'none' }
+  | { kind: 'own'; agentId: string; name: string; handle: string; owner: string; revoked?: true }
+  | { kind: 'verified'; name?: string; owner: string; handle?: string; did: string; verifiedName?: string }
+  | { kind: 'unverified'; did: string; calledName?: string }
+```
+
+- **The details' new fields** (T3, on `AgentDetailsView`'s props, not a hook type): `handle?: string`,
+  `persona?: string` (absent before the agent's first room) and `actNames?: string[]`.
+- **Strings, not ids, are displayed:** `name`, `persona`, `owner`, `memoryNames` and `context` arrive as the names to
+  draw. A view never resolves an id or a DID to a name.
+- **Fixtures** use these types, so a shape change fails to compile in the fixture before it can mislead a test.
 
 ## Files each part writes (no two parts write the same file; fb's parts write none of these)
 
@@ -939,6 +1006,7 @@ Two more apply:
 ```
 {
   agents: { agentId, name, memoryNames }[],
+  persona: string,
   canAdd: boolean,
   setting: 'yes' | 'no' | 'notStated',
   tier: 'open' | 'attributed',
@@ -971,8 +1039,9 @@ Two more apply:
 
 ```
 {
-  name,
-  widensContext?: string,
+  name: string,
+  persona: string,
+  widensContext?: string,       // RoomAgentAddable.widens?.context
   outcome?: AddRoomOutcome,
   onAdd(): void,
   onClose(): void,
