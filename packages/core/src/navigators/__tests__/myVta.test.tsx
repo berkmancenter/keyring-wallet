@@ -96,7 +96,8 @@ const VTA = [
   Screens.StateOfficeCodes,
 ]
 const ROOMS = [Screens.RoomsHome, Screens.Room, Screens.RoomInfo, Screens.RoomPart, Screens.RoomOffer]
-const AGENTS = [Screens.AiAgents, Screens.AgentDetails, Screens.ConnectAgent, Screens.AgentMemories]
+// With the agent chat (R3), registered here too.
+const AGENTS = [Screens.AiAgents, Screens.AgentDetails, Screens.ConnectAgent, Screens.AgentMemories, Screens.AgentChat]
 // Today's title keys, in the same order (RoomPart's title is a function of its part).
 const TODAY_TITLES = [
   'Screens.MyAgent',

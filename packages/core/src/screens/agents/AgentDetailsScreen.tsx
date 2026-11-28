@@ -24,6 +24,7 @@ import {
   useMemoryCounts,
   useRevokeDeps,
 } from '../../modules/connected-agents/ConnectedAgentsProvider'
+import { useAgentChatService } from '../../modules/connected-agents/chat/useAgentChat'
 import { MEMORY_COUNT_WARNING } from '../../modules/connected-agents/memories'
 import { TEMPORARY_GRANT_MS } from '../../modules/connected-agents/pairing'
 import { revokeAgentConnection } from '../../modules/connected-agents/revoke'
@@ -201,6 +202,8 @@ const AgentDetailsScreen: React.FC<AgentDetailsScreenProps> = ({ navigation, rou
   const { agent, refresh } = useAgentConnection(agentId)
   const actions = useAgentActions()
   const keepConnectedOffered = useKeepConnectedOffered(agentId)
+  // "Message" only while the chat service is mounted (fb-C4's AgentChatProvider): never a button to a chat that isn't.
+  const chat = useAgentChatService()
   const contextIds = useMemo(() => agent?.memories.map((m) => m.id) ?? [], [agent])
   const counted = useMemoryCounts(agentId, contextIds)
   const [sheet, setSheet] = useState<Sheet>()
@@ -253,6 +256,7 @@ const AgentDetailsScreen: React.FC<AgentDetailsScreenProps> = ({ navigation, rou
           )
         }
         onConnectAgain={() => navigation.navigate(Screens.ConnectAgent, { againFrom: agentId })}
+        onMessage={chat ? () => navigation.navigate(Screens.AgentChat, { agentId, name: agent.name }) : undefined}
         onKeepConnected={keepConnectedOffered ? () => act(actions.keepConnected(agentId)) : undefined}
         onRevoke={() => setSheet('revoke')}
       />

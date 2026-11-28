@@ -17,6 +17,12 @@ import {
   searchItems,
   type MessagesChip,
 } from '../components/listItems/messagesListItems'
+import { isAgentConnectEnabled } from '../modules/connected-agents/agentConnectFlag'
+import {
+  AGENT_MESSAGE_ROW_KIND,
+  useAgentMessageRows,
+  type AgentMessageRow,
+} from '../modules/connected-agents/chat/messageRows'
 import IconButton, { ButtonLocation } from '../components/buttons/IconButton'
 import { ThemedText } from '../components/texts/ThemedText'
 import { useStore } from '../contexts/store'
@@ -34,7 +40,13 @@ import { loadSavedCommunityNames } from '../modules/trust-tasks/module/savedComm
 import { useCommunityNamesLearned } from '../modules/trust-tasks/screens/useCommunity'
 import { communityTarget } from '../modules/trust-tasks/module/vtiCommunityLink'
 import { communityLabelAloneOf } from '../modules/trust-tasks/screens/communityName'
-import { conversations, isConversationPartner, messageRows, type MessageRow } from '../modules/vrc/contacts/messageRows'
+import {
+  conversations,
+  isConversationPartner,
+  messageRows,
+  searchRows,
+  type MessageRow,
+} from '../modules/vrc/contacts/messageRows'
 import { useVrcNameCache } from '../modules/vrc/context/VrcNameCacheProvider'
 import { useConnectionRelationships } from '../modules/vrc/contacts/useContactFacts'
 import { useContactLinks } from '../modules/vrc/contacts/useContactLinks'
@@ -52,6 +64,33 @@ interface MessagesProps {
   navigation: StackNavigationProp<MessageStackParams, Screens.Messages>
 }
 
+/** An agent chat's row in the list (§3.14, §7.9): fb-C4's row, under its own kind. */
+export type AgentItem = { kind: typeof AGENT_MESSAGE_ROW_KIND; key: string; row: AgentMessageRow }
+
+const NO_AGENT_ROWS: AgentMessageRow[] = []
+
+/**
+ * The agent chats merged by time among the list's items (already newest first, as `mergeByTime` ordered them, by
+ * `itemAt`): an agent's row by its last message, one with no message yet below everything that has a time. Equal
+ * times keep the people and rooms first, and each in their own order, as `mergeByTime` does.
+ */
+export function withAgentRows<I extends { key: string }>(
+  items: readonly I[],
+  itemAt: (item: I) => number,
+  agents: readonly AgentMessageRow[]
+): Array<I | AgentItem> {
+  if (agents.length === 0) return [...items]
+  const timed = [
+    ...items.map((item, index) => ({ item: item as I | AgentItem, at: itemAt(item), index })),
+    ...agents.map((row, index) => ({
+      item: { kind: AGENT_MESSAGE_ROW_KIND, key: `agent:${row.agentId}`, row } as AgentItem,
+      at: row.lastAt ? Date.parse(row.lastAt) : -Infinity,
+      index: items.length + index,
+    })),
+  ]
+  return timed.sort((a, b) => b.at - a.at || a.index - b.index).map(({ item }) => item)
+}
+
 const Messages: React.FC<MessagesProps> = ({ navigation }) => {
   const { ColorPalette } = useTheme()
   const { t } = useTranslation()
@@ -63,11 +102,14 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
   // it opens a chat, and stays put if the person leaves it (messageWake.ts).
   useReportMessagesListFocus()
   const [store] = useStore()
-  const [{ contactHideList }, ContactListItem, defaultScreenOptionsDict] = useServices([
+  const [{ contactHideList }, ContactListItem, defaultScreenOptionsDict, AgentContactCard] = useServices([
     TOKENS.CONFIG,
     TOKENS.COMPONENT_CONTACT_LIST_ITEM,
     TOKENS.OBJECT_SCREEN_CONFIG,
+    TOKENS.COMPONENT_AGENT_CONTACT_CARD,
   ])
+  // Agent connect's developer switch, read once when the list mounts, as the stacks read it.
+  const [agentConnect] = useState(isAgentConnectEnabled)
 
   // People only: never the mediator, a witness service or another hidden connection, never one not yet completed
   // (isConversationPartner). The same in developer mode: a conversation list is not where infrastructure is inspected.
@@ -148,6 +190,30 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
         (room) => roomTitle(t, { name: room.roomName, nameFrom: room.nameFrom })
       ),
     [chipItems, query, store.preferences.alternateContactNames, getVrcName, t]
+  )
+
+  // The agent chats (§7.9, frames 26 and 29), with the switch on: under All and People, never under a community chip,
+  // searched by name as a person is, and merged by time with the rest. With it off the list is as it was.
+  const agentRows = useAgentMessageRows()
+  const chipAgents = useMemo(
+    () => (agentConnect && chip.kind !== 'community' ? agentRows : NO_AGENT_ROWS),
+    [agentConnect, chip.kind, agentRows]
+  )
+  const listed = useMemo(
+    () =>
+      agentConnect
+        ? withAgentRows(
+            shown,
+            (item) =>
+              item.kind === 'room'
+                ? item.row.lastActivityAt
+                  ? item.row.lastActivityAt.getTime()
+                  : -Infinity
+                : Math.max(...item.row.connectionIds.map((id) => activity(id))),
+            searchRows(chipAgents, (row) => row.name, query)
+          )
+        : shown,
+    [agentConnect, shown, chipAgents, query, activity]
   )
 
   const style = StyleSheet.create({
@@ -267,11 +333,18 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
       <FlatList
         style={style.list}
         contentContainerStyle={{ flexGrow: 1 }}
-        data={shown}
+        data={listed}
         keyboardShouldPersistTaps="handled"
         keyExtractor={(item) => item.key}
         renderItem={({ item }) =>
-          item.kind === 'room' ? (
+          item.kind === AGENT_MESSAGE_ROW_KIND ? (
+            // An agent's chat: its card, with its last message under the name, opening the agent chat.
+            <AgentContactCard
+              name={item.row.name}
+              subtitle={item.row.lastText}
+              onPress={() => navigation.navigate(Screens.AgentChat, { agentId: item.row.agentId, name: item.row.name })}
+            />
+          ) : item.kind === 'room' ? (
             <RoomMessageRow row={item.row} onOpen={(roomId) => navigation.navigate(Screens.Room, { roomId })} />
           ) : (
             <ContactListItem
@@ -283,7 +356,7 @@ const Messages: React.FC<MessagesProps> = ({ navigation }) => {
         }
         ListEmptyComponent={() =>
           // Something under this chip, but nothing by that name: said so, not the "no chats yet" state.
-          chipItems.length > 0 ? (
+          chipItems.length + chipAgents.length > 0 ? (
             <ThemedText style={style.noMatch} testID={testIdWithKey('MessagesNoMatch')}>
               {t('MessagesList.NoMatch', { query: query.trim(), interpolation: { escapeValue: false } })}
             </ThemedText>

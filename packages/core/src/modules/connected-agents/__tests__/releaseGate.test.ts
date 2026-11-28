@@ -133,7 +133,12 @@ const isTest = (path: string) => path.split(sep).includes('__tests__') || /\.tes
 const inModule = (path: string) => path.includes(`connected-agents${sep}`)
 
 /** What the gate finds, as pure facts about a set of source files. */
-export function releaseGate(files: SourceFile[]): { flagReachable: boolean; missing: string[] } {
+export function releaseGate(files: SourceFile[]): {
+  flagReachable: boolean
+  revokeWired: boolean
+  acceptanceWired: boolean
+  missing: string[]
+} {
   const raw = files.filter((f) => !isTest(f.path))
   // Each pattern reads the view where a false match errs strict, never open. The setter: any mention, raw, comments
   // included (a mention only makes the flag look reachable). Everything that would count a step as wired, or the flag
@@ -166,7 +171,7 @@ export function releaseGate(files: SourceFile[]): { flagReachable: boolean; miss
           : [`the chat's VDC acceptance (step 7.9): ${ACCEPTANCE_TYPE} handled with verifyVdcPair`]),
       ]
     : []
-  return { flagReachable, missing }
+  return { flagReachable, revokeWired, acceptanceWired, missing }
 }
 
 function sources(root: string): SourceFile[] {
@@ -204,8 +209,15 @@ describe('the agent-connect release gate (#1060 finding 21)', () => {
     }
   })
 
-  it('today the flag is not reachable: nothing outside the tests sets it, and it starts off', () => {
-    expect(releaseGate([...sources(CORE_SRC), ...sources(APP_SRC)]).flagReachable).toBe(false)
+  // The gate is open from backlog 2's R4 (the Developer rows reach the setter), with both wirings it waited for in
+  // place. The verdict in full, so a later change that quietly unwires either one fails here, not only above.
+  it('today the gate is open: the flag is reachable, Revoke and the acceptance are wired, and nothing is missing', () => {
+    expect(releaseGate([...sources(CORE_SRC), ...sources(APP_SRC)])).toEqual({
+      flagReachable: true,
+      revokeWired: true,
+      acceptanceWired: true,
+      missing: [],
+    })
   })
 
   it('every navigator is in packages/core/src, so the Revoke wiring is an import the gate can follow', () => {

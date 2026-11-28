@@ -1,0 +1,72 @@
+{
+  "about": "Agent connect step 7.9, the agent chat (docs/plans/agent-connect-plan.md §3.5, §6): the chat (frame 27), stopped at 20 with no reply and not connected (frame 28), and the version mismatch (no frame). Same form as agent-connect-screens.json, which the catalogue (screenCatalogue.test.tsx) reads with this file; the drawings are __tests__/fixtures/screenStatesChat.tsx. Reached from Messages and from an agent's details, with the developer switch on.",
+  "canvas": "docs/plans/agent-connect-plan/canvas/",
+  "kit": "docs/plans/agent-connect-plan/mockups/",
+  "states": [
+    {
+      "id": "agent-chat",
+      "step": "7.9",
+      "marker": "AgentChat",
+      "frame": "27-agent-chat.png",
+      "kit": null,
+      "words": [
+        "Rooms.AgentBadge",
+        "ConnectedAgents.BelongsTo"
+      ],
+      "frameOnly": [
+        {
+          "what": "\"Noor Haddad mentioned you in Campus notes.\"",
+          "why": "a mention from a room is P1 (rooms), not P0's chat"
+        },
+        {
+          "what": "the day line \"Today 10:38\" above the messages",
+          "why": "each bubble shows its own time under it instead (appOnly)"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "a time under each bubble",
+          "why": "the brief asks for bubbles with times, as a person's chat has"
+        }
+      ]
+    },
+    {
+      "id": "agent-chat-waiting",
+      "step": "7.9",
+      "marker": "AgentChatState",
+      "frame": "28-agent-chat-waiting.png",
+      "kit": null,
+      "words": [
+        "Rooms.AgentBadge",
+        "ConnectedAgents.BelongsTo",
+        "ConnectedAgents.StatusUnreachable",
+        "ConnectedAgents.ChatWaiting"
+      ],
+      "frameOnly": [
+        {
+          "what": "the day line \"Today 18:02\" above the messages",
+          "why": "each bubble shows its own time under it instead (appOnly)"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "a time under each bubble, and the composer drawn disabled",
+          "why": "stopped at 20 with no reply, nothing more is sent until the agent answers (fb-C4)"
+        }
+      ]
+    },
+    {
+      "id": "agent-chat-version-mismatch",
+      "step": "7.9",
+      "marker": "AgentChatState",
+      "frame": null,
+      "noFrame": "no frame draws it: the agent speaks another major version (fb-C2), and its line takes the composer's place",
+      "kit": null,
+      "words": [
+        "Rooms.AgentBadge",
+        "ConnectedAgents.BelongsTo",
+        "ConnectedAgents.VersionMismatch"
+      ]
+    }
+  ]
+}

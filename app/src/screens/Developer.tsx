@@ -15,6 +15,8 @@ import {
   setV2MediationEnabled,
   setSharedConnectEnabled,
   setSharedConnectInviteEnabled,
+  setAgentConnectEnabled,
+  setHcpEnabled,
   setTrustedApproversEnabled,
   setStateVerifiedApproversEnabled,
   setTrustTestStateEnabled,
@@ -129,6 +131,8 @@ const Developer: React.FC = () => {
   const [enableSharedConnectInvite, setEnableSharedConnectInvite] = useState(
     !!store.developer.enableSharedConnectInvite
   )
+  const [enableAgentConnect, setEnableAgentConnect] = useState(!!store.developer.enableAgentConnect)
+  const [enableHcp, setEnableHcp] = useState(!!store.developer.enableHcp)
   const [enableTrustedApprovers, setEnableTrustedApprovers] = useState(!!store.developer.enableTrustedApprovers)
   const [enableStateVerifiedApprovers, setEnableStateVerifiedApprovers] = useState(
     !!store.developer.enableStateVerifiedApprovers
@@ -253,6 +257,8 @@ const Developer: React.FC = () => {
      * runners read it to tap a switch only when it disagrees with the run; the switches are on by default).
      */
     switchOn?: boolean
+    /** A switch row that cannot be changed now (its switch is disabled too): the row takes no tap, and says so. */
+    disabled?: boolean
   }
   const SectionRow = ({
     title,
@@ -265,6 +271,7 @@ const Developer: React.FC = () => {
     wholeRow,
     hint,
     switchOn,
+    disabled,
   }: SectionRowProps) => (
     <>
       <View style={styles.section}>
@@ -300,9 +307,11 @@ const Developer: React.FC = () => {
             )}
             <Pressable
               onPress={onPress}
+              disabled={disabled}
               accessible={true}
               accessibilityLabel={accessibilityLabel}
               accessibilityHint={hint}
+              accessibilityState={disabled === undefined ? undefined : { disabled }}
               accessibilityValue={switchOn === undefined ? undefined : { text: switchOn ? 'on' : 'off' }}
               testID={testID}
               style={styles.sectionRow}
@@ -516,6 +525,30 @@ const Developer: React.FC = () => {
     // Read live: the QR sheet offers "Show a code" from the next time it opens, no restart.
     setSharedConnectInviteEnabled(next)
     setEnableSharedConnectInvite(next)
+  }
+
+  const toggleEnableAgentConnectSwitch = () => {
+    const next = !enableAgentConnect
+    dispatch({
+      type: BCDispatchAction.TOGGLE_AGENT_CONNECT,
+      payload: [next],
+    })
+    // The agent routes, the My Agent tab's first screen and the "My VTA" row read it when their stacks mount, so the
+    // change applies in full on the next launch.
+    setAgentConnectEnabled(next)
+    setEnableAgentConnect(next)
+  }
+
+  const toggleEnableHcpSwitch = () => {
+    // Only while agent connect is on: bifold's isHcpEnabled() needs both, so the row could do nothing.
+    if (!enableAgentConnect) return
+    const next = !enableHcp
+    dispatch({
+      type: BCDispatchAction.TOGGLE_HCP,
+      payload: [next],
+    })
+    setHcpEnabled(next)
+    setEnableHcp(next)
   }
 
   const toggleEnableTrustedApproversSwitch = () => {
@@ -1240,6 +1273,44 @@ const Developer: React.FC = () => {
             ios_backgroundColor={ColorPalette.grayscale.lightGrey}
             onValueChange={toggleEnableSharedConnectInviteSwitch}
             value={enableSharedConnectInvite}
+          />
+        </SectionRow>
+        <SectionRow
+          title={t('Developer.EnableAgentConnect')}
+          accessibilityLabel={t('Developer.EnableAgentConnect')}
+          testID={testIdWithKey('ToggleEnableAgentConnect')}
+          switchOn={enableAgentConnect}
+          showRowSeparator
+          // The row toggles too, as the shared-connect row above (iOS hides the Switch from automation).
+          onPress={toggleEnableAgentConnectSwitch}
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={enableAgentConnect ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey}
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleEnableAgentConnectSwitch}
+            value={enableAgentConnect}
+          />
+        </SectionRow>
+        <SectionRow
+          title={t('Developer.EnableHcp')}
+          accessibilityLabel={t('Developer.EnableHcp')}
+          testID={testIdWithKey('ToggleEnableHcp')}
+          // Shown off while agent connect is off, whatever was saved: bifold's isHcpEnabled() needs both.
+          switchOn={enableAgentConnect && enableHcp}
+          disabled={!enableAgentConnect}
+          showRowSeparator
+          onPress={toggleEnableHcpSwitch}
+        >
+          <Switch
+            trackColor={{ false: ColorPalette.grayscale.lightGrey, true: ColorPalette.brand.primaryDisabled }}
+            thumbColor={
+              enableAgentConnect && enableHcp ? ColorPalette.brand.primary : ColorPalette.grayscale.mediumGrey
+            }
+            ios_backgroundColor={ColorPalette.grayscale.lightGrey}
+            onValueChange={toggleEnableHcpSwitch}
+            value={enableAgentConnect && enableHcp}
+            disabled={!enableAgentConnect}
           />
         </SectionRow>
         <SectionRow
