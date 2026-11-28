@@ -21,6 +21,12 @@ export const PROPOSED_COPY: Readonly<Record<string, string>> = {
   DeleteMemoryRecordsLeft_other: 'backlog (step 7.16): as above',
   UnnamedAgent: 'backlog (step 7.16): an agent with no name in the delete body',
   NumberDigitFilled: 'accessibility: §6 says each digit is announced as it is typed, not in which words',
+  AddRoomRefused: 'backlog 3 ruling 2 (step 7.13): the VTA refused the room add; §6 and §3.10 give no words',
+  AddRoomUnreachable: 'backlog 3 ruling 2 (step 7.13): the VTA was unreachable at the room add; §3.10 gives no words',
+  AddRoomNotAddable: 'backlog 3 ruling 2 (step 7.13): the agent left the addable list between the list and the press',
+  AnswersOthersNotSaved: 'backlog 3 ruling 2 (step 7.14): Keyring could not store an "Answers other people" change',
+  AnswersOthersPending:
+    'backlog 3 ruling 3 (step 7.14): the change is stored, not yet sent; `settings` has no acknowledgement',
 }
 
 /**
@@ -41,4 +47,6 @@ export const NO_ROOM_FORMS: Readonly<Record<string, string>> = {
  */
 export const SETTLED_ELSEWHERE: Readonly<Record<string, string>> = {
   ActingAs: '§7.7',
+  NotAgentKind: '§3.10',
+  OthersReply: '§3.13',
 }

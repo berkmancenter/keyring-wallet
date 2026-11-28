@@ -2,8 +2,10 @@
  * The reconcile of HCP approvals in flight (step 7.27 track C, part 3): for every {@link HcpApprovalInFlight} the
  * approve flow left behind (the approval failed, `onApproved` failed, or the app stopped in between), either complete
  * it or revoke its grant by the `grantId` it carries. Meant to run at app start, beside the base path's reconcile
- * (`../revoke.ts`, `reconcileAgents`), before any HCP approve flow starts; wiring it there is not this track's work
- * (that file and `../services.ts` are on the brief's do-not-touch list), so nothing calls it yet.
+ * (`../revoke.ts`, `reconcileAgents`), before any HCP approve flow starts; `../services.ts` runs it in
+ * `services.reconcile`, as its own step after `reconcileAgents`, whenever the root has built the HCP ports (backlog 2,
+ * fb-W1). "Approved but not recorded" relies on this reconcile running at app start, so no approve flow may become
+ * reachable without it.
  *
  * The approvals in flight are taken newest first (by `startedAt`), and for each, in this order:
  * - its client's connection already names its grant: `onApproved` wrote it and stopped before removing the approval

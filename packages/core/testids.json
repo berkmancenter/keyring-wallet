@@ -706,6 +706,10 @@
     "DeleteChatCancel": ["src/components/listItems/DeleteChatSheet.tsx"],
     "DeleteChatConfirm": ["src/components/listItems/DeleteChatSheet.tsx"],
     "DeleteChatSheet": ["src/components/listItems/DeleteChatSheet.tsx"],
+    "DeleteMemoryConfirm": ["src/modules/connected-agents/screens/DeleteMemorySheet.tsx"],
+    "DeleteMemoryKeep": ["src/modules/connected-agents/screens/DeleteMemorySheet.tsx"],
+    "DeleteMemoryOutcome": ["src/modules/connected-agents/screens/DeleteMemorySheet.tsx"],
+    "DeleteMemorySheet": ["src/modules/connected-agents/screens/DeleteMemorySheet.tsx"],
     "DenyConsentButton": [
       "src/modules/trust-tasks/screens/MyAgent.ids.ts",
       "src/modules/trust-tasks/screens/RequestCard.tsx"
@@ -1046,6 +1050,9 @@
     "MemberCardRole": ["src/modules/directory/screens/CommunityMemberCard.tsx"],
     "MemberCardStatus": ["src/modules/directory/screens/CommunityMemberCard.tsx"],
     "MemberCardWhose": ["src/modules/directory/screens/CommunityMemberCard.tsx"],
+    "MemoriesList": ["src/modules/connected-agents/screens/MemoriesListView.tsx"],
+    "MemoriesListDelete": ["src/modules/connected-agents/screens/MemoriesListView.tsx"],
+    "MemoriesListRow": ["src/modules/connected-agents/screens/MemoriesListView.tsx"],
     "MemoryAccessNotice": ["src/modules/connected-agents/components/MemoryAccessNotice.tsx"],
     "MemoryAccessRestore": ["src/modules/connected-agents/components/MemoryAccessNotice.tsx"],
     "MemoryAccessRevoke": ["src/modules/connected-agents/components/MemoryAccessNotice.tsx"],
