@@ -1,5 +1,5 @@
 {
-  "about": "The \"Acting as\" states of the connect form (finding 18, docs/plans/agent-connect-plan.md §7.7, canvas frame 58), added to the base manifest agent-connect-screens.json; the same rules apply. Named \".u5-acting-as\" rather than \".acting-as\" so the base file still sorts first, as the catalogue requires. Drawn in packages/core/src/modules/connected-agents/__tests__/fixtures/screenStatesActingAs.tsx with two personas, the only case that draws the row.",
+  "about": "The \"Acting as\" states of the connect form (finding 18, docs/plans/agent-connect-plan.md §7.7, canvas frame 58), added to the base manifest agent-connect-screens.json; the same rules apply. Named \".u5-acting-as\" rather than \".acting-as\" from when the catalogue found the base file by its sort position; the catalogue now finds it by name, and the name stays. Drawn in packages/core/src/modules/connected-agents/__tests__/fixtures/screenStatesActingAs.tsx with two personas, the only case that draws the row.",
   "canvas": "docs/plans/agent-connect-plan/canvas/",
   "kit": "docs/plans/agent-connect-plan/mockups/",
   "states": [
@@ -7,7 +7,6 @@
       "id": "connect-acting-as",
       "step": "7.7",
       "marker": "ActingAsRow",
-      "steps": [{ "press": "ActingAsRow" }],
       "frame": "58-acting-as.png",
       "kit": "01-connect-name.svg",
       "words": [
@@ -29,6 +28,10 @@
         {
           "what": "the canvas note (\"Canvas note, not on the phone\")",
           "why": "a note for the reader of the canvas, never drawn on the phone"
+        },
+        {
+          "what": "the chevron pointing down while the list is open",
+          "why": "the chevron's direction when open: accepted, the platform's convention (it points up while open)"
         },
         {
           "what": "\"Ada\" on the row and checked in the list",
@@ -54,7 +57,7 @@
       "id": "connect-acting-as-chosen",
       "step": "7.7",
       "marker": "ActingAsOption",
-      "steps": [{ "press": "ActingAsRow" }, { "pressLabel": "Ada", "within": "ActingAsOption" }],
+      "steps": [{ "pressLabel": "Ada", "within": "ActingAsOption" }],
       "frame": "58-acting-as.png",
       "kit": "01-connect-name.svg",
       "words": [
@@ -76,6 +79,10 @@
         {
           "what": "the canvas note (\"Canvas note, not on the phone\")",
           "why": "a note for the reader of the canvas, never drawn on the phone"
+        },
+        {
+          "what": "the chevron pointing down while the list is open",
+          "why": "the chevron's direction when open: accepted, the platform's convention (it points up while open)"
         },
         {
           "what": "\"Continue\" on",

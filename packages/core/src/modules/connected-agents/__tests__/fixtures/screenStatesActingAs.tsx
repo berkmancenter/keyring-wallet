@@ -28,7 +28,7 @@ const form = () => (
   />
 )
 
-// Both states draw the same form; the manifest's steps open the list and, for the second, choose "Ada".
+// Both states draw the same form, the list open since nothing is chosen; for the second the manifest's step chooses "Ada".
 export const SCREEN_STATES: Record<string, () => React.ReactElement> = {
   'connect-acting-as': form,
   'connect-acting-as-chosen': form,

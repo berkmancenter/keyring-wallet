@@ -16,6 +16,11 @@ export interface ActingAsRowProps {
   /** The chosen persona's DID; undefined until the person picks one (nothing is pre-selected). */
   selected?: string
   onSelect: (did: string) => void
+  /**
+   * Whether the connect asks; by default, with more than one persona. The connect form passes its own flag, which stays
+   * on once it has asked, so the row does not disappear when the list shrinks mid-connect.
+   */
+  ask?: boolean
 }
 
 const styles = StyleSheet.create({
@@ -28,18 +33,25 @@ const styles = StyleSheet.create({
 })
 
 /**
- * "Acting as" (finding 18, §7.7; canvas frame 58): which of the owner's personas the agent acts for. Drawn only with
- * more than one persona: a row labelled "Acting as" with the chosen persona's display name (none before a choice),
- * which opens an inline list of radio rows, one per persona, the chosen one checked. Nothing is pre-selected: the
- * connect asks rather than guesses. With 0 or 1 persona it draws nothing.
+ * "Acting as" (finding 18, §7.7; canvas frame 58): which of the owner's personas the agent acts for. Drawn only while
+ * the connect asks (by default, with more than one persona): a row labelled "Acting as" with the chosen persona's
+ * display name (none before a choice), and an inline list of radio rows, one per persona, the chosen one checked.
+ * Nothing is pre-selected: the connect asks rather than guesses. While nothing is chosen the list is open, so the
+ * question is not behind a tap; after a choice it stays however the person leaves it, and it opens again if the
+ * choice is lost.
  */
-const ActingAsRow: React.FC<ActingAsRowProps> = ({ personas, selected, onSelect }) => {
+const ActingAsRow: React.FC<ActingAsRowProps> = ({ personas, selected, onSelect, ask = personas.length > 1 }) => {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-
-  if (personas.length < 2) return null
-
   const chosen = personas.find((p) => p.did === selected)
+  const [open, setOpen] = useState(chosen === undefined)
+  const [shownDid, setShownDid] = useState(chosen?.did)
+  if (shownDid !== chosen?.did) {
+    setShownDid(chosen?.did)
+    if (chosen === undefined) setOpen(true)
+  }
+
+  if (!ask) return null
+
   const label = t('ConnectedAgents.ActingAs')
 
   return (

@@ -21,7 +21,8 @@ export type ConnectGuard = 'checking' | 'ok' | 'notAdministrator' | 'vtaTooOld' 
 
 /**
  * What the name step hands on. The logic fills the persona and the empty context (seam, point 4); with more than one
- * persona the person picks it here ("Acting as", finding 18), and it comes as `ownerPersonaDid`.
+ * persona the person picks it here ("Acting as", finding 18), and it comes as `ownerPersonaDid`. It is defined whenever
+ * the form asked and undefined only when it never did; the logic fills the only persona only when it is undefined.
  */
 export type ConnectFormChoice = {
   name: string
@@ -67,7 +68,10 @@ export interface ConnectAgentFormProps {
   guard: ConnectGuard
   /** The owner's memories; undefined while they are listed. */
   memories?: PickerMemory[]
-  /** The owner's personas. With more than one, "Acting as" asks which; with 0 or 1 nothing is asked. */
+  /**
+   * The owner's personas. With more than one, "Acting as" asks which; with 0 or 1 from the start nothing is asked. Once
+   * it has asked, it keeps asking for this connect even if the list shrinks.
+   */
   personas?: ActingAsPersona[]
   onCreateMemory: (name: string) => Promise<CreateMemoryResult>
   onContinue: (choice: ConnectFormChoice) => void
@@ -79,7 +83,8 @@ export interface ConnectAgentFormProps {
  * as the memory picker, with its helper; "What it can use them for", the two purposes shown, not picked (D44); "For 4
  * hours" with its helper, with no expiry choice (D42); the terminal helper; and "Continue". With more than one persona,
  * "Acting as" sits above "Memory it can use" (finding 18, §7.7; canvas frame 58), nothing is pre-selected, and
- * "Continue" waits for a choice, which it hands on as `ownerPersonaDid`.
+ * "Continue" waits for a choice that is in the current list, which it hands on as `ownerPersonaDid`. Once asked, the
+ * row stays for the rest of the connect: a list that shrinks, even to one, does not end the question.
  *
  * Before any of that the connect guard runs: a phone that is not a full administrator, a VTA too old for agents, or a
  * VTA it cannot reach, ends the connect here, with no name field, no picker and no "New memory" (canvas frame K23).
@@ -97,6 +102,11 @@ const ConnectAgentForm: React.FC<ConnectAgentFormProps> = ({
   const [selected, setSelected] = useState<string[]>([])
   const [naming, setNaming] = useState(false)
   const [personaDid, setPersonaDid] = useState<string | undefined>()
+  // Once this connect has asked "Acting as" (more than one persona at any point), it keeps asking until it ends; a
+  // chosen persona that leaves the list clears the choice, so a shrinking list never drops a choice silently (§7.7).
+  const [asksPersona, setAsksPersona] = useState(personas.length > 1)
+  if (!asksPersona && personas.length > 1) setAsksPersona(true)
+  if (personaDid !== undefined && !personas.some((p) => p.did === personaDid)) setPersonaDid(undefined)
 
   if (guard === 'checking') {
     return (
@@ -111,8 +121,7 @@ const ConnectAgentForm: React.FC<ConnectAgentFormProps> = ({
 
   const trimmed = name.trim()
   // Memories still being listed: wait for them, so a memory cannot be missed by a quick "Continue".
-  // With several personas the connect asks, so "Continue" waits for a choice that is still in the list (§7.7).
-  const asksPersona = personas.length > 1
+  // Once the connect has asked, "Continue" waits for a choice that is in the current list (§7.7).
   const ownerPersonaDid = asksPersona ? personas.find((p) => p.did === personaDid)?.did : undefined
   const ready =
     trimmed.length > 0 && !naming && memories !== undefined && (!asksPersona || ownerPersonaDid !== undefined)
@@ -140,7 +149,7 @@ const ConnectAgentForm: React.FC<ConnectAgentFormProps> = ({
           testID={testIdWithKey('ConnectAgentName')}
         />
 
-        <ActingAsRow personas={personas} selected={ownerPersonaDid} onSelect={setPersonaDid} />
+        <ActingAsRow personas={personas} selected={ownerPersonaDid} onSelect={setPersonaDid} ask={asksPersona} />
 
         <ThemedText style={styles.section}>{t('ConnectedAgents.MemoryItCanUse')}</ThemedText>
         {memories === undefined ? (

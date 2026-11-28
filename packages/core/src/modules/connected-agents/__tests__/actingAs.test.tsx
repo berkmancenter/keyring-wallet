@@ -27,7 +27,8 @@ describe('ActingAsRow', () => {
     return { onSelect, tree: show(<ActingAsRow personas={personas} selected={selected} onSelect={onSelect} />) }
   }
 
-  // control: changing `personas.length < 2` to `< 1` in ActingAsRow draws the row with one persona and fails this.
+  // control: changing the default `ask = personas.length > 1` to `> 0` in ActingAsRow draws the row with one persona
+  // and fails this.
   it.each([
     ['no persona', []],
     ['one persona', [ADA]],
@@ -38,26 +39,42 @@ describe('ActingAsRow', () => {
     expect(tree.toJSON()).toBeNull()
   })
 
-  it('draws "Acting as" with two personas, with no name and the list closed before a choice', () => {
+  it('draws "Acting as" with two personas, with no name on the row before a choice', () => {
     const { tree } = row([ADA, COLLEGE])
     const header = tree.getByTestId(id('ActingAsRow'))
     expect(tree.getByText('ConnectedAgents.ActingAs')).toBeTruthy()
     expect(header.props.accessibilityLabel).toBe('ConnectedAgents.ActingAs')
-    expect(header.props.accessibilityState.expanded).toBe(false)
-    expect(tree.queryByText('Ada')).toBeNull()
-    expect(tree.queryAllByTestId(id('ActingAsOption'))).toHaveLength(0)
   })
 
-  it('opens an inline list of radio rows by display name, none checked, and closes it again', () => {
+  // control: starting the list closed (`useState(false)` for `open` in ActingAsRow) fails this.
+  it('with nothing chosen, shows the inline list of radio rows by display name without a tap, none checked', () => {
     const { tree } = row([ADA, COLLEGE])
-    fireEvent.press(tree.getByTestId(id('ActingAsRow')))
     const options = tree.getAllByTestId(id('ActingAsOption'))
     expect(options.map((o) => o.props.accessibilityLabel)).toEqual(['Ada', 'Ada at Example College'])
     expect(options.map((o) => o.props.accessibilityRole)).toEqual(['radio', 'radio'])
     expect(options.map((o) => o.props.accessibilityState.checked)).toEqual([false, false])
     expect(tree.getByTestId(id('ActingAsRow')).props.accessibilityState.expanded).toBe(true)
+  })
+
+  it('closes the list on a press of the row and opens it again on the next', () => {
+    const { tree } = row([ADA, COLLEGE])
     fireEvent.press(tree.getByTestId(id('ActingAsRow')))
     expect(tree.queryAllByTestId(id('ActingAsOption'))).toHaveLength(0)
+    expect(tree.getByTestId(id('ActingAsRow')).props.accessibilityState.expanded).toBe(false)
+    fireEvent.press(tree.getByTestId(id('ActingAsRow')))
+    expect(tree.getAllByTestId(id('ActingAsOption'))).toHaveLength(2)
+  })
+
+  it('starts closed when a persona is already chosen', () => {
+    const { tree } = row([ADA, COLLEGE], ADA.did)
+    expect(tree.queryAllByTestId(id('ActingAsOption'))).toHaveLength(0)
+  })
+
+  it('draws the row with one persona when told to ask', () => {
+    const onSelect = jest.fn()
+    const tree = show(<ActingAsRow personas={[ADA]} onSelect={onSelect} ask />)
+    expect(tree.getByTestId(id('ActingAsRow'))).toBeTruthy()
+    expect(tree.getAllByTestId(id('ActingAsOption')).map((o) => o.props.accessibilityLabel)).toEqual(['Ada'])
   })
 
   it('shows the chosen persona on the row and checks it in the list', () => {
@@ -73,7 +90,6 @@ describe('ActingAsRow', () => {
 
   it('hands on the DID of the persona pressed', () => {
     const { tree, onSelect } = row([ADA, COLLEGE])
-    fireEvent.press(tree.getByTestId(id('ActingAsRow')))
     fireEvent.press(tree.getByLabelText('Ada at Example College'))
     expect(onSelect).toHaveBeenCalledWith(COLLEGE.did)
   })
@@ -102,10 +118,20 @@ describe('ConnectAgentForm with "Acting as"', () => {
   }
   const continueOff = (tree: ReturnType<typeof show>) =>
     tree.getByTestId(id('ConnectAgentContinue')).props.accessibilityState.disabled
-  const choose = (tree: ReturnType<typeof show>, name: string) => {
+  // With nothing chosen the list is already open, so a choice is one press.
+  const choose = (tree: ReturnType<typeof show>, name: string) => fireEvent.press(tree.getByLabelText(name))
+  const options = (tree: ReturnType<typeof show>) =>
+    tree.queryAllByTestId(id('ActingAsOption')).map((o) => o.props.accessibilityLabel)
+
+  // control: after a choice and a tap on the row, the options close, so it is the opening state that shows them.
+  it('with several personas and nothing chosen, the options are visible without a tap', () => {
+    const { tree } = form([ADA, COLLEGE])
+    expect(options(tree)).toEqual(['Ada', 'Ada at Example College'])
+    choose(tree, 'Ada')
+    expect(options(tree)).toEqual(['Ada', 'Ada at Example College'])
     fireEvent.press(tree.getByTestId(id('ActingAsRow')))
-    fireEvent.press(tree.getByLabelText(name))
-  }
+    expect(options(tree)).toEqual([])
+  })
 
   it('draws "Acting as" above "Memory it can use"', () => {
     const { tree } = form([ADA, COLLEGE])
@@ -144,6 +170,8 @@ describe('ConnectAgentForm with "Acting as"', () => {
     expect(onContinue.mock.calls[0][0].ownerPersonaDid).toBe(ADA.did)
   })
 
+  // The never-asked control for the shrinking cases below: with 0 or 1 persona from the start the form never asks,
+  // and `ownerPersonaDid` is absent from the choice, not merely undefined.
   it.each([
     ['no personas prop', undefined],
     ['no persona', []],
@@ -157,25 +185,68 @@ describe('ConnectAgentForm with "Acting as"', () => {
     expect(Object.keys(onContinue.mock.calls[0][0]).sort()).toEqual(['memoryContexts', 'name', 'purposes'])
   })
 
-  it('drops a choice whose persona has left the list, and waits again', () => {
-    const onContinue = jest.fn()
-    const props = {
-      guard: 'ok' as const,
-      memories: MEMORIES,
-      onCreateMemory: jest.fn(),
-      onContinue,
-      onClose: jest.fn(),
+  describe('when the persona list shrinks mid-connect', () => {
+    const WORK: ActingAsPersona = { did: 'did:example:persona-three', name: 'Ada at Work' }
+    const shrinking = (chosen: string) => {
+      const onContinue = jest.fn()
+      const props = {
+        guard: 'ok' as const,
+        memories: MEMORIES,
+        onCreateMemory: jest.fn(),
+        onContinue,
+        onClose: jest.fn(),
+      }
+      const tree = show(<ConnectAgentForm {...props} personas={[ADA, COLLEGE, WORK]} />)
+      fireEvent.changeText(tree.getByTestId(id('ConnectAgentName')), 'Notes helper')
+      choose(tree, chosen)
+      expect(continueOff(tree)).toBe(false)
+      const shrinkTo = (personas: ActingAsPersona[]) =>
+        tree.rerender(
+          <BasicAppContext>
+            <ConnectAgentForm {...props} personas={personas} />
+          </BasicAppContext>
+        )
+      return { tree, onContinue, shrinkTo }
     }
-    const third: ActingAsPersona = { did: 'did:example:persona-three', name: 'Ada at Work' }
-    const tree = show(<ConnectAgentForm {...props} personas={[ADA, COLLEGE, third]} />)
-    fireEvent.changeText(tree.getByTestId(id('ConnectAgentName')), 'Notes helper')
-    choose(tree, 'Ada at Work')
-    expect(continueOff(tree)).toBe(false)
-    tree.rerender(
-      <BasicAppContext>
-        <ConnectAgentForm {...props} personas={[ADA, COLLEGE]} />
-      </BasicAppContext>
-    )
-    expect(continueOff(tree)).toBe(true)
+
+    it('drops a choice whose persona has left the list, and waits again', () => {
+      const { tree, shrinkTo } = shrinking('Ada at Work')
+      shrinkTo([ADA, COLLEGE])
+      expect(continueOff(tree)).toBe(true)
+    })
+
+    // control: deriving `asksPersona` from `personas.length > 1` on each render (not sticky) fails this: the row goes
+    // and "Continue" comes on with no persona, so the logic would fill one the person did not choose.
+    it('down to one with the chosen persona gone: the row still asks and "Continue" is off', () => {
+      const { tree, onContinue, shrinkTo } = shrinking('Ada at Work')
+      shrinkTo([ADA])
+      expect(tree.getByTestId(id('ActingAsRow')).props.accessibilityLabel).toBe('ConnectedAgents.ActingAs')
+      expect(options(tree)).toEqual(['Ada'])
+      expect(continueOff(tree)).toBe(true)
+      fireEvent.press(tree.getByTestId(id('ConnectAgentContinue')))
+      expect(onContinue).not.toHaveBeenCalled()
+
+      choose(tree, 'Ada')
+      expect(continueOff(tree)).toBe(false)
+      fireEvent.press(tree.getByTestId(id('ConnectAgentContinue')))
+      expect(onContinue.mock.calls[0][0].ownerPersonaDid).toBe(ADA.did)
+    })
+
+    it('reopens the list when the choice is lost, even after the person closed it', () => {
+      const { tree, shrinkTo } = shrinking('Ada at Work')
+      fireEvent.press(tree.getByTestId(id('ActingAsRow')))
+      expect(options(tree)).toEqual([])
+      shrinkTo([ADA])
+      expect(options(tree)).toEqual(['Ada'])
+    })
+
+    it('down to one with the chosen persona still there: the choice is kept and "Continue" stays on', () => {
+      const { tree, onContinue, shrinkTo } = shrinking('Ada')
+      shrinkTo([ADA])
+      expect(tree.getByTestId(id('ActingAsRow')).props.accessibilityLabel).toBe('ConnectedAgents.ActingAs, Ada')
+      expect(continueOff(tree)).toBe(false)
+      fireEvent.press(tree.getByTestId(id('ConnectAgentContinue')))
+      expect(onContinue.mock.calls[0][0].ownerPersonaDid).toBe(ADA.did)
+    })
   })
 })
