@@ -47,7 +47,6 @@ describe('HcpApproveView', () => {
     const props: HcpApproveViewProps = {
       name: 'Notes helper',
       view: HCP_APPROVAL_VIEW,
-      until: '14:30',
       confirm: jest.fn(async () => true),
       onApprove: jest.fn(),
       ...over,
@@ -351,6 +350,16 @@ describe('the HCP word source', () => {
     ).toThrow(/Hcp\.A.*Hcp\.B/)
     // Control: texts that only share a start do not count.
     expect(() => buildHcpWordSource({ A: { en: 'Revoke' }, B: { en: 'Revoke "{{name}}"?' } })).not.toThrow()
+  })
+
+  it('throws, naming the string and both keys, when two templates both match one rendered string', () => {
+    // Neither template matches the other's text, so the table builds; "Hello y x" fits both.
+    const source = buildHcpWordSource({ A: { en: 'Hello {{a}} x' }, B: { en: 'Hello y {{b}}' } })
+    expect(() => source.wordOf('Hello y x')).toThrow(/"Hello y x".*Hcp\.A.*Hcp\.B/)
+    // Control: a string only one of them fits is that one's word, and a string neither fits is no word.
+    expect(source.wordOf('Hello z x')).toBe('Hcp.A')
+    expect(source.wordOf('Hello y z')).toBe('Hcp.B')
+    expect(source.wordOf('Goodbye')).toBeUndefined()
   })
 
   it('treats regular-expression characters in a text literally', () => {

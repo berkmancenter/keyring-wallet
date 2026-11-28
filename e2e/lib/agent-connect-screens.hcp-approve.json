@@ -8,7 +8,7 @@
       "step": "7.27",
       "marker": "HcpConnectWaiting",
       "frame": null,
-      "noFrame": "the HCP lane draws only Approve; this state uses the base path's layout",
+      "noFrame": "no frame draws this state; it is a spinner with no words",
       "kit": null,
       "words": [],
       "noWords": "before the scan is read: a spinner with no words, by design; only its marker is checked"
@@ -18,7 +18,7 @@
       "step": "7.27",
       "marker": "HcpConnectWaiting",
       "frame": null,
-      "noFrame": "the HCP lane draws only Approve; this state uses the base path's layout",
+      "noFrame": "no frame draws this state; it is a spinner with no words",
       "kit": null,
       "words": [],
       "noWords": "a wait for the VTA's consent request: a spinner with no words, by design; only its marker is checked"
@@ -28,7 +28,7 @@
       "step": "7.27",
       "marker": "ConnectNumber",
       "frame": null,
-      "noFrame": "the HCP lane draws only Approve; this state uses the base path's layout",
+      "noFrame": "no frame draws this state; it uses the base path's number entry (ConnectNumberView)",
       "kit": null,
       "words": [
         "ConnectedAgents.NumberTitle",
@@ -86,7 +86,7 @@
       "step": "7.27",
       "marker": "ConnectConnected",
       "frame": null,
-      "noFrame": "the HCP lane draws only Approve; this state uses the base path's layout",
+      "noFrame": "no frame draws this state; it uses the base path's Done (ConnectedView)",
       "kit": null,
       "words": [
         "ConnectedAgents.IsConnected",
@@ -100,7 +100,7 @@
       "step": "7.27",
       "marker": "HcpConnectEnd",
       "frame": null,
-      "noFrame": "the HCP lane draws only Approve; this state uses the base path's layout",
+      "noFrame": "no frame draws this state; it uses the base path's notice layout (ConnectNotice and Close)",
       "kit": null,
       "words": ["Hcp.CodeExpired", "Global.Close"]
     },
@@ -109,7 +109,7 @@
       "step": "7.27",
       "marker": "HcpConnectEnd",
       "frame": null,
-      "noFrame": "the HCP lane draws only Approve; this state uses the base path's layout",
+      "noFrame": "no frame draws this state; it uses the base path's notice layout (ConnectNotice and Close)",
       "kit": null,
       "words": ["Hcp.WrongNumber", "Global.Close"]
     },
@@ -118,7 +118,7 @@
       "step": "7.27",
       "marker": "HcpConnectEnd",
       "frame": null,
-      "noFrame": "the HCP lane draws only Approve; this state uses the base path's layout",
+      "noFrame": "no frame draws this state; it uses the base path's notice layout (ConnectNotice and Close)",
       "kit": null,
       "words": ["Hcp.Locked", "Global.Close"]
     },
@@ -127,7 +127,7 @@
       "step": "7.27",
       "marker": "HcpConnectEnd",
       "frame": null,
-      "noFrame": "the HCP lane draws only Approve; this state uses the base path's layout",
+      "noFrame": "no frame draws this state; it uses the base path's notice layout (ConnectNotice and Close)",
       "kit": null,
       "words": ["Hcp.ApproveNotApproved", "Global.Close"]
     },
@@ -136,7 +136,7 @@
       "step": "7.27",
       "marker": "HcpConnectEnd",
       "frame": null,
-      "noFrame": "the HCP lane draws only Approve; this state uses the base path's layout",
+      "noFrame": "no frame draws this state; it uses the base path's notice layout (ConnectNotice and Close)",
       "kit": null,
       "words": ["Hcp.ApproveNotRecorded", "Global.Close"]
     },
@@ -145,7 +145,7 @@
       "step": "7.27",
       "marker": "HcpConnectEnd",
       "frame": null,
-      "noFrame": "the HCP lane draws only Approve; this state uses the base path's layout",
+      "noFrame": "no frame draws this state; it uses the base path's notice layout (ConnectNotice and Close)",
       "kit": null,
       "words": ["Hcp.ApproveDeclined", "Global.Close"]
     },
@@ -154,7 +154,7 @@
       "step": "7.27",
       "marker": "HcpConnectEnd",
       "frame": null,
-      "noFrame": "the HCP lane draws only Approve; this state uses the base path's layout",
+      "noFrame": "no frame draws this state; it uses the base path's notice layout (ConnectNotice and Close)",
       "kit": null,
       "words": ["Hcp.ApproveAnsweredElsewhere", "Global.Close"]
     }
