@@ -27,6 +27,8 @@ export const PROPOSED_COPY: Readonly<Record<string, string>> = {
   AnswersOthersNotSaved: 'backlog 3 ruling 2 (step 7.14): Keyring could not store an "Answers other people" change',
   AddToRoomBodyAllRooms:
     'backlog 3 (step 7.13, decided 11-28): the add sheet says the agent can use every room of the persona',
+  AddToRoomBodyAlready:
+    'backlog 3 (step 7.13, decided 11-28): the add sheet for an agent that can already use the persona rooms',
   AgentsUseEveryRoom: 'backlog 3 (step 7.13, decided 11-28): room info says the same, in place of the one-room note',
   CanUseEveryRoomAs: 'backlog 3 (steps 7.13 and 7.14, decided 11-28): the same, in What it remembers and the details',
   AnswersOthersPending:

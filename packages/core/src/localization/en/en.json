@@ -4293,6 +4293,7 @@
     "CallsItself": "calls itself {{name}}",
     "OwnerUnknown": "Keyring can't tell who this belongs to.",
     "AddToRoomBodyAllRooms": "Adding an agent lets it use every room you're in as {{persona}}, not only this one. It is asked to act only when you mention it, but nothing in a room enforces that.",
+    "AddToRoomBodyAlready": "It can already use every room you're in as {{persona}}. Here, it is asked to act only when you mention it, but nothing in the room enforces that.",
     "AgentsUseEveryRoom": "Agents added here can use every room you're in as {{persona}}, and read everything in them, not only messages that mention them.",
     "CanUseEveryRoomAs": "It can use every room you're in as {{persona}}."
   }
