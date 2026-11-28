@@ -8,18 +8,20 @@
 //   misnamed  HEAD is the pin's commit, named shorter than git abbreviates it: an abbreviation that has
 //             already outgrown the repo, said with what to write
 //   rewind    HEAD is past the pin: checking it out would move the clone backwards (setup run from a tree
-//             whose PINS.json is older than the clone, as a stale checkout's is), so it isn't, unasked
+//             whose PINS.json is older than the clone, as a stale checkout's is), so it isn't, unasked.
+//             Never for a clone setup has just made (`fresh`): it sits on the remote's default branch, which
+//             is past almost every pin, and holds nothing anyone moved there, so it is off and checked out
 //   off       HEAD is another commit, or the pin's name resolves to none here
 
 /**
- * @param {{ head: string, headCommit: string, pinSha: string, pinCommit?: string, pinBehindHead?: boolean }} at
+ * @param {{ head: string, headCommit: string, pinSha: string, pinCommit?: string, pinBehindHead?: boolean, fresh?: boolean }} at
  *   head: `git rev-parse --short HEAD`; headCommit: `git rev-parse HEAD`; pinSha: PINS.json's value;
  *   pinCommit: `git rev-parse --verify <pinSha>^{commit}`, if it resolved; pinBehindHead: the pin's commit
- *   is an ancestor of HEAD (`git merge-base --is-ancestor`)
+ *   is an ancestor of HEAD (`git merge-base --is-ancestor`); fresh: setup cloned it in this run
  */
-export function pinState({ head, headCommit, pinSha, pinCommit, pinBehindHead = false }) {
+export function pinState({ head, headCommit, pinSha, pinCommit, pinBehindHead = false, fresh = false }) {
   if (pinCommit && pinCommit === headCommit)
     return headCommit.startsWith(pinSha) && pinSha.length >= head.length ? 'pinned' : 'misnamed';
-  if (pinCommit && pinBehindHead) return 'rewind';
+  if (pinCommit && pinBehindHead) return fresh ? 'off' : 'rewind';
   return 'off';
 }

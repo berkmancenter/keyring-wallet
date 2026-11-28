@@ -36,3 +36,16 @@ test('HEAD at another commit the pin is not behind is off, and is checked out as
 test('a pin that resolves to no commit here is off, and is fetched as before (control)', () => {
   assert.equal(at({ pinSha: 'deadbeef', pinCommit: undefined, pinBehindHead: true }), 'off');
 });
+
+test('a clone setup has just made sits on the default branch, past the pin: off, so it is checked out', () => {
+  // A fresh `git clone` lands on the remote's default branch, past almost every pin. Read as rewind, a first
+  // setup left every such clone at upstream main and said only "!" (the 0cc18df23 case, 2026-11-28).
+  assert.equal(
+    pinState({ head: 'f7b78e29d', headCommit: OTHER, pinSha: '439a03335', pinCommit: FULL, pinBehindHead: true, fresh: true }),
+    'off'
+  );
+});
+
+test('a fresh clone already at its pin is pinned, not checked out again (control)', () => {
+  assert.equal(at({ pinSha: '439a03335', pinCommit: FULL, fresh: true }), 'pinned');
+});
