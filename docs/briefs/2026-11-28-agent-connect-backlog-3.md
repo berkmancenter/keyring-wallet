@@ -212,7 +212,7 @@ test file has that case, with switch on as the control.
 
 | Hook | Part | Tests (each with its control) |
 |---|---|---|
-| `useRoomAgents(roomId)` → `{ offered, setting, persona, inRoom, addable }` | fb-P1c | `offered` is false for `private` and `unknown`. `persona` is the name of the persona the owner acts as in the room. `inRoom` holds own agents whose record lists this room. `addable` holds only `active` agents not in it, including agents already added to another room of this persona, with `widens: null`. `widens` is `null` exactly when the agent's record already lists a room of this persona, and set (to the persona's context) otherwise. It is computed from the record's `rooms`, never from what `act` happens to hold. Control: an agent added to another room of the same persona is in `addable` with `widens: null`, not in `inRoom`. Control: an agent whose `act` already holds the persona's context but whose record lists no room of the persona has `widens` set |
+| `useRoomAgents(roomId)` → `{ offered, setting, tier, persona, inRoom, addable }` | fb-P1c | `offered` is false for `private` and `unknown`. `tier` is the room's `RoomSummary.tier` (`rooms/types.ts:131`) narrowed to `'open' \| 'attributed'`, present whenever `offered` is true. In an `attributed` room `addable` is computed exactly as in an open room, so the views can draw their disabled row; the add itself is refused there (fb-P1c). `persona` is the name of the persona the owner acts as in the room. `inRoom` holds own agents whose record lists this room. `addable` holds only `active` agents not in it, including agents already added to another room of this persona, with `widens: null`. `widens` is `null` exactly when the agent's record already lists a room of this persona, and set (to the persona's context) otherwise. It is computed from the record's `rooms`, never from what `act` happens to hold. Control: an agent added to another room of the same persona is in `addable` with `widens: null`, not in `inRoom`. Control: an agent whose `act` already holds the persona's context but whose record lists no room of the persona has `widens` set |
 | `useAddAgentToRoom(roomId)` → `{ add(agentId): Promise<AddRoomOutcome> }` | fb-P1c | one case per row of fb-P1c's mapping. The setting is re-read at the call: changed between the list and the press, it is `'settingNo'` |
 | `useRoomMentionables(roomId)` → `{ agentId, name, handle }[]` | fb-P1d | only own agents with this room in `rooms`. Control: an agent in another room is absent |
 | `useAnswersOthers(agentId)` → `{ value, offered, pending, set }` | fb-P1e | `pending` stays true until the intent is `sent`. With `OTHERS_HOOK_CHECK_PASSED` false, `offered` is false |
@@ -322,7 +322,8 @@ export function settleRoomAdds(ports: RoomAddPorts): Promise<{ settled: string[]
 
 1. **Checks, no network:**
    - the record is `active` (else `notOffered`);
-   - the tier is `open` or `attributed` (`private` and `unknown` are `tierNotSupported`);
+   - the tier is `open` (`attributed`, `private` and `unknown` are `tierNotSupported`; agents work only in open
+     rooms, ruling 1);
    - the agent is not in the room already (`alreadyInRoom`);
    - `actingAs === ownerPersonaDid` (`otherPersona`, ruling 4);
    - the community's setting: `notAllowed` is `communityNo`, and `notStated` or no `communityDid` is
@@ -400,6 +401,9 @@ export function settleRoomAdds(ports: RoomAddPorts): Promise<{ settled: string[]
     plus `roomPresent`, and keys listed as exactly that persona's signing key. Control: an entry read back with one
     more capability, or with unrestricted keys, is `notApplied`. Mutation: check the capabilities by containment, and
     the test goes red.
+  - An add for an `attributed` room is `'notAddable'` (`tierNotSupported`) with no VTA call, no intent and no offer,
+    while `useRoomAgents` still lists the same `addable` agents there. Control: the same agent in an `open` room
+    writes once.
   - `roomOpen` is absent from the entry after the add, and the write the fake VTA received does not name it.
     Control: an entry read back holding `roomOpen` is `notApplied`, and the record does not gain it.
   - A second room in the same context makes no VTA write. Control: the first room does.
