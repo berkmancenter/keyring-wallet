@@ -140,7 +140,17 @@ export type HcpConnection = {
    * from the client's `grant.issued` audit event (`./grantId.ts`), then kept here.
    */
   grantId?: string
+  /** The learnt grant's `grant.issued` event time: the grant demonstrably existed (so a refused revoke is not "no such grant"). */
+  grantIssuedAt?: string
+  /** `grant.issued`'s `data.expiresAt`, when the VTA gave one: the issued grant's own expiry. */
+  grantExpiresAt?: string
   threadId: string
+  /**
+   * When the approval started (the approval in flight's `startedAt`): the lower bound for every `grant.issued` and
+   * audit lookup, since `approvedAt` can be late (a connection completed by the reconcile is dated up to the
+   * request's own `expiresAt`). Absent on records written before it was kept; `approvedAt` stands in.
+   */
+  approvalStartedAt?: string
   /** When `decide(approve)` resolved. */
   approvedAt: string
   /** The `hcpGrantTerm` effect's `expiresAt`. */
@@ -163,7 +173,7 @@ export type HcpConnection = {
 
 /**
  * An HCP approval in flight (part 3): written before `decide(approve)` is called, under its own kind in the same
- * store and keyed by `grantId`, so an existing connection for the client, and an earlier approval in flight for it,
+ * store and keyed by `threadId`, so an existing connection for the client, and an earlier approval in flight for it,
  * are left as they are until the new one is confirmed. It names the grant the approval would create: if the approval
  * fails, or the app stops before the connection is written, the reconcile completes it or revokes the grant by
  * `grantId`. Times are ISO-8601 instants.
@@ -175,6 +185,10 @@ export type HcpApprovalInFlight = {
   name: string
   /** The grant the approval creates, when the request named it; else learnt later. */
   grantId?: string
+  /** The learnt grant's `grant.issued` event time: the grant demonstrably existed (so a refused revoke is not "no such grant"). */
+  grantIssuedAt?: string
+  /** `grant.issued`'s `data.expiresAt`, when the VTA gave one: the issued grant's own expiry. */
+  grantExpiresAt?: string
   /** The scanned thread: this record's key, since it names exactly one request and so one grant. */
   threadId: string
   /** The consent request being approved. */
@@ -191,7 +205,7 @@ export type HcpApprovalInFlight = {
 
 /**
  * A grant whose connection a newer approval for the same client replaced while the grant may still be live (part 3):
- * written in the same step as the new connection, under its own kind, keyed by `grantId`; the reconcile revokes it.
+ * written in the same step as the new connection, under its own kind, keyed by `threadId`; the reconcile revokes it.
  * Times are ISO-8601 instants.
  */
 export type HcpRetiringGrant = {
@@ -200,10 +214,19 @@ export type HcpRetiringGrant = {
   name: string
   /** As on the connection it was: absent if never learnt. */
   grantId?: string
+  /** The learnt grant's `grant.issued` event time: the grant demonstrably existed (so a refused revoke is not "no such grant"). */
+  grantIssuedAt?: string
+  /** `grant.issued`'s `data.expiresAt`, when the VTA gave one: the issued grant's own expiry. */
+  grantExpiresAt?: string
   threadId: string
-  /** The grant's expiry, when known: once passed there is nothing left to revoke. */
+  /**
+   * The grant's expiry: once passed there is nothing left to revoke. A record without it was written before the
+   * §5.1 contract (keyed by `grantId`) and is ignored (`./store.ts`).
+   */
   expiresAt?: string
-  /** When it was approved: where its `grantId` is looked for if never learnt. */
+  /** When its approval started: where its `grantId` is looked for if never learnt (else `approvedAt`). */
+  approvalStartedAt?: string
+  /** When it was approved. */
   approvedAt?: string
   /** When the newer connection replaced it. */
   retiredAt: string

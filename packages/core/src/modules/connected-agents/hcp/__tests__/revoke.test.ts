@@ -161,8 +161,69 @@ describe('revokeHcpGrant', () => {
     expect(task.mock.calls.map((c) => c[0])).toEqual([HCP_AUDIT_READ, HCP_GRANTS_REVOKE])
     expect(task.mock.calls[0][1]).toMatchObject({ client: CLIENT_VID, eventType: 'grant.issued' })
     expect(task.mock.calls[1][1]).toStrictEqual({ grantId: GRANT })
-    expect(result).toEqual({ ok: true, connection: revoked() })
-    expect((await store.get(CLIENT_VID))?.grantId).toBe(GRANT)
+    const learnt = { ...revoked(), grantIssuedAt: '2026-11-27T10:01:01.000Z' }
+    expect(result).toEqual({ ok: true, connection: learnt })
+    expect(await store.get(CLIENT_VID)).toEqual(learnt)
+  })
+
+  it('B1: learns from the approval start, not a late approvedAt (a connection the reconcile completed)', async () => {
+    const { grantId: _none, ...noId } = connection()
+    const late = { ...noId, approvalStartedAt: '2026-11-27T10:00:30.000Z', approvedAt: '2026-11-27T10:05:00.000Z' }
+    const vta = fakeVta({
+      audit: async () => ({ events: [auditEvent('grant.issued', '2026-11-27T10:00:40.000Z', { grantId: GRANT })] }),
+    })
+    const { deps, task } = await setup(late, vta)
+    expect(await revokeHcpGrant(deps, CLIENT_VID)).toMatchObject({ ok: true })
+    expect(task.mock.calls[0][1]).toMatchObject({ from: '2026-11-27T09:59:30.000Z' })
+    expect(task.mock.calls[1][1]).toStrictEqual({ grantId: GRANT })
+  })
+
+  it('B2: refuses to guess, sending nothing, while another unlearnt approval of the client overlaps', async () => {
+    const { grantId: _none, ...noId } = connection()
+    const vta = fakeVta({ audit: async () => ({ events: [] }) })
+    const { deps, store, task } = await setup(noId, vta)
+    await store.putInFlight({
+      id: CLIENT_VID,
+      name: 'My notes agent',
+      threadId: 'urn:uuid:00000000-0000-4000-8000-0000000000a1',
+      approvalId: 'consent-2',
+      approvalExpiresAt: '2026-11-27T10:06:00.000Z',
+      expiresAt: '2026-11-27T11:01:00.000Z',
+      startedAt: '2026-11-27T10:01:30.000Z',
+    })
+    expect(await revokeHcpGrant(deps, CLIENT_VID)).toEqual({
+      ok: false,
+      refused: 'grantAmbiguous',
+      message: { key: 'RevokeGrantAmbiguous', params: { name: 'My notes agent' } },
+    })
+    expect(task).not.toHaveBeenCalled()
+    expect(await store.get(CLIENT_VID)).toEqual(noId)
+  })
+
+  it("B2: never learns a grant another of the client's records holds", async () => {
+    const { grantId: _none, ...noId } = connection()
+    const OTHER = 'urn:uuid:22222222-2222-4222-8222-222222222222'
+    const vta = fakeVta({
+      audit: async () => ({
+        events: [
+          auditEvent('grant.issued', '2026-11-27T10:00:50.000Z', { grantId: OTHER }),
+          auditEvent('grant.issued', '2026-11-27T10:01:01.000Z', { grantId: GRANT }),
+        ],
+      }),
+    })
+    const { deps, store, task } = await setup(noId, vta)
+    await store.putInFlight({
+      id: CLIENT_VID,
+      name: 'My notes agent',
+      grantId: OTHER,
+      threadId: 'urn:uuid:00000000-0000-4000-8000-0000000000a1',
+      approvalId: 'consent-2',
+      approvalExpiresAt: '2026-11-27T10:06:00.000Z',
+      expiresAt: '2026-11-27T11:01:00.000Z',
+      startedAt: '2026-11-27T10:00:20.000Z',
+    })
+    expect(await revokeHcpGrant(deps, CLIENT_VID)).toMatchObject({ ok: true })
+    expect(task.mock.calls[1][1]).toStrictEqual({ grantId: GRANT })
   })
 
   it('a record with no grantId and no grant.issued yet is refused grantNotIssued, and nothing is revoked', async () => {
@@ -171,7 +232,7 @@ describe('revokeHcpGrant', () => {
     expect(await revokeHcpGrant(deps, CLIENT_VID)).toEqual({
       ok: false,
       refused: 'grantNotIssued',
-      message: { key: 'RevokeRefused', params: { name: 'My notes agent' } },
+      message: { key: 'RevokeNotYetIssued', params: { name: 'My notes agent' } },
     })
     expect(task.mock.calls.map((c) => c[0])).toEqual([HCP_AUDIT_READ])
     expect(await store.get(CLIENT_VID)).toEqual(noId)

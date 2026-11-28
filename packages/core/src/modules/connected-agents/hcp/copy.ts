@@ -37,6 +37,8 @@ export type HcpCopyKey =
   | 'Keep'
   | 'RevokeUnreachable'
   | 'RevokeRefused'
+  | 'RevokeNotYetIssued'
+  | 'RevokeGrantAmbiguous'
   | 'NewMemoryTitle'
   | 'NewMemoryField'
   | 'NewMemoryHelper'
@@ -210,6 +212,22 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     en: 'Your VTA refused to revoke "{{name}}", so nothing changed here.',
     fr: "Votre VTA a refusé de révoquer « {{name}} », donc rien n'a changé ici.",
     ptBr: 'Seu VTA recusou revogar "{{name}}", então nada mudou aqui.',
+    source: 'PROPOSED',
+  },
+  // Added at review of the §5.1 alignment: nothing was sent, because the grant is not in the audit log yet (the
+  // client has not picked up its access). It can be tried again shortly.
+  RevokeNotYetIssued: {
+    en: '"{{name}}" hasn\'t picked up its access yet. Try again in a minute.',
+    fr: "« {{name}} » n'a pas encore récupéré son accès. Réessayez dans une minute.",
+    ptBr: '"{{name}}" ainda não pegou seu acesso. Tente de novo em um minuto.',
+    source: 'PROPOSED',
+  },
+  // Added at review of the §5.1 alignment: nothing was sent, because Keyring cannot tell which of the client's grants
+  // is this connection's (two approvals at once). Revoking the wrong one would end the wrong access.
+  RevokeGrantAmbiguous: {
+    en: 'Keyring can\'t tell yet which access of "{{name}}" to end, so nothing changed. Try again later.',
+    fr: "Keyring ne sait pas encore quel accès de « {{name}} » arrêter, donc rien n'a changé. Réessayez plus tard.",
+    ptBr: 'O Keyring ainda não sabe qual acesso de "{{name}}" encerrar, então nada mudou. Tente de novo mais tarde.',
     source: 'PROPOSED',
   },
   NewMemoryTitle: {

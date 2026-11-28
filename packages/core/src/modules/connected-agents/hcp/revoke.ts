@@ -39,9 +39,15 @@
  */
 import { useEffect, useRef, useState } from 'react'
 
-import { HCP_AUDIT_SKEW_MS, HCP_GRANT_NOT_ISSUED, learnHcpGrantId } from './grantId'
+import {
+  HCP_AUDIT_SKEW_MS,
+  HCP_GRANT_AMBIGUOUS,
+  HCP_GRANT_NOT_ISSUED,
+  learnHcpGrantId,
+  learntGrantFields,
+} from './grantId'
 import { isHcpEnabled } from './hcpFlag'
-import type { HcpConnectionReader } from './store'
+import { heldOfConnection, type HcpConnectionReader } from './store'
 import { HCP_DISCLOSURES_SUMMARY, HCP_GRANTS_REVOKE, type HcpConnection, type HcpNoticeState } from './types'
 import { callHcp, type HcpCallFailure, type HcpVtaPort, onHcpFailure } from './vtaPort'
 import { type HcpAuditEvent, isInstant, readHcpAudit } from './whatItSaw/audit'
@@ -55,7 +61,16 @@ export interface HcpRevokeDeps {
 export type HcpRevokeResult =
   | { ok: true; connection: HcpConnection }
   | { ok: false; missing: true }
-  | { ok: false; refused: string; message: { key: 'RevokeRefused'; params: { name: string } } }
+  | {
+      ok: false
+      refused: string
+      /**
+       * `RevokeRefused` for the VTA's refusal. With nothing sent: `RevokeNotYetIssued` while the grant is not yet in
+       * the audit log (`grantNotIssued`), `RevokeGrantAmbiguous` when Keyring cannot tell which grant is this
+       * connection's (`grantAmbiguous`); both can be tried again later.
+       */
+      message: { key: 'RevokeRefused' | 'RevokeNotYetIssued' | 'RevokeGrantAmbiguous'; params: { name: string } }
+    }
   | { ok: false; unreachable: true; message: { key: 'RevokeUnreachable'; params: { name: string } } }
   /**
    * The HCP flags are off: nothing was sent and the record is unchanged. No copy, on purpose: with the flags off no
@@ -89,17 +104,22 @@ export async function revokeHcpGrant(deps: HcpRevokeDeps, id: string): Promise<H
   const c = await deps.store.get(id)
   if (!c) return { ok: false, missing: true }
   if (c.revokedAt) return { ok: true, connection: c }
-  const refusedFor = (code: string): HcpRevokeResult => ({
+  const refusedFor = (
+    code: string,
+    key: 'RevokeRefused' | 'RevokeNotYetIssued' | 'RevokeGrantAmbiguous' = 'RevokeRefused'
+  ): HcpRevokeResult => ({
     ok: false,
     refused: code,
-    message: { key: 'RevokeRefused', params: { name: c.name } },
+    message: { key, params: { name: c.name } },
   })
   let grantId = c.grantId
   if (!grantId) {
-    const learnt = await learnHcpGrantId(deps.port, { clientVid: c.id, since: c.approvedAt })
+    // From the approval's start, excluding every grant Keyring holds for the client (`./grantId.ts`).
+    const held = await deps.store.heldFor(c.id)
+    const learnt = await learnHcpGrantId(deps.port, { clientVid: c.id, record: heldOfConnection(c), held })
     if (!learnt.ok) {
       return onHcpFailure<HcpRevokeResult>(learnt, {
-        refused: refusedFor,
+        refused: (code) => refusedFor(code),
         unreachable: () => ({
           ok: false,
           unreachable: true,
@@ -108,10 +128,12 @@ export async function revokeHcpGrant(deps: HcpRevokeDeps, id: string): Promise<H
         off: () => ({ ok: false, off: true }),
       })
     }
-    if (!('grantId' in learnt)) return refusedFor(HCP_GRANT_NOT_ISSUED)
-    const known = learnt.grantId
-    grantId = known
-    await deps.store.update(id, (r) => (r.grantId || r.threadId !== c.threadId ? r : { ...r, grantId: known }))
+    if ('ambiguous' in learnt) return refusedFor(HCP_GRANT_AMBIGUOUS, 'RevokeGrantAmbiguous')
+    if (!('grantId' in learnt)) return refusedFor(HCP_GRANT_NOT_ISSUED, 'RevokeNotYetIssued')
+    const known = learntGrantFields(learnt)
+    grantId = known.grantId
+    // Kept before the revoke is sent, so the answer cannot change from one try to the next.
+    await deps.store.update(id, (r) => (r.grantId || r.threadId !== c.threadId ? r : { ...r, ...known }))
   }
   const outcome = await callHcp<unknown>(deps.port, HCP_GRANTS_REVOKE, { grantId })
   if (!outcome.ok) {
@@ -227,7 +249,8 @@ const latest = (times: string[]) =>
 /** The "Telling…" rule over the audit log (module comment). Three filtered reads; any failure ends it. */
 async function readNoticeFromAudit(port: HcpVtaPort, c: Revoked, now: Date): Promise<AuditNotice> {
   const revokedAt = Date.parse(c.revokedAt)
-  const sinceApproval = new Date(Date.parse(c.approvedAt) - HCP_AUDIT_SKEW_MS).toISOString()
+  // From the approval's start, never `approvedAt`, which the reconcile can date as late as the request's expiry.
+  const sinceApproval = new Date(Date.parse(c.approvalStartedAt ?? c.approvedAt) - HCP_AUDIT_SKEW_MS).toISOString()
 
   const revokes = await readHcpAudit(port, { client: c.id, eventType: HCP_GRANT_REVOKED_EVENT, from: sinceApproval })
   if (revokes.failure) return { failure: revokes.failure }

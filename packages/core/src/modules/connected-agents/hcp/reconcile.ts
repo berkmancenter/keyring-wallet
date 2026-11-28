@@ -21,12 +21,16 @@
  *   `permissionDenied`, which is how TT `hcp/grants/revoke` refuses a grantId the VTA does not hold for this
  *   Management Client; either way there is nothing to revoke), removes the approval in flight (`revoked`,
  *   `absent`); any other refusal,
- *   or an unreachable VTA, keeps it for the next reconcile (`kept`). The HCP flags turned off meanwhile (`off`) is not
+ *   or an unreachable VTA, keeps it for the next reconcile (`kept`). `permissionDenied` is "no such grant" only for a
+ *   `grantId` never seen in a `grant.issued` event (one the request pre-assigned): for a grant the log showed issued,
+ *   it means Keyring is not (or no longer) recognised as Management Client, so the record is kept. The HCP flags turned off meanwhile (`off`) is not
  *   a failed revoke: the record is kept and the reconcile stops there.
  *
- * A record with no `grantId` learns it before the revoke. When no `grant.issued` event names it yet, there may be no
- * grant: if the grant's `expiresAt` has passed, or (approval in flight) the consent request was denied or expired,
- * there is nothing to revoke and the record is removed (`absent`); otherwise it is kept (`kept`, `grantNotIssued`).
+ * A record with no `grantId` learns it before the revoke, from its approval's start and excluding every grant Keyring
+ * holds for the client, and keeps it on the record before anything is sent (`./grantId.ts`). When no `grant.issued`
+ * event names it yet, or Keyring cannot tell which one does, there may be no grant of ours: if the grant's
+ * `expiresAt` has passed, or (approval in flight) the consent request was denied or expired, there is nothing to
+ * revoke and the record is removed (`absent`); otherwise it is kept (`kept`, `grantNotIssued` or `grantAmbiguous`).
  *
  * Then each retiring grant (a connection a newer one replaced, see `./store.ts`), marked `retiring: true`: if its
  * client's connection still names it (the app stopped inside `complete`, before the newer connection was written), it
@@ -39,8 +43,20 @@
  */
 import type { HcpApprovalSource } from './approvals'
 import { isHcpEnabled } from './hcpFlag'
-import { HCP_GRANT_NOT_ISSUED, learnHcpGrantId } from './grantId'
-import type { HcpConnectionStore } from './store'
+import {
+  HCP_GRANT_AMBIGUOUS,
+  HCP_GRANT_NOT_ISSUED,
+  type HcpHeldApproval,
+  learnHcpGrantId,
+  learntGrantFields,
+} from './grantId'
+import {
+  HCP_APPROVAL_IN_FLIGHT_KIND,
+  HCP_RETIRING_KIND,
+  heldOfInFlight,
+  heldOfRetiring,
+  type HcpConnectionStore,
+} from './store'
 import { HCP_GRANTS_REVOKE, type HcpApprovalInFlight, type HcpConnection, type HcpRetiringGrant } from './types'
 import { callHcp, type HcpVtaPort, onHcpFailure } from './vtaPort'
 
@@ -54,8 +70,13 @@ export const HCP_GRANT_NOT_FOUND = 'notFound'
  */
 export const HCP_REVOKE_NO_SUCH_GRANT = 'permissionDenied'
 
-/** The refusals of a revoke that mean there is no such grant to revoke. */
-const NO_SUCH_GRANT: readonly string[] = [HCP_GRANT_NOT_FOUND, HCP_REVOKE_NO_SUCH_GRANT]
+/**
+ * Whether a refusal means there is no such grant to revoke: `notFound` always; `permissionDenied` only for a grant
+ * never seen issued, since for one the log showed issued it means Keyring's issuer is not (or no longer) recognised
+ * as Management Client (VTI hcp.md §4.4), and the grant may well be live.
+ */
+const noSuchGrant = (code: string, seenIssued: boolean) =>
+  code === HCP_GRANT_NOT_FOUND || (code === HCP_REVOKE_NO_SUCH_GRANT && !seenIssued)
 
 export interface HcpReconcileDeps {
   store: Pick<
@@ -67,6 +88,8 @@ export interface HcpReconcileDeps {
     | 'listRetiring'
     | 'removeRetiring'
     | 'removeRetiringIfCurrent'
+    | 'heldFor'
+    | 'rememberGrant'
   >
   source: Pick<HcpApprovalSource, 'list'>
   port: HcpVtaPort
@@ -93,37 +116,41 @@ function connectionOf(flight: HcpApprovalInFlight, approvedAt: Date): HcpConnect
     id: flight.id,
     name: flight.name,
     ...(flight.grantId ? { grantId: flight.grantId } : {}),
+    ...(flight.grantIssuedAt ? { grantIssuedAt: flight.grantIssuedAt } : {}),
+    ...(flight.grantExpiresAt ? { grantExpiresAt: flight.grantExpiresAt } : {}),
     threadId: flight.threadId,
+    approvalStartedAt: flight.startedAt,
     approvedAt: approvedAt.toISOString(),
     expiresAt: flight.expiresAt,
     ...(flight.chosenPurpose ? { chosenPurpose: flight.chosenPurpose } : {}),
   }
 }
 
-/** What revoking a record's grant needs. `noGrant`: with no `grant.issued` event yet, there is certainly none. */
+/** What revoking a record's grant needs. `noGrant`: with no `grant.issued` event of ours, there is certainly none. */
 interface RevokeTarget {
   id: string
-  grantId?: string
-  since?: string
-  exclude: string[]
+  kind: typeof HCP_APPROVAL_IN_FLIGHT_KIND | typeof HCP_RETIRING_KIND
+  record: HcpHeldApproval
+  /** Set when the record's `grantId` was seen in a `grant.issued` event. */
+  grantIssuedAt?: string
   noGrant: boolean
   remove: () => Promise<unknown>
 }
 
 /**
- * Revoke the target's grant, sent once, learning its id first if needed; `remove` drops the record when the VTA no
- * longer holds the grant. Gives the grant id it used, if any.
+ * Revoke the target's grant, sent once, learning its id first if needed (and keeping it on the record before the
+ * revoke is sent); `remove` drops the record when the VTA no longer holds the grant. Gives the grant id it used.
  */
 async function revokeGrant(
   deps: HcpReconcileDeps,
   target: RevokeTarget
 ): Promise<RevokeOutcome & { grantId?: string }> {
-  const { remove } = target
-  let grantId = target.grantId
+  const { id, remove } = target
+  let grantId = target.record.grantId
+  let seenIssued = !!target.grantIssuedAt
   if (!grantId) {
-    const learnt = target.since
-      ? await learnHcpGrantId(deps.port, { clientVid: target.id, since: target.since, exclude: target.exclude })
-      : ({ ok: true, notIssued: true } as const)
+    const held = await deps.store.heldFor(id)
+    const learnt = await learnHcpGrantId(deps.port, { clientVid: id, record: target.record, held })
     if (!learnt.ok) {
       return onHcpFailure<RevokeOutcome>(learnt, {
         refused: (code) => ({ outcome: 'kept', refused: code }),
@@ -132,18 +159,25 @@ async function revokeGrant(
       })
     }
     if (!('grantId' in learnt)) {
-      if (!target.noGrant) return { outcome: 'kept', refused: HCP_GRANT_NOT_ISSUED }
+      if (!target.noGrant) {
+        return { outcome: 'kept', refused: 'ambiguous' in learnt ? HCP_GRANT_AMBIGUOUS : HCP_GRANT_NOT_ISSUED }
+      }
       await remove()
       return { outcome: 'absent' }
     }
-    grantId = learnt.grantId
+    const fields = learntGrantFields(learnt)
+    // Kept before the revoke, so a stop or a refusal from here on leaves the same answer for the next reconcile.
+    await deps.store.rememberGrant(target.kind, id, target.record.threadId, fields)
+    grantId = fields.grantId
+    seenIssued = true
   }
-  return { grantId, ...(await sendRevoke(deps, grantId, remove)) }
+  return { grantId, ...(await sendRevoke(deps, grantId, seenIssued, remove)) }
 }
 
 async function sendRevoke(
   deps: HcpReconcileDeps,
   grantId: string,
+  seenIssued: boolean,
   remove: () => Promise<unknown>
 ): Promise<RevokeOutcome> {
   const outcome = await callHcp<unknown>(deps.port, HCP_GRANTS_REVOKE, { grantId })
@@ -153,7 +187,7 @@ async function sendRevoke(
   }
   return onHcpFailure<Promise<RevokeOutcome>>(outcome, {
     refused: async (code) => {
-      if (!NO_SUCH_GRANT.includes(code)) return { outcome: 'kept', refused: code }
+      if (!noSuchGrant(code, seenIssued)) return { outcome: 'kept', refused: code }
       await remove()
       return { outcome: 'absent' }
     },
@@ -188,9 +222,9 @@ async function reconcileOne(deps: HcpReconcileDeps, flight: HcpApprovalInFlight)
 
   const revoked = await revokeGrant(deps, {
     id,
-    grantId: flight.grantId,
-    since: flight.startedAt,
-    exclude: existing?.grantId ? [existing.grantId] : [],
+    kind: HCP_APPROVAL_IN_FLIGHT_KIND,
+    record: heldOfInFlight(flight),
+    ...(flight.grantIssuedAt ? { grantIssuedAt: flight.grantIssuedAt } : {}),
     noGrant:
       Date.parse(flight.expiresAt) <= now.getTime() || approval?.status === 'denied' || approval?.status === 'expired',
     remove: () => deps.store.removeInFlight(id, threadId),
@@ -206,13 +240,12 @@ async function reconcileRetiring(deps: HcpReconcileDeps, retiring: HcpRetiringGr
   if (await deps.store.removeRetiringIfCurrent(id, threadId)) {
     return { ...ids, retiring: true, outcome: 'current' }
   }
-  const current = await deps.store.get(id)
   const expiry = retiring.expiresAt ? Date.parse(retiring.expiresAt) : NaN
   const outcome = await revokeGrant(deps, {
     id,
-    grantId: retiring.grantId,
-    since: retiring.approvedAt,
-    exclude: current?.grantId ? [current.grantId] : [],
+    kind: HCP_RETIRING_KIND,
+    record: heldOfRetiring(retiring),
+    ...(retiring.grantIssuedAt ? { grantIssuedAt: retiring.grantIssuedAt } : {}),
     noGrant: !Number.isNaN(expiry) && expiry <= deps.clock().getTime(),
     remove: () => deps.store.removeRetiring(id, threadId),
   })

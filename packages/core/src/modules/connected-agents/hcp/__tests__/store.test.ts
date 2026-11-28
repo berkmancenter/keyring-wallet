@@ -18,6 +18,7 @@ import type { HcpApprovalInFlight, HcpApprovalView, HcpConnection } from '../typ
 import { CLIENT_VID, GRANT, GRANT_EXPIRES_AT, OTHER_THREAD, OTHER_VID, THREAD } from './fixtures/hcpApproval'
 
 const SECOND_THREAD = OTHER_THREAD
+const OLDER_THREAD = 'urn:uuid:00000000-0000-4000-8000-0000000000a1'
 const RESEARCH = 'https://example.org/purpose/research'
 
 function fakeAgent() {
@@ -186,7 +187,8 @@ describe('the approval in flight', () => {
     const store = new HcpConnectionStore(agent)
     await beginHcpApproval(store)(view(), APPROVAL, STARTED)
     await recordHcpApproval(store)(view(), new Date('2026-11-27T10:01:00.000Z'))
-    expect(await store.list()).toEqual([approved])
+    // The approval's start is kept from the approval in flight: the lower bound of every later lookup (B1).
+    expect(await store.list()).toEqual([{ ...approved, approvalStartedAt: STARTED.toISOString() }])
     expect(await store.listInFlight()).toEqual([])
   })
 
@@ -253,10 +255,56 @@ describe('a connection replaced while its grant may be live', () => {
     expect(await store.listRetiring()).toEqual([withoutId])
   })
 
-  it('putRetiring writes a retiring grant by its thread; removeRetiringIfCurrent removes it only while named', async () => {
+  it('rememberGrant keeps a learnt grant on a retiring grant or an approval in flight that names none', async () => {
     const { agent } = fakeAgent()
     const store = new HcpConnectionStore(agent)
-    await store.putRetiring(retired)
+    const { grantId: _g, ...unlearnt } = connection()
+    await store.put(unlearnt)
+    await store.complete(connection({ threadId: SECOND_THREAD, approvedAt: '2026-11-27T11:00:00.000Z' }), NOW)
+    const learnt = { grantId: GRANT, grantIssuedAt: '2026-11-27T10:01:05.000Z' }
+    expect(await store.rememberGrant('retiring', CLIENT_VID, THREAD, learnt)).toBe(true)
+    expect((await store.listRetiring())[0]).toMatchObject(learnt)
+    // Never over a grant already named, nor another client's record.
+    expect(await store.rememberGrant('retiring', CLIENT_VID, THREAD, { ...learnt, grantId: 'x' })).toBe(false)
+    expect(await store.rememberGrant('retiring', OTHER_VID, THREAD, learnt)).toBe(false)
+    await store.putInFlight(inFlightFor(OLDER_THREAD))
+    expect(await store.rememberGrant('approving', CLIENT_VID, OLDER_THREAD, learnt)).toBe(true)
+    expect(await store.getInFlight(OLDER_THREAD)).toMatchObject(learnt)
+  })
+
+  it('heldFor lists every approval Keyring holds for the client, with its window', async () => {
+    const { agent } = fakeAgent()
+    const store = new HcpConnectionStore(agent)
+    await store.put(connection({ approvalStartedAt: '2026-11-27T10:00:30.000Z' }))
+    await store.putInFlight(inFlightFor(OLDER_THREAD))
+    await store.putInFlight({ ...inFlightFor(SECOND_THREAD), id: OTHER_VID })
+    expect(await store.heldFor(CLIENT_VID)).toEqual([
+      { threadId: THREAD, grantId: GRANT, since: '2026-11-27T10:00:30.000Z', decidedBy: '2026-11-27T10:01:00.000Z' },
+      { threadId: OLDER_THREAD, since: '2026-11-27T10:00:30.000Z', decidedBy: '2026-11-27T10:05:00.000Z' },
+    ])
+  })
+
+  it('records written before the §5.1 contract (keyed by grantId, no expiresAt) are ignored, never listed', async () => {
+    const { agent } = fakeAgent()
+    const store = new HcpConnectionStore(agent)
+    const legacy = { id: CLIENT_VID, name: 'n', grantId: GRANT, threadId: THREAD, retiredAt: '2026-11-27T10:00:00Z' }
+    await agent.genericRecords.save({
+      content: { ...legacy, approvalId: 'c', approvalExpiresAt: '2026-11-27T10:05:00Z', expiresInSeconds: 3600 },
+      tags: { recordType: 'keyring/hcp-connection', kind: 'approving', key: GRANT },
+    } as never)
+    await agent.genericRecords.save({
+      content: legacy,
+      tags: { recordType: 'keyring/hcp-connection', kind: 'retiring', key: GRANT },
+    } as never)
+    expect(await store.listInFlight()).toEqual([])
+    expect(await store.listRetiring()).toEqual([])
+  })
+
+  it('removeRetiringIfCurrent removes a retiring grant only while the connection names it', async () => {
+    const { agent } = fakeAgent()
+    const store = new HcpConnectionStore(agent)
+    await store.put(connection())
+    await store.complete(connection({ threadId: SECOND_THREAD, approvedAt: '2026-11-27T11:00:00.000Z' }), NOW)
     await store.put(connection({ threadId: SECOND_THREAD }))
     expect(await store.removeRetiringIfCurrent(CLIENT_VID, THREAD)).toBe(false)
     await store.put(connection())

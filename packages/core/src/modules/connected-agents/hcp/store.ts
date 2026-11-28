@@ -22,6 +22,7 @@
 import type { Agent } from '@credo-ts/core'
 
 import { deleteKeyed, getKeyed, listKeyed, putKeyed, withKeyLock } from '../../trust-tasks/module/keyedRecords'
+import type { HcpHeldApproval } from './grantId'
 import type { HcpApprovalInFlight, HcpApprovalView, HcpConnection, HcpRetiringGrant } from './types'
 
 export const HCP_CONNECTION_RECORD_TYPE = 'keyring/hcp-connection'
@@ -35,7 +36,45 @@ export const HCP_APPROVAL_IN_FLIGHT_KIND = 'approving'
 export const HCP_RETIRING_KIND = 'retiring'
 
 /** What `revoke.ts` and the hook need of the store. */
-export type HcpConnectionReader = Pick<HcpConnectionStore, 'get' | 'update'>
+export type HcpConnectionReader = Pick<HcpConnectionStore, 'get' | 'update' | 'heldFor'>
+
+const readable = (t: unknown) => typeof t === 'string' && !Number.isNaN(Date.parse(t))
+
+/**
+ * Records written before the §5.1 contract were keyed by `grantId`, an approval in flight with `expiresInSeconds` and
+ * no `expiresAt`, a retiring grant with no `expiresAt`. They are ignored (never listed, never revoked or removed):
+ * the feature was behind `hcpEnabled=false`, and reading them would key and date them wrongly.
+ */
+const isCurrentInFlight = (r: HcpApprovalInFlight) =>
+  typeof r.threadId === 'string' && readable(r.expiresAt) && readable(r.startedAt) && readable(r.approvalExpiresAt)
+const isCurrentRetiring = (r: HcpRetiringGrant) => typeof r.threadId === 'string' && readable(r.expiresAt)
+
+/** A connection's approval, for learning a grant (`./grantId.ts`). */
+export const heldOfConnection = (c: HcpConnection): HcpHeldApproval => ({
+  threadId: c.threadId,
+  ...(c.grantId ? { grantId: c.grantId } : {}),
+  since: c.approvalStartedAt ?? c.approvedAt,
+  decidedBy: c.approvedAt,
+})
+
+/** An approval in flight's approval: it cannot have been decided after the request's own `expiresAt`. */
+export const heldOfInFlight = (f: HcpApprovalInFlight): HcpHeldApproval => ({
+  threadId: f.threadId,
+  ...(f.grantId ? { grantId: f.grantId } : {}),
+  since: f.startedAt,
+  decidedBy: f.approvalExpiresAt,
+})
+
+/** A retiring grant's approval. */
+export const heldOfRetiring = (r: HcpRetiringGrant): HcpHeldApproval => ({
+  threadId: r.threadId,
+  ...(r.grantId ? { grantId: r.grantId } : {}),
+  ...(r.approvalStartedAt || r.approvedAt ? { since: r.approvalStartedAt ?? r.approvedAt } : {}),
+  ...(r.approvedAt ? { decidedBy: r.approvedAt } : {}),
+})
+
+/** What a record keeps once its grant is learnt. */
+export type HcpLearntGrant = Pick<HcpConnection, 'grantIssuedAt' | 'grantExpiresAt'> & { grantId: string }
 
 export class HcpConnectionStore {
   public constructor(private readonly agent: Agent) {}
@@ -70,9 +109,50 @@ export class HcpConnectionStore {
     })
   }
 
-  /** Every approval in flight, one per grant (a client can have several). */
-  public listInFlight(): Promise<HcpApprovalInFlight[]> {
-    return listKeyed<HcpApprovalInFlight>(this.agent, HCP_CONNECTION_RECORD_TYPE, HCP_APPROVAL_IN_FLIGHT_KIND)
+  /** Every approval in flight, one per grant (a client can have several). Pre-§5.1 records are left out. */
+  public async listInFlight(): Promise<HcpApprovalInFlight[]> {
+    const all = await listKeyed<HcpApprovalInFlight>(
+      this.agent,
+      HCP_CONNECTION_RECORD_TYPE,
+      HCP_APPROVAL_IN_FLIGHT_KIND
+    )
+    return all.filter(isCurrentInFlight)
+  }
+
+  /**
+   * Every approval Keyring holds for client `id`: its connection, its approvals in flight and its retiring grants.
+   * Learning a grant excludes their grant ids and compares their windows (`./grantId.ts`).
+   */
+  public async heldFor(id: string): Promise<HcpHeldApproval[]> {
+    const [connection, flights, retiring] = await Promise.all([this.get(id), this.listInFlight(), this.listRetiring()])
+    return [
+      ...(connection ? [heldOfConnection(connection)] : []),
+      ...flights.filter((f) => f.id === id).map(heldOfInFlight),
+      ...retiring.filter((r) => r.id === id).map(heldOfRetiring),
+    ]
+  }
+
+  /**
+   * Keep a grant learnt for the approval in flight or retiring grant of thread `threadId`, if it is client `id`'s and
+   * names no grant yet, before anything is sent for it. Returns whether it was written.
+   */
+  public rememberGrant(
+    kind: typeof HCP_APPROVAL_IN_FLIGHT_KIND | typeof HCP_RETIRING_KIND,
+    id: string,
+    threadId: string,
+    learnt: HcpLearntGrant
+  ): Promise<boolean> {
+    return this.locked(id, async () => {
+      const current = await getKeyed<{ id: string; grantId?: string }>(
+        this.agent,
+        HCP_CONNECTION_RECORD_TYPE,
+        kind,
+        threadId
+      )
+      if (!current || current.id !== id || current.grantId) return false
+      await putKeyed(this.agent, HCP_CONNECTION_RECORD_TYPE, kind, threadId, { ...current, ...learnt })
+      return true
+    })
   }
 
   /** The approval in flight for a request's thread. */
@@ -102,27 +182,18 @@ export class HcpConnectionStore {
     return this.locked(id, () => this.drop(HCP_APPROVAL_IN_FLIGHT_KIND, id, threadId))
   }
 
-  /** Every retiring grant: one whose connection a newer one replaced while the grant may still be live. */
-  public listRetiring(): Promise<HcpRetiringGrant[]> {
-    return listKeyed<HcpRetiringGrant>(this.agent, HCP_CONNECTION_RECORD_TYPE, HCP_RETIRING_KIND)
+  /**
+   * Every retiring grant: one whose connection a newer one replaced while the grant may still be live. Pre-§5.1
+   * records are left out.
+   */
+  public async listRetiring(): Promise<HcpRetiringGrant[]> {
+    const all = await listKeyed<HcpRetiringGrant>(this.agent, HCP_CONNECTION_RECORD_TYPE, HCP_RETIRING_KIND)
+    return all.filter(isCurrentRetiring)
   }
 
   /** Remove the retiring grant of thread `threadId` if it is client `id`'s. Returns whether one was removed. */
   public removeRetiring(id: string, threadId: string): Promise<boolean> {
     return this.locked(id, () => this.drop(HCP_RETIRING_KIND, id, threadId))
-  }
-
-  /** Rewrite a retiring grant (to add a `grantId` learnt later), under its thread. */
-  public putRetiring(record: HcpRetiringGrant): Promise<void> {
-    return this.locked(record.id, () =>
-      putKeyed(
-        this.agent,
-        HCP_CONNECTION_RECORD_TYPE,
-        HCP_RETIRING_KIND,
-        record.threadId,
-        record as unknown as Record<string, unknown>
-      )
-    )
   }
 
   /**
@@ -148,9 +219,23 @@ export class HcpConnectionStore {
    * - if it is not revoked, its grant is first written as an {@link HcpRetiringGrant}, which the reconcile revokes;
    * - if it was approved after this one (a later `approvedAt`), it stays the connection, and this grant is the one
    *   written as retiring.
+   *
+   * A connection with no `approvalStartedAt` takes its approval in flight's `startedAt`.
    */
-  public complete(connection: HcpConnection, now: Date = new Date()): Promise<void> {
-    return this.locked(connection.id, async () => {
+  public complete(record: HcpConnection, now: Date = new Date()): Promise<void> {
+    return this.locked(record.id, async () => {
+      const flight = record.approvalStartedAt
+        ? undefined
+        : await getKeyed<HcpApprovalInFlight>(
+            this.agent,
+            HCP_CONNECTION_RECORD_TYPE,
+            HCP_APPROVAL_IN_FLIGHT_KIND,
+            record.threadId
+          )
+      const connection: HcpConnection =
+        flight?.id === record.id && readable(flight.startedAt)
+          ? { ...record, approvalStartedAt: flight.startedAt }
+          : record
       const existing = await this.get(connection.id)
       if (existing && existing.threadId !== connection.threadId) {
         if (Date.parse(existing.approvedAt) > Date.parse(connection.approvedAt)) {
@@ -170,8 +255,11 @@ export class HcpConnectionStore {
       id: c.id,
       name: c.name,
       ...(c.grantId ? { grantId: c.grantId } : {}),
+      ...(c.grantIssuedAt ? { grantIssuedAt: c.grantIssuedAt } : {}),
+      ...(c.grantExpiresAt ? { grantExpiresAt: c.grantExpiresAt } : {}),
       threadId: c.threadId,
       expiresAt: c.expiresAt,
+      ...(c.approvalStartedAt ? { approvalStartedAt: c.approvalStartedAt } : {}),
       approvedAt: c.approvedAt,
       retiredAt: at.toISOString(),
     }

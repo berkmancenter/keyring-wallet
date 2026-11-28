@@ -48,6 +48,9 @@ const KEYS: HcpCopyKey[] = [
   'RevokeNotToldPast',
   'RevokeAlreadyEnded',
   'RevokeAlreadyDisconnected',
+  // Added at review of the §5.1 alignment: a revoke with nothing sent, the grant not yet issued or not told apart.
+  'RevokeNotYetIssued',
+  'RevokeGrantAmbiguous',
 ]
 const APPROVE_ENDINGS = [
   'ApproveNotApproved',
