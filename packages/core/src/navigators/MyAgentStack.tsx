@@ -1,9 +1,15 @@
 import type { ParamListBase, RouteProp } from '@react-navigation/native'
 import { createStackNavigator, type StackNavigationProp } from '@react-navigation/stack'
-import React, { useEffect, useSyncExternalStore } from 'react'
+import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { TOKENS, useServices } from '../container-api'
+import { isAgentConnectEnabled } from '../modules/connected-agents/agentConnectFlag'
+import { ConnectedAgentsRoot } from '../modules/connected-agents/ConnectedAgentsRoot'
+import AgentDetailsScreen from '../screens/agents/AgentDetailsScreen'
+import AgentMemoriesScreen from '../screens/agents/AgentMemoriesScreen'
+import AiAgentsScreen from '../screens/agents/AiAgentsScreen'
+import ConnectAgentScreen from '../screens/agents/ConnectAgentScreen'
 import { vtaAgent } from '../modules/trust-tasks/module/vtaAgent'
 import { agentHomeScreen } from '../modules/trust-tasks/screens/agentHome'
 import { useTheme } from '../contexts/theme'
@@ -49,6 +55,25 @@ interface MyAgentStackProps {
   navigation?: StackNavigationProp<ParamListBase>
 }
 
+/**
+ * An agent-connect screen inside `ConnectedAgentsRoot`, which builds the services its hooks read (and renders nothing
+ * while no VTA is administered). A stack's children can only be screens, so each screen carries the root itself.
+ */
+function inConnectedAgentsRoot<P extends object>(Screen: React.ComponentType<P>): React.FC<P> {
+  const Rooted: React.FC<P> = (props) => (
+    <ConnectedAgentsRoot>
+      <Screen {...props} />
+    </ConnectedAgentsRoot>
+  )
+  Rooted.displayName = `InConnectedAgentsRoot(${Screen.displayName ?? Screen.name ?? 'Screen'})`
+  return Rooted
+}
+
+const AiAgents = inConnectedAgentsRoot(AiAgentsScreen)
+const AgentDetails = inConnectedAgentsRoot(AgentDetailsScreen)
+const ConnectAgent = inConnectedAgentsRoot(ConnectAgentScreen)
+const AgentMemories = inConnectedAgentsRoot(AgentMemoriesScreen)
+
 const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
   const Stack = createStackNavigator<MyAgentStackParams>()
   // A link reaches this stack as the tab route's `{ screen: … }`. React
@@ -78,6 +103,8 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
   const { t } = useTranslation()
   const defaultStackOptions = useDefaultStackOptions(theme)
   const [ScreenOptionsDictionary, config] = useServices([TOKENS.OBJECT_SCREEN_CONFIG, TOKENS.CONFIG])
+  // Agent connect's developer switch, read once when the stack mounts: a change applies on the next launch.
+  const [agentConnect] = useState(isAgentConnectEnabled)
 
   return (
     <Stack.Navigator initialRouteName={landsOn} screenOptions={{ ...defaultStackOptions }}>
@@ -279,6 +306,32 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         component={RoomOffer}
         options={{ title: t('Rooms.Offer'), ...ScreenOptionsDictionary[Screens.RoomOffer] }}
       />
+      {/* Agent connect (docs/plans/agent-connect-plan.md §6): registered only with its developer switch on. */}
+      {agentConnect ? (
+        <>
+          <Stack.Screen
+            name={Screens.AiAgents}
+            component={AiAgents}
+            options={{ title: t('ConnectedAgents.AiAgents'), ...ScreenOptionsDictionary[Screens.AiAgents] }}
+          />
+          <Stack.Screen
+            name={Screens.AgentDetails}
+            component={AgentDetails}
+            // The agent's own name (#1060 finding 9).
+            options={({ route }) => ({ title: route.params.name, ...ScreenOptionsDictionary[Screens.AgentDetails] })}
+          />
+          <Stack.Screen
+            name={Screens.ConnectAgent}
+            component={ConnectAgent}
+            options={{ title: t('ConnectedAgents.ConnectAnAgent'), ...ScreenOptionsDictionary[Screens.ConnectAgent] }}
+          />
+          <Stack.Screen
+            name={Screens.AgentMemories}
+            component={AgentMemories}
+            options={{ title: t('ConnectedAgents.MemoriesTitle'), ...ScreenOptionsDictionary[Screens.AgentMemories] }}
+          />
+        </>
+      ) : null}
     </Stack.Navigator>
   )
 }

@@ -40,7 +40,10 @@
     "AgentCatchingUp": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentChips": ["src/modules/trust-tasks/screens/AgentChips.tsx"],
     "AgentCommunityHighlighted": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
-    "AgentContactCard": ["src/modules/connected-agents/components/AgentContactCard.tsx"],
+    "AgentContactCard": [
+      "src/modules/connected-agents/components/AgentContactCard.tsx",
+      "src/modules/vrc/screens/ListContacts.tsx"
+    ],
     "AgentContinueVetting": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentCreateAddress": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCreateAddressContinue": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],

@@ -187,11 +187,42 @@ describe('ConnectedAgents words', () => {
     expect(reaches.sort()).toEqual([
       'container-impl.ts -> components/AgentContactCard',
       'modules/trust-tasks/module/triggerLink.ts -> agentConnectFlag',
+      'modules/vrc/screens/ListContacts.tsx -> ConnectedAgentsProvider',
+      'modules/vrc/screens/ListContacts.tsx -> ConnectedAgentsRoot',
+      'modules/vrc/screens/ListContacts.tsx -> agentConnectFlag',
+      'navigators/MyAgentStack.tsx -> ConnectedAgentsRoot',
+      'navigators/MyAgentStack.tsx -> agentConnectFlag',
+      'screens/agents/AgentDetailsScreen.tsx -> ConnectedAgentsProvider',
+      'screens/agents/AgentDetailsScreen.tsx -> memories',
+      'screens/agents/AgentDetailsScreen.tsx -> pairing',
+      'screens/agents/AgentDetailsScreen.tsx -> revoke',
+      'screens/agents/AgentDetailsScreen.tsx -> screens/AgentDetailsView',
+      'screens/agents/AgentDetailsScreen.tsx -> screens/ApproveView',
+      'screens/agents/AgentDetailsScreen.tsx -> screens/ChangeMemoriesView',
+      'screens/agents/AgentDetailsScreen.tsx -> screens/RevokeAgentSheet',
+      'screens/agents/AgentMemoriesScreen.tsx -> ConnectedAgentsProvider',
+      'screens/agents/AgentMemoriesScreen.tsx -> screens/DeleteMemorySheet',
+      'screens/agents/AgentMemoriesScreen.tsx -> screens/MemoriesListView',
+      'screens/agents/AiAgentsScreen.tsx -> ConnectedAgentsProvider',
+      'screens/agents/AiAgentsScreen.tsx -> screens/AgentListView',
+      'screens/agents/ConnectAgentScreen.tsx -> ConnectedAgentsProvider',
+      'screens/agents/ConnectAgentScreen.tsx -> pairing',
+      'screens/agents/ConnectAgentScreen.tsx -> screens/ApproveView',
+      'screens/agents/ConnectAgentScreen.tsx -> screens/ConnectAgentForm',
+      'screens/agents/ConnectAgentScreen.tsx -> screens/ConnectFailureView',
+      'screens/agents/ConnectAgentScreen.tsx -> screens/ConnectNumberView',
+      'screens/agents/ConnectAgentScreen.tsx -> screens/ConnectScanView',
+      'screens/agents/ConnectAgentScreen.tsx -> screens/ConnectedView',
     ])
     const namesToken = files
       .filter((file) => readFileSync(file, 'utf8').includes('COMPONENT_AGENT_CONTACT_CARD'))
       .map((file) => path.relative(src, file))
-    expect(namesToken.sort()).toEqual(['container-api.ts', 'container-impl.ts', 'types/agent-contact-card.ts'])
+    expect(namesToken.sort()).toEqual([
+      'container-api.ts',
+      'container-impl.ts',
+      'modules/vrc/screens/ListContacts.tsx',
+      'types/agent-contact-card.ts',
+    ])
   })
 
   it('keeps the plan copy rules: no "instant", "encrypted", "private" or "no trace" (§6, §7.10)', () => {
