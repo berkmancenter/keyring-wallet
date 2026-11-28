@@ -181,13 +181,13 @@ const SELF_DELETE = /cannot delete your own ACL entry/i
 /** Any of VTI-ACL-053's refusals: what the caller asked to write goes beyond its own entry (vta-service operations/acl.rs:340-403). */
 const OWN_ACCESS_BOUND = /VTI-ACL-053/
 /**
- * VTI-ACL-107's refusal: an entry stating purposes beyond the writer's own (vta-service-v0.80.0, 71f64ab1b,
- * operations/acl.rs `validate_purposes_within_caller`, "purposes outside your own … (VTI-ACL-107)"; added by afc06a431,
- * VTI #2539, the breaking VTI-ACL-100 – 110 change). The 0.3 tasks answer it with the code `purposeOutsideDelegator`
- * (acl_v0_3.rs), older ones as a forbidden with these words. It POST-DATES our VTI pin (vta-service-v0.79.0,
- * f7b78e29d), which has none of it: only an agent at v0.80.0 or later refuses this way, so the pinned reference cannot
- * exercise this branch. The agent bounds the grant either way: this only says why, in the same words as an expiry
- * beyond this phone's own.
+ * VTI-ACL-107's refusal: an entry stating purposes beyond the writer's own (added by afc06a431, VTI #2539, the
+ * breaking VTI-ACL-100 – 110 change, first in vta-service-v0.80.0). At our VTI pin (VTI-Fig, bf35b6787,
+ * vta-service 0.87.2) it is operations/acl.rs `validate_purposes_within_caller` (:382), worded "… an entry you write may
+ * state only purposes your own entry grants, and `any` never grants modelTraining (VTI-ACL-107)"; the 0.3 tasks answer
+ * it with the code `purposeOutsideDelegator` (trust_tasks/acl.rs), older ones as a forbidden with these words. Only the
+ * `VTI-ACL-107` marker is matched, which every wording since v0.80.0 carries. The agent bounds the grant either way:
+ * this only says why, in the same words as an expiry beyond this phone's own.
  */
 const OWN_PURPOSES_BOUND = /VTI-ACL-107/
 /** VTI-ACL-053's refusal of a permanent entry from a caller whose own entry expires, with that expiry in epoch seconds (acl.rs:391-394). */

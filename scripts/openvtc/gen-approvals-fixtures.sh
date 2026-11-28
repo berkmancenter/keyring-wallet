@@ -5,7 +5,7 @@
 # with the one it derives itself, so Keyring's TypeScript port must match the
 # SDK exactly. Re-run this at every VTI bump and commit the result in bifold.
 #
-#   scripts/openvtc/gen-approvals-fixtures.sh [path/to/bifold]
+#   scripts/openvtc/gen-approvals-fixtures.sh [path/to/the/repository]
 #
 # Reads    <bifold>/packages/core/src/modules/trust-tasks/__tests__/fixtures/approvals-cases.json
 # Writes   <bifold>/packages/core/src/modules/trust-tasks/__tests__/fixtures/approvals-rego.json
@@ -18,7 +18,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-BIFOLD="${1:-$ROOT/bifold}"
+# Since the fold the framework is this repository: packages/ is at the root.
+BIFOLD="${1:-$ROOT}"
 FIX="$BIFOLD/packages/core/src/modules/trust-tasks/__tests__/fixtures"
 # external/ is gitignored, so a worktree has none: use the main checkout's.
 MAIN="$(cd "$(git -C "$ROOT" rev-parse --git-common-dir)/.." && pwd)"
