@@ -53,6 +53,9 @@ for (const [name, pin] of Object.entries(pins.repos)) {
       continue;
     }
     console.log(`  … cloning ${name}`);
+    // A full clone on purpose: no --depth, no --single-branch. vta-agent-memory-agent-connect pins a commit that is
+    // only on integration/agent-connect, not on the fork's default branch, so a shallow or single-branch clone
+    // cannot check it out ("could not check out 4057a5a9f"), while every other entry would still work.
     execFileSync("git", ["clone", "--quiet", url, dir], { stdio: "inherit" });
   }
 
