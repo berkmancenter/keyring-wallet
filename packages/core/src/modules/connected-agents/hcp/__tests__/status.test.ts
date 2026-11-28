@@ -90,7 +90,7 @@ describe('hcpStatus', () => {
       notice: { key: 'RevokeAlreadyDisconnected', params: { name: 'My notes agent' } },
     })
     expect(hcpText('RevokeAlreadyEnded', 'en', { name: 'x' })).toBe(
-      '"x" had already expired, so there was nothing to tell.'
+      'Access for "x" had already ended, so there was nothing to tell.'
     )
     expect(hcpText('RevokeAlreadyDisconnected', 'en', { name: 'x' })).toBe(
       '"x" had already disconnected, so there was nothing to tell.'

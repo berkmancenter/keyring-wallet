@@ -157,11 +157,12 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     ptBr: 'Revogado. Não conseguimos avisar "{{name}}". O que ele leu deixou de poder ser usado às {{time}}.',
     source: 'PROPOSED',
   },
-  // The grant had expired before the revoke reached the VTA: no notice is sent for an expired grant.
+  // The grant had expired before the revoke reached the VTA: no notice is sent for an expired grant. Names the access,
+  // not the agent, as having ended (reworded at review).
   RevokeAlreadyEnded: {
-    en: '"{{name}}" had already expired, so there was nothing to tell.',
-    fr: "« {{name}} » avait déjà expiré, il n'y avait donc rien à lui dire.",
-    ptBr: '"{{name}}" já tinha expirado, então não havia nada a avisar.',
+    en: 'Access for "{{name}}" had already ended, so there was nothing to tell.',
+    fr: "L'accès de « {{name}} » avait déjà pris fin, il n'y avait donc rien à lui dire.",
+    ptBr: 'O acesso de "{{name}}" já tinha terminado, então não havia nada a avisar.',
     source: 'PROPOSED',
   },
   // The client had relinquished the grant itself: no notice follows a relinquishment.

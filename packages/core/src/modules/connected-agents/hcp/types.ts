@@ -171,7 +171,7 @@ export type HcpConnection = {
   revokedAt?: string
   notice?: HcpNoticeState
   /**
-   * The newest `usableUntil` a notice poll read for this client, kept beside `notice` so that the 24-hour stop settles
+   * The newest `usableUntil` a notice poll read for this client, kept beside `notice` so that the 25-hour stop settles
    * a notice with the same time whether or not the app restarted while it was polling.
    */
   lastUsableUntil?: string
@@ -180,6 +180,21 @@ export type HcpConnection = {
    * `abandoned` notice still the same is taken to be stale, from before the revoke, and keeps `telling`.
    */
   summaryAtRevoke?: { notification: 'delivered' | 'abandoned' | 'none'; usableUntil: string | null }
+  /**
+   * The audit log's answers that cannot change once the revoke is 5 minutes old (`HCP_ENDED_MARGIN_MS` in
+   * `./revoke.ts`), kept after the first complete read past that point so later polls read only `revocation.notified`.
+   */
+  auditStep1?: HcpAuditStep1
+}
+
+/** What the notice poll read once from the audit log for a revoked grant (`./revoke.ts`). */
+export type HcpAuditStep1 = {
+  /** The first `grant.revoked` for the grant, if the log had one. */
+  revokedEventAt?: string
+  /** The largest `useUntil` disclosed under the grant, if any. */
+  maxUseUntil?: string
+  /** Whether the `context.read` read was cut at its maximum. */
+  cut: boolean
 }
 
 /**
