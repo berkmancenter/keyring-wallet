@@ -330,7 +330,8 @@ requires Revoke to be routed and the chat's VDC acceptance handled wherever the 
 keep the flag off by itself. **Decided by Alberto, 11-28:** agent connect's switch, and the P1 rooms switch, are absent
 from store builds until he decides to release them. A build-time setting keeps both flags off and hides both
 Developer rows when it is unset, and the release gate checks it. Development and lab builds set it. Any Developer row
-for either switch, R4's included, renders only when the setting is on (Keyring's core lane adds the export). The Keyring side of step 7.9, the chat, comes too.
+for either switch, R4's included, renders only when the setting is on: it calls `agentConnectAvailableInBuild()` from `@bifold/core`
+(merged in #1131), or the release gate fails it. The Keyring side of step 7.9, the chat, comes too.
 
 Sources:
 - the plan `docs/plans/agent-connect-plan.md`: §6, §7.7 to §7.11, §8.6;
