@@ -2,6 +2,19 @@
   "updated": "2026-11-28",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
+    "vta-agent-memory-agent-connect": {
+      "url": "https://github.com/albertoleon7794/vta-agent-memory.git",
+      "branch": "integration/agent-connect",
+      "sha": "4057a5a9f",
+      "commitDate": "2026-11-26",
+      "pinnedOn": "2026-11-28",
+      "why": "Keyring's own fork of vta-agent-memory, where the agent connect plugin work (plan D45, \u00a77.6, track B) lands on branch integration/agent-connect before any of it goes upstream: pairing with the link and QR code and the owner's grant at the pinned VTA (PR-3b, 4057a5a). Reviews of Keyring's agent connect work read the plugin side here. A separate clone: the upstream entry vta-agent-memory stays at OpenVTC main 80047d9, the base the fork extends. `branch` names the branch sync-external digests and advances on, since the fork's default branch is main.",
+      "watch": [
+        "src/",
+        "Cargo.toml",
+        "docs/"
+      ]
+    },
     "vta-browser-plugin": {
       "sha": "bf92427",
       "commitDate": "2026-10-22",
