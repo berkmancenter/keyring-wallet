@@ -717,7 +717,7 @@ This file holds no keyring-wallet parts: c5's wallet work for agent connect has 
 
 ## Plugin parts (`vta-agent-memory` fork)
 
-These six parts are separate from the keyring-wallet parts. **They cannot start until Brendan's side has a checkout of the fork and push access to it.** Making him a collaborator on the fork is Alberto's call, and it has not been done. Meanwhile c5 keeps building the plugin on the fork. Any part c5 finishes before that access exists drops out of this section, and this file says so when it happens.
+These six parts are separate from the keyring-wallet parts. **Access (2026-11-27, updated 2026-11-28):** Alberto invited Brendan (`bmiller59`) with write access to the fork; the invitation is still pending. Under this section's rule that a part c5 finishes before that access exists drops out, **c5 builds P1 and P2** (the coordinator's word, 2026-11-28; P1 is fork pull request #5). Brendan's side's track 4 therefore **starts from P3**: one branch and one pull request into `integration/agent-connect`. Before c5 starts any other part, it checks what the track 4 pull request touches, so the two sides do not collide on files.
 
 c5 is building, and none of these parts touches:
 - PR-4: enrol as `aiAgent`, the memory probe per context, and the configuration for `K_a`;
@@ -838,7 +838,7 @@ differs from the envelope's.
   - a document accepted once is refused the second time, including across a reload of the store from disk;
   - a store deleted between deliveries refuses an old document and accepts a new one;
   - **controls:** each case is accepted when its one rule is disabled in a test-only build.
-- **Owner:** Brendan's side. No dependency on another part.
+- **Owner:** **c5** (taken 2026-11-28, fork pull request #5). No dependency on another part.
 
 ### P2: the inbox, covering the gate, the fence, caps, the durable cursor and `settings`
 
@@ -864,7 +864,7 @@ differs from the envelope's.
   - an unknown-major `settings` keeps the last one;
   - an older `settings` after a newer one changes nothing;
   - each with a control.
-- **Owner:** Brendan's side. It depends on P1's signature only.
+- **Owner:** **c5** (taken 2026-11-28, in progress). It depends on P1's signature only.
 
 ### P3: the VDC grant check and the acceptance
 
