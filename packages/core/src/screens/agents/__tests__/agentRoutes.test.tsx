@@ -452,17 +452,13 @@ describe('MyAgentStack registers the agent screens only with the switch on', () 
     for (const name of [...AGENT_SCREENS, Screens.HcpConnect]) expect(names).not.toContain(name)
   })
 
-  it('with it on, the four are registered after the stack screens of today, each inside the root', () => {
+  it('with it on, the four are registered first (R2: the tab opens on them), each inside the root', () => {
     setAgentConnectEnabled(true)
     const screens = stack()
     const names = screens.map((s) => s.name)
-    expect(names.slice(-4)).toEqual(AGENT_SCREENS)
+    expect(names.slice(0, 4)).toEqual(AGENT_SCREENS)
     // HcpConnect's view (#1109) is not on this base, so it is not registered: see the PR.
     expect(names).not.toContain(Screens.HcpConnect)
-    // The same screens of today come first, in the same order.
-    setAgentConnectEnabled(false)
-    expect(names.slice(0, -4)).toEqual(stack().map((s) => s.name))
-    setAgentConnectEnabled(true)
     const details = screens.find((s) => s.name === Screens.AgentDetails)
     const options = details?.options as (a: { route: { params: { name: string } } }) => { title: string }
     expect(options({ route: { params: { name: 'Notes helper' } } }).title).toBe('Notes helper')

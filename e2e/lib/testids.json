@@ -1120,6 +1120,7 @@
     "MyQRShareLinkError": ["src/components/misc/QRScanner.tsx"],
     "MyQRShareLinkKeepOpen": ["src/components/misc/QRScanner.tsx"],
     "MyQRShareLinkNote": ["src/components/misc/QRScanner.tsx"],
+    "MyVtaRow": ["src/screens/Settings.tsx"],
     "NameInput": ["src/components/forms/WalletNameForm.tsx", "src/screens/RenameContact.tsx"],
     "NewMessageAddContact": ["src/screens/NewMessage.tsx"],
     "NewMessageContact": ["src/screens/NewMessage.tsx"],

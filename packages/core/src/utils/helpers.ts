@@ -39,11 +39,11 @@ import { i18n } from '../localization/index'
 import { BifoldLogger } from '../services/logger'
 import { Role } from '../types/chat'
 import { BifoldError } from '../types/error'
-import { Screens, Stacks, TabStacks } from '../types/navigators'
+import { Screens, Stacks } from '../types/navigators'
 import {
   keyringAgentLinkKind,
   LinkNotOurs,
-  myAgentLinkParams,
+  myAgentLinkRoute,
   routeKeyringAgentLink,
 } from '../modules/trust-tasks/module/vtiLinks'
 import {
@@ -1313,12 +1313,11 @@ export const connectFromScanOrDeepLink = async (
   // needing no mediator — routed before the transport wait below.
   if (keyringAgentLinkKind(uri)) {
     try {
-      await routeKeyringAgentLink(uri, agent, (destination) =>
-        navigation.navigate(Stacks.TabStack as any, {
-          screen: TabStacks.MyAgentStack,
-          params: myAgentLinkParams(destination),
-        })
-      )
+      // The My Agent tab, or "My VTA" under Settings with agent connect on (agent-connect plan §7.8).
+      await routeKeyringAgentLink(uri, agent, (destination) => {
+        const { name, params } = myAgentLinkRoute(destination)
+        navigation.navigate(name as any, params)
+      })
       return
     } catch (error) {
       // A link that had to be asked whether it is a community's join code, and is not one (joinLink): it goes on

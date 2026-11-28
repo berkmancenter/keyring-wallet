@@ -21,7 +21,8 @@ import {
   parseTicketUri,
 } from '@bifold/trust-tasks'
 
-import { Screens } from '../../../types/navigators'
+import { Screens, Stacks, TabStacks } from '../../../types/navigators'
+import { isAgentConnectEnabled } from '../../connected-agents/agentConnectFlag'
 import { k1Root } from '../../sedi/guardian/stateRoots'
 import { isGuardianCardLink } from '../../sedi/holder/guardianCardLink'
 import { phoneCodesOn } from '../../sedi/identity/phoneCodesOn'
@@ -515,6 +516,34 @@ export function myAgentLinkParams(destination: MyAgentDestination): {
   }
   const screen = MY_AGENT_SCREEN[destination]
   return screen === agentHomeScreen() ? { screen } : { screen, initial: false }
+}
+
+/**
+ * With agent connect's developer switch on, the route from the main stack to one of the VTA's screens in "My VTA"
+ * under Settings, where they moved (agent-connect plan §7.8), above that stack's own first screen; undefined with it
+ * off, when the caller opens the My Agent tab as it always has.
+ */
+export function myVtaRoute(
+  screen: Screens,
+  params?: object
+): { name: Stacks.SettingStack; params: object } | undefined {
+  if (!isAgentConnectEnabled()) return undefined
+  return { name: Stacks.SettingStack, params: { screen: Screens.MyVta, params: { screen, params, initial: false } } }
+}
+
+/**
+ * Where a link's destination is navigated to from the main stack: the My Agent tab, with {@link myAgentLinkParams}.
+ * With agent connect's developer switch on, the VTA's screens have moved under Settings as "My VTA" (agent-connect
+ * plan §7.8), so the same params go to that stack instead; with it off this is the tab, as always.
+ */
+export function myAgentLinkRoute(destination: MyAgentDestination): {
+  name: Stacks.TabStack | Stacks.SettingStack
+  params: object
+} {
+  const params = myAgentLinkParams(destination)
+  return isAgentConnectEnabled()
+    ? { name: Stacks.SettingStack, params: { screen: Screens.MyVta, params } }
+    : { name: Stacks.TabStack, params: { screen: TabStacks.MyAgentStack, params } }
 }
 
 /** A new id for each scan of a code: unique within this run of the app. */

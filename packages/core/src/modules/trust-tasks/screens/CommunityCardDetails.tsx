@@ -24,6 +24,7 @@ import { testIdWithKey } from '../../../utils/testable'
 import { classifyCredential } from '../module/vtiInbox'
 import { GenericRecordsCommunityStore, type VtiCommunityStore } from '../module/VtiCommunityStore'
 import { isCommunityCard, roleShownWithMembershipCard } from '../module/vtiWalletCards'
+import { myVtaRoute } from '../module/vtiLinks'
 
 import { CardKeptRow } from './CardKeptRow'
 import { communityCardKey } from './CommunityCard'
@@ -46,11 +47,15 @@ type Navigate = { navigate: (name: string, params?: object) => void }
  * under it: without it the community screen became the stack's only route, and
  * the My Agent tab was stuck there with no way back (226 candidate 3, a device).
  */
-export const openCommunityFrom = (navigation: unknown, communityDid: string): void =>
-  (navigation as Navigate).navigate(Stacks.TabStack, {
+export const openCommunityFrom = (navigation: unknown, communityDid: string): void => {
+  // With agent connect on, the community is in "My VTA" under Settings (agent-connect plan §7.8).
+  const moved = myVtaRoute(Screens.VtiCommunity, { communityDid })
+  if (moved) return (navigation as Navigate).navigate(moved.name, moved.params)
+  ;(navigation as Navigate).navigate(Stacks.TabStack, {
     screen: TabStacks.MyAgentStack,
     params: { screen: Screens.VtiCommunity, params: { communityDid }, initial: false },
   })
+}
 
 export const CommunityCardDetails: React.FC<{
   card: Record<string, unknown>

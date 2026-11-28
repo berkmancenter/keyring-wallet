@@ -118,6 +118,8 @@ export enum Screens {
   ConnectAgent = 'Connect an agent',
   HcpConnect = 'Connect an agent (HCP)',
   AgentMemories = 'Your memories',
+  // The VTA's own screens, under Settings once agent connect is on (§7.8).
+  MyVta = 'My VTA',
 }
 
 export enum Stacks {
@@ -365,6 +367,8 @@ export type SettingStackParams = {
   // profileId given: edit that profile. Omitted: create a new one.
   [Screens.EditRCard]: { profileId: string } | undefined
   [Screens.MyProfiles]: undefined
+  // "My VTA" (agent connect on only): the VTA's screens, moved here from the My Agent tab (§7.8).
+  [Screens.MyVta]: NavigatorScreenParams<MyAgentStackParams> | undefined
 }
 
 export type NotificationStackParams = {

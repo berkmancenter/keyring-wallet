@@ -186,12 +186,17 @@ describe('ConnectedAgents words', () => {
     )
     expect(reaches.sort()).toEqual([
       'container-impl.ts -> components/AgentContactCard',
+      'modules/rooms/roomLinks.ts -> agentConnectFlag',
       'modules/trust-tasks/module/triggerLink.ts -> agentConnectFlag',
+      'modules/trust-tasks/module/vtiLinks.ts -> agentConnectFlag',
       'modules/vrc/screens/ListContacts.tsx -> ConnectedAgentsProvider',
       'modules/vrc/screens/ListContacts.tsx -> ConnectedAgentsRoot',
       'modules/vrc/screens/ListContacts.tsx -> agentConnectFlag',
       'navigators/MyAgentStack.tsx -> ConnectedAgentsRoot',
       'navigators/MyAgentStack.tsx -> agentConnectFlag',
+      'navigators/SettingStack.tsx -> agentConnectFlag',
+      // Sorted by code unit, so an upper-case name comes before `agents/`.
+      'screens/Settings.tsx -> agentConnectFlag',
       'screens/agents/AgentDetailsScreen.tsx -> ConnectedAgentsProvider',
       'screens/agents/AgentDetailsScreen.tsx -> memories',
       'screens/agents/AgentDetailsScreen.tsx -> pairing',

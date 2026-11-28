@@ -16,6 +16,8 @@ const SRC = path.join(__dirname, '..', '..', '..')
 const ALLOWED = [
   'types/navigators.ts',
   'navigators/MyAgentStack.tsx',
+  // The stack's screen list, which both MyAgentStack and "My VTA" register (agent-connect §7.8).
+  'navigators/VtaStack.tsx',
   'modules/trust-tasks/screens/agentHome.ts',
   'modules/trust-tasks/module/vtiLinks.ts',
 ]

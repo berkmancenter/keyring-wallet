@@ -25,6 +25,7 @@ import { defaultAutoLockTime } from '../constants'
 import { effectiveDefaultAutoLockMinutes } from '../utils/e2eClocks'
 import { AutoLockTime } from '../contexts/activity'
 import { KEEP_MESSAGES_DEFAULT, KEEP_MESSAGES_OPTIONS, KeepMessages } from '../modules/chat/retention'
+import { isAgentConnectEnabled } from '../modules/connected-agents/agentConnectFlag'
 import { DispatchAction } from '../contexts/reducers/store'
 import { useStore } from '../contexts/store'
 import { useTheme } from '../contexts/theme'
@@ -61,6 +62,8 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
     },
     historyEnabled,
   ] = useServices([TOKENS.CONFIG, TOKENS.HISTORY_ENABLED])
+  // Agent connect's developer switch, read once when the screen mounts (the stacks read it the same way).
+  const [agentConnect] = useState(isAgentConnectEnabled)
   const [expandedDropdown, setExpandedDropdown] = useState<'language' | 'autolock' | 'keepmessages' | null>(null)
   const keepMessages: KeepMessages = store.preferences.keepMessages ?? KEEP_MESSAGES_DEFAULT
   // The lock time in force: the person's choice, else the build's default — the
@@ -414,6 +417,18 @@ const Settings: React.FC<SettingsProps> = ({ navigation }) => {
       })
     }
   }
+
+  // "My VTA" (§7.8, frame 20): the VTA's screens, moved here from the My Agent tab, first in App Settings. Put in after
+  // every other row, so the rows placed above by position (Data retention's) keep the places they had.
+  if (agentConnect)
+    settingsSections
+      .find((item) => item.header.title === t('Settings.AppSettings'))
+      ?.data.unshift({
+        title: t('ConnectedAgents.MyVta'),
+        accessibilityLabel: t('ConnectedAgents.MyVta'),
+        testID: testIdWithKey('MyVtaRow'),
+        onPress: () => navigation.navigate(Screens.MyVta),
+      })
 
   const SectionHeader: React.FC<{
     icon: SettingIcon

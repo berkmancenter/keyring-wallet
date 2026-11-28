@@ -36,7 +36,7 @@ import {
   isMessagesLink,
   keyringAgentLinkKind,
   linkForLog,
-  myAgentLinkParams,
+  myAgentLinkRoute,
 } from '../modules/trust-tasks/module/vtiLinks'
 import { linkNoticeToast, openKeyringLink, type KeyringLinkNotice } from '../modules/trust-tasks/module/keyringLinkOpen'
 import { useVtiCardVault } from '../modules/trust-tasks/module/vtiCardVault'
@@ -238,11 +238,11 @@ const TabStack: React.FC = () => {
               // tabs pops whatever sits above them, so the screen a link opens
               // comes to the top. Navigating the tabs alone left it underneath
               // an open modal, where the person could not see it had worked.
-              (destination) =>
-                (navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(
-                  Stacks.TabStack,
-                  { screen: TabStacks.MyAgentStack, params: myAgentLinkParams(destination) }
-                ),
+              // The My Agent tab, or "My VTA" under Settings with agent connect on (§7.8).
+              (destination) => {
+                const { name, params } = myAgentLinkRoute(destination)
+                ;(navigation as unknown as { navigate: (name: string, params?: object) => void }).navigate(name, params)
+              },
               (notice: KeyringLinkNotice) => {
                 if (notice.kind === 'unusable') logger.warn(`agent link not usable: ${notice.message ?? 'unreadable'}`)
                 const toast = linkNoticeToast(notice, t, toastBottomOffset)
