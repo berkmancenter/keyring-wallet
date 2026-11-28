@@ -9,23 +9,24 @@
  * words it leads to say the clock looks wrong without saying which way.
  *
  * Matched on the code AND the upstream wire words together. Line numbers are
- * for trust-tasks-rs 0.39.0 and affinidi-data-integrity 0.8.7, the versions
- * in VTI 97fda9813's Cargo.lock (vta-service 0.84.0); 0.37.2 and 0.8.0, at
- * f7b78e29d, word them the same way.
+ * for trust-tasks-rs 0.41.2 and affinidi-data-integrity 0.9.2, the versions
+ * in VTI bf35b6787's Cargo.lock (VTI-Fig, vta-service 0.87.2); 0.39.0 and
+ * 0.8.7 at 97fda9813, and 0.37.2 and 0.8.0 at f7b78e29d, word them the same
+ * way, with the same 60 s skews.
  *
  * - `malformedRequest` with `FUTURE_ISSUED_AT`, "issuedAt is in the future
  *   beyond the consumer's skew tolerance" (the const at `freshness.rs:322`, its text at `:323`): `issuedAt`
  *   more than 60 s ahead (`DEFAULT_SKEW`, `:49`). The wire message is the
  *   variant's Display, "malformed request: <reason>" (`error.rs:608`).
  * - `expired` with `STALE_WIRE_MESSAGE`, "document is outside the consumer's
- *   acceptance window" (the const at `error.rs:835`, its text at `:836`): `issuedAt` older than the window plus
+ *   acceptance window" (the const at `error.rs:844`, its text at `:845`): `issuedAt` older than the window plus
  *   60 s, and the VTA's window is 10 min (vti-common `acceptance.rs:61-62`,
  *   `trust_task/mod.rs:66`), checked on every task it is sent
  *   (vta-service `trust_tasks/mod.rs:1978`). Not the `expired` of a reached
  *   `expiresAt`, which is worded differently and is about the document's own
  *   stated end.
  * - `proofInvalid` with "Created date is in the future (beyond the 60s
- *   clock-skew allowance)" (affinidi-data-integrity `lib.rs:812`,
+ *   clock-skew allowance)" (affinidi-data-integrity `lib.rs:888`,
  *   `DEFAULT_CLOCK_SKEW` `options.rs:183`): the proof's `created` more than
  *   60 s ahead. The VTA checks `issuedAt` first, so this is the rarer one.
  *

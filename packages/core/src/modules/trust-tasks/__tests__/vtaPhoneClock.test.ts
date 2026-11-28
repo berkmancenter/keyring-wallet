@@ -16,8 +16,8 @@ import { VtaAgentController } from '../module/vtaAgent'
 import { deviceRefusalOf } from '../module/vtaOwner'
 import { VtiRefusal } from '../module/vtiAgent'
 
-// The refusals as they reach the phone: the code, and the wire message trust-tasks-rs 0.39.0 / affinidi-data-integrity
-// 0.8.7 give it (VTI 97fda9813's Cargo.lock).
+// The refusals as they reach the phone: the code, and the wire message trust-tasks-rs 0.41.2 / affinidi-data-integrity
+// 0.9.2 give it (VTI bf35b6787's Cargo.lock; 0.39.0 / 0.8.7 at 97fda9813 word them the same).
 const AHEAD = () =>
   new VtiRefusal(
     'malformedRequest',

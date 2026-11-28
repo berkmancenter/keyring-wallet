@@ -1,10 +1,10 @@
 {
   "note": "Prebuilt checkers for bifold's VTI conformance job. Written by build.sh; do not edit by hand. Rebuild after a VTI pin bump or a change to either checker's sources. Not bit-reproducible: sourceDigest identifies the source, not the binary.",
-  "release": "card-verify-dist-97fda9813-439a03335-918e9f8d",
-  "builtAt": "2026-11-26T18:49:58Z",
+  "release": "card-verify-dist-bf35b6787-439a03335-6651ff13",
+  "builtAt": "2026-11-28T16:20:14Z",
   "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
   "checkers": {
-    "card-verify": {"vtiPin": "97fda9813", "sourceDigest": "d66fdfedec839d1e8011128a3411018b4bfa3730d5c2dcb006d461c4e3c447dd", "sha256": "c4db56c26deff5eb4b865132ae5ce806fb4fc5a99e33def9ee6f8d08b75f6086", "url": "https://github.com/berkmancenter/keyring-wallet/releases/download/card-verify-dist-97fda9813-439a03335-918e9f8d/card-verify", "target": "aarch64-apple-darwin", "minMacOS": "14.0"},
-    "card-verify-v047": {"vtiPin": "439a03335", "sourceDigest": "d0047d37c52d9d9b02d4e6c5aad555dc3419026e211618a82e8a98cce652c9ea", "sha256": "10b939b3d52404ef2443c194d5d126b706f9e000319cbd46922c3d3b4a0c560a", "url": "https://github.com/berkmancenter/keyring-wallet/releases/download/card-verify-dist-97fda9813-439a03335-918e9f8d/card-verify-v047", "target": "aarch64-apple-darwin", "minMacOS": "14.0"}
+    "card-verify": {"vtiPin": "bf35b6787", "sourceDigest": "ec5b29697017fa156ee43978b53c578b367c1376174725a9b9deeb0511467efa", "sha256": "5ae299d8b034775a0202f7a74672958a5ae4943b64e50b26d992dc9b573fe07a", "url": "https://github.com/berkmancenter/keyring-wallet/releases/download/card-verify-dist-bf35b6787-439a03335-6651ff13/card-verify", "target": "aarch64-apple-darwin", "minMacOS": "14.0"},
+    "card-verify-v047": {"vtiPin": "439a03335", "sourceDigest": "d0047d37c52d9d9b02d4e6c5aad555dc3419026e211618a82e8a98cce652c9ea", "sha256": "55c0ed06d5f06456d3315450ea4ac8cc79fb92598ed550f3cdca8ff51be4a246", "url": "https://github.com/berkmancenter/keyring-wallet/releases/download/card-verify-dist-bf35b6787-439a03335-6651ff13/card-verify-v047", "target": "aarch64-apple-darwin", "minMacOS": "14.0"}
   }
 }

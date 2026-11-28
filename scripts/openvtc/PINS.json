@@ -28,10 +28,10 @@
       ]
     },
     "verifiable-trust-infrastructure": {
-      "sha": "97fda9813",
-      "commitDate": "2026-11-23",
-      "pinnedOn": "2026-11-26",
-      "why": "Tag vta-service-v0.84.0 (vta-sdk 0.91.0), what every Farm VTA runs (0.84.0 per the nightly watch, 2026-11-24), matched as the plan owner's rule asks; 0.84.0 to 0.87.0 serves the same task set. On Alberto's word (2026-11-26). card-verify moved to this vta-sdk and to its Cargo.lock versions in the same pull request.",
+      "sha": "bf35b6787",
+      "commitDate": "2026-11-27",
+      "pinnedOn": "2026-11-28",
+      "why": "Tag VTI-Fig (bf35b6787, #2845): the Fig GA release, vta-service 0.87.2 (vta-sdk 0.94.2), what every Farm VTA runs (vta-keyring-runner-uiux and -prague report 0.87.2 in /openapi.json, 2026-11-28; the community VTCs run Fig's vtc-service 0.35.2), matched as Alberto's rule asks; on his word (2026-11-28). card-verify moved to this vta-sdk and to its Cargo.lock versions in the same pull request.",
       "watch": [
         "CHANGELOG.md",
         "docs/02-vta/",

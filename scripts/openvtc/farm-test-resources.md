@@ -67,6 +67,13 @@ keeps them as evidence and prints the commands to remove them.
 recreated.** The table and notes below describe the old one, and apply again
 only once the new community's DID and REST base replace them here.
 
+Measured 2026-11-28: `vtc-keyring-test.ic3.dev` no longer resolves. The
+community VTCs that answer `/health` are `vtc-keyring-community-a.ic3.dev` and
+`vtc-keyring-lab-community.ic3.dev`, both vtc-service 0.35.2 (VTI-Fig). Two
+defaults still name the old host: `--vtc-base` in `e2e/openvtc/run-phase1.mjs`
+and `run-phase2.mjs`. Pass `--vtc-base` explicitly until a replacement
+community is recorded here.
+
 | VTC | DID | REST | Admission | Mediator |
 |---|---|---|---|---|
 | `keyring-test-vtc` (published name *Keyring Lab Community*) | `did:webvh:QmdervYcngPtJnKGuZSzH2tvDe8q274cty8324G4finFnV:dids-keyring-stack.ic3.dev:keyring-test-vtc` | `https://vtc-keyring-test.ic3.dev/v1` | **one vetter's statement** (it also publishes an invitation criterion, which does not admit on its own — see below) | its stack's own (`keyring-stack-mediator`), so a runner reaches it **across mediators** |
