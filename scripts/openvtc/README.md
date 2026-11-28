@@ -21,6 +21,7 @@ commit:
 |---|---|
 | `vta-browser-plugin` | `packages/tsp-js` — the TSP wire layer (published as `@openvtc/vti-tsp-js`); `packages/core` — the browser wallet's VTA client, our closest reference implementation |
 | `verifiable-trust-infrastructure` | `vta-service` — the VTA itself (Rust); design notes under `docs/` that are the best documentation of the protocol |
+| `verifiable-trust-infrastructure-hcp` | A separate clone of the same repository, pinned only to read `docs/05-design-notes/hcp.md` (the HCP V0 contract), which no tagged release carries yet; nothing builds from it, and the main pin above stays at what the Farm runs |
 | `vti-didcomm-js` | the mediator client (`@openvtc/vti-didcomm-js`) — authentication, pickup socket, TSP frame demux |
 | `vti-setup` | deployment recipes |
 | `vta-mobile-agent-ios` | the iOS reference agent — mobile flows, and the closest analogue to what Keyring will do |

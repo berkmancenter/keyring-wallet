@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-26",
+  "updated": "2026-11-28",
   "note": "Pins are the SHAs the reference corpus was last validated against. Advance only via tools/sync-external.mjs --advance.",
   "repos": {
     "vta-browser-plugin": {
@@ -40,6 +40,16 @@
       "watch": [
         "vta-sdk/src/vetting/",
         "vta-sdk/src/protocols/vetting.rs"
+      ]
+    },
+    "verifiable-trust-infrastructure-hcp": {
+      "url": "https://github.com/OpenVTC/verifiable-trust-infrastructure.git",
+      "sha": "0cc18df23",
+      "commitDate": "2026-11-26",
+      "pinnedOn": "2026-11-28",
+      "why": "A third, separate clone of VTI at main 0cc18df23 (#2823, the merge that added docs/05-design-notes/hcp.md, blob 06537e4f6f8579a993996d6def00440b3fb10fe0), only to read the HCP V0 contract the agent connect work builds to (hcp.md §5.1, the consent-request effect kinds). No tagged release contains hcp.md yet: VTI-Fig (bf35b6787) was cut before it. The main pin above stays at what the Farm runs (Alberto's rule) and does not move with this one; nothing builds from this clone. This entry is removed once the main pin is a tagged release that contains hcp.md and the Farm runs it.",
+      "watch": [
+        "docs/05-design-notes/hcp.md"
       ]
     },
     "affinidi-tdk-rs": {
