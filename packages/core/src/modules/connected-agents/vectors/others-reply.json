@@ -1,0 +1,8 @@
+{
+  "description": "The fixed reply to a mention by someone who is not the agent's owner, with \"Answers other people\" off (docs/plans/agent-connect-plan.md §3.13), copied from §3.13's table. Shared by Keyring (ConnectedAgents.OthersReply, the preview in the agent's details) and the agent-connect plugin (src/core/others/messages.json), so the two copies cannot drift (§8.1). The English is the source.",
+  "version": 1,
+  "status": "fr and pt-br drafts, not reviewed (D16)",
+  "en": "I'm an AI agent and I can't respond to anyone but the person I work for.",
+  "fr": "Je suis un agent IA et je ne peux répondre qu'à la personne pour qui je travaille.",
+  "pt-br": "Sou um agente de IA e só posso responder à pessoa para quem trabalho."
+}
