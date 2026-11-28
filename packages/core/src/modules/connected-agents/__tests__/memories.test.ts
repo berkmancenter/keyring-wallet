@@ -12,6 +12,7 @@ import {
   connectGuard,
   countMemory,
   countNotice,
+  createAgentContext,
   createMemory,
   isUnrestrictedAdministrator,
   MEMORY_COUNT_MAX_PAGES,
@@ -221,6 +222,65 @@ describe('createMemory (§3.15, D35)', () => {
       code: 'failed',
     })
     expect(list).not.toHaveBeenCalled()
+  })
+})
+
+describe('createAgentContext (§3.3: a connect with no memory)', () => {
+  it('creates keyring-agent-<10 base32> named after the agent, and the picker never offers it', async () => {
+    const created: { id: string; name: string }[] = []
+    const result = await createAgentContext(
+      { listContexts: async () => [], createContext: async (id, name) => created.push({ id, name }) },
+      '  Laptop agent ',
+      bytes(3)
+    )
+    expect(result).toEqual({ ok: true, id: 'keyring-agent-dddddddddd' })
+    expect(created).toEqual([{ id: 'keyring-agent-dddddddddd', name: 'Laptop agent' }])
+    expect(
+      await pickerMemories({ listContexts: async () => [{ id: 'keyring-agent-dddddddddd', name: 'Laptop agent' }] })
+    ).toEqual([])
+  })
+
+  it('CONTROL: a memory of the same name does not stop it, since an agent context is no memory', async () => {
+    const result = await createAgentContext(
+      { listContexts: async () => [{ id: 'keyring-memory-x', name: 'Laptop agent' }], createContext: jest.fn() },
+      'Laptop agent',
+      bytes(3)
+    )
+    expect(result).toEqual({ ok: true, id: 'keyring-agent-dddddddddd' })
+  })
+
+  it('held for approval is heldForApproval, tried once', async () => {
+    const create = jest.fn(async () => {
+      throw new Error('held')
+    })
+    const result = await createAgentContext(
+      { listContexts: async () => [], createContext: create },
+      'A',
+      bytes(3),
+      () => true
+    )
+    expect(result).toEqual({ ok: false, code: 'heldForApproval' })
+    expect(create).toHaveBeenCalledTimes(1)
+  })
+
+  it('a colliding id is redrawn; an unlistable VTA or an empty name fails', async () => {
+    let draws = 0
+    const random = (n: number) => new Uint8Array(n).fill(draws++ === 0 ? 1 : 2)
+    const listed = [{ id: `keyring-agent-${randomContextSuffix(() => new Uint8Array(10).fill(1))}` }]
+    const create = jest.fn()
+    const result = await createAgentContext({ listContexts: async () => listed, createContext: create }, 'A', random)
+    expect(result).toMatchObject({ ok: true })
+    expect((result as { id: string }).id).not.toBe(listed[0].id)
+    const list = async () => {
+      throw new Error('unreachable')
+    }
+    expect(await createAgentContext({ listContexts: list, createContext: jest.fn() }, 'A', bytes(1))).toEqual({
+      ok: false,
+      code: 'failed',
+    })
+    expect(
+      await createAgentContext({ listContexts: async () => [], createContext: jest.fn() }, '  ', bytes(1))
+    ).toEqual({ ok: false, code: 'failed' })
   })
 })
 

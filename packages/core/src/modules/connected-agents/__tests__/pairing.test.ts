@@ -21,6 +21,7 @@ import {
   ProveOutcome,
   SpentRequestStore,
   TEMPORARY_GRANT_MS,
+  aclScopeFor,
   lockedCopy,
 } from '../pairing'
 import { handleWithSuffix } from '../handle'
@@ -133,7 +134,14 @@ class MemoryLockoutStore implements LockoutStore {
   }
 }
 
-function setup(over: { administers?: string[]; taken?: string[]; ownVta?: string | undefined } = {}) {
+function setup(
+  over: {
+    administers?: string[]
+    taken?: string[]
+    ownVta?: string | undefined
+    createAgentContext?: ConstructorParameters<typeof PairingMachine>[0]['createAgentContext']
+  } = {}
+) {
   let now = T0
   const clock = () => now
   const transport = new FakeTransport()
@@ -154,6 +162,7 @@ function setup(over: { administers?: string[]; taken?: string[]; ownVta?: string
       spent,
       lockout: new PairingLockout(lockoutStore, clock),
       takenHandles: () => over.taken ?? [],
+      createAgentContext: over.createAgentContext,
       onTransition: (s) => history.push(s),
     })
   return {
@@ -620,5 +629,54 @@ describe('the choice', () => {
   ])('%s is refused before anything starts', async (_, over) => {
     const t = setup()
     expect(await t.machine.start(choice(over))).toEqual({ phase: 'failed', reason: 'invalid-choice' })
+  })
+})
+
+describe('a connect with no memory chosen (§3.3: the agent gets a new empty context of its own)', () => {
+  const noMemory = { memoryContexts: [], agentContext: undefined }
+
+  it('makes the agent its own context, named after it, and goes on to the scan with it', async () => {
+    const createAgentContext = jest.fn(async () => ({ ok: true as const, id: 'keyring-agent-aaaaaaaaaa' }))
+    const t = setup({ createAgentContext })
+    const state = await t.machine.start(choice({ ...noMemory, name: '  Laptop agent ' }))
+    expect(createAgentContext).toHaveBeenCalledWith('Laptop agent')
+    expect(state).toMatchObject({ phase: 'awaitingScan', choice: { agentContext: 'keyring-agent-aaaaaaaaaa' } })
+    // The entry it asks for is that context alone, with no memory capability.
+    const granted = aclScopeFor((state as Extract<PairingState, { phase: 'awaitingScan' }>).choice, T0)
+    expect(granted).toMatchObject({ contexts: ['keyring-agent-aaaaaaaaaa'], capabilities: { scope: 'none' } })
+  })
+
+  it('a context held for approval ends with the memory-held line, not the generic one', async () => {
+    const t = setup({ createAgentContext: async () => ({ ok: false, code: 'heldForApproval' }) })
+    expect(await t.machine.start(choice(noMemory))).toEqual({ phase: 'failed', reason: 'memory-held-for-approval' })
+  })
+
+  it('a context that could not be made ends as the VTA unreachable, not the generic one', async () => {
+    const t = setup({ createAgentContext: async () => ({ ok: false, code: 'failed' }) })
+    expect(await t.machine.start(choice(noMemory))).toEqual({ phase: 'failed', reason: 'vta-unreachable' })
+  })
+
+  it('CONTROL: with memories chosen, no context is made and the choice goes on as it was', async () => {
+    const createAgentContext = jest.fn(async () => ({ ok: true as const, id: 'keyring-agent-aaaaaaaaaa' }))
+    const t = setup({ createAgentContext })
+    const state = await t.machine.start(choice())
+    expect(createAgentContext).not.toHaveBeenCalled()
+    expect(state).toMatchObject({ phase: 'awaitingScan' })
+    expect((state as Extract<PairingState, { phase: 'awaitingScan' }>).choice.agentContext).toBeUndefined()
+  })
+
+  it('CONTROL: without the means to make a context, a choice with no memory still ends invalid-choice', async () => {
+    const t = setup()
+    expect(await t.machine.start(choice(noMemory))).toEqual({ phase: 'failed', reason: 'invalid-choice' })
+  })
+
+  it('CONTROL: another problem with the choice is still refused, and nothing is made', async () => {
+    const createAgentContext = jest.fn(async () => ({ ok: true as const, id: 'keyring-agent-aaaaaaaaaa' }))
+    const t = setup({ createAgentContext })
+    expect(await t.machine.start(choice({ ...noMemory, name: '  ' }))).toEqual({
+      phase: 'failed',
+      reason: 'invalid-choice',
+    })
+    expect(createAgentContext).not.toHaveBeenCalled()
   })
 })

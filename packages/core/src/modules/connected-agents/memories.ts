@@ -79,8 +79,58 @@ export async function pickerMemories(port: Pick<MemoryPort, 'listContexts'>): Pr
     .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
 }
 
-/** The most ids drawn for one new memory: a collision is a redraw (§3.15), and 50 bits make a second one vanishingly rare. */
+/** The most ids drawn for one new memory or agent context: a collision is a redraw (§3.15), and 50 bits make a second one vanishingly rare. */
 const CREATE_ATTEMPTS = 3
+
+/** What creating an agent's own context answers: its id, or why there is none. */
+export type CreateAgentContextResult = { ok: true; id: string } | { ok: false; code: 'heldForApproval' | 'failed' }
+
+/**
+ * The agent's own context, for a connect with no memory chosen (§3.3's `act` row: "the entry's context is a new empty
+ * context Keyring creates for the agent"): a top-level context `keyring-agent-<10 random base32>`, named after the
+ * agent. It is no memory, so the picker never offers it (`isMemoryContext`) and no memory's name can collide with it.
+ * Like a memory create (step 5), it is sent without waiting for consent: one an approval rule holds is
+ * `heldForApproval`, never retried. A collision with an existing id is a redraw.
+ */
+export async function createAgentContext(
+  port: Pick<MemoryPort, 'listContexts' | 'createContext'>,
+  agentName: string,
+  randomBytes: (length: number) => Uint8Array,
+  isHeld: (error: unknown) => boolean = () => false
+): Promise<CreateAgentContextResult> {
+  const name = agentName.trim()
+  if (name.length < 1 || name.length > 64) return { ok: false, code: 'failed' }
+  let taken: Set<string>
+  try {
+    taken = new Set((await port.listContexts()).map((c) => c.id))
+  } catch {
+    return { ok: false, code: 'failed' }
+  }
+  for (let attempt = 0; attempt < CREATE_ATTEMPTS; attempt++) {
+    const id = `${AGENT_CONTEXT_PREFIX}${randomContextSuffix(randomBytes)}`
+    if (taken.has(id)) continue
+    try {
+      await port.createContext(id, name)
+      return { ok: true, id }
+    } catch (error) {
+      if (isHeld(error)) return { ok: false, code: 'heldForApproval' }
+      // As for a memory: a refusal does not say whether the id existed, so re-list; a now-listed id of another name
+      // was a collision (redraw), one of this name was made.
+      try {
+        const after = await port.listContexts()
+        if (after.some((c) => c.id === id && c.name?.trim() !== name)) {
+          taken.add(id)
+          continue
+        }
+        if (after.some((c) => c.id === id)) return { ok: true, id }
+      } catch {
+        // fall through to failed
+      }
+      return { ok: false, code: 'failed' }
+    }
+  }
+  return { ok: false, code: 'failed' }
+}
 
 /**
  * "New memory" (§3.15): a top-level context `keyring-memory-<10 random base32>` named as typed (1 to 64 characters

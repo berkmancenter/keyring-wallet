@@ -27,7 +27,14 @@ import {
   settleKeepConnected,
   type KeepConnectedPorts,
 } from './keepConnected'
-import { connectGuard, countMemory, createMemory, pickerMemories, type MemoryPort } from './memories'
+import {
+  connectGuard,
+  countMemory,
+  createAgentContext,
+  createMemory,
+  pickerMemories,
+  type MemoryPort,
+} from './memories'
 import { reconcileAgents, removeAgentEntries, type RevokeDeps, type RevokeVta } from './revoke'
 import { AgentConnectionStore, KeyedLockoutStore, KeyedSpentRequestStore } from './store'
 import type { AgentConnection } from './types'
@@ -264,6 +271,9 @@ export function connectedAgentsServices(
         connections,
         lockoutStore: new KeyedLockoutStore(agent),
         spent: new KeyedSpentRequestStore(agent, clock),
+        // A connect with no memory gets its own empty context (§3.3), made as a memory is (step 5).
+        createAgentContext: (name) =>
+          createAgentContext(memory, name, randomBytes, (error) => consentPendingOf(error) !== undefined),
       },
       onState
     )

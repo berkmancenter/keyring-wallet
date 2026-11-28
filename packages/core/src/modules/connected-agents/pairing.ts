@@ -183,6 +183,8 @@ export type PairingFailure =
   | 'rotation-lost-limits'
   | 'handle-collision'
   | 'invalid-choice'
+  /** No memory was chosen, and the agent's own context was held for approval at the VTA (step 5). */
+  | 'memory-held-for-approval'
 
 /**
  * The owner-facing words for each failure, as the plan gives them (§3.2, §3.10). Where the plan gives none yet,
@@ -200,6 +202,7 @@ export const PAIRING_FAILURE_COPY: Record<PairingFailure, string | undefined> = 
   'rotation-lost-limits': undefined,
   'handle-collision': undefined,
   'invalid-choice': undefined,
+  'memory-held-for-approval': "Your VTA asks for approval before a memory is made, so this one wasn't made.",
 }
 
 /** The lock's words, with the minutes left. */
@@ -279,6 +282,13 @@ export type PairingDeps = {
   lockout: PairingLockout
   /** The handles the owner's other agents hold. */
   takenHandles: () => Iterable<string>
+  /**
+   * Create the agent's own context, for a choice with no memory (§3.3's `act` row; `memories.ts`'s
+   * `createAgentContext`). Without it such a choice cannot be granted and ends `invalid-choice`.
+   */
+  createAgentContext?: (
+    agentName: string
+  ) => Promise<{ ok: true; id: string } | { ok: false; code: 'heldForApproval' | 'failed' }>
   onTransition?: (state: PairingState) => void
 }
 
@@ -397,9 +407,18 @@ export class PairingMachine {
   /** Step 1: the owner chose the name, memories and purposes. Refused while locked. */
   public async start(choice: AgentConnectChoice): Promise<PairingState> {
     if (this.current.phase !== 'idle') throw new Error(`start in phase ${this.current.phase}`)
-    if (choiceProblem(choice)) return this.fail('invalid-choice')
+    const problem = choiceProblem(choice)
+    // A choice with no memory is a legitimate one: its context is the agent's own, made here. Only without the means
+    // to make it is it not one.
+    const needsOwnContext = problem === 'contexts' && this.deps.createAgentContext !== undefined
+    if (problem && !needsOwnContext) return this.fail('invalid-choice')
     const lock = await this.deps.lockout.state()
     if (lock.locked) return this.set({ phase: 'locked', lockout: lock })
+    if (needsOwnContext && this.deps.createAgentContext) {
+      const made = await this.deps.createAgentContext(sanitizeLabel(choice.name) as string)
+      if (!made.ok) return this.fail(made.code === 'heldForApproval' ? 'memory-held-for-approval' : 'vta-unreachable')
+      return this.set({ phase: 'awaitingScan', choice: { ...choice, agentContext: made.id } })
+    }
     return this.set({ phase: 'awaitingScan', choice })
   }
 

@@ -30,6 +30,7 @@ export const CONNECT_END_KEY: Record<ConnectEnd, string> = {
   'rotation-lost-limits': 'ConnectedAgents.FailRotationLostLimits',
   'handle-collision': 'ConnectedAgents.FailHandleCollision',
   'invalid-choice': 'ConnectedAgents.FailGeneric',
+  'memory-held-for-approval': 'ConnectedAgents.MemoryHeldForApproval',
   notAdministrator: 'ConnectedAgents.NotAnAdministrator',
   vtaTooOld: 'ConnectedAgents.VtaTooOld',
   'mediator-closed': 'ConnectedAgents.FailMediatorClosed',

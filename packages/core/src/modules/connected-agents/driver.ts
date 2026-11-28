@@ -32,6 +32,7 @@ import {
   type ConfirmedAgent,
   type NumberEntry,
   type PairingCleanup,
+  type PairingDeps,
   type PairingLink,
   type PairingState,
   type SpentRequestStore,
@@ -79,6 +80,8 @@ export type DriverPorts = {
   lockoutStore: LockoutStore
   spent: SpentRequestStore
   signingKeyIdOf?: (personaDid: string) => string
+  /** Create the agent's own context for a connect with no memory (`memories.ts`'s `createAgentContext`). */
+  createAgentContext?: PairingDeps['createAgentContext']
 }
 
 /** What persisting a pairing's end came to. */
@@ -172,6 +175,7 @@ export class AgentConnectDriver {
       spent: ports.spent,
       lockout: new PairingLockout(ports.lockoutStore, ports.clock),
       takenHandles: () => this.handles,
+      createAgentContext: ports.createAgentContext,
       onTransition: (state) => this.transition(state),
     })
   }
