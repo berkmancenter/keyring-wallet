@@ -3,7 +3,7 @@
  * token, the status chip, the memory picker and the memory-access notice; and the ConnectedAgents.* words in en, fr
  * and pt-br, with the proposals the plan does not have yet listed in PROPOSED_COPY.
  */
-import { fireEvent, render, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import { readdirSync, readFileSync, statSync } from 'fs'
 import path from 'path'
 import React from 'react'
@@ -389,6 +389,12 @@ describe('MemoryPicker', () => {
     expect(create.props.accessibilityState.disabled).toBe(true)
     fireEvent.changeText(tree.getByTestId(id('MemoryPickerName')), '  Housing ')
     fireEvent.press(tree.getByTestId(id('MemoryPickerCreate')))
+    // Settle the create's own promise inside act before looking: the picker closes the name field only after it
+    // resolves, and a bare waitFor (1 s by default) timed out once on a loaded CI runner (#1127, part 2/4).
+    expect(onCreate).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      await onCreate.mock.results[0].value
+    })
     await waitFor(() => expect(tree.queryByTestId(id('MemoryPickerName'))).toBeNull())
     expect(onCreate).toHaveBeenCalledWith('Housing')
     const housing = rows(tree).find((r) => r.props.accessibilityLabel === 'Housing')
