@@ -176,6 +176,8 @@ const translation = {
     "EnableV2Mailbox": "Caixa de correio DIDComm v2 (convites v2)",
     "EnableSharedConnect": "Conectar com um código compartilhado (experimental)",
     "EnableSharedConnectInvite": "Mostrar um código para outras pessoas escanearem (experimental; precisa da opção acima)",
+    "EnableAgentConnect": "Agentes de IA: conectar um agente (desenvolvedor)",
+    "EnableHcp": "Faixa HCP dos agentes de IA (desenvolvedor; requer a opção acima)",
     "EnableTrustedApprovers": "Aprovadores de confiança: alguém de confiança aprova por você (experimental). Ative nos dois telefones: enquanto estiver desativado, os pedidos para ser aprovador são ignorados.",
     "EnableStateVerifiedApprovers": "Aprovadores verificados pelo estado: verificar o cartão de guardião de um aprovador (experimental)",
     "EnableTrustTestState": "Confiar no estado de teste (K0), só para testes",

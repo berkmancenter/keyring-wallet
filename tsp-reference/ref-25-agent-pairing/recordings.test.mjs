@@ -207,8 +207,10 @@ test("2.6, the cases: 14 of step 0.1; none can run at the pin; 0.84.0 and 0.87.0
   planHas("| The rung's 14 cases (step 0.1) | none can run | recorded, each repeats | recorded, each repeats, the same as 0.84.0 on every case |");
   const names = Object.keys(cases["0.87.0"]);
   for (const version of VERSIONS) assert.deepEqual(Object.keys(cases[version]), names, `${version} records the same cases, in the same order`);
-  // Every case but the one for step 7.5 belongs to step 0.1.
-  assert.equal(names.filter((name) => name !== "pairing-readback").length, 14);
+  // Every case but the one for step 7.5 and the one for Brendan's Q7 belongs to step 0.1.
+  const notStep01 = ["pairing-readback", "own-entry"];
+  for (const name of notStep01) assert.ok(names.includes(name), `the recordings carry ${name}`);
+  assert.equal(names.filter((name) => !notStep01.includes(name)).length, 14);
   for (const name of names) {
     assert.match(cases["0.79.0"][name].notRunnable?.join(" ") ?? "", /acl\/grant\/0\.3 is not served/, `0.79.0 ${name}`);
     assert.equal("notRunnable" in cases["0.84.0"][name], false, `0.84.0 ${name}`);

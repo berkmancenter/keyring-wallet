@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/audit/read/0.1",
+  "title": "HCP — Read Audit Log — payload",
+  "description": "The request payload of the HCP 2.0-draft-3 Read audit log operation (HCP 8.3, 5.4; `GET /v2/audit` in HCP 9.2, 9.4.7, paginated per HCP 9.5): a Management Client, acting for the Context Subject, a delegate or a former delegate, reads one page of the audit log, filtered as asked. HCP defines no request or result schema for this operation; the filters come from HCP 8.3 and the paging members from HCP 9.5. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, proof) are owned by the framework — SPEC §6.3. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "accessToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "The Management Client's HCP access token (HCP 9.3), carried unchanged. HCP's HTTP Binding sends it as a Bearer token; this member carries it in the document. The provider validates it exactly as over HTTP and treats it as opaque. The maxLength is a framework bound, not an HCP requirement. OPTIONAL: where it is absent, the provider authenticates the request's `issuer` VID, by the REQUIRED request proof, as a Management Client the Authorizing Principal enrolled (HCP 3.2.3), and refuses any other issuer with permissionDenied; where it is present, the token rules apply unchanged. Pending HCP confirmation (question 56)."
+    },
+    "client": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "description": "Only events in which this HCP Client took part, as initiator or as the client of the grant concerned, by its client identifier (HCP 8.3: \"filter by HCP Client\"; the name as in HCP 9.4.12). The member name and what it matches are this carriage's reading, pending HCP confirmation (question 29). The maxLength is a framework bound, not an HCP requirement."
+    },
+    "category": {
+      "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Category",
+      "description": "Only events whose `categories` include this category (HCP 8.3: \"filter by ... category\"; the name as in HCP 9.4.12). The member name is this carriage's reading, pending HCP confirmation (question 29)."
+    },
+    "eventType": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Only events of this type, one of those HCP 8.1 lists, such as `context.read` (HCP 8.3: \"filter by ... event type\"; named after the audit event's own `eventType`, HCP 8.2). The member name is this carriage's reading, pending HCP confirmation (question 29). The maxLength is a framework bound, not an HCP requirement."
+    },
+    "from": {
+      "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Instant",
+      "description": "Only events whose `timestamp` is at or after this instant: the lower bound of HCP 8.3's date range (the name as in HCP 9.4.12). Inclusive, pending HCP confirmation (questions 29 and 30)."
+    },
+    "to": {
+      "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Instant",
+      "description": "Only events whose `timestamp` is at or before this instant: the upper bound of HCP 8.3's date range (the name as in HCP 9.4.12). Inclusive, pending HCP confirmation (questions 29 and 30)."
+    },
+    "cursor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "description": "HCP `cursor` (HCP 9.5): the opaque continuation token from a previous response's `nextCursor`. Absent asks for the first page. The maxLength is a framework bound, not an HCP requirement."
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "description": "HCP `limit` (HCP 9.5): the most events to return in this page. Absent leaves the page size to the provider. The maximum of 1000 is a framework bound, not an HCP requirement (pending HCP confirmation, question 3)."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "HCP — Read Audit Log — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["events"],
+      "description": "One page of the audit log, as the caller may read it (HCP 8.3, 17.7). Failures use trust-task-error, not this shape.",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": { "$ref": "../../../_shared/0.1/audit-event.schema.json#/$defs/AuditEvent" },
+          "description": "The audit events of this page, oldest first (HCP 8.2). HCP 9.4.7 names no member for them; `events` is this carriage's name, pending HCP confirmation (question 30). For a delegate or former delegate, only the events HCP 17.7 lets them read; for a former delegate, `entryId` and `relatedEntryId` are withheld as null and `disclosed` and the `data` of a `context.*` event are left out (HCP 17.7), pending HCP confirmation (question 42). Empty when nothing matches."
+        },
+        "nextCursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "HCP `nextCursor` (HCP 9.5): an opaque token for the next page, which encodes no credential or entry content and stays valid for at least 300 seconds. Absent, never null, when the result set is exhausted: a departure from HCP 9.5's null, pending HCP confirmation (question 3). The maxLength is a framework bound, not an HCP requirement."
+        }
+      }
+    }
+  }
+}

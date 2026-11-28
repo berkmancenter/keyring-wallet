@@ -9,9 +9,13 @@ import {
   useAgentContacts,
   useAgentPairing,
   useConnectGuard,
+  useAgentActions,
+  useDeleteMemory,
+  useKeepConnectedOffered,
   useMemories,
   useMemoryCounts,
   usePersonas,
+  useRevokeDeps,
   type ConnectedAgentsServices,
   type PairingDriver,
 } from '../ConnectedAgentsProvider'
@@ -44,6 +48,9 @@ function fakeServices(over: Partial<ConnectedAgentsServices> = {}) {
     reconcile: async () => {
       reconciled.push(1)
     },
+    previewDelete: async () => ({ ok: false, code: 'unreachable' }),
+    deleteMemory: async () => ({ ok: false, code: 'unreachable' }),
+    keepConnectedOffered: async () => false,
     driver: async () => {
       throw new Error('no driver in this test')
     },
@@ -54,7 +61,17 @@ function fakeServices(over: Partial<ConnectedAgentsServices> = {}) {
       retryPending: async () => ({ ok: true }),
       extend: async () => ({ ok: true }),
       remove: async () => ({ ok: true }),
+      keepConnected: async () => ({ ok: false, code: 'notOffered' }),
     },
+    revokeDeps: {
+      store: {
+        list: async () => [],
+        get: async () => undefined,
+        update: async () => undefined,
+        remove: async () => {},
+      },
+      vta: { findAgentEntries: async () => ({ complete: true, matches: [] }), revokeSubject: async () => ({}) },
+    } as unknown as ConnectedAgentsServices['revokeDeps'],
     reachability: (id) => (id === RECORD_FOR_STATUS.unreachable.record.id ? { reachable: false } : undefined),
     ...over,
   }
@@ -83,6 +100,35 @@ describe('useAgentConnections', () => {
     const { result } = renderHook(() => useAgentConnection(id), { wrapper: wrap(services) })
     await waitFor(() => expect(result.current.agent).toBeDefined())
     expect(result.current.agent?.memories.map((m) => m.name)).toEqual(['Education', 'Healthcare'])
+  })
+
+  it("drift reaches the details: the entry's contexts as the last reconcile read them, by record id", async () => {
+    const id = RECORD_FOR_STATUS.connectedUntil.record.id
+    const asked: string[] = []
+    const { services } = fakeServices({
+      entryContexts: (agentId) => {
+        asked.push(agentId)
+        // The entry holds Travel, which the owner never bound, and no longer holds Healthcare.
+        return agentId === id ? ['keyring-memory-educat1on', 'keyring-memory-trave1abc'] : undefined
+      },
+    })
+    const { result } = renderHook(() => useAgentConnection(id), { wrapper: wrap(services) })
+    await waitFor(() => expect(result.current.agent).toBeDefined())
+    expect(result.current.agent?.drift).toEqual({
+      extra: [{ id: 'keyring-memory-trave1abc', name: 'Travel' }],
+      missing: [{ id: 'keyring-memory-hea1thcar', name: 'Healthcare' }],
+    })
+    expect(asked).toContain(id)
+  })
+
+  it('control: with no entryContexts, no view shows drift', async () => {
+    // control: passing `entryContexts: []` for every record instead of `services.entryContexts?.(r.id)` in
+    // useAgentConnections makes this fail (every bound memory shows as missing).
+    const { services } = fakeServices()
+    const { result } = renderHook(() => useAgentConnections(), { wrapper: wrap(services) })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.agents.length).toBeGreaterThan(0)
+    expect(result.current.agents.filter((a) => a.drift !== undefined)).toEqual([])
   })
 
   it('outside a provider, a hook says so', () => {
@@ -192,9 +238,108 @@ describe('memories', () => {
     expect(saved).toEqual([{ agentId: 'did:key:z6MkNotes', contextId: 'keyring-memory-hea1thcar', count: 1240 }])
   })
 
+  it("useDeleteMemory: preview and remove reach the services' step 7.16, the remove only as confirmed", async () => {
+    const asked: { memoryId: string; confirmed?: true }[] = []
+    const { services } = fakeServices({
+      previewDelete: async (memoryId) => {
+        asked.push({ memoryId })
+        return { ok: true, count: { ok: true, count: 3, complete: true }, overWarning: false, agents: [] }
+      },
+      deleteMemory: async (memoryId, confirmed) => {
+        asked.push({ memoryId, confirmed })
+        return { ok: true, recordsNotUpdated: 0 }
+      },
+    })
+    const { result } = renderHook(() => useDeleteMemory(), { wrapper: wrap(services) })
+    await act(async () => {
+      expect(await result.current.preview('keyring-memory-trave1abc')).toMatchObject({ ok: true, overWarning: false })
+      expect(await result.current.remove('keyring-memory-trave1abc', true)).toEqual({ ok: true, recordsNotUpdated: 0 })
+    })
+    expect(asked).toEqual([
+      { memoryId: 'keyring-memory-trave1abc' },
+      { memoryId: 'keyring-memory-trave1abc', confirmed: true },
+    ])
+  })
+
   it('usePersonas gives the personas for the Acting as row', async () => {
     const { services } = fakeServices()
     const { result } = renderHook(() => usePersonas(), { wrapper: wrap(services) })
     await waitFor(() => expect(result.current).toEqual([{ did: 'did:webvh:persona.example:ada', name: 'Ada' }]))
+  })
+})
+
+describe('Keep it connected: one path (fb-W1)', () => {
+  it('useKeepConnectedOffered is false while it loads, then what the services answer for that agent', async () => {
+    let answer: (offered: boolean) => void = () => undefined
+    const asked: string[] = []
+    const { services } = fakeServices({
+      keepConnectedOffered: (agentId) => {
+        asked.push(agentId)
+        return new Promise<boolean>((resolve) => (answer = resolve))
+      },
+    })
+    const { result } = renderHook(() => useKeepConnectedOffered('did:key:z6MkNotes'), { wrapper: wrap(services) })
+    expect(result.current).toBe(false)
+    await act(async () => answer(true))
+    expect(result.current).toBe(true)
+    expect(asked).toEqual(['did:key:z6MkNotes'])
+  })
+
+  it('control: an answer that is still loading is never shown as offered, and a failed read is not offered', async () => {
+    // control: dropping `value.agentId === agentId` from useKeepConnectedOffered makes this fail: the first agent's
+    // true is drawn for the second, in the render before its own load starts.
+    const renders: { id: string; offered: boolean }[] = []
+    let calls = 0
+    let second: (offered: boolean) => void = () => undefined
+    const { services } = fakeServices({
+      keepConnectedOffered: () => {
+        calls++
+        if (calls === 1) return Promise.resolve(true)
+        if (calls === 2) return new Promise<boolean>((resolve) => (second = resolve))
+        return Promise.reject(new Error('the store could not be read'))
+      },
+    })
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string }) => {
+        const offered = useKeepConnectedOffered(id)
+        renders.push({ id, offered })
+        return offered
+      },
+      { wrapper: wrap(services), initialProps: { id: 'did:key:z6MkA' } }
+    )
+    await waitFor(() => expect(result.current).toBe(true))
+    rerender({ id: 'did:key:z6MkB' })
+    expect(result.current).toBe(false)
+    await act(async () => second(false))
+    expect(result.current).toBe(false)
+    // Every render drawn for the second agent, the first one included, said not offered.
+    expect(renders.filter((r) => r.id === 'did:key:z6MkB').map((r) => r.offered)).not.toContain(true)
+    rerender({ id: 'did:key:z6MkC' })
+    await waitFor(() => expect(calls).toBe(3))
+    expect(result.current).toBe(false)
+  })
+
+  it('the act is useAgentActions().keepConnected; the services carry no second keepConnected', async () => {
+    const acted: string[] = []
+    const { services } = fakeServices()
+    services.actions.keepConnected = async (agentId) => {
+      acted.push(agentId)
+      return { ok: true }
+    }
+    const { result } = renderHook(() => useAgentActions(), { wrapper: wrap(services) })
+    await act(async () => {
+      expect(await result.current.keepConnected('did:key:z6MkNotes')).toEqual({ ok: true })
+    })
+    expect(acted).toEqual(['did:key:z6MkNotes'])
+    expect('keepConnected' in services).toBe(false)
+  })
+})
+
+describe('useRevokeDeps (step 7.10, fb-W1)', () => {
+  it("is the services' revoke deps: the connection store and the VTA's revoke, with no tellAgent yet", () => {
+    const { services } = fakeServices()
+    const { result } = renderHook(() => useRevokeDeps(), { wrapper: wrap(services) })
+    expect(result.current).toBe(services.revokeDeps)
+    expect(result.current.tellAgent).toBeUndefined()
   })
 })

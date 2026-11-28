@@ -9,7 +9,7 @@ import { setAgentConnectEnabled } from '../../agentConnectFlag'
 import type { VtaSession } from '../../services'
 import { setHcpEnabled } from '../hcpFlag'
 import { HCP_GRANTS_REVOKE } from '../types'
-import { callHcp, HCP_TASK_TIMEOUT_MS, HcpOffError, hcpVtaPort, type HcpVtaPort } from '../vtaPort'
+import { callHcp, HCP_TASK_TIMEOUT_MS, HcpOffError, hcpVtaPort, type HcpVtaPort, onHcpFailure } from '../vtaPort'
 
 const AGENT = { id: 'agent' } as unknown as Agent
 const VTA = 'did:web:vta.example.org'
@@ -114,5 +114,21 @@ describe('callHcp', () => {
       ok: false,
       unreachable: true,
     })
+  })
+})
+
+describe('onHcpFailure', () => {
+  const on = { refused: (code: string) => `refused ${code}`, unreachable: () => 'unreachable', off: () => 'off' }
+
+  it('gives each failed outcome to its own handler', () => {
+    expect(onHcpFailure({ ok: false, refused: 'notFound' }, on)).toBe('refused notFound')
+    expect(onHcpFailure({ ok: false, unreachable: true }, on)).toBe('unreachable')
+    expect(onHcpFailure({ ok: false, off: true }, on)).toBe('off')
+  })
+
+  it('control: a caller that leaves out a handler does not type-check', () => {
+    const { off: _off, ...withoutOff } = on
+    // @ts-expect-error the `off` handler is missing
+    expect(() => onHcpFailure({ ok: false, unreachable: true }, withoutOff)).not.toThrow()
   })
 })

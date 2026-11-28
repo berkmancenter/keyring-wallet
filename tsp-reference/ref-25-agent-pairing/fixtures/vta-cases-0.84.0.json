@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-11-26T09:14:57.799Z",
+  "recordedAt": "2026-11-27T23:13:37.782Z",
   "source": {
     "repository": "OpenVTC/verifiable-trust-infrastructure",
     "commit": "97fda98130047ca8ff4c0af1b60116d558968d2a",
@@ -550,6 +550,27 @@
       "theAgentsAcceptance": {
         "signedByItsOwnKey": true,
         "verifiesWithThePersonasKey": false
+      }
+    },
+    "own-entry": {
+      "grant": "ok",
+      "asTheAgent": {
+        "aclShowOwn": "permissionDenied",
+        "aclShowOwnCreatedBy": "<not answered>",
+        "aclListOwn": "permissionDenied",
+        "aclListOwnCreatedBy": "<not answered>",
+        "whoami": "ok",
+        "whoamiMembers": [
+          "capabilities",
+          "roles",
+          "scopes",
+          "session"
+        ],
+        "whoamiMentionsCreator": false
+      },
+      "control": {
+        "aclShowAsAdministrator": "ok",
+        "createdBy": "<the administrator>"
       }
     }
   }
