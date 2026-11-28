@@ -6,19 +6,24 @@
  *
  * A module-level switch, like agentConnectFlag.ts: the app sets it from its developer settings at start-up.
  *
+ * Absent from store builds (agentConnectBuild.ts): with `agentConnectAvailableInBuild()` false the switch reads off and
+ * setting it does nothing.
+ *
  * @module connected-agents/agentRoomsFlag
  */
 
+import { agentConnectAvailableInBuild } from './agentConnectBuild'
 import { isAgentConnectEnabled } from './agentConnectFlag'
 
 let agentRoomsEnabled = false
 
 /** Turn agent connect's rooms tier on or off (developer setting). It takes effect only with agent connect on. */
 export function setAgentRoomsEnabled(enabled: boolean): void {
+  if (!agentConnectAvailableInBuild()) return
   agentRoomsEnabled = enabled
 }
 
 /** Whether agent connect's rooms tier is on: its own switch, and agent connect's. */
 export function isAgentRoomsEnabled(): boolean {
-  return agentRoomsEnabled && isAgentConnectEnabled()
+  return agentConnectAvailableInBuild() && agentRoomsEnabled && isAgentConnectEnabled()
 }

@@ -617,6 +617,13 @@ jobs:
           echo "✅ Android SDK configured at $ANDROID_HOME"
           echo "Created local.properties with: sdk.dir=$ANDROID_HOME"
 
+      - name: Refuse agent connect in a store build
+        run: |
+          # The last check before the build, after every write to app/.env (the OTA step's included): agent connect is
+          # absent from store builds until Alberto releases it (decided 2026-11-28; only test-builds.yml and
+          # app/.env.sample set it). Turning it on is a build-config change, his to make.
+          if grep -qE '^KEYRING_AGENT_CONNECT_BUILD' app/.env; then echo "::error::KEYRING_AGENT_CONNECT_BUILD would be baked into a store build"; exit 1; fi
+
       - name: Android release build
         working-directory: app/android
         env:
@@ -1070,6 +1077,13 @@ jobs:
 
       # Signing is manual (certificate + profile from the secrets), so the archive
       # needs no API key and no provisioning updates.
+      - name: Refuse agent connect in a store build
+        run: |
+          # The last check before the build, after every write to app/.env (the OTA step's included): agent connect is
+          # absent from store builds until Alberto releases it (decided 2026-11-28; only test-builds.yml and
+          # app/.env.sample set it). Turning it on is a build-config change, his to make.
+          if grep -qE '^KEYRING_AGENT_CONNECT_BUILD' app/.env; then echo "::error::KEYRING_AGENT_CONNECT_BUILD would be baked into a store build"; exit 1; fi
+
       - name: Archive build
         working-directory: app/ios
         run: |

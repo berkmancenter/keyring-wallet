@@ -434,3 +434,132 @@ describe('control: the gate bites', () => {
     expect(releaseGate([flag, inTest]).flagReachable).toBe(false)
   })
 })
+
+/**
+ * Agent connect is absent from a store build (decided 2026-11-28 by Alberto): with `KEYRING_AGENT_CONNECT_BUILD` off,
+ * neither agent connect's switch nor the P1 rooms switch can be on, and no Developer row for either renders. The facts
+ * the gate holds, read the same strict way as above (comments and strings blanked where a match would count as wired):
+ *
+ * - `agentConnectBuild.ts` reads the build value from `react-native-config` and compares it to `'1'`, and exports no way
+ *   to change it (no exported `let` or `var`, no assignment to the key);
+ * - each switch's setter opens with `if (!agentConnectAvailableInBuild()) return`, and its getter returns
+ *   `agentConnectAvailableInBuild() && …`;
+ * - every non-test file outside the two switch files that names either setter (a Developer row, a start-up apply) also
+ *   calls `agentConnectAvailableInBuild()`, which is how a row is hidden in a build without agent connect.
+ */
+const BUILD_FILE = join('connected-agents', 'agentConnectBuild.ts')
+const ROOMS_FLAG_FILE = join('connected-agents', 'agentRoomsFlag.ts')
+const ANY_SETTER = /\bset(?:AgentConnect|AgentRooms)Enabled\b/
+const AVAILABLE_CALL = /\bagentConnectAvailableInBuild\s*\(/
+const SETTER_GATED = (name: string) =>
+  new RegExp(`export function ${name}\\([^)]*\\)[^{]*\\{\\s*if \\(!agentConnectAvailableInBuild\\(\\)\\) return\\b`)
+const GETTER_GATED = (name: string) =>
+  new RegExp(`export function ${name}\\(\\)[^{]*\\{\\s*return agentConnectAvailableInBuild\\(\\) &&`)
+
+/** What keeps agent connect out of a store build, as problems found in a set of source files (none: it holds). */
+export function buildGate(files: SourceFile[]): string[] {
+  const raw = files.filter((f) => !isTest(f.path))
+  const live = new Map(raw.map((f) => [f.path, blanked(f.path, f.text, false)]))
+  const bare = new Map(raw.map((f) => [f.path, blanked(f.path, f.text, true)]))
+  const find = (end: string) => raw.find((f) => f.path.endsWith(end))
+  const problems: string[] = []
+
+  const build = find(BUILD_FILE)
+  if (!build) problems.push(`${BUILD_FILE} is missing`)
+  else {
+    const code = live.get(build.path) ?? ''
+    if (!/Config\.KEYRING_AGENT_CONNECT_BUILD\?\.trim\(\) === '1'/.test(code))
+      problems.push(`${BUILD_FILE} does not read Config.KEYRING_AGENT_CONNECT_BUILD as exactly '1'`)
+    if (/export\s+(?:let|var)\b/.test(code) || /KEYRING_AGENT_CONNECT_BUILD\s*=[^=]/.test(code))
+      problems.push(`${BUILD_FILE} lets the build value be changed`)
+  }
+  for (const [file, setter, getter] of [
+    [FLAG_FILE, 'setAgentConnectEnabled', 'isAgentConnectEnabled'],
+    [ROOMS_FLAG_FILE, 'setAgentRoomsEnabled', 'isAgentRoomsEnabled'],
+  ] as const) {
+    const f = find(file)
+    const code = f ? (bare.get(f.path) ?? '') : ''
+    if (!SETTER_GATED(setter).test(code)) problems.push(`${setter} does not refuse when the build lacks agent connect`)
+    if (!GETTER_GATED(getter).test(code))
+      problems.push(`${getter} does not read false when the build lacks agent connect`)
+  }
+  for (const f of raw) {
+    if (f.path.endsWith(FLAG_FILE) || f.path.endsWith(ROOMS_FLAG_FILE)) continue
+    if (ANY_SETTER.test(f.text) && !AVAILABLE_CALL.test(bare.get(f.path) ?? ''))
+      problems.push(`${f.path} sets a switch but does not hide it with agentConnectAvailableInBuild()`)
+  }
+  return problems
+}
+
+describe('agent connect is absent from a store build (decided 2026-11-28)', () => {
+  it('the tree holds it: the build value, both switches, and every row that sets one', () => {
+    const files = [...sources(CORE_SRC), ...sources(APP_SRC)]
+    expect(files.some((f) => f.path.endsWith(BUILD_FILE))).toBe(true)
+    expect(files.some((f) => f.path.endsWith(ROOMS_FLAG_FILE))).toBe(true)
+    expect(buildGate(files)).toEqual([])
+  })
+})
+
+describe('control: the build gate bites', () => {
+  const root = join('/r', 'packages', 'core', 'src', 'modules')
+  const build: SourceFile = {
+    path: join(root, BUILD_FILE),
+    text: "export function agentConnectAvailableInBuild(): boolean {\n  return Config.KEYRING_AGENT_CONNECT_BUILD?.trim() === '1'\n}",
+  }
+  const gatedFlag = (setter: string, getter: string, file: string): SourceFile => ({
+    path: join(root, file),
+    text:
+      `export function ${setter}(enabled: boolean): void {\n  if (!agentConnectAvailableInBuild()) return\n  x = enabled\n}\n` +
+      `export function ${getter}(): boolean {\n  return agentConnectAvailableInBuild() && x\n}`,
+  })
+  const connect = gatedFlag('setAgentConnectEnabled', 'isAgentConnectEnabled', FLAG_FILE)
+  const rooms = gatedFlag('setAgentRoomsEnabled', 'isAgentRoomsEnabled', ROOMS_FLAG_FILE)
+  const hiddenRow: SourceFile = {
+    path: join('/r', 'app', 'src', 'screens', 'Developer.tsx'),
+    text: '{agentConnectAvailableInBuild() && <Row onToggle={(v) => setAgentRoomsEnabled(v)} />}',
+  }
+
+  it('the gated files and a hidden row hold', () => {
+    expect(buildGate([build, connect, rooms, hiddenRow])).toEqual([])
+  })
+
+  it('a setter without the build check fails, naming it', () => {
+    const open = { ...connect, text: connect.text.replace('if (!agentConnectAvailableInBuild()) return\n  ', '') }
+    expect(buildGate([build, open, rooms])).toEqual([
+      'setAgentConnectEnabled does not refuse when the build lacks agent connect',
+    ])
+  })
+
+  it('a getter without the build check fails, naming it', () => {
+    const open = { ...rooms, text: rooms.text.replace('return agentConnectAvailableInBuild() && x', 'return x') }
+    expect(buildGate([build, connect, open])).toEqual([
+      'isAgentRoomsEnabled does not read false when the build lacks agent connect',
+    ])
+  })
+
+  it('a Developer row that sets a switch without hiding it fails; one hidden only in a comment or a string fails too', () => {
+    const shown = { ...hiddenRow, text: '<Row onToggle={(v) => setAgentConnectEnabled(v)} />' }
+    expect(buildGate([build, connect, rooms, shown])).toEqual([
+      `${shown.path} sets a switch but does not hide it with agentConnectAvailableInBuild()`,
+    ])
+    const commented = { ...shown, text: `// agentConnectAvailableInBuild()\n${shown.text}` }
+    const quoted = { ...shown, text: `const s = 'agentConnectAvailableInBuild()'\n${shown.text}` }
+    expect(buildGate([build, connect, rooms, commented])).toHaveLength(1)
+    expect(buildGate([build, connect, rooms, quoted])).toHaveLength(1)
+  })
+
+  it('a build value that can be changed, or read as anything but 1, fails', () => {
+    const settable = { ...build, text: `${build.text}\nexport let override = false` }
+    expect(buildGate([settable, connect, rooms])).toEqual([`${BUILD_FILE} lets the build value be changed`])
+    const loose = { ...build, text: build.text.replace("=== '1'", '!== undefined') }
+    expect(buildGate([loose, connect, rooms])).toEqual([
+      `${BUILD_FILE} does not read Config.KEYRING_AGENT_CONNECT_BUILD as exactly '1'`,
+    ])
+  })
+
+  it('a missing build file fails, and a setter named only in a test does not count as a row', () => {
+    expect(buildGate([connect, rooms])).toEqual([`${BUILD_FILE} is missing`])
+    const inTest = { path: join(root, '__tests__', 'x.test.ts'), text: 'setAgentConnectEnabled(true)' }
+    expect(buildGate([build, connect, rooms, inTest])).toEqual([])
+  })
+})
