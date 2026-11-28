@@ -126,6 +126,7 @@ const EXPECTED_VIEW: HcpApprovalView = {
   title: { key: 'ApproveTitle', params: { name: 'My helper' } },
   rows: ROWS,
   warning: { key: 'ApproveOwnTerminal' },
+  notSignIn: { key: 'ApproveNotSignIn' },
   approve: { key: 'Approve' },
   clientVid: CLIENT_VID,
   threadId: THREAD,

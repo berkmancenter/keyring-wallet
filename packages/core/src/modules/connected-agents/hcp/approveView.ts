@@ -4,8 +4,9 @@
  * The checklist rows are the effects' `summary` strings, verbatim and in the order sent ("Decided here"), a kind
  * Keyring does not know included (VTI hcp.md §5.1): a
  * `task-consent/request` surface renders `summary` as the VTA wrote it and never substitutes its own prose. They are
- * plain text; the screen must never interpret them as markup. The title, the warning and the button are Keyring's
- * own strings (`./copy.ts`). Nothing here holds the match number.
+ * plain text; the screen must never interpret them as markup. The title, the warning, the "not signing in" line and
+ * the button are Keyring's own strings (`./copy.ts`); the "not signing in" line is on every consent, whatever effects
+ * arrive. Nothing here holds the match number.
  *
  * @module connected-agents/hcp/approveView
  */
@@ -21,6 +22,8 @@ export function hcpApproveView(name: string, effects: HcpEffects, threadId: stri
     title: { key: 'ApproveTitle', params: { name } },
     rows: [...effects.rows],
     warning: { key: 'ApproveOwnTerminal' },
+    // Keyring's own, on every consent: not an effect, so no effect (or lack of one) can drop it.
+    notSignIn: { key: 'ApproveNotSignIn' },
     approve: { key: 'Approve' },
     clientVid: effects.client.clientId,
     ...(effects.client.grantId ? { grantId: effects.client.grantId } : {}),

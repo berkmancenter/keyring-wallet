@@ -20,6 +20,7 @@ describe('hcpApproveView', () => {
       title: { key: 'ApproveTitle', params: { name: 'My helper' } },
       rows: ROWS,
       warning: { key: 'ApproveOwnTerminal' },
+      notSignIn: { key: 'ApproveNotSignIn' },
       approve: { key: 'Approve' },
       clientVid: CLIENT_VID,
       threadId: THREAD,
@@ -53,6 +54,36 @@ describe('hcpApproveView', () => {
     expect(view.chosenPurpose).toBeUndefined()
     // control: without one, there is no choice.
     expect(hcpApproveView('My helper', read(), THREAD).purposeChoice).toBeUndefined()
+  })
+
+  describe('"not signing in" is Keyring’s own line on every consent, never an effect', () => {
+    const NOT_SIGN_IN = 'Approving gives access. It is not signing in.'
+    const SIX_KINDS = ['hcpClient', 'hcpCategory', 'hcpPurpose', 'hcpUseUntil', 'hcpGrantTerm', 'hcpDirectives']
+
+    it('shows it for a consent with only the six §5.1 kinds, none of which says it', () => {
+      const effects = hcpEffects()
+      expect(effects.map((e) => e.kind)).toEqual(SIX_KINDS)
+      const view = hcpApproveView('My helper', read(effects), THREAD)
+      expect(view.notSignIn).toEqual({ key: 'ApproveNotSignIn' })
+      expect(hcpText(view.notSignIn.key, 'en')).toBe(NOT_SIGN_IN)
+      expect(view.rows).not.toContain(NOT_SIGN_IN)
+    })
+
+    it('shows it for a consent with an unknown kind, which is a row only', () => {
+      const unknown = { kind: 'hcpSomethingNew', summary: 'Something new.', detail: {} }
+      const view = hcpApproveView('My helper', read([...hcpEffects(), unknown]), THREAD)
+      expect(view.rows).toEqual([...ROWS, 'Something new.'])
+      expect(view.notSignIn).toEqual({ key: 'ApproveNotSignIn' })
+      expect(hcpText(view.notSignIn.key, 'en')).toBe(NOT_SIGN_IN)
+    })
+
+    it('shows it as Keyring’s when an older VTA still sends the retired hcpGrantNotSignIn effect', () => {
+      const old = { kind: 'hcpGrantNotSignIn', summary: 'Approving is not signing in.', detail: {} }
+      const view = hcpApproveView('My helper', read([...hcpEffects(), old]), THREAD)
+      expect(view.notSignIn).toEqual({ key: 'ApproveNotSignIn' })
+      // The retired kind is now just an unknown kind: its summary is a row, verbatim.
+      expect(view.rows).toEqual([...ROWS, 'Approving is not signing in.'])
+    })
   })
 
   it('takes the title from the name the person gave, never from the request', () => {

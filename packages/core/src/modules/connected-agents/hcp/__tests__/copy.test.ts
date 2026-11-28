@@ -42,6 +42,8 @@ const KEYS: HcpCopyKey[] = [
   'RevokeNothingDisclosed',
   // Added for the VTI hcp.md §5.1 contract: the request names no purpose, so the person picks one.
   'ApproveChoosePurpose',
+  // Added for the VTI hcp.md §5.1 contract: "not signing in" is Keyring's own line, no longer an effect.
+  'ApproveNotSignIn',
   // Added for the "Telling…" rule: not told with the time past; already expired; already disconnected.
   'RevokeNotToldPast',
   'RevokeAlreadyEnded',

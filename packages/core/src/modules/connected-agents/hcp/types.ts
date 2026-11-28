@@ -81,6 +81,11 @@ export type HcpApprovalView = {
   rows: string[]
   /** "Only continue if you ran the command…" */
   warning: { key: 'ApproveOwnTerminal' }
+  /**
+   * "Approving gives access. It is not signing in." Keyring's own line, on every HCP consent whatever effects arrive:
+   * never an effect (the old `hcpGrantNotSignIn` kind is gone), as the VTA maintainer confirmed.
+   */
+  notSignIn: { key: 'ApproveNotSignIn' }
   approve: { key: 'Approve' }
   clientVid: string
   /** The grant's id, when the request carried one; otherwise learnt after approval (see `./grantId.ts`). */

@@ -16,6 +16,7 @@ export type HcpCopySource = 'companion finding 6' | 'plan §6' | 'PROPOSED'
 export type HcpCopyKey =
   | 'ApproveTitle'
   | 'ApproveOwnTerminal'
+  | 'ApproveNotSignIn'
   | 'Approve'
   | 'CodeExpired'
   | 'WrongNumber'
@@ -67,6 +68,13 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     en: 'Only continue if you ran the command in your own terminal just now.',
     fr: 'Continuez seulement si vous venez de lancer la commande dans votre propre terminal.',
     ptBr: 'Só continue se você acabou de executar o comando no seu próprio terminal.',
+    source: 'plan §6',
+  },
+  // Keyring's own line on every HCP consent, never an effect: the base path's `ConnectedAgents.ApproveNotSignIn`.
+  ApproveNotSignIn: {
+    en: 'Approving gives access. It is not signing in.',
+    fr: "Approuver donne un accès. Ce n'est pas une connexion à votre compte.",
+    ptBr: 'Aprovar dá acesso. Não é um login.',
     source: 'plan §6',
   },
   Approve: {

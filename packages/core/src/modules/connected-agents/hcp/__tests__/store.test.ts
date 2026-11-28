@@ -42,6 +42,7 @@ const view = (change: Partial<HcpApprovalView> = {}): HcpApprovalView => ({
   title: { key: 'ApproveTitle', params: { name: 'My notes agent' } },
   rows: [],
   warning: { key: 'ApproveOwnTerminal' },
+  notSignIn: { key: 'ApproveNotSignIn' },
   approve: { key: 'Approve' },
   clientVid: CLIENT_VID,
   threadId: THREAD,
