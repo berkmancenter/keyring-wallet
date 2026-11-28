@@ -26,6 +26,8 @@ import {
   setPeerLegCarriage,
   setSharedConnectEnabled,
   setSharedConnectInviteEnabled,
+  setAgentConnectEnabled,
+  setHcpEnabled,
   setTrustedApproversEnabled,
   setStateVerifiedApproversEnabled,
   setTrustTestStateEnabled,
@@ -395,6 +397,8 @@ export class AppContainer implements Container {
         enableLivePickup,
         enableSharedConnect,
         enableSharedConnectInvite,
+        enableAgentConnect,
+        enableHcp,
         enableTrustedApprovers,
         enableStateVerifiedApprovers,
         enableTrustTestState,
@@ -433,6 +437,8 @@ export class AppContainer implements Container {
         // A saved "on" outlives any default, so bifold's isSharedConnectInviteEnabled() (with its remote off) is this
         // flag's only kill path: keep the read going through it, never inline the saved value.
         loadSwitch(BCLocalStorageKeys.EnableSharedConnectInvite, (val) => (enableSharedConnectInvite = val)),
+        loadSwitch(BCLocalStorageKeys.EnableAgentConnect, (val) => (enableAgentConnect = val)),
+        loadSwitch(BCLocalStorageKeys.EnableHcp, (val) => (enableHcp = val)),
         // As above: bifold's isTrustedApproversEnabled() (with its remote off) is this flag's only kill path, so every
         // reader goes through it, never the saved value.
         loadSwitch(BCLocalStorageKeys.EnableTrustedApprovers, (val) => (enableTrustedApprovers = val)),
@@ -485,6 +491,8 @@ export class AppContainer implements Container {
           enableLivePickup,
           enableSharedConnect,
           enableSharedConnectInvite,
+          enableAgentConnect,
+          enableHcp,
           enableTrustedApprovers,
           enableStateVerifiedApprovers,
           enableTrustTestState,
@@ -500,6 +508,10 @@ export class AppContainer implements Container {
       setSharedConnectEnabled(state.developer.enableSharedConnect)
       // Before the QR sheet first opens: it offers "Show a code" only while this is on.
       setSharedConnectInviteEnabled(state.developer.enableSharedConnectInvite)
+      // Before the first stack mounts: the agent routes, the My Agent tab's first screen and the "My VTA" row read
+      // these once, when their stacks mount. bifold's isHcpEnabled() needs both on.
+      setAgentConnectEnabled(state.developer.enableAgentConnect)
+      setHcpEnabled(state.developer.enableHcp)
       // Before the agent's first message is read: an offer or an approver's request that arrives is dropped while off.
       setTrustedApproversEnabled(state.developer.enableTrustedApprovers)
       // Before a Guardian card arrives or Who approves opens: both read these at each check.

@@ -186,6 +186,8 @@ describe('ConnectedAgents words', () => {
     )
     expect(reaches.sort()).toEqual([
       'container-impl.ts -> components/AgentContactCard',
+      'index.ts -> agentConnectFlag',
+      'index.ts -> hcp/hcpFlag',
       'modules/rooms/roomLinks.ts -> agentConnectFlag',
       'modules/trust-tasks/module/triggerLink.ts -> agentConnectFlag',
       'modules/trust-tasks/module/vtiLinks.ts -> agentConnectFlag',

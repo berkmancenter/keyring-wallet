@@ -281,6 +281,9 @@ export type {
   ChatMessageIds,
 } from './modules/chat'
 export { EnforcementCheckCard, EnforcementCheckIds } from './modules/trust-tasks'
+// The agent-connect developer switches, for the app's Developer settings and its start-up apply (backlog 2, R4).
+export { setAgentConnectEnabled } from './modules/connected-agents/agentConnectFlag'
+export { setHcpEnabled } from './modules/connected-agents/hcp/hcpFlag'
 export {
   setupTrustTasksInbound,
   setTspCarriageEnabled,

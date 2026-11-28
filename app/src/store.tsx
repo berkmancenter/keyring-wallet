@@ -42,6 +42,16 @@ export interface Developer {
    */
   enableSharedConnectInvite: boolean
   /**
+   * Agent connect (docs/plans/agent-connect-plan.md): the AI agent screens, behind the developer switch. bifold's
+   * setAgentConnectEnabled; the stacks read it when they mount, so a change applies in full on the next launch.
+   */
+  enableAgentConnect: boolean
+  /**
+   * The HCP lane for AI agents (step 7.27 track C): bifold's setHcpEnabled. Holds only while enableAgentConnect is on
+   * too (bifold's isHcpEnabled needs both).
+   */
+  enableHcp: boolean
+  /**
    * Trusted approvers (docs/plans/trusted-approver-plan.md): naming someone to approve sensitive actions on this
    * person's agent, and approving for someone else's. bifold's setTrustedApproversEnabled.
    */
@@ -89,6 +99,8 @@ enum DeveloperDispatchAction {
   TOGGLE_LIVE_PICKUP = 'developer/toggleLivePickup',
   TOGGLE_SHARED_CONNECT = 'developer/toggleSharedConnect',
   TOGGLE_SHARED_CONNECT_INVITE = 'developer/toggleSharedConnectInvite',
+  TOGGLE_AGENT_CONNECT = 'developer/toggleAgentConnect',
+  TOGGLE_HCP = 'developer/toggleHcp',
   TOGGLE_TRUSTED_APPROVERS = 'developer/toggleTrustedApprovers',
   TOGGLE_STATE_VERIFIED_APPROVERS = 'developer/toggleStateVerifiedApprovers',
   TOGGLE_TRUST_TEST_STATE = 'developer/toggleTrustTestState',
@@ -171,6 +183,9 @@ const developerState: Developer = {
   // A saved choice wins on load, so someone who switched it off keeps it off. To turn it off for everyone, use
   // bifold's SHARED_CONNECT_REMOTE_OFF.invite, which beats a saved "on"; changing this default cannot.
   enableSharedConnectInvite: true,
+  // Off by default, both: a developer turns them on in Developer settings. A saved choice wins on load (container-imp).
+  enableAgentConnect: false,
+  enableHcp: false,
   // Off by default. A saved choice wins on load. To turn it off for everyone, whatever was saved, use bifold's
   // TRUSTED_APPROVERS_REMOTE_OFF, which beats a saved "on"; changing this default cannot.
   enableTrustedApprovers: false,
@@ -204,6 +219,8 @@ export enum BCLocalStorageKeys {
   EnableLivePickup = 'EnableLivePickup',
   EnableSharedConnect = 'EnableSharedConnect',
   EnableSharedConnectInvite = 'EnableSharedConnectInvite',
+  EnableAgentConnect = 'EnableAgentConnect',
+  EnableHcp = 'EnableHcp',
   EnableTrustedApprovers = 'EnableTrustedApprovers',
   EnableStateVerifiedApprovers = 'EnableStateVerifiedApprovers',
   EnableTrustTestState = 'EnableTrustTestState',
@@ -322,6 +339,22 @@ const bcReducer = (state: BCState, action: ReducerAction<BCDispatchAction>): BCS
         BCLocalStorageKeys.EnableSharedConnectInvite,
         developer.enableSharedConnectInvite
       )
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_AGENT_CONNECT: {
+      const enableAgentConnect: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableAgentConnect }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableAgentConnect, developer.enableAgentConnect)
+
+      return { ...state, developer }
+    }
+    case DeveloperDispatchAction.TOGGLE_HCP: {
+      const enableHcp: boolean = (action?.payload || []).pop() || false
+      const developer = { ...state.developer, enableHcp }
+
+      PersistentStorage.storeValueForKey<boolean>(BCLocalStorageKeys.EnableHcp, developer.enableHcp)
 
       return { ...state, developer }
     }
