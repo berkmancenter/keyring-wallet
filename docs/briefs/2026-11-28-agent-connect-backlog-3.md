@@ -655,9 +655,11 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
   }
   ```
 
-  - **After ruling 6:** `inRoom` is every own agent that can use this room, which means every agent added to any room
-    of this persona, not only one added here. `addable` leaves those out. fb's Section A rules decide the sets; the
-    views draw what they're given.
+  - **After ruling 6 (fb's "Differs" line, which wins):** `inRoom` is the own agents whose record lists **this**
+    room, meaning the rooms each was offered. An agent learns which rooms to watch from each room's offer, so one
+    never offered here wouldn't answer a mention here. `addable` **keeps** an agent already added to another room of
+    the same persona, with `widens: null`. Its add sends only this room's offer, with no VTA write (fb-P1c step 3).
+    The access is still persona-wide, as `persona` and the words say.
 
   - `setting` is `'yes'` only on the community's explicit yes. **fb differs:** a room no community hosts reads
     `'notStated'`, because no field marks a room as the person's own, and a room with no `communityDid` is often a
@@ -696,7 +698,8 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
   - The access line's names: `actNames: string[]`, every context in the entry's `act`, so the persona's context
     shows (PLAN:1361, "the effective-access lines show the persona's context").
 - **For T4 (7.14):** `useMemberListAgents(roomId)` returns `{ own: AgentRow[], others: AgentRow[] }`, where `AgentRow`
-  is `{ did, name, handle, owner, agentId? }`. `own` follows ruling 6: every own agent that can use this room.
+  is `{ did, name, handle, owner, agentId? }`. `own` is the own agents whose record lists this room (fb's rule, as
+  `inRoom`).
   `others` holds only agents with a verified delegation (§3.16); none appear until a room's profile lists
   `delegation`, which is correct today.
 - **For T4:** `useAgentIdentity(roomId, did)` returns one of:
@@ -885,6 +888,7 @@ Two more apply:
 |---|---|---|---|
 | `AddToRoomBodyAllRooms` | Adding an agent lets it use every room you're in as {{persona}}, not only this one. It is asked to act only when you mention it, but nothing in a room enforces that. | Ajouter un agent lui permet d'utiliser tous les salons où vous êtes en tant que {{persona}}, pas seulement celui-ci. On lui demande d'agir seulement quand vous le mentionnez, mais rien dans un salon ne l'impose. | Adicionar um agente permite que ele use todas as salas em que você está como {{persona}}, não só esta. Pede-se que ele aja só quando você o mencionar, mas nada em uma sala garante isso. |
 | `AgentsUseEveryRoom` | Agents added here can use every room you're in as {{persona}}, and read everything in them, not only messages that mention them. | Les agents ajoutés ici peuvent utiliser tous les salons où vous êtes en tant que {{persona}}, et tout y lire, pas seulement les messages qui les mentionnent. | Os agentes adicionados aqui podem usar todas as salas em que você está como {{persona}} e ler tudo nelas, não só as mensagens que os mencionam. |
+| `AddToRoomBodyAlready` | It can already use every room you're in as {{persona}}. Here, it is asked to act only when you mention it, but nothing in the room enforces that. | Il peut déjà utiliser tous les salons où vous êtes en tant que {{persona}}. Ici, on lui demande d'agir seulement quand vous le mentionnez, mais rien dans le salon ne l'impose. | Ele já pode usar todas as salas em que você está como {{persona}}. Aqui, pede-se que ele aja só quando você o mencionar, mas nada na sala garante isso. |
 | `CanUseEveryRoomAs` | It can use every room you're in as {{persona}}. | Il peut utiliser tous les salons où vous êtes en tant que {{persona}}. | Ele pode usar todas as salas em que você está como {{persona}}. |
 
 - **Removed:** `AddToRoomBody`, `AgentsReadEverything`, `CanReadAllOf` and `WidenBodyRooms`. No code used them, and
@@ -940,8 +944,10 @@ Two more apply:
 }
 ```
 
-- **The words, in this order:** `AddToRoomTitle`; `AddToRoomBodyAllRooms` with `{{persona}}` (the eye notice; ruling 6;
-  the sheet takes a `persona` prop); `AddRoomMemoryNotice` with
+- **The words, in this order:** `AddToRoomTitle`; the eye notice with `{{persona}}` (ruling 6; the sheet takes a
+  `persona` prop), which is `AddToRoomBodyAllRooms` when `widensContext` is given, or else `AddToRoomBodyAlready`,
+  since with `widens: null` the agent can already use the persona's rooms and the add only offers this one;
+  `AddRoomMemoryNotice` with
   `{{context}}`, only when `widensContext` is given (the layers notice); `MembersWillSee`, with the people icon.
 - **The buttons:** "Add to room" (`AddToRoom`) and "Not now" (`Global.NotNow`).
 - **Focus** (PLAN:1361, "before the button is focusable"):
@@ -1009,7 +1015,8 @@ mounts `AddAgentFlow`. Nothing else in the file changes.
 - Each `setting` value: only `'yes'` enables "Add an agent", from this screen (PLAN:1361).
 - One addable agent skips the picker; two show it; an `expired` agent is never offered (fb filters it; the view
   draws only what it's given).
-- The add sheet shows the memory notice only with `widensContext`. The accessibility order is title, notices, then
+- The add sheet shows `AddToRoomBodyAllRooms` and the memory notice only with `widensContext`, and
+  `AddToRoomBodyAlready` without it. The accessibility order is title, notices, then
   buttons.
 - Each `AddRoomOutcome` shows its own line, and after it there is no "Add to room" (`queryByTestId` is null) and no
   "Try again".
