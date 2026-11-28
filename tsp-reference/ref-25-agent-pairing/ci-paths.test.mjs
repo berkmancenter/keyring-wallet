@@ -65,7 +65,9 @@ export function outsideReads() {
     for (const file of sources(join(root, rung))) {
       for (const m of readFileSync(file, "utf8").matchAll(/["'`](\.\.\/[^"'`$]+)["'`]/g)) {
         const target = relative(repo, resolve(dirname(file), m[1])).split(sep).join("/");
-        if (!target.startsWith("tsp-reference/") && !target.startsWith("..")) {
+        // `tsp-reference` itself (a script reaching the corpus root) is inside, not an escape.
+        const inside = target === "tsp-reference" || target.startsWith("tsp-reference/");
+        if (!inside && !target.startsWith("..")) {
           reads.push({ target, from: relative(repo, file).split(sep).join("/") });
         }
       }
