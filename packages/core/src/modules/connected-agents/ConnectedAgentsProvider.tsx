@@ -14,6 +14,7 @@ import type { KeepConnectedResult } from './keepConnected'
 import type { ConnectGuard, MemoryCount } from './memories'
 import { countNotice } from './memories'
 import type { AgentConnectChoice, NumberEntry, PairingLink, PairingState } from './pairing'
+import type { RevokeDeps } from './revoke'
 import { agentContacts, viewOf, type Reachability } from './status'
 import type { AgentConnection, AgentView, CreateMemoryResult, PickerMemory } from './types'
 
@@ -54,13 +55,19 @@ export interface ConnectedAgentsServices {
   previewDelete(memoryId: string): Promise<DeletePreview>
   /** Step 7.16's delete, only after the owner confirmed the preview. */
   deleteMemory(memoryId: string, confirmed: true): Promise<DeleteMemoryResult>
-  /** Step 7.28's "Keep it connected". The screen asks `keepConnectedOffered` first. */
-  keepConnected(agentId: string): Promise<KeepConnectedResult>
-  /** Whether "Keep it connected" is offered for this agent (false while `KEEP_CONNECTED_MEASURED` is false). */
+  /**
+   * Whether "Keep it connected" is offered for this agent (false while `KEEP_CONNECTED_MEASURED` is false). The act
+   * itself is `actions.keepConnected`, the one path (fb-W1), so the two cannot drift apart.
+   */
   keepConnectedOffered(agentId: string): Promise<boolean>
   driver(onState: (state: PairingState) => void): Promise<PairingDriver>
   /** Step 7.7's actions on one agent (`connected-agents/actions.ts`); Remove revokes a listed entry (step 7.10). */
   actions: AgentActionsPort
+  /**
+   * Step 7.10's revoke, for the routed container's own `revokeAgentConnection(deps, id)` (`useRevokeDeps`): the
+   * connection store and the VTA's revoke calls, the same ones the reconcile runs a `revoking` record again with.
+   */
+  revokeDeps: RevokeDeps<AgentConnection>
   reachability?: (agentId: string) => Reachability
 }
 
@@ -72,7 +79,10 @@ export interface AgentActionsPort {
   retryPending(agentId: string): Promise<ActionResult>
   extend(agentId: string): Promise<ActionResult>
   remove(agentId: string): Promise<ActionResult>
-  /** Step 7.28's "Keep it connected" (`connected-agents/keepConnected.ts`). */
+  /**
+   * Step 7.28's "Keep it connected" (`connected-agents/keepConnected.ts`), the one path for the act: called only after
+   * `useKeepConnectedOffered(agentId)` said true. It refuses an agent it is not offered for (`notOffered`).
+   */
   keepConnected(agentId: string): Promise<KeepConnectedResult>
 }
 
@@ -92,8 +102,11 @@ export function useConnectedAgentsServices(): ConnectedAgentsServices {
 /** How often a pairing waiting for the agent's registration and rotation re-lists its entry (#1060 finding 11). */
 export const ENROLMENT_POLL_MS = 15_000
 
-/** Run `load` on mount and on `refresh`; the last answer wins, and an unmounted hook sets nothing. */
-function useLoaded<T>(
+/**
+ * Run `load` on mount and on `refresh`; the last answer wins, and an unmounted hook sets nothing. Exported for the
+ * HCP hooks (`hcp/hooks.ts`), not for screens.
+ */
+export function useLoaded<T>(
   load: () => Promise<T>,
   initial: T
 ): { value: T; loading: boolean; refresh: () => Promise<void> } {
@@ -282,6 +295,31 @@ export function usePersonas(): { did: string; name: string }[] {
  */
 export function useAgentActions(): AgentActionsPort {
   return useConnectedAgentsServices().actions
+}
+
+/**
+ * Whether "Keep it connected" (step 7.28) is offered for this agent: the only way a screen learns it. False while it
+ * loads, and false when the record cannot be read. The act is `useAgentActions().keepConnected(agentId)`, called only
+ * after this said true.
+ */
+export function useKeepConnectedOffered(agentId: string): boolean {
+  const services = useConnectedAgentsServices()
+  const load = useCallback(
+    async () => ({ agentId, offered: await services.keepConnectedOffered(agentId).catch(() => false) }),
+    [services, agentId]
+  )
+  const { value, loading } = useLoaded<{ agentId?: string; offered: boolean }>(load, { offered: false })
+  // Keyed by the agent: an answer for the agent shown before is never read as this one's.
+  return !loading && value.agentId === agentId && value.offered
+}
+
+/**
+ * The deps for step 7.10's revoke, for the routed container's own `revokeAgentConnection(deps, id)` (the release gate
+ * wants that call in a routed file, so no hook here makes it). `store` is the connection store and `vta` the
+ * services' `revokeVta`; `tellAgent` is absent until the chat's control messages (fb-C3) give one.
+ */
+export function useRevokeDeps(): RevokeDeps<AgentConnection> {
+  return useConnectedAgentsServices().revokeDeps
 }
 
 /**

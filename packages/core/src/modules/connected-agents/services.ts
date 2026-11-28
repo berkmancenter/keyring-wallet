@@ -15,6 +15,8 @@ import { AgentActions, type RevokeEntryPort } from './actions'
 import type { AgentAccessPort } from './carriage'
 import type { AdministratorSigner } from './deviceEnrolDraft'
 import type { AgentActionsPort, ConnectedAgentsServices } from './ConnectedAgentsProvider'
+import type { HcpPorts } from './hcp/hooks'
+import { reconcileHcpApprovals } from './hcp/reconcile'
 import { deleteMemory, previewDelete, type DeleteMemoryPorts } from './deleteMemory'
 import { AgentConnectDriver } from './driver'
 import { entryContexts, readAgentEntries, type EntryRead } from './entryRead'
@@ -26,7 +28,7 @@ import {
   type KeepConnectedPorts,
 } from './keepConnected'
 import { connectGuard, countMemory, createMemory, pickerMemories, type MemoryPort } from './memories'
-import { reconcileAgents, removeAgentEntries, type RevokeVta } from './revoke'
+import { reconcileAgents, removeAgentEntries, type RevokeDeps, type RevokeVta } from './revoke'
 import { AgentConnectionStore, KeyedLockoutStore, KeyedSpentRequestStore } from './store'
 import type { AgentConnection } from './types'
 import type { VdcSignPort } from './vdc'
@@ -122,13 +124,17 @@ export function revokeEntryPort(vta: RevokeVta): RevokeEntryPort {
 /**
  * The services for the VTA this phone administers. The administrator DID is read from the session when it signs
  * (it changes when the phone's key is rotated); with none, signing fails and the pairing fails as unreachable.
+ *
+ * `hcp` is given only with `isHcpEnabled()` (`ConnectedAgentsRoot` builds it): the reconcile then also runs
+ * `reconcileHcpApprovals` over those ports. Without it no HCP port is built and the reconcile has no HCP step.
  */
 export function connectedAgentsServices(
   agent: Agent,
   vtaDid: string,
   session: VtaSession,
   personas: PersonaSource,
-  clock: () => number = Date.now
+  clock: () => number = Date.now,
+  hcp?: HcpPorts
 ): ConnectedAgentsServices {
   const { access, vdcSign, memory, revokeVta, ownTask, listAcl } = vtaPorts(agent, vtaDid, session)
   const connections = new AgentConnectionStore(agent)
@@ -156,7 +162,6 @@ export function connectedAgentsServices(
   // is written under `keyring/keep-connected` before the update is sent, and the reconcile settles any it left.
   const keepIntents = new KeepConnectedIntentStore(agent)
   const keepPorts: KeepConnectedPorts = { clock, access, task: ownTask, vdcSign, connections, intents: keepIntents }
-  const keep = (agentId: string) => keepConnected(keepPorts, agentId)
   const actions: AgentActionsPort = {
     widen: (agentId, memoryId) => agentActions.widen(agentId, memoryId),
     narrow: (agentId, memoryId) => agentActions.narrow(agentId, memoryId),
@@ -164,8 +169,14 @@ export function connectedAgentsServices(
     retryPending: (agentId) => agentActions.retryPending(agentId),
     extend: (agentId) => agentActions.extend(agentId),
     remove: (agentId) => agentActions.remove(agentId),
-    keepConnected: keep,
+    // The one path for the act (fb-W1): a screen asks `useKeepConnectedOffered` first, then calls this, and
+    // `keepConnected` itself refuses an agent it is not offered for (`notOffered`).
+    keepConnected: (agentId) => keepConnected(keepPorts, agentId),
   }
+  // Step 7.10's revoke, for the routed container's own `revokeAgentConnection(deps, id)` (`useRevokeDeps`): the same
+  // store and VTA calls the reconcile uses, so a revoke left `revoking` is the one the reconcile runs again. `tellAgent`
+  // stays absent until the chat's control messages (fb-C3) give one.
+  const revokeDeps: RevokeDeps<AgentConnection> = { store: connections, vta: revokeVta, now: clock }
   // The entries as the last reconcile read them, by record id: the details' drift reads these, never a fresh listing.
   let lastReads: ReadonlyMap<string, EntryRead> = new Map()
   const step = async (run: () => Promise<unknown>) => {
@@ -176,6 +187,29 @@ export function connectedAgentsServices(
       // the next, and the reconcile is asked again at the next opening.
     }
   }
+  const reconcileOnce = async () => {
+    await step(async () => (await driverFor(() => undefined)).reconcilePairing())
+    await step(() => reconcileAgents(revokeDeps))
+    // Only with the HCP ports, which the root builds only with `isHcpEnabled()`: no HCP port, no HCP step.
+    if (hcp) {
+      await step(() =>
+        reconcileHcpApprovals({ store: hcp.store, source: hcp.source, port: hcp.port, clock: hcp.clock })
+      )
+    }
+    await step(() => agentActions.sweepNotFinished())
+    await step(() => settleKeepConnected({ access, connections, intents: keepIntents }))
+    // A store that cannot be read leaves no reads: no drift is shown from an older reconcile, and nothing is due.
+    let records: AgentConnection[] = []
+    lastReads = new Map()
+    await step(async () => {
+      records = await connections.list()
+      lastReads = await readAgentEntries(access, records)
+    })
+    await step(() => reissueDueGrants({ clock, vdcSign, connections }, records, lastReads))
+  }
+  // One reconcile at a time: one asked while another runs joins it, so the root's opening reconcile and a list's own
+  // never run the same repairs side by side (`reconcileHcpApprovals` sends each revoke once per run).
+  let reconciling: Promise<void> | undefined
   return {
     clock,
     listConnections: () => connections.list(),
@@ -196,34 +230,25 @@ export function connectedAgentsServices(
         .filter((p) => p.vtaDid === undefined || p.vtaDid === vtaDid)
         .map((p) => ({ did: p.did, name: p.label ?? '' })),
     // In order, each step catching its own failure: records still pairing get their grant or become Not finished; a
-    // revoke left `revoking` runs again and an active or expired agent is listed (§3.9, #1077); those Not finished for
-    // 10 minutes are removed (§3.10); a "Keep it connected" left unfinished is settled from a fresh read of its entry
-    // (§7.28, fb-4), before the reads below so a record it makes persistent is read and re-issued as one; each active
-    // or expired agent's entry is read once, kept for drift; and grants with 48 hours or less left are re-issued from
-    // those reads (§3.4).
-    reconcile: async () => {
-      await step(async () => (await driverFor(() => undefined)).reconcilePairing())
-      await step(() => reconcileAgents({ store: connections, vta: revokeVta, now: clock }))
-      await step(() => agentActions.sweepNotFinished())
-      await step(() => settleKeepConnected({ access, connections, intents: keepIntents }))
-      // A store that cannot be read leaves no reads: no drift is shown from an older reconcile, and nothing is due.
-      let records: AgentConnection[] = []
-      lastReads = new Map()
-      await step(async () => {
-        records = await connections.list()
-        lastReads = await readAgentEntries(access, records)
-      })
-      await step(() => reissueDueGrants({ clock, vdcSign, connections }, records, lastReads))
+    // revoke left `revoking` runs again and an active or expired agent is listed (§3.9, #1077); with the HCP ports, the
+    // HCP approvals in flight are completed or their grants revoked, and retiring grants revoked (§7.27 track C, part
+    // 3); those Not finished for 10 minutes are removed (§3.10); a "Keep it connected" left unfinished is settled from a
+    // fresh read of its entry (§7.28, fb-4), before the reads below so a record it makes persistent is read and
+    // re-issued as one; each active or expired agent's entry is read once, kept for drift; and grants with 48 hours or
+    // less left are re-issued from those reads (§3.4).
+    reconcile: () => {
+      if (!reconciling) reconciling = reconcileOnce().finally(() => (reconciling = undefined))
+      return reconciling
     },
     entryContexts: (agentId) => entryContexts(lastReads.get(agentId)),
     previewDelete: (memoryId) => previewDelete(deletePorts, memoryId),
     deleteMemory: (memoryId, confirmed) => deleteMemory(deletePorts, memoryId, confirmed),
-    keepConnected: keep,
     keepConnectedOffered: async (agentId) => {
       const record = await connections.get(agentId)
       return record !== undefined && keepConnectedOffered(record, clock())
     },
     actions,
+    revokeDeps,
     driver: (onState) => driverFor(onState),
   }
 
