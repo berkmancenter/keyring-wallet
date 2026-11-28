@@ -255,6 +255,9 @@ jobs:
           # rows, which show only in a test build, for the gate to read.
           if grep -qE '^E2E_CLOCKS' .env; then echo "::error::E2E_CLOCKS was already in .env"; exit 1; fi
           if [ "${CLOCKS}" = real ]; then echo "E2E_CLOCKS=real" >> .env; else echo "E2E_CLOCKS=short" >> .env; fi
+          # Agent connect and its rooms tier are in test builds, never in store builds (decided 2026-11-28).
+          if grep -qE '^KEYRING_AGENT_CONNECT_BUILD' .env; then echo "::error::KEYRING_AGENT_CONNECT_BUILD was already in .env"; exit 1; fi
+          echo "KEYRING_AGENT_CONNECT_BUILD=1" >> .env
           # Push: only when asked for (inputs.push is empty on a push to main,
           # which builds the testers' configuration).
           # The same lines the staging workflow writes for an iOS push build.
@@ -398,6 +401,9 @@ jobs:
           # rows, which show only in a test build, for the gate to read.
           if grep -qE '^E2E_CLOCKS' .env; then echo "::error::E2E_CLOCKS was already in .env"; exit 1; fi
           if [ "${CLOCKS}" = real ]; then echo "E2E_CLOCKS=real" >> .env; else echo "E2E_CLOCKS=short" >> .env; fi
+          # Agent connect and its rooms tier are in test builds, never in store builds (decided 2026-11-28).
+          if grep -qE '^KEYRING_AGENT_CONNECT_BUILD' .env; then echo "::error::KEYRING_AGENT_CONNECT_BUILD was already in .env"; exit 1; fi
+          echo "KEYRING_AGENT_CONNECT_BUILD=1" >> .env
           # Push: only when asked for (inputs.push is empty on a push to main,
           # which builds the testers' configuration).
           # As in the staging workflow: Android gets the gateway only when the
