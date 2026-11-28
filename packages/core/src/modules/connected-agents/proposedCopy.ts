@@ -25,6 +25,10 @@ export const PROPOSED_COPY: Readonly<Record<string, string>> = {
   AddRoomUnreachable: 'backlog 3 ruling 2 (step 7.13): the VTA was unreachable at the room add; §3.10 gives no words',
   AddRoomNotAddable: 'backlog 3 ruling 2 (step 7.13): the agent left the addable list between the list and the press',
   AnswersOthersNotSaved: 'backlog 3 ruling 2 (step 7.14): Keyring could not store an "Answers other people" change',
+  AddToRoomBodyAllRooms:
+    'backlog 3 (step 7.13, decided 11-28): the add sheet says the agent can use every room of the persona',
+  AgentsUseEveryRoom: 'backlog 3 (step 7.13, decided 11-28): room info says the same, in place of the one-room note',
+  CanUseEveryRoomAs: 'backlog 3 (steps 7.13 and 7.14, decided 11-28): the same, in What it remembers and the details',
   AnswersOthersPending:
     'backlog 3 ruling 3 (step 7.14): the change is stored, not yet sent; `settings` has no acknowledgement',
 }

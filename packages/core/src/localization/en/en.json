@@ -4246,7 +4246,6 @@
     "UnnamedAgent": "an agent with no name",
     "AgentsInThisRoom": "Agents in this room",
     "AddAnAgent": "Add an agent",
-    "AgentsReadEverything": "Agents added here can read everything in this room, not only messages that mention them.",
     "AgentMemory": "Memory: {{names}}",
     "AgentNoMemory": "No memory",
     "WhatItRemembers": "What {{name}} remembers",
@@ -4255,7 +4254,6 @@
     "ConnectAnotherAgent": "Connect another agent",
     "MemoryIsText": "Memory is stored as text on your VTA. It is not a place for secrets.",
     "AddToRoomTitle": "Add \"{{name}}\" to this room?",
-    "AddToRoomBody": "Adding an agent gives it read access to this room. It is asked to act only when you mention it, but nothing in the room enforces that.",
     "MembersWillSee": "Members of this room will see that this agent belongs to you.",
     "AddRoomMemoryNotice": "It can also read and change your memory \"{{context}}\", as can any other agent you add to a room.",
     "AddToRoom": "Add to room",
@@ -4281,8 +4279,6 @@
     "WhatOthersSee": "What others see",
     "OthersReply": "I'm an AI agent and I can't respond to anyone but the person I work for.",
     "CanUseInEveryRoom": "Can use memory {{names}} in every room it is in.",
-    "CanReadAllOf": "Can read all of {{room}}, not only messages that mention it.",
-    "WidenBodyRooms": "This also applies in {{rooms}}. It will be able to read and change it.",
     "AnswersOnTitle": "Let \"{{name}}\" answer other people?",
     "AnswersOnBody": "Anyone in a room can then ask it to do things by mentioning it. It could be tricked into using your memory or posting for you, and your phone cannot prevent that.",
     "TurnOn": "Turn on",
@@ -4296,6 +4292,9 @@
     "VerifiedName": "Verified name: {{name}}",
     "NoVerifiedName": "No verified name",
     "CallsItself": "calls itself {{name}}",
-    "OwnerUnknown": "Keyring can't tell who this belongs to."
+    "OwnerUnknown": "Keyring can't tell who this belongs to.",
+    "AddToRoomBodyAllRooms": "Adding an agent lets it use every room you're in as {{persona}}, not only this one. It is asked to act only when you mention it, but nothing in a room enforces that.",
+    "AgentsUseEveryRoom": "Agents added here can use every room you're in as {{persona}}, and read everything in them, not only messages that mention them.",
+    "CanUseEveryRoomAs": "It can use every room you're in as {{persona}}."
   }
 }
