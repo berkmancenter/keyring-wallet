@@ -81,8 +81,7 @@ answers.
   `agents`; until a community sets it, it reads as not stated.
 - **B12. Two new release-gate conditions** (Section A, ruling 8).
 
-One Keyring-side measurement for fb-P1c is pending (Section A, ruling 1). The add is built as planned until it
-reports.
+Section A's ruling 1 (fb-P1c's room access) is decided: Alberto, coordinator's session, 11-28.
 
 Asked upstream through Brendan, on Alberto's word: registering `mentions` on a room post and `delegation` on a
 member profile. RM3 and RM6 build on the fallback until then.
@@ -99,11 +98,20 @@ and §11. Paths are under `packages/core/src/modules/` unless they say otherwise
 ## Rulings only Alberto or Brendan can give
 
 "The plan owner" below is Brendan, who owns the agent-connect plan. Nothing below decides these. Each part that meets
-one builds the interim named here and says so in its PR. Rulings 2 to 8 and 10 are Brendan's. Ruling 1 goes to Alberto,
-but only after the measurement reports. Ruling 9 is §11's.
+one builds the interim named here and says so in its PR. Rulings 2 to 8 and 10 are Brendan's. Ruling 1 is decided by
+Alberto. Ruling 9 is §11's.
 
-1. **A Keyring-side measurement for fb-P1c is pending** (Alberto's to rule on afterwards). **Interim until then:**
-   the add is built as planned, no copy changes, and the fb-P1c PR says the measurement is pending.
+1. **DECIDED (Alberto, coordinator's session, 11-28): fb-P1c's room access is persona-wide, with two hard rules.**
+   1. The add grants room access keyed to the one persona the owner acts as in that room: keys listed as that
+      persona's signing key, never unrestricted.
+   2. **Rule A:** the entry's capabilities stay `{ scope: listed }`, and the add only appends `roomPresent`. It never
+      widens to the role's own set. A test reads the entry back and asserts the exact list, with a control.
+   3. **Rule B:** the add sends nothing unless the entry's consumer kind reads back as `aiAgent`. This is the plan's
+      VTI-Q28 fallback, made a hard gate. A kind that is not `aiAgent`, or cannot be read, gives the outcome
+      `notAddable`, and nothing is granted. The kind is read from the device by its `deviceId` through `device/list`,
+      after any key swap; an entry with no device registered has no kind and is refused the same way. Test and
+      control for each.
+   4. The copy says the agent can use every room the owner is in as that persona. Section B words it.
 2. **Removing an agent from one room (plan owner).** The plan has only Revoke. Options: (a) Revoke only; (b) "Remove
    from this room": drop the row, send a new `keyring/agent/room-withdrawn/1.0` (behavioural), and narrow `act` and
    the room capabilities when the last room of a context goes (enforced). Interim: (a).
@@ -309,19 +317,27 @@ export function settleRoomAdds(ports: RoomAddPorts): Promise<{ settled: string[]
    - `actingAs === ownerPersonaDid` (`otherPersona`, ruling 4);
    - the community's setting: `notAllowed` is `communityNo`, and `notStated` or no `communityDid` is
      `communityNotStated`.
-2. **The kind, read back on every add:** `findAgentEntries` (`carriage.ts:78-81`). An entry that is not listed is
-   `notListed`, and a throw is `unreachable`. `requireAiAgentKind(match)` false is `notAiAgent`.
+2. **The kind, read back on every add (ruling 1, Rule B):** `findAgentEntries` (`carriage.ts:78-81`). An entry that is
+   not listed is `notListed`, and a throw is `unreachable`. The consumer kind is read from the entry's device, by its
+   `deviceId`, through `device/list`, after any key swap, as ref-25's pairing read-back reads it.
+   `requireAiAgentKind(match)` is true only for a kind that reads back as `aiAgent`. False is `notAiAgent`: no intent,
+   no VTA write, no grant, no offer. That includes a kind that is absent or cannot be read, and an entry with no device
+   registered, which has no kind.
 3. **The write:** write the intent `{ agentId, roomId, personaContext, at }` (`keyring/agent-room-add`, keyed
-   records). Then one `narrowOrWidenCapabilities` with `act: { from: held, to: held ∪ {personaContext} }` and
-   `capabilities: listed ∪ {'room-present', 'room-open'}` (wire names at `vta-sdk/src/acl.rs:305-306`, VTI clone
-   `97fda9813`). Send only the members that change; no VTA write when neither does (a second room in the same context).
+   records). Then one `narrowOrWidenCapabilities` with `act: { from: held, to: held ∪ {personaContext} }`. The
+   capabilities stay `{ scope: listed }`, and the write appends only `roomPresent` (wire `room-present`,
+   `vta-sdk/src/acl.rs:305`, VTI clone `97fda9813`) to the listed set; it never widens to the role's own set (ruling
+   1, Rule A). The room access is keyed to the persona the owner acts as in that room: keys listed as that persona's
+   signing key, never unrestricted (ruling 1). Send only the members that change; no VTA write when neither does (a
+   second room in the same context).
    `AgentAccessPort.narrowOrWidenCapabilities` (`carriage.ts:82-86`) gains `capabilities?: readonly string[]`, which
    `VtaClient`'s `AgentAccessChange` already carries (`VtaClient.ts:719-733`). A refusal from the VTA is `refused`, and
    a throw without one is `unreachable`.
 4. **The read-back:** `act` must equal exactly the bound memories ∪ `allowedBesideMemories(record, roomContexts ∪
-   {personaContext})` (`actions.ts:88`), and the capabilities must include both room ones. Anything else is
-   `notApplied`, the intent is dropped, and Restore shows the drift.
-5. **The record:** one `store.update` adds the room, `personaContext` to `contexts`, and the two capabilities to
+   {personaContext})` (`actions.ts:88`). The capabilities must read back with scope `listed` and exactly the listed
+   set held before plus `roomPresent`, and the keys as listed with exactly that persona's signing key. Anything else
+   is `notApplied`, the intent is dropped, and Restore shows the drift.
+5. **The record:** one `store.update` adds the room, `personaContext` to `contexts`, and `roomPresent` to
    `capabilities`. Then the intent is removed.
 6. **The first room's grant:** a new VDC grant with `vdcScopeOf(record)` (`keyring.agent.room-present`), stored, then
    `sendVdcGrant`. A failure is `vdc`, with the room kept.
@@ -344,10 +360,13 @@ export function settleRoomAdds(ports: RoomAddPorts): Promise<{ settled: string[]
 - **The hooks** are `useRoomAgents` and `useAddAgentToRoom`, in `rooms/hooks.ts`, as "The seam with eb" below gives
   them. `add` maps `AddToRoomResult` onto eb's `AddRoomOutcome`:
   - `ok` (offer sent or pending) and `vdc` (the room is recorded; the reconcile re-issues the grant) are `'added'`;
-  - `notAiAgent` is `'notAgentKind'`; `refused` is `'refused'`; `unreachable` is `'unreachable'`;
+  - `refused` is `'refused'`; `unreachable` is `'unreachable'`;
   - `notApplied` and `notListed` are `'accessChanged'`;
   - `communityNo` is `'settingNo'`, and `communityNotStated` is `'settingNotStated'`;
-  - `noRecord`, `notOffered`, `alreadyInRoom`, `tierNotSupported` and `otherPersona` are `'notAddable'`.
+  - `noRecord`, `notOffered`, `alreadyInRoom`, `tierNotSupported`, `otherPersona` and `notAiAgent` are `'notAddable'`
+    (ruling 1, Rule B).
+- **The copy (ruling 1):** the add says the agent can use every room the owner is in as that persona. Section B
+  words it.
 - **Decided here:** the grant goes through connected-agents' access port, not `RoomsService.grantAgentAccess`
   (`rooms/types.ts:681`, which is `notYet` at `agentRoomsService.ts:2972`). Reason: one writer computes every entry
   write from the read-back (the `actions.ts` header). Our side updates the wording of §3.6 step 1.
@@ -360,7 +379,17 @@ export function settleRoomAdds(ports: RoomAddPorts): Promise<{ settled: string[]
 - **Tests:**
   - `act` after the add is exactly memories, own context and persona context. Control: an entry read back with one
     extra context is `notApplied`. Mutation: check by containment, and that test goes red.
-  - A kind other than `ai-agent` gives `notAiAgent` and no write. Control: `ai-agent` writes once.
+  - Rule B: a consumer kind that is not `aiAgent`, and one that is absent, each give `'notAddable'` with no intent, no
+    VTA write, no grant and no offer. Control: `aiAgent` writes once.
+  - Rule B, an entry with no device registered: `'notAddable'`, and nothing is written or sent. Control: the same
+    entry with its device registered as `aiAgent` writes once.
+  - Rule B reads the kind after a key swap: the entry's key is swapped, then the kind is read from `device/list` by
+    `deviceId` and is still `aiAgent`, and the add writes. Control: the device registered with another kind is
+    `'notAddable'`.
+  - Rule A: the entry read back after the add has capabilities `{ scope: listed }` with exactly the list held before
+    plus `roomPresent`, and keys listed as exactly that persona's signing key. Control: an entry read back with one
+    more capability, or with unrestricted keys, is `notApplied`. Mutation: check the capabilities by containment, and
+    the test goes red.
   - A second room in the same context makes no VTA write. Control: the first room does.
   - `notAllowed` and `notStated` refuse with their own codes and make no VTA call. Control: `allowed` proceeds.
   - An intent left by a crash, with the entry widened, is recorded by `settleRoomAdds`. Control: an intent whose
