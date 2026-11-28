@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
 })
 
 /** What the view shows after a save that did not end it. */
-type Outcome = { kind: 'notSaved'; text: string } | { kind: 'failed' }
+type Outcome = { kind: 'message'; text: string } | { kind: 'failed' }
 
 export interface HcpNewMemoryViewProps {
   /** The name the person gave the agent. */
@@ -63,9 +63,11 @@ export interface HcpNewMemoryViewProps {
  *
  * - "Save" is disabled until `hcpMemoryTextValid(text)`: 1 to 4096 characters after trimming.
  * - `ok`: calls `onDone`, once, and the view is spent.
- * - `unreachable`: shows the result's own `MemoryNotSaved` line, keeping the text, with "Save" there to press again.
- * - `invalid` or `refused`: shows `ConnectedAgents.FailGeneric` (the brief's choice for both), keeping the text.
- * - `noManager`, `off`, or a save that throws: also `FailGeneric` (not in the brief; see the PR), keeping the text.
+ * - A result that carries a message shows that message, keeping the text, with "Save" there to press again:
+ *   `unreachable` (`MemoryNotSaved`), `refused` (`MemoryRefused`) and `noManager` (`MemoryNoVta`). (Decided at review,
+ *   in place of the brief's `ConnectedAgents.FailGeneric` for `refused`, whose "Nothing was connected." is false here.)
+ * - `invalid`, `off`, or a save that throws: `ConnectedAgents.FailGeneric`, keeping the text. Each is a backstop the
+ *   view does not expect to reach, and none has HCP words of its own; see the branch in `save`.
  *
  * One save at a time: while one is open, the field and "Save" are disabled and a second press sends nothing.
  */
@@ -105,9 +107,16 @@ const HcpNewMemoryView: React.FC<HcpNewMemoryViewProps> = ({ name, onSave, onDon
       setDone(true)
       setOutcome(undefined)
       onDone()
-    } else if (result && 'unreachable' in result) {
-      setOutcome({ kind: 'notSaved', text: hcp(result.message.key) })
+    } else if (result && 'message' in result) {
+      // `unreachable`, `refused` and `noManager` each carry their own words. Save stays on: the person may edit the
+      // text after a refusal, or sign in to their VTA, and try again.
+      setOutcome({ kind: 'message', text: hcp(result.message.key) })
     } else {
+      // Backstops only, with no HCP words of their own (and no part may add one):
+      // - `invalid` cannot come from a press: Save is off until `hcpMemoryTextValid(text)`, and `save` checks it again
+      //   above before calling `onSave`. It shows only if the caller's check and this view's ever disagree.
+      // - `off`: the flags are off, so this screen is not reachable (hcp/newMemory.ts gives `off` no copy on purpose).
+      // - a save that throws: `addHcpMemory` answers its failures rather than throwing.
       setOutcome({ kind: 'failed' })
     }
   }, [done, hcp, onDone, onSave, text])
@@ -138,7 +147,7 @@ const HcpNewMemoryView: React.FC<HcpNewMemoryViewProps> = ({ name, onSave, onDon
         <ThemedText style={styles.helper}>{hcp('NewMemoryHelper')}</ThemedText>
         {outcome ? (
           <ConnectNotice
-            text={outcome.kind === 'notSaved' ? outcome.text : t('ConnectedAgents.FailGeneric')}
+            text={outcome.kind === 'message' ? outcome.text : t('ConnectedAgents.FailGeneric')}
             testID={testIdWithKey('HcpNewMemoryOutcome')}
           />
         ) : null}
