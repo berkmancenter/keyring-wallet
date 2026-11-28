@@ -287,7 +287,8 @@ describe('Keep it connected: one path (fb-W1)', () => {
 
   it('control: an answer that is still loading is never shown as offered, and a failed read is not offered', async () => {
     // control: dropping `value.agentId === agentId` from useKeepConnectedOffered makes this fail: the first agent's
-    // true shows for the second while its own answer is still loading.
+    // true is drawn for the second, in the render before its own load starts.
+    const renders: { id: string; offered: boolean }[] = []
     let calls = 0
     let second: (offered: boolean) => void = () => undefined
     const { services } = fakeServices({
@@ -298,15 +299,21 @@ describe('Keep it connected: one path (fb-W1)', () => {
         return Promise.reject(new Error('the store could not be read'))
       },
     })
-    const { result, rerender } = renderHook(({ id }: { id: string }) => useKeepConnectedOffered(id), {
-      wrapper: wrap(services),
-      initialProps: { id: 'did:key:z6MkA' },
-    })
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string }) => {
+        const offered = useKeepConnectedOffered(id)
+        renders.push({ id, offered })
+        return offered
+      },
+      { wrapper: wrap(services), initialProps: { id: 'did:key:z6MkA' } }
+    )
     await waitFor(() => expect(result.current).toBe(true))
     rerender({ id: 'did:key:z6MkB' })
     expect(result.current).toBe(false)
     await act(async () => second(false))
     expect(result.current).toBe(false)
+    // Every render drawn for the second agent, the first one included, said not offered.
+    expect(renders.filter((r) => r.id === 'did:key:z6MkB').map((r) => r.offered)).not.toContain(true)
     rerender({ id: 'did:key:z6MkC' })
     await waitFor(() => expect(calls).toBe(3))
     expect(result.current).toBe(false)

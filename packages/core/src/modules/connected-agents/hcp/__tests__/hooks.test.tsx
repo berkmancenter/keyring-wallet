@@ -152,6 +152,8 @@ describe('useHcpApproveFlow', () => {
   })
 
   it('leaving the screen after the request was found cancels: the request is denied and the flow stops listening', async () => {
+    // control: taking 'numberEntry' out of CANCEL_ON_LEAVE (hooks.ts) makes this fail: nothing is denied, and the
+    // flow still listens after the screen is gone.
     const { decide, listening, wrapper } = setup()
     const { result, unmount } = renderHook(() => useHcpApproveFlow(), { wrapper })
     await act(async () => {
@@ -166,21 +168,16 @@ describe('useHcpApproveFlow', () => {
     expect(listening()).toBe(0)
   })
 
-  it("control: React's development double mount does not end a flow that has not started", async () => {
-    // control: putting 'idle' in CANCEL_ON_LEAVE makes this fail (the first unmount cancels, and start answers
-    // `cancelled`).
-    const { wrapper } = setup()
-    const strict = ({ children }: { children: React.ReactNode }) => (
-      <React.StrictMode>{wrapper({ children })}</React.StrictMode>
-    )
-    const { result } = renderHook(() => useHcpApproveFlow(), { wrapper: strict })
+  it('leaving while still waiting for the request cancels without a deny (none was found)', async () => {
+    const { decide, listening, wrapper } = setup([])
+    const { result, unmount } = renderHook(() => useHcpApproveFlow(), { wrapper })
     await act(async () => {
       await result.current.start({ name: 'Notes', link: LINK })
     })
-    expect(result.current.state.state).toBe('numberEntry')
-    await act(async () => {
-      await result.current.cancel()
-    })
+    expect(result.current.state.state).toBe('waiting')
+    unmount()
+    expect(decide).not.toHaveBeenCalled()
+    expect(listening()).toBe(0)
   })
 
   it('leaving after the end sends nothing more', async () => {
