@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-11-26T08:58:59.447Z",
+  "recordedAt": "2026-11-27T22:49:00.403Z",
   "source": {
     "repository": "OpenVTC/verifiable-trust-infrastructure",
     "commit": "f7b78e29dfa0fc79d125eba5970cce66d82b53d5",
@@ -96,6 +96,14 @@
       "notRunnable": [
         "acl/grant/0.3 is not served (it serves 0.2)",
         "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)"
+      ]
+    },
+    "own-entry": {
+      "notRunnable": [
+        "acl/grant/0.3 is not served (it serves 0.2)",
+        "vta/memory/put/0.3 is not served (it serves 0.1, 0.2)",
+        "acl/show/0.3 is not served (it serves 0.2)",
+        "acl/list/0.4 is not served (it serves 0.3)"
       ]
     }
   }

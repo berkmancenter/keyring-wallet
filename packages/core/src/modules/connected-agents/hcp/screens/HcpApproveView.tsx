@@ -34,12 +34,8 @@ const ROW_ICONS = ['office-building-outline', 'eye-outline', 'timer-sand', 'cloc
 export interface HcpApproveViewProps {
   /** The name the person gave the agent (Keyring's, never the request's). */
   name: string
+  /** The VTA's rows. They carry the grant's time (the term row, verbatim), so this view takes no `until` of its own. */
   view: HcpApprovalView
-  /**
-   * The end of the grant, formatted for this phone. Not drawn: the VTA's own term row says how long, verbatim, and the
-   * view never adds a second time beside it. Kept so the flow passes one set of props to Approve and Done.
-   */
-  until: string
   /** The flow is approving (`approving`): Approve is disabled. */
   busy?: boolean
   /** Asks the phone's face or fingerprint check; true only when it passed (ApproveView's contract). */

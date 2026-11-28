@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/entries/get/0.1",
+  "title": "HCP — Get Entry — payload",
+  "description": "The request payload of the HCP 2.0-draft-3 Get entry operation (HCP 5.2.2): an HCP Client asks a provider for one named entry, for a stated purpose, under the grant its access token evidences. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, proof) are owned by the framework — SPEC §6.3. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["purpose", "accessToken"],
+  "properties": {
+    "ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "description": "HCP `ref`: the grant-scoped reference a Context Client was given when the entry was disclosed to it (HCP 5.2.2, 7.4). Exactly one of `ref` and `entryId` is present; that rule is not checked by the schema (a schema `oneOf` would complicate every generated library), and a request with both or neither fails with `malformedRequest`. The maxLength is a framework bound, not an HCP requirement."
+    },
+    "entryId": {
+      "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Urn",
+      "description": "HCP `entryId`: the entry's `id`, by which a Management Client names it (HCP 5.2.2). A Context Client never knows an entry's `id` (HCP 7.4)."
+    },
+    "purpose": {
+      "$ref": "../../../_shared/0.1/common.schema.json#/$defs/PurposeCode",
+      "description": "HCP `purpose`: a purpose code the grant approved for a category of the entry (HCP 5.2.2, 6.1.5.2)."
+    },
+    "purposeDescription": {
+      "type": "string",
+      "maxLength": 1024,
+      "description": "HCP `purposeDescription`: a plain-language statement of the task, recorded in the provider's audit log (HCP 5.2.2, 8.2). The maxLength is a framework bound, not an HCP requirement."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "HCP `version`: the entry version to return instead of the current one (HCP 5.2.2)."
+    },
+    "accessToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "The HCP access token for the grant under which the client acts (HCP 12, 13), carried unchanged. HCP's HTTP Binding sends it as a Bearer token (HCP 9.3); this member carries it in the document. The provider validates it exactly as over HTTP and treats it as opaque. The maxLength is a framework bound, not an HCP requirement."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "HCP — Get Entry — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry", "retrievalId", "minimization", "directives", "respondedAt"],
+      "description": "The HCP Get entry result (HCP 5.2.2): the entry, inside a result so that the minimization report has somewhere to sit. Failures use trust-task-error, not this shape.",
+      "properties": {
+        "entry": {
+          "anyOf": [
+            { "$ref": "../../../_shared/0.1/disclosure.schema.json#/$defs/Disclosure" },
+            { "$ref": "../../../_shared/0.1/context-entry.schema.json#/$defs/Entry" }
+          ],
+          "description": "HCP `entry`: a Disclosure where the requester is a Context Client (HCP 7.4), with its `useUntil` (HCP 7.6); otherwise the whole Entry."
+        },
+        "retrievalId": {
+          "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Urn",
+          "description": "HCP `retrievalId`: the `urn:uuid:` identifier of this retrieval, recorded in the `context.read` audit event (HCP 5.2.2, 8.2)."
+        },
+        "minimization": {
+          "$ref": "../../../_shared/0.1/common.schema.json#/$defs/MinimizationReport",
+          "description": "HCP `minimization`: the minimization report (HCP 7.5). Its `method` is `none`, since the caller named a single entry (HCP 5.2.2, 9.4.2)."
+        },
+        "directives": {
+          "type": ["array", "null"],
+          "items": { "$ref": "../../../_shared/0.1/directive.schema.json#/$defs/Directive" },
+          "description": "HCP `directives`: the directives that apply, where the requester is a Context Client (HCP 5.2.2, 6.4); empty when none applies. Null where the requester is not a Context Client, to whom HCP delivers no directives. HCP's own shape leaves the member optional; the carriage requires it, as a list or null, so that \"none applies\" is never confused with \"not a Context Client\", pending HCP confirmation (question 42)."
+        },
+        "respondedAt": {
+          "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Instant",
+          "description": "HCP `timestamp`, renamed: the date-time of the response (HCP 5.2.2)."
+        }
+      }
+    }
+  }
+}

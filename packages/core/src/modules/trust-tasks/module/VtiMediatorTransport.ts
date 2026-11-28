@@ -83,6 +83,7 @@ export const ALIVE_CHECK_MS = 10_000
 const DELIVERY = 'https://didcomm.org/messagepickup/3.0/delivery'
 const PICKUP_PROTOCOL = 'https://didcomm.org/messagepickup/3.0/'
 const PICKUP_STATUS = 'https://didcomm.org/messagepickup/3.0/status'
+const PICKUP_STATUS_REQUEST = 'https://didcomm.org/messagepickup/3.0/status-request'
 /** A resync never starts a second drain within this long of the last one. */
 const RESYNC_DEBOUNCE_MS = 1000
 /**
@@ -113,6 +114,44 @@ export const REOPEN_BOUND_MS = 45000
 
 /** How long {@link VtiMediatorSession.ask} waits for the mediator's answer before it gives up. */
 export const ASK_TIMEOUT_MS = 15_000
+
+/**
+ * The longest {@link VtiMediatorSession.sendToSettled} waits for the mediator to refuse a forward, or to answer the
+ * fence after it, before it ends as "not refused within" this long. A ceiling, not the usual wait: measured on a
+ * local affinidi-messaging-mediator v0.53.0 (f6ed8159, the mailbox settings), a refusal came 4 to 13 ms after the
+ * forward and the fence's answer 9 to 41 ms (deploy/keyring-messaging/mailbox/evidence/run-settled-send-f6ed8159.txt).
+ */
+export const SETTLE_BOUND_MS = 5_000
+
+/**
+ * How a {@link VtiMediatorSession.sendToSettled} ended when the mediator did not refuse the forward. Neither case says
+ * the peer has the message. The mediator never answers a forward it takes, only one it refuses: on a client socket a
+ * refused frame gets a problem-report threaded to it by `pthid`, and an accepted one gets nothing
+ * (affinidi-messaging-mediator f6ed815, handlers/websocket/connection.rs `on_text`).
+ * - `fenced`: the mediator answered a pickup `status-request` sent after the forward, and no refusal of the forward
+ *   came before that answer. The mediator handles a socket's frames one at a time and writes a frame's refusal before
+ *   it reads the next frame, so our mediator took the forward.
+ * - `notRefusedWithin`: on a session still open, nothing refused the forward within `withinMs`, and the fence was not
+ *   asked or not answered. Weak evidence that our mediator took it. A refusal may still come later; it is then only
+ *   logged.
+ * - `stopped`: the session stopped before either, `afterMs` after the forward left. No evidence either way, and least
+ *   of all when the mediator closed the socket, which is when a refusal is likely and unseen. Not a failed send
+ *   either: the forward left, and nothing says it was refused.
+ */
+export type SettledSend =
+  | { id: string; settled: 'fenced' }
+  | { id: string; settled: 'notRefusedWithin'; withinMs: number }
+  | { id: string; settled: 'stopped'; afterMs: number }
+
+/** A {@link VtiMediatorSession.sendToSettled} waiting: listed under its forward's id and, while asked, its fence's. */
+type Settling = {
+  forwardId: string
+  fenceId?: string
+  startedAt: number
+  resolve: (settled: SettledSend) => void
+  reject: (error: Error) => void
+  timer?: ReturnType<typeof setTimeout>
+}
 
 /**
  * A session that keeps listening (`keepOpen`, the wallet mailbox) reopens a socket that closed under it after this
@@ -920,7 +959,7 @@ export class VtiMediatorSession {
     })
 
     socket.onmessage = (event: WebSocketMessageEvent) => {
-      void this.handleFrame(typeof event.data === 'string' ? event.data : String(event.data))
+      void this.takeFrame(typeof event.data === 'string' ? event.data : String(event.data))
     }
     // The mediator says why it ends a socket. A token it no longer honours is
     // not presented again: the next reopen signs in.
@@ -1147,7 +1186,24 @@ export class VtiMediatorSession {
   }
 
   /** Hand a delivered frame to Credo, then acknowledge it — never the other way round. */
-  private async handleFrame(raw: string): Promise<void> {
+  /** Frames from the socket so far, numbered in the order they arrived. */
+  private frameSeq = 0
+  /** Frames from the socket still being handled, by number: what a fence's answer waits for (`fenceAnswered`). */
+  private readonly framesInFlight = new Map<number, Promise<void>>()
+
+  /**
+   * Hand a socket frame to `handleFrame`, numbered and listed while it is handled. Frames are handled concurrently
+   * (each one's decrypt is its own), so a frame that arrived first may finish last. Only a fence answer reads the
+   * list; every frame is handled exactly as before.
+   */
+  private takeFrame(raw: string): Promise<void> {
+    const seq = ++this.frameSeq
+    const taking = this.handleFrame(raw, seq).finally(() => this.framesInFlight.delete(seq))
+    this.framesInFlight.set(seq, taking)
+    return taking
+  }
+
+  private async handleFrame(raw: string, seq?: number): Promise<void> {
     // Anything at all from the mediator: the socket is alive.
     this.unansweredPolls = 0
     this.heardSinceCheck = true
@@ -1164,6 +1220,7 @@ export class VtiMediatorSession {
       // agent: Credo has no handler for it and rejects it as invalid. Frames
       // carrying a peer's message are JWEs, so a plaintext `status` is ours.
       if (isPickup(frame.type)) {
+        this.fenceAnswered(frame, seq)
         this.heardDrainStatus(frame)
         this.heardPickup(frame)
         return
@@ -1189,6 +1246,7 @@ export class VtiMediatorSession {
         // Its own frames are never queued messages: acknowledging one provokes
         // another status reply, forever (vti-didcomm-js, mediator-transport.js).
         if (isPickup(plaintext.type)) {
+          this.fenceAnswered(plaintext, seq)
           this.heardDrainStatus(plaintext)
           this.heardPickup(plaintext)
           return
@@ -1198,6 +1256,8 @@ export class VtiMediatorSession {
           // the mediator (it names itself on every Trust Task answer and problem-report it sends, measured at
           // v0.53.0). Taken by the asker, never handed on or acknowledged. One that arrives after the ask gave up
           // is no longer waited for and falls through to the branch below: the mediator's own, dropped unsaid.
+          // Likewise its refusal of a forward a `sendToSettled` waits on; a plain `forward` is never waited on.
+          if (this.refusedSettling(plaintext)) return
           if (this.answeredAsk(plaintext)) return
           // The mediator's own problem-report, about something this transport
           // sent it: dropped unsaid, three reached a tester's report as a bare
@@ -1396,7 +1456,7 @@ export class VtiMediatorSession {
           // on. Acknowledged here, so it stops coming back. Measured 2026-11-24 (281's live mailbox check): the
           // first poll after every open re-delivered the account/update and wake/set answers, and the mailbox
           // logged each as an envelope dropped, which read as lost mail.
-          if (!this.answeredAsk(plaintext) && isProblemReport(plaintext))
+          if (!this.refusedSettling(plaintext) && !this.answeredAsk(plaintext) && isProblemReport(plaintext))
             releaseWarn(
               `${LOG_PREFIX} ${this.where} sent a problem-report for ${didPrefix(this.identity.did)}: ${problemReportWords(plaintext)}`
             )
@@ -1567,6 +1627,172 @@ export class VtiMediatorSession {
       expires_time: nowSec() + FORWARD_EXPIRY_SECS,
       body: { next: hop },
       attachments: [{ id: utils.uuid(), data: { json: inner } }],
+    })
+  }
+
+  /**
+   * `sendTo`, with the mediator's refusal of the forward surfaced: rejects with the mediator's problem-report words
+   * when it refuses the forward, and resolves with how it ended otherwise ({@link SettledSend}): `fenced`,
+   * `notRefusedWithin` after `withinMs`, or `stopped` when the session stopped first. Never "delivered": the mediator
+   * does not say a forward reached the peer.
+   *
+   * The fence (on unless `fence: false`) is a pickup `status-request` sent right after the forward. The mediator
+   * answers it with a `status` threaded to it, and writes any refusal of the forward before that answer (one frame
+   * at a time per socket). Measured at v0.53.0 (f6ed8159): the refusal came first in 40 of 40 refused sends, both
+   * the early refusal (`e.p.authorization.send_forwarded`, no self-grant) and a later one (`e.p.delivery.refused`),
+   * and 20 of 20 accepted sends were fenced with no refusal and reached the addressee
+   * (deploy/keyring-messaging/mailbox/evidence/settled-send-probe.mjs). Frames are handled concurrently here, so the answer counts only once every frame that
+   * arrived before it has been handled (`fenceAnswered`).
+   *
+   * Opt-in, beside `sendTo`: `sendTo`, `forward` and `forwardForMailbox` are unchanged, and a plain forward is never
+   * waited on. Only the refusal of OUR mediator is seen: a peer reached through a second mediator
+   * (`tspOnlyMediatorFor`) may be refused there, and that refusal goes to the second mediator's sender, not to us.
+   * The caller is the agent chat carrier (connected-agents/chat/carrier.ts).
+   */
+  async sendToSettled(
+    peerDid: string,
+    plaintext: DidCommV2PlaintextMessage,
+    options: { fence?: boolean; withinMs?: number } = {}
+  ): Promise<SettledSend> {
+    const inner = await authcryptTo(this.agent, this.identity, peerDid, plaintext)
+    return this.forwardSettled(peerDid, inner, options)
+  }
+
+  /** `forward`, settled as {@link sendToSettled} describes: the half of it after the authcrypt. */
+  async forwardSettled(
+    next: string,
+    innerJwe: unknown,
+    options: { fence?: boolean; withinMs?: number } = {}
+  ): Promise<SettledSend> {
+    const fence = options.fence ?? true
+    const withinMs = options.withinMs ?? SETTLE_BOUND_MS
+    const envelope = await this.forwardEnvelope(next, innerJwe)
+    const forwardId = envelope.id as string
+    const waiting: Settling = { forwardId, startedAt: Date.now(), resolve: () => undefined, reject: () => undefined }
+    const settled = new Promise<SettledSend>((resolve, reject) => {
+      waiting.resolve = resolve
+      waiting.reject = reject
+      waiting.timer = setTimeout(() => {
+        this.endSettling(waiting)
+        resolve({ id: forwardId, settled: 'notRefusedWithin', withinMs })
+      }, withinMs)
+    })
+    this.settling.set(forwardId, waiting)
+    try {
+      await this.send(envelope)
+    } catch (error) {
+      this.endSettling(waiting)
+      throw error
+    }
+    if (fence) {
+      const fenceId = uuid()
+      waiting.fenceId = fenceId
+      this.settling.set(fenceId, waiting)
+      // The forward has left: a fence that cannot be sent leaves the bound to decide, never a failed send.
+      await this.send({
+        id: fenceId,
+        typ: PLAIN,
+        type: PICKUP_STATUS_REQUEST,
+        from: this.identity.did,
+        to: [this.mediator.did],
+        created_time: nowSec(),
+        expires_time: nowSec() + MEDIATOR_REQUEST_EXPIRY_SECS,
+        return_route: 'all',
+        body: { recipient_did: this.identity.did },
+      }).catch(() => {
+        if (this.settling.get(fenceId) === waiting) this.settling.delete(fenceId)
+        waiting.fenceId = undefined
+      })
+    }
+    return settled
+  }
+
+  /**
+   * The forward `forward` sends, built for `sendToSettled`: the same Routing 2.0 forward to our mediator, with the
+   * extra layer for a peer behind a mediator ours may not route to. Kept beside `forward`, not shared with it, so a
+   * released send stays as it was; `vtiMediatorSendSettled.test.ts` holds the two to the same shape.
+   */
+  private async forwardEnvelope(next: string, innerJwe: unknown): Promise<DidCommV2PlaintextMessage> {
+    let inner = typeof innerJwe === 'string' ? JSON.parse(innerJwe) : innerJwe
+    let hop = next
+    const theirs = await this.tspOnlyMediatorFor(next)
+    if (theirs) {
+      inner = await this.packFor(theirs, {
+        id: uuid(),
+        typ: PLAIN,
+        type: FORWARD,
+        from: this.identity.did,
+        to: [theirs.did],
+        created_time: nowSec(),
+        expires_time: nowSec() + FORWARD_EXPIRY_SECS,
+        body: { next },
+        attachments: [{ id: utils.uuid(), data: { json: inner } }],
+      })
+      hop = theirs.did
+    }
+    return {
+      id: uuid(),
+      typ: PLAIN,
+      type: FORWARD,
+      from: this.identity.did,
+      to: [this.mediator.did],
+      created_time: nowSec(),
+      expires_time: nowSec() + FORWARD_EXPIRY_SECS,
+      body: { next: hop },
+      attachments: [{ id: utils.uuid(), data: { json: inner } }],
+    }
+  }
+
+  /** What waits on a `sendToSettled`, by its forward's id and by its fence's. A plain `forward` is never listed. */
+  private readonly settling = new Map<string, Settling>()
+
+  private endSettling(entry: Settling): void {
+    clearTimeout(entry.timer)
+    if (this.settling.get(entry.forwardId) === entry) this.settling.delete(entry.forwardId)
+    if (entry.fenceId && this.settling.get(entry.fenceId) === entry) this.settling.delete(entry.fenceId)
+  }
+
+  /**
+   * If `plaintext` is the mediator's problem-report about a forward a `sendToSettled` waits on (threaded by `pthid`,
+   * or `thid`), reject that send with its words and say so. A refusal of the fence itself is no refusal of the
+   * forward: the fence is dropped, the bound decides, and the report falls through to be logged as before.
+   */
+  private refusedSettling(plaintext: DidCommV2PlaintextMessage): boolean {
+    if (!isProblemReport(plaintext) || this.settling.size === 0) return false
+    const { thid, pthid } = plaintext as { thid?: unknown; pthid?: unknown }
+    for (const t of [pthid, thid]) {
+      if (typeof t !== 'string') continue
+      const entry = this.settling.get(t)
+      if (!entry) continue
+      if (entry.forwardId === t) {
+        this.endSettling(entry)
+        entry.reject(new Error(`${LOG_PREFIX} ${this.where} refused: ${problemReportWords(plaintext)}`))
+        return true
+      }
+      this.settling.delete(t)
+      entry.fenceId = undefined
+    }
+    return false
+  }
+
+  /**
+   * A pickup `status` answering a fence: the send it fences ends as `fenced` once every frame that arrived before
+   * this one has been handled, unless one of them refused the forward meanwhile. Frame `seq` is this one's number
+   * (`takeFrame`); without one, every frame in flight is waited for.
+   */
+  private fenceAnswered(frame: { type?: unknown; thid?: unknown }, seq: number | undefined): void {
+    if (frame.type !== PICKUP_STATUS || typeof frame.thid !== 'string') return
+    const entry = this.settling.get(frame.thid)
+    if (!entry || entry.fenceId !== frame.thid) return
+    this.settling.delete(frame.thid)
+    entry.fenceId = undefined
+    const earlier = [...this.framesInFlight]
+      .filter(([n]) => seq === undefined || n < seq)
+      .map(([, taking]) => taking.catch(() => undefined))
+    void Promise.all(earlier).then(() => {
+      if (this.settling.get(entry.forwardId) !== entry) return
+      this.endSettling(entry)
+      entry.resolve({ id: entry.forwardId, settled: 'fenced' })
     })
   }
 
@@ -1761,6 +1987,12 @@ export class VtiMediatorSession {
       clearTimeout(waiting.timer)
       this.asks.delete(id)
       waiting.reject(new Error(`${LOG_PREFIX} session stopped before ${this.where} answered`))
+    }
+    // A settling send's forward has left and was not refused while the session lasted, which says nothing: it ends
+    // as `stopped`, never as its bound (which a live socket earns) and never as a failed send.
+    for (const entry of new Set(this.settling.values())) {
+      this.endSettling(entry)
+      entry.resolve({ id: entry.forwardId, settled: 'stopped', afterMs: Date.now() - entry.startedAt })
     }
     this.socket?.close()
     this.socket = undefined

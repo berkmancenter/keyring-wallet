@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trusttasks.org/spec/hcp/entries/withdraw/0.1",
+  "title": "HCP — Withdraw Entry — payload",
+  "description": "The request payload of the HCP 2.0-draft-3 Withdraw operation (HCP 5.2.5): an HCP Client marks an entry deleted (a soft delete), which hides it from Context Clients at once. The outer document members (id, type, issuer, recipient, issuedAt, expiresAt, proof) are owned by the framework — SPEC §6.3. Every maxLength, maxItems and maxProperties in this schema is a Trust Tasks framework bound (SPEC §7.3 item 19), not an HCP requirement; so is every minLength or minItems of 1 on a member HCP's own schema allows to be empty.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["reason", "accessToken"],
+  "properties": {
+    "ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "description": "HCP `ref`: the entry to withdraw, by the grant-scoped reference a Context Client was given (HCP 5.2.5, 7.4). Exactly one of `ref` and `entryId` is present; not checked by the schema, and a request with both or neither fails with `malformedRequest`. The maxLength is a framework bound, not an HCP requirement."
+    },
+    "entryId": {
+      "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Urn",
+      "description": "HCP `entryId`: the entry to withdraw, by its `id`, as a Management Client names it (HCP 5.2.5)."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "description": "HCP `reason`: why the entry is withdrawn, recorded in the audit log (HCP 5.2.5). The maxLength is a framework bound, not an HCP requirement."
+    },
+    "accessToken": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192,
+      "description": "The HCP access token for the grant under which the client acts (HCP 12, 13), carried unchanged. HCP's HTTP Binding sends it as a Bearer token (HCP 9.3); this member carries it in the document. The provider validates it exactly as over HTTP and treats it as opaque. The maxLength is a framework bound, not an HCP requirement."
+    }
+  },
+  "$defs": {
+    "Response": {
+      "$anchor": "response",
+      "title": "HCP — Withdraw Entry — response payload",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "respondedAt"],
+      "description": "The HCP Withdraw result (HCP 5.2.5, 9.4.5): the entry as the caller named it, its new status and the time. Exactly one of `ref` and `entryId` is present, the one the request used; not checked by the schema. Failures use trust-task-error, not this shape.",
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "HCP `ref`: the `ref` the Context Client named, returned as named; never the entry's `id` (HCP 9.4.5). The maxLength is a framework bound, not an HCP requirement."
+        },
+        "entryId": {
+          "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Urn",
+          "description": "HCP `entryId`: the `id` the Management Client named (HCP 9.4.5)."
+        },
+        "status": {
+          "type": "string",
+          "const": "deleted",
+          "description": "HCP `status`: the entry's new `record.status`, always `deleted` (HCP 4.2.4, 5.2.5)."
+        },
+        "hardDeleted": {
+          "type": "boolean",
+          "const": false,
+          "description": "HCP `hardDeleted`, which HCP's HTTP Binding returns (HCP 9.4.5): always `false` here, since a withdrawal is never a hard deletion (HCP 5.4.2). OPTIONAL."
+        },
+        "respondedAt": {
+          "$ref": "../../../_shared/0.1/common.schema.json#/$defs/Instant",
+          "description": "HCP `timestamp`, renamed: the date-time of the response (HCP 5.2.5)."
+        }
+      }
+    }
+  }
+}

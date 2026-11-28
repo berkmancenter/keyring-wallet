@@ -97,7 +97,6 @@ const HcpConnectFlowView: React.FC<HcpConnectFlowViewProps> = ({
         <HcpApproveView
           name={name}
           view={state.view}
-          until={until}
           busy={state.state === 'approving'}
           confirm={confirm}
           onApprove={onApprove}
