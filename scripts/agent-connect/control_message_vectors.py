@@ -180,16 +180,18 @@ AHEAD = "2026-11-20T12:10:00Z"  # 10 minutes ahead of NOW
 EARLIER = "2026-11-20T11:30:00Z"
 
 
-def signed(sender, recipient, type_, payload, doc_id, issued=ISSUED):
+def signed(sender, recipient, type_, payload, doc_id, issued=ISSUED, keys=None, dids=None):
+    keys = KEYS if keys is None else keys
+    dids = DIDS if dids is None else dids
     document = {
         "type": type_,
         "id": doc_id,
-        "issuer": DIDS[sender],
-        "recipient": DIDS[recipient],
+        "issuer": dids[sender],
+        "recipient": dids[recipient],
         "issuedAt": issued,
         "payload": {"version": "1.0", **payload},
     }
-    vm = DIDS[sender] + "#" + DIDS[sender][len("did:key:"):]
+    vm = dids[sender] + "#" + dids[sender][len("did:key:"):]
     config = {
         "type": "DataIntegrityProof",
         "cryptosuite": "eddsa-jcs-2022",
@@ -198,8 +200,8 @@ def signed(sender, recipient, type_, payload, doc_id, issued=ISSUED):
         "proofPurpose": "assertionMethod",
     }
     data = hashlib.sha256(jcs(config).encode()).digest() + hashlib.sha256(jcs(document).encode()).digest()
-    signature = sign(KEYS[sender], data)
-    assert verify(PUBS[sender], data, signature)
+    signature = sign(keys[sender], data)
+    assert verify(secret_to_public(keys[sender]), data, signature)
     return {**document, "proof": {**config, "proofValue": "z" + b58encode(signature)}}
 
 
@@ -299,5 +301,102 @@ def main():
     sys.stdout.write("\n")
 
 
+# --- the introduction (plan §11 Q7, option 3: Alberto, 2026-11-28) ------------------------------------------------
+#
+# Keyring's first document to a paired agent, signed by the entry's GRANTER (the ACL entry's `delegatedBy`, else its
+# `createdBy`), introducing the chat identity, the owner's persona, the mediator and the VTA. Its own file,
+# `introduction.json`, so `control-messages.json` above is unchanged by it. Its own keys, for the same reason: adding
+# names to KEYS would change that file's `dids`.
+
+INTRO_KEYS = {name: seed(name) for name in ("granter", "otherAdmin", "newChatDid")}
+INTRO_KEYS.update({name: KEYS[name] for name in ("chatDid", "agentDid", "otherAgentDid")})
+INTRO_DIDS = {name: did_key(secret_to_public(s)) for name, s in INTRO_KEYS.items()}
+# These sign nothing: fixed strings.
+VTA_DID = "did:webvh:QmVta:vta.example.org"
+OTHER_VTA_DID = "did:webvh:QmOtherVta:other.example.org"
+OWNER_PERSONA_DID = "did:webvh:QmPersona:persona.example.org"
+MEDIATOR_DID = "did:webvh:QmMediator:mailbox.example.org"
+INTRODUCTION = "keyring/agent/introduction/1.0"
+
+
+def introduction(sender, doc_id, issued=ISSUED, chat="chatDid", vta=VTA_DID, recipient="agentDid"):
+    payload = {"chatDid": INTRO_DIDS[chat], "ownerPersonaDid": OWNER_PERSONA_DID, "mediatorDid": MEDIATOR_DID,
+               "vtaDid": vta}
+    return signed(sender, recipient, INTRODUCTION, payload, doc_id, issued, INTRO_KEYS, INTRO_DIDS)
+
+
+def receiver(**extra):
+    return {"did": INTRO_DIDS["agentDid"], "granter": INTRO_DIDS["granter"], "vtaDid": VTA_DID, "now": NOW, **extra}
+
+
+def main_introduction():
+    first = introduction("granter", uuid(301))
+    replacing = introduction("granter", uuid(302), chat="newChatDid")
+    altered = json.loads(json.dumps(first))
+    altered["payload"]["chatDid"] = INTRO_DIDS["otherAgentDid"]
+    older = introduction("granter", uuid(311), issued=EARLIER)
+
+    valid = [
+        {"name": "the first introduction", "receiver": receiver(), "document": first, "expect": "accept"},
+        {"name": "a newer introduction with a different chatDid, after one applied earlier: it replaces it",
+         "receiver": receiver(lastIntroduction=EARLIER), "document": replacing, "expect": "accept"},
+    ]
+    refuse = [
+        {"name": "wrong issuer: signed by the chat identity it introduces (the circular case)",
+         "receiver": receiver(), "document": introduction("chatDid", uuid(321)),
+         "expect": "refuse", "reason": "wrong-issuer"},
+        {"name": "wrong issuer: signed by another administrator, not this entry's granter",
+         "receiver": receiver(), "document": introduction("otherAdmin", uuid(322)),
+         "expect": "refuse", "reason": "wrong-issuer"},
+        {"name": "wrong VTA: introduces this agent to a VTA it is not pinned to",
+         "receiver": receiver(), "document": introduction("granter", uuid(323), vta=OTHER_VTA_DID),
+         "expect": "refuse", "reason": "wrong-vta"},
+        {"name": "wrong recipient: signed for another agent of the same owner",
+         "receiver": receiver(), "document": introduction("granter", uuid(324), recipient="otherAgentDid"),
+         "expect": "refuse", "reason": "recipient"},
+        {"name": "stale: issued more than 7 days before the receiver's clock",
+         "receiver": receiver(), "document": introduction("granter", uuid(325), issued=STALE),
+         "expect": "refuse", "reason": "stale"},
+        {"name": "ahead: issued more than 5 minutes ahead of the receiver's clock",
+         "receiver": receiver(), "document": introduction("granter", uuid(326), issued=AHEAD),
+         "expect": "refuse", "reason": "future"},
+        {"name": "repeated id: the same signed introduction delivered again",
+         "receiver": receiver(seenIds=[first["id"]]), "document": first,
+         "expect": "refuse", "reason": "repeated"},
+        {"name": "altered payload: the chatDid changed after it was signed",
+         "receiver": receiver(), "document": altered, "expect": "refuse", "reason": "proof"},
+        {"name": "older introduction after a newer one applied: distinct ids, but it would undo the newer",
+         "receiver": receiver(lastIntroduction=ISSUED), "document": older,
+         "expect": "refuse", "reason": "older-state"},
+    ]
+    out = {
+        "description": "Keyring's introduction to a paired agent and what the agent refuses (plan §11 Q7, option 3, "
+                       "decided by Alberto 2026-11-28): signed by the agent's ACL entry's granter (delegatedBy, else "
+                       "createdBy), naming chatDid, ownerPersonaDid, mediatorDid and vtaDid. Generated by "
+                       "scripts/agent-connect/control_message_vectors.py --introduction, independent of both "
+                       "implementations.",
+        "version": 1,
+        "rules": {
+            "issuer": "refuse an issuer other than receiver.granter, the entry's delegatedBy, else its createdBy",
+            "vta": "refuse a payload.vtaDid other than receiver.vtaDid, the VTA the agent is pinned to",
+            "proof": "DataIntegrityProof, eddsa-jcs-2022, proofPurpose assertionMethod, by the issuer's key",
+            "freshness": "refuse issuedAt more than 300 s ahead of, or more than 604800 s behind, the receiver's now",
+            "seenIds": "refuse an id in receiver.seenIds; record it before acting",
+            "recipient": "refuse a recipient other than receiver.did",
+            "state": "refuse one not newer than receiver.lastIntroduction; a newer one replaces the chatDid, "
+                     "ownerPersonaDid and mediatorDid applied before",
+        },
+        "dids": {**INTRO_DIDS, "vtaDid": VTA_DID, "otherVtaDid": OTHER_VTA_DID,
+                 "ownerPersonaDid": OWNER_PERSONA_DID, "mediatorDid": MEDIATOR_DID},
+        "valid": valid,
+        "refuse": refuse,
+    }
+    json.dump(out, sys.stdout, indent=2)
+    sys.stdout.write("\n")
+
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ["--introduction"]:
+        main_introduction()
+    else:
+        main()
