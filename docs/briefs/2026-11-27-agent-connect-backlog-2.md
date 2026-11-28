@@ -57,9 +57,12 @@ moves" (merge, never rebase).
 - **Track 3, the HCP agent client** in openvti-starter, from the plan owner's 00:18Z post: your own work; nothing
   of Keyring's touches it.
 
+- **Track 4, the plugin:** P1 to P6 (Section C), one branch and one PR into `integration/agent-connect` on
+  github.com/albertoleon7794/vta-agent-memory (head `4057a5a`). Push access for the plan owner was granted on
+  2026-11-28 on Alberto's word; accept the invitation first. Nothing goes to OpenVTC's own repository.
+
 **Not open yet:**
 
-- The plugin parts P1 to P6 (Section C) wait on access to the fork.
 - Keyring's HCP changes for the 00:18Z decisions wait on our impact read.
 - Keyring holds `trust-tasks/**` (#1118).
 - The VTA-side HCP provider is Glenn's (Keyring's local work there is paused).
