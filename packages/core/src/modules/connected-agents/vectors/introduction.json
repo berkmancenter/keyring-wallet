@@ -121,7 +121,7 @@
         }
       },
       "expect": "refuse",
-      "reason": "wrongIssuer"
+      "reason": "wrong-issuer"
     },
     {
       "name": "wrong issuer: signed by another administrator, not this entry's granter",
@@ -154,7 +154,7 @@
         }
       },
       "expect": "refuse",
-      "reason": "wrongIssuer"
+      "reason": "wrong-issuer"
     },
     {
       "name": "wrong VTA: introduces this agent to a VTA it is not pinned to",
@@ -187,7 +187,7 @@
         }
       },
       "expect": "refuse",
-      "reason": "wrongVta"
+      "reason": "wrong-vta"
     },
     {
       "name": "wrong recipient: signed for another agent of the same owner",
@@ -389,7 +389,7 @@
         }
       },
       "expect": "refuse",
-      "reason": "olderState"
+      "reason": "older-state"
     }
   ]
 }

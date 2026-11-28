@@ -344,13 +344,13 @@ def main_introduction():
     refuse = [
         {"name": "wrong issuer: signed by the chat identity it introduces (the circular case)",
          "receiver": receiver(), "document": introduction("chatDid", uuid(321)),
-         "expect": "refuse", "reason": "wrongIssuer"},
+         "expect": "refuse", "reason": "wrong-issuer"},
         {"name": "wrong issuer: signed by another administrator, not this entry's granter",
          "receiver": receiver(), "document": introduction("otherAdmin", uuid(322)),
-         "expect": "refuse", "reason": "wrongIssuer"},
+         "expect": "refuse", "reason": "wrong-issuer"},
         {"name": "wrong VTA: introduces this agent to a VTA it is not pinned to",
          "receiver": receiver(), "document": introduction("granter", uuid(323), vta=OTHER_VTA_DID),
-         "expect": "refuse", "reason": "wrongVta"},
+         "expect": "refuse", "reason": "wrong-vta"},
         {"name": "wrong recipient: signed for another agent of the same owner",
          "receiver": receiver(), "document": introduction("granter", uuid(324), recipient="otherAgentDid"),
          "expect": "refuse", "reason": "recipient"},
@@ -367,7 +367,7 @@ def main_introduction():
          "receiver": receiver(), "document": altered, "expect": "refuse", "reason": "proof"},
         {"name": "older introduction after a newer one applied: distinct ids, but it would undo the newer",
          "receiver": receiver(lastIntroduction=ISSUED), "document": older,
-         "expect": "refuse", "reason": "olderState"},
+         "expect": "refuse", "reason": "older-state"},
     ]
     out = {
         "description": "Keyring's introduction to a paired agent and what the agent refuses (plan §11 Q7, option 3, "
