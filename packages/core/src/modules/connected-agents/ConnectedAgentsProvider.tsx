@@ -46,7 +46,8 @@ export interface ConnectedAgentsServices {
   personas(): Promise<{ did: string; name: string }[]>
   /**
    * Asked where the VDC policy is asked (§3.4): records still pairing get their grant or become Not finished, a revoke
-   * left unconfirmed runs again, each agent's entry is read once, and grants close to their end are re-issued.
+   * left unconfirmed runs again, each agent's entry is read once, and grants close to their end are re-issued. With
+   * the HCP ports, HCP approvals left in flight are completed or revoked too. One asked while another runs joins it.
    */
   reconcile(): Promise<void>
   /** The contexts the agent's entry held at the last reconcile, for drift; undefined when nothing was proved. */
