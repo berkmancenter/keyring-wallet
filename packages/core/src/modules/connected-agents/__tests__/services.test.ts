@@ -5,8 +5,11 @@ import { VTA_TASK } from '../../trust-tasks/module/VtaClient'
 import { AgentActions } from '../actions'
 import { AgentConnectDriver } from '../driver'
 import { ACL_UPDATE_03, KeepConnectedIntentStore } from '../keepConnected'
+import type { HcpApprovalSource } from '../hcp/approvals'
+import { hcpPorts } from '../hcp/hooks'
+import { reconcileHcpApprovals } from '../hcp/reconcile'
 import { NOT_FINISHED_AFTER_MS } from '../pairing'
-import type { RevokeVta } from '../revoke'
+import { revokeAgentConnection, type RevokeVta } from '../revoke'
 import { administratorSigner, connectedAgentsServices, revokeEntryPort, vtaPorts, type VtaSession } from '../services'
 import { AgentConnectionStore } from '../store'
 import { agentRecord, FIXTURE_NOW } from '../testing/fixtures'
@@ -27,6 +30,10 @@ function mockStep<A extends unknown[], R>(name: string, actual: (...args: A) => 
 jest.mock('../revoke', () => {
   const actual = jest.requireActual('../revoke')
   return { ...actual, reconcileAgents: mockStep('reconcileAgents', actual.reconcileAgents) }
+})
+jest.mock('../hcp/reconcile', () => {
+  const actual = jest.requireActual('../hcp/reconcile')
+  return { ...actual, reconcileHcpApprovals: mockStep('reconcileHcpApprovals', actual.reconcileHcpApprovals) }
 })
 jest.mock('../entryRead', () => {
   const actual = jest.requireActual('../entryRead')
@@ -49,6 +56,14 @@ jest.mock('../../trust-tasks/documentProof', () => ({
 }))
 
 const VTA = 'did:webvh:QmVta:vta.example.org'
+
+const mockReconcileHcpApprovals = reconcileHcpApprovals as jest.MockedFunction<typeof reconcileHcpApprovals>
+
+const fakeApprovalSource = (): HcpApprovalSource => ({
+  list: () => [],
+  subscribe: () => () => undefined,
+  decide: async () => undefined,
+})
 
 type Answer = (...args: unknown[]) => unknown
 
@@ -203,6 +218,7 @@ describe('the reconcile (§3.4, §3.9, §3.10)', () => {
     'readAgentEntries',
     'reissueDueGrants',
   ]
+  const HCP_ORDER = [ORDER[0], ORDER[1], 'reconcileHcpApprovals', ...ORDER.slice(2)]
 
   it('runs the pairing, the revoke reconcile, the sweep, the Keep it connected settle, the entry reads and the VDC re-issue, in that order', async () => {
     const { session } = fakeSession('did:peer:2.admin')
@@ -220,6 +236,53 @@ describe('the reconcile (§3.4, §3.9, §3.10)', () => {
       await expect(connectedAgentsServices(agent(), VTA, session, async () => []).reconcile()).resolves.toBeUndefined()
       expect(mockSteps).toEqual(ORDER)
     }
+  })
+
+  it('with the HCP ports, runs reconcileHcpApprovals as its own step, right after reconcileAgents (fb-W1)', async () => {
+    const { session } = fakeSession('did:peer:2.admin')
+    const a = agent()
+    const ports = hcpPorts(a, VTA, session, () => FIXTURE_NOW, fakeApprovalSource())
+    await connectedAgentsServices(a, VTA, session, async () => [], Date.now, ports).reconcile()
+    expect(mockSteps).toEqual(HCP_ORDER)
+    expect(mockReconcileHcpApprovals).toHaveBeenCalledWith({
+      store: ports.store,
+      source: ports.source,
+      port: ports.port,
+      clock: ports.clock,
+    })
+  })
+
+  it('with the HCP ports, one step failing (the HCP one included) still runs the rest', async () => {
+    for (const failing of HCP_ORDER) {
+      mockSteps.length = 0
+      mockFailing.clear()
+      mockFailing.add(failing)
+      const { session } = fakeSession('did:peer:2.admin')
+      const a = agent()
+      const ports = hcpPorts(a, VTA, session, () => FIXTURE_NOW, fakeApprovalSource())
+      await expect(
+        connectedAgentsServices(a, VTA, session, async () => [], Date.now, ports).reconcile()
+      ).resolves.toBeUndefined()
+      expect(mockSteps).toEqual(HCP_ORDER)
+    }
+  })
+
+  it('control: without the HCP ports there is no HCP step', async () => {
+    // control: running reconcileHcpApprovals whatever `hcp` is (with ports built in services.ts) makes this fail.
+    const { session } = fakeSession('did:peer:2.admin')
+    await connectedAgentsServices(agent(), VTA, session, async () => []).reconcile()
+    expect(mockSteps).not.toContain('reconcileHcpApprovals')
+  })
+
+  it('a reconcile asked while one runs joins it: each step runs once', async () => {
+    // control: returning `reconcileOnce()` from `reconcile` each time makes this fail (every step runs twice).
+    const { session } = fakeSession('did:peer:2.admin')
+    const services = connectedAgentsServices(agent(), VTA, session, async () => [])
+    await Promise.all([services.reconcile(), services.reconcile()])
+    expect(mockSteps).toEqual(ORDER)
+    mockSteps.length = 0
+    await services.reconcile()
+    expect(mockSteps).toEqual(ORDER)
   })
 
   it("keeps each agent's entry as read, and answers its contexts for drift; none before a reconcile", async () => {
@@ -274,6 +337,39 @@ describe('the reconcile (§3.4, §3.9, §3.10)', () => {
     ).reconcile()
     expect(await store.get(record.id)).toMatchObject({ grantType: 'persistent', persistentElectedAt: startedAt })
     expect(await intents.list()).toEqual([])
+  })
+})
+
+describe("the routed revoke's deps (step 7.10, fb-W1)", () => {
+  it("revokeAgentConnection over services.revokeDeps revokes on this VTA and writes the services' own store", async () => {
+    const record = agentRecord()
+    let revoked = false
+    const { session, calls } = fakeSession('did:peer:2.admin', {
+      // The entry is listed until its subject is revoked.
+      findAgentEntries: () => ({
+        complete: true,
+        matches: revoked ? [] : [{ deviceId: record.deviceId, entry: { subject: record.agentDid } }],
+      }),
+      revokeSubject: () => {
+        revoked = true
+        return {}
+      },
+    })
+    const a = agent()
+    await new AgentConnectionStore(a).put(record)
+    const services = connectedAgentsServices(
+      a,
+      VTA,
+      session,
+      async () => [],
+      () => FIXTURE_NOW
+    )
+    expect(services.revokeDeps.tellAgent).toBeUndefined()
+    expect(await revokeAgentConnection(services.revokeDeps, record.id)).toEqual({ kind: 'revoked' })
+    expect(calls.filter((c) => c.method === 'revokeSubject').map((c) => `${c.args[0]}@${c.vtaDid}`)).toEqual([
+      `${record.agentDid}@${VTA}`,
+    ])
+    expect((await new AgentConnectionStore(a).get(record.id))?.state).toBe('revoked')
   })
 })
 
@@ -425,6 +521,14 @@ describe('tasks this phone sends about its own VTA: never waited on for consent'
     expect(update.map((c) => c.args)).toEqual([
       [ACL_UPDATE_03, { subject: record.agentDid, expiresAt: null }, 30000, {}, undefined, { waitForConsent: false }],
     ])
+  })
+
+  it('Keep it connected has one path: actions.keepConnected; the services carry no keepConnected of their own', () => {
+    // control: putting `keepConnected` back on the object connectedAgentsServices returns makes this fail.
+    const services = connectedAgentsServices(agent(), VTA, fakeSession().session, async () => [])
+    expect(typeof services.actions.keepConnected).toBe('function')
+    expect(typeof services.keepConnectedOffered).toBe('function')
+    expect(Object.keys(services)).not.toContain('keepConnected')
   })
 
   it('Keep it connected is not offered while it is unmeasured, nor for an agent with no record', async () => {
