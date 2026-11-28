@@ -257,13 +257,25 @@ describe('a settled send', () => {
     await session.stop()
   })
 
-  test('the session stopping: the forward left and was not refused, so the send ends not refused within what it waited', async () => {
+  test('the session stopping first: the send ends `stopped`, its own result, never the bound’s and never a failure', async () => {
     const { session, sent } = sessionSending()
-    const settled = session.forwardSettled(AGENT, INNER)
+    const settled = session.forwardSettled(AGENT, INNER, { withinMs: 60_000 })
     await new Promise((r) => setImmediate(r))
     await session.stop()
-    await expect(settled).resolves.toMatchObject({ id: sent[0].id, settled: 'notRefusedWithin' })
+    const outcome = await settled
+    expect(outcome).toMatchObject({ id: sent[0].id, settled: 'stopped' })
+    expect(outcome).not.toHaveProperty('withinMs')
+    expect((outcome as { afterMs: number }).afterMs).toBeLessThan(60_000)
     expect(session['settling'].size).toBe(0)
+  })
+
+  test('CONTROL: the bound reached on a live session is `notRefusedWithin`, never `stopped`, with or without the fence', async () => {
+    for (const fence of [true, false]) {
+      const { session, sent } = sessionSending()
+      const outcome = await session.forwardSettled(AGENT, INNER, { fence, withinMs: 20 })
+      expect(outcome).toEqual({ id: sent[0].id, settled: 'notRefusedWithin', withinMs: 20 })
+      await session.stop()
+    }
   })
 
   test('a refusal arriving after the bound is the mediator’s own, logged as before', async () => {

@@ -131,13 +131,17 @@ export const SETTLE_BOUND_MS = 5_000
  * - `fenced`: the mediator answered a pickup `status-request` sent after the forward, and no refusal of the forward
  *   came before that answer. The mediator handles a socket's frames one at a time and writes a frame's refusal before
  *   it reads the next frame, so our mediator took the forward.
- * - `notRefusedWithin`: nothing refused the forward within `withinMs`, and the fence was not asked or not answered (or
- *   the session stopped first; `withinMs` is then how long it waited). A refusal may still come later; it is then
- *   only logged.
+ * - `notRefusedWithin`: on a session still open, nothing refused the forward within `withinMs`, and the fence was not
+ *   asked or not answered. Weak evidence that our mediator took it. A refusal may still come later; it is then only
+ *   logged.
+ * - `stopped`: the session stopped before either, `afterMs` after the forward left. No evidence either way, and least
+ *   of all when the mediator closed the socket, which is when a refusal is likely and unseen. Not a failed send
+ *   either: the forward left, and nothing says it was refused.
  */
 export type SettledSend =
   | { id: string; settled: 'fenced' }
   | { id: string; settled: 'notRefusedWithin'; withinMs: number }
+  | { id: string; settled: 'stopped'; afterMs: number }
 
 /** A {@link VtiMediatorSession.sendToSettled} waiting: listed under its forward's id and, while asked, its fence's. */
 type Settling = {
@@ -1628,8 +1632,9 @@ export class VtiMediatorSession {
 
   /**
    * `sendTo`, with the mediator's refusal of the forward surfaced: rejects with the mediator's problem-report words
-   * when it refuses the forward, and resolves with how it ended otherwise ({@link SettledSend}): `fenced`, or
-   * `notRefusedWithin` after `withinMs`. Never "delivered": the mediator does not say a forward reached the peer.
+   * when it refuses the forward, and resolves with how it ended otherwise ({@link SettledSend}): `fenced`,
+   * `notRefusedWithin` after `withinMs`, or `stopped` when the session stopped first. Never "delivered": the mediator
+   * does not say a forward reached the peer.
    *
    * The fence (on unless `fence: false`) is a pickup `status-request` sent right after the forward. The mediator
    * answers it with a `status` threaded to it, and writes any refusal of the forward before that answer (one frame
@@ -1983,11 +1988,11 @@ export class VtiMediatorSession {
       this.asks.delete(id)
       waiting.reject(new Error(`${LOG_PREFIX} session stopped before ${this.where} answered`))
     }
-    // A settling send's forward has left and was not refused while the session lasted: so it ends, as it would at
-    // its bound, never as a failed send (which a caller could offer to send again).
+    // A settling send's forward has left and was not refused while the session lasted, which says nothing: it ends
+    // as `stopped`, never as its bound (which a live socket earns) and never as a failed send.
     for (const entry of new Set(this.settling.values())) {
       this.endSettling(entry)
-      entry.resolve({ id: entry.forwardId, settled: 'notRefusedWithin', withinMs: Date.now() - entry.startedAt })
+      entry.resolve({ id: entry.forwardId, settled: 'stopped', afterMs: Date.now() - entry.startedAt })
     }
     this.socket?.close()
     this.socket = undefined
