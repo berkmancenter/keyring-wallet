@@ -31,6 +31,8 @@ export const PROPOSED_COPY: Readonly<Record<string, string>> = {
     'backlog 3 (step 7.13, decided 11-28): the add sheet for an agent that can already use the persona rooms',
   AgentsUseEveryRoom: 'backlog 3 (step 7.13, decided 11-28): room info says the same, in place of the one-room note',
   CanUseEveryRoomAs: 'backlog 3 (steps 7.13 and 7.14, decided 11-28): the same, in What it remembers and the details',
+  AgentsNotInAttributed:
+    'backlog 3 (step 7.13, decided 11-28): agents work in open rooms only; the add is off in an attributed room',
   AnswersOthersPending:
     'backlog 3 ruling 3 (step 7.14): the change is stored, not yet sent; `settings` has no acknowledgement',
 }

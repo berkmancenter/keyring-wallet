@@ -4166,9 +4166,10 @@
     "NoVerifiedName": "Nenhum nome verificado",
     "CallsItself": "chama a si mesmo de {{name}}",
     "OwnerUnknown": "O Keyring não consegue saber a quem ele pertence.",
-    "AddToRoomBodyAllRooms": "Adicionar um agente permite que ele use todas as salas em que você está como {{persona}}, não só esta. Pede-se que ele aja só quando você o mencionar, mas nada em uma sala garante isso.",
-    "AddToRoomBodyAlready": "Ele já pode usar todas as salas em que você está como {{persona}}. Aqui, pede-se que ele aja só quando você o mencionar, mas nada na sala garante isso.",
-    "AgentsUseEveryRoom": "Os agentes adicionados aqui podem usar todas as salas em que você está como {{persona}} e ler tudo nelas, não só as mensagens que os mencionam.",
-    "CanUseEveryRoomAs": "Ele pode usar todas as salas em que você está como {{persona}}."
+    "AddToRoomBodyAllRooms": "Adicionar um agente permite que ele use todas as salas abertas em que você está como {{persona}}, não só esta. Pede-se que ele aja só quando você o mencionar, mas nada em uma sala garante isso.",
+    "AddToRoomBodyAlready": "Ele já pode usar todas as salas abertas em que você está como {{persona}}. Aqui, pede-se que ele aja só quando você o mencionar, mas nada na sala garante isso.",
+    "AgentsUseEveryRoom": "Os agentes adicionados aqui podem usar todas as salas abertas em que você está como {{persona}} e ler tudo nelas, não só as mensagens que os mencionam.",
+    "CanUseEveryRoomAs": "Ele pode usar todas as salas abertas em que você está como {{persona}}.",
+    "AgentsNotInAttributed": "Os agentes não podem ler nem responder em salas atribuídas. Eles funcionam só em salas abertas."
   }
 }

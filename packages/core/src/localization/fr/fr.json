@@ -4250,9 +4250,10 @@
     "NoVerifiedName": "Aucun nom vérifié",
     "CallsItself": "se fait appeler {{name}}",
     "OwnerUnknown": "Keyring ne peut pas savoir à qui il appartient.",
-    "AddToRoomBodyAllRooms": "Ajouter un agent lui permet d'utiliser tous les salons où vous êtes en tant que {{persona}}, pas seulement celui-ci. On lui demande d'agir seulement quand vous le mentionnez, mais rien dans un salon ne l'impose.",
-    "AddToRoomBodyAlready": "Il peut déjà utiliser tous les salons où vous êtes en tant que {{persona}}. Ici, on lui demande d'agir seulement quand vous le mentionnez, mais rien dans le salon ne l'impose.",
-    "AgentsUseEveryRoom": "Les agents ajoutés ici peuvent utiliser tous les salons où vous êtes en tant que {{persona}}, et tout y lire, pas seulement les messages qui les mentionnent.",
-    "CanUseEveryRoomAs": "Il peut utiliser tous les salons où vous êtes en tant que {{persona}}."
+    "AddToRoomBodyAllRooms": "Ajouter un agent lui permet d'utiliser tous les salons ouverts où vous êtes en tant que {{persona}}, pas seulement celui-ci. On lui demande d'agir seulement quand vous le mentionnez, mais rien dans un salon ne l'impose.",
+    "AddToRoomBodyAlready": "Il peut déjà utiliser tous les salons ouverts où vous êtes en tant que {{persona}}. Ici, on lui demande d'agir seulement quand vous le mentionnez, mais rien dans le salon ne l'impose.",
+    "AgentsUseEveryRoom": "Les agents ajoutés ici peuvent utiliser tous les salons ouverts où vous êtes en tant que {{persona}}, et tout y lire, pas seulement les messages qui les mentionnent.",
+    "CanUseEveryRoomAs": "Il peut utiliser tous les salons ouverts où vous êtes en tant que {{persona}}.",
+    "AgentsNotInAttributed": "Les agents ne peuvent ni lire ni répondre dans les salons attribués. Ils fonctionnent seulement dans les salons ouverts."
   }
 }
