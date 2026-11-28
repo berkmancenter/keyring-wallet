@@ -1,9 +1,11 @@
 /**
  * The socket's receive path, end to end from `socket.onmessage`: every frame the mediator sends reaches its handling,
- * once, whatever else arrives around it. This path carries every released VTI session's traffic (rooms and community
- * tasks, the VTA, the mailbox), and since `sendToSettled` each frame goes through `takeFrame`, which numbers it while
- * it is handled. Before this suite no test drove more than one frame through `onmessage`, so a `takeFrame` that lost
- * frames went unseen: deliberately dropping every second frame left all pre-existing session suites green.
+ * once, in order, whatever else arrives around it. This path carries every released VTI session's traffic (rooms and
+ * community tasks, the VTA, the mailbox). It is the first suite to drive `onmessage` end to end; the session suites
+ * call `handleFrame` directly, below it, so an `onmessage` that lost frames would go unseen. Keep it entering at
+ * `onmessage`. Since `sendToSettled`, each frame also goes through `takeFrame`, which numbers it while it is handled:
+ * deliberately dropping every second frame there left all pre-existing session suites green. (One file for main's
+ * #1120 and the feature's #1118: the four cases are the same, and the feature adds the in-flight checks.)
  */
 import type { DidCommV2PlaintextMessage } from '@credo-ts/didcomm'
 
