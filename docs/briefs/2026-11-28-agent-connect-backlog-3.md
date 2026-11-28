@@ -569,7 +569,8 @@ on ruling 4) and **B3-Z** (the developer switch row, last).
    - **This is one open question, shared with c5's RM4,** with two options:
      - **(a) A structured message,** `keyring/agent/mention-report/1.0` `{ version, member, room, count, replied }`,
        drawn by Keyring in the owner's language with a plural count key. RM4 sends this in place of text, and its
-       "Sent the fixed reply" distinction becomes `replied`. **eb recommends (a).**
+       "Sent the fixed reply" distinction becomes `replied`. **eb recommends (a); so does c5**, whose part carries
+       this same question, word for word, as its ruling 6 (11-28).
      - **(b) Plugin text, RM4 as written.** T5 is then empty: the line is an ordinary agent bubble (R3).
    - **T5 is not started until this is ruled,** and RM4's owner report waits on the same ruling.
 5. **DECIDED (Alberto, coordinator's session, 11-28; relayed to eb by the coordinator): Alberto arranges the fr and
@@ -606,8 +607,12 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
   }
   ```
 
-  - `setting` is `'yes'` in a room the person owns, and for a room no community hosts (§3.8, PLAN:646).
-  - `addable` holds only `active` agents that are not yet in the room (frame 34's note).
+  - `setting` is `'yes'` only on the community's explicit yes. **fb differs:** a room no community hosts reads
+    `'notStated'`, because no field marks a room as the person's own, and a room with no `communityDid` is often a
+    custody-only community room. So today, with no `agents` member in VTI (§3.8), the add is off in every room. That
+    is the plan's rule ("not stated counts as no"), and the views only follow `setting`.
+  - `addable` holds only `active` agents that are not yet in the room (frame 34's note). **fb also leaves out** an
+    agent whose `ownerPersonaDid` isn't the persona the owner acts as in that room.
   - `widens` is the persona's context when the add would put it into `act`: the agent's first room, or a room of
     another persona (PLAN:594).
 - **For T1:** `useAddAgentToRoom(roomId)` returns `{ add(agentId): Promise<AddRoomOutcome> }`, where `AddRoomOutcome`
@@ -617,9 +622,13 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
   - `'refused'`, the VTA refused the update;
   - `'unreachable'`;
   - `'accessChanged'`, the read-back of `act` isn't exactly the bound memories plus the persona's context (PLAN:1361);
-  - `'settingNo'` and `'settingNotStated'`, the setting re-read at the call.
+  - `'settingNo'` and `'settingNotStated'`, the setting re-read at the call;
+  - `'notAddable'` (**fb's addition**): the agent left `addable` between the list and the press. `'refused'` would
+    word it falsely.
 
-  The intent record, the kind check, `grantAgentAccess`, the VDC re-issue and the room offer are fb's. A room offer
+  The intent record, the kind check, the grant, the VDC re-issue and the room offer are fb's. **fb differs:** the
+  grant doesn't go through `grantAgentAccess`, which is `notYet` in the real service and does no kind check. The
+  outcomes are unchanged. A room offer
   that is queued but not yet read by the agent counts as `'added'`: the room is recorded once the VTA update succeeds
   (PLAN:597).
 - **For T2 (7.14):** `useRoomMentionables(roomId)` returns `{ agentId, name, handle }[]`, the owner's agents in this
@@ -638,7 +647,7 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
   appear until a room's profile lists `delegation`, which is correct today.
 - **For T4:** `useAgentIdentity(roomId, did)` returns one of:
   - `{ kind: 'none' }`, a person (or either switch off);
-  - `{ kind: 'own', agentId, name, handle, owner }`;
+  - `{ kind: 'own', agentId, name, handle, owner, revoked?: true }`;
   - `{ kind: 'verified', name?, owner, handle?, did, verifiedName? }`;
   - `{ kind: 'unverified', did, calledName? }`.
 
@@ -648,7 +657,7 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
 
 | Part | Creates | Edits |
 |---|---|---|
-| B3-0 (eb; lands first) | `connected-agents/agentRoomsFlag.ts` (only if ruling 1 says a separate switch) | the three locale files (`ConnectedAgents.*` only); `connected-agents/proposedCopy.ts` (PROPOSED and SETTLED_ELSEWHERE entries only) |
+| B3-0 (eb; lands first; **PR #1123**) | `connected-agents/agentRoomsFlag.ts` (only if ruling 1 says a separate switch) | the three locale files (`ConnectedAgents.*` only); `connected-agents/proposedCopy.ts` (PROPOSED and SETTLED_ELSEWHERE entries only) |
 | T1 7.13 room info and the add flow (frames 34 to 37) | `rooms/components/AgentRoomSection.tsx`, `rooms/components/AgentPickerSheet.tsx`, `rooms/components/AgentRoomSheet.tsx` (the add sheet; the plan's name, PLAN:984), `rooms/components/AddAgentFlow.tsx`, `connected-agents/screens/WhatItRemembersSheet.tsx`, `rooms/__tests__/addAgentToRoom.test.tsx`, `connected-agents/__tests__/fixtures/screenStatesRooms.tsx`, `e2e/lib/agent-connect-screens.rooms.json` | `rooms/screens/RoomInfo.tsx` |
 | T2 7.13 and 7.14 composer (frames 31 to 33) | `rooms/components/ComposerMoreSheet.tsx` (the plan's name, PLAN:991), `rooms/components/MentionSuggestions.tsx`, `rooms/__tests__/composerAgents.test.tsx`, `fixtures/screenStatesComposer.tsx`, `e2e/lib/agent-connect-screens.composer.json` | `rooms/components/RoomComposer.tsx`, `rooms/screens/Room.tsx` |
 | T3 7.14 "Answers other people" and the P1 lines (frames 12 to 16) | `connected-agents/components/AnswersOthersRow.tsx`, `connected-agents/screens/AnswersOthersConfirmSheet.tsx`, `connected-agents/__tests__/answersOthers.test.tsx`, `fixtures/screenStatesAnswers.tsx`, `e2e/lib/agent-connect-screens.answers.json` | `connected-agents/screens/AgentDetailsView.tsx`, `AgentListView.tsx`, `ChangeMemoriesView.tsx`; `screens/agents/AgentDetailsScreen.tsx` and `AiAgentsScreen.tsx` (new props only) |
@@ -712,7 +721,8 @@ One rule is new:
 - **A repair names its caller.** Any branch that handles a state that should not happen names, in a comment at the
   branch and in its test's name, why it can happen and which code calls the repair. Here that means:
   - `'accessChanged'` (who: `useAgentActions().restore`, from AgentDetails' "Restore");
-  - `useAgentIdentity` returning `'own'` for a revoked agent (who: nothing; it draws as `'unverified'`, below);
+  - `useAgentIdentity`'s `'own'` with `revoked: true` (who: fb's `markOwnAgents`, which still marks the agent's past
+    posts as the owner's; drawn as below in T4);
   - `offered: false` (who: fb's hook-check constant).
 
 Two more apply:
@@ -796,6 +806,8 @@ Two more apply:
   - `OthersReply` → `'§3.13'`: the plan's three texts exactly (PLAN:752-756). The shared vector file with the plugin
     (PLAN:759) is fb's, beside c5's RM4 copy.
 - **PROPOSED in en too** (`PROPOSED_COPY`, each with a reason naming its ruling):
+  - `AddRoomNotAddable` (ruling 2; for fb's `'notAddable'`): ""{{name}}" can't be added to this room now." / "« {{name}}
+    » ne peut pas être ajouté à ce salon maintenant." / ""{{name}}" não pode ser adicionado a esta sala agora."
   - `AddRoomRefused` (ruling 2): "Your VTA refused this. "{{name}}" wasn't added." / "Votre VTA a refusé. « {{name}} »
     n'a pas été ajouté." / "Seu VTA recusou. "{{name}}" não foi adicionado."
   - `AddRoomUnreachable` (ruling 2): "Couldn't reach your VTA. "{{name}}" wasn't added." / "Impossible de joindre
@@ -876,6 +888,7 @@ Two more apply:
   | `notAgentKind` | `NotAgentKind` |
   | `refused` | `AddRoomRefused` |
   | `unreachable` | `AddRoomUnreachable` |
+  | `notAddable` | `AddRoomNotAddable` |
   | `accessChanged` | `MemoryAccessChanged` (existing), plus "See details" (`SeeDetails`, existing) to AgentDetails, where "Restore" is. This is a repair; name the caller. |
   | `settingNo` | `CommunityNo` |
   | `settingNotStated` | `CommunityNotStated` |
@@ -1136,8 +1149,10 @@ testIDs: `AgentIdentity`, `AgentIdentityOwner`, `AgentIdentityVerified`, `AgentI
   byte-identical to today.
 - **Decided here:** the hook is called inside the sheet, not by its three callers (RoomInfo, RoomPart, Room), so no
   caller file changes and no other track's file is touched.
-- **Decided here (a repair; name the caller):** an `'own'` result for an agent whose connection is revoked draws as
-  `'unverified'`, never as own. fb's hook should not return it. The branch says so and has a test.
+- **Decided here (a repair; name the caller):** an `'own'` result with `revoked: true` draws the own body **without**
+  `AnswersOthersRow` and without `MentionAs`, with the status `StatusRevoked` ("Revoked", existing) under the owner
+  line. It is still the owner's agent: fb's `markOwnAgents` marks its past posts, so "Keyring can't tell who this
+  belongs to." would be false. The branch names `markOwnAgents` as the reason and has a test.
 
 **Catalogue:** `screenStatesMembers.tsx` and `agent-connect-screens.members.json`.
 
