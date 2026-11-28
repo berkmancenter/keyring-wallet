@@ -61,6 +61,22 @@ moves" (merge, never rebase).
   github.com/albertoleon7794/vta-agent-memory (head `4057a5a`). Push access for the plan owner was granted on
   2026-11-28 on Alberto's word; accept the invitation first. Nothing goes to OpenVTC's own repository.
 
+- **Track 5, the HCP revoke notice ("Telling…"):** one branch and one PR from the feature tip, in
+  `connected-agents/hcp/revoke.ts`, `hcp/status.ts`, `hcp/copy.ts` and their tests. These rules come from the
+  `disclosures/summary` 0.1 schema (`hcp/__tests__/fixtures/hcp-suite-4e2dd42fa/specs/hcp/disclosures/summary/0.1/payload.schema.json`,
+  unchanged at 0.43.0), read with `{ client }` as today:
+  - an OK answer with **no `clients` entry** for the client means nothing was disclosed, so show only "Revoked.",
+    never "Telling…" and never "We couldn't tell…";
+  - **our `grantId` not in that client's `grants`** means nothing was disclosed under our grant, so also only
+    "Revoked.";
+  - `delivered` counts as told **only if `usableUntil` is at or after our `revokedAt`**; an earlier time is a
+    retired grant's notice, so keep "Telling…";
+  - `abandoned` counts as ours only while our `grantId` is listed `revoked` in `grants`; otherwise keep "Telling…";
+  - `none` stays "Telling…" (since #1401 it also means not yet sent, or being retried);
+  - refused, unreachable or flags off keep their own lines: they are no answer, not "nothing disclosed".
+  A test per rule, with a `// control:` case. No new strings, except that "Revoked." on its own may need a key; if
+  it does, it is marked PROPOSED in fr and pt-br.
+
 **Not open yet:**
 
 - Keyring's HCP changes for the 00:18Z decisions wait on our impact read.
