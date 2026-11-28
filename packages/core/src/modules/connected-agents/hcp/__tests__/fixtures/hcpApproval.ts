@@ -19,43 +19,43 @@ export const LINK: HcpConnectLink = { clientVid: CLIENT_VID, uuid: UUID, threadI
 /** The instant the fixture's VTA held the request; the approval expires 5 minutes later. */
 export const HELD_AT = Date.parse('2026-11-27T10:00:00.000Z')
 
+/** The grant's expiry the fixture's `hcpGrantTerm` names: 4 hours after the hold. */
+export const GRANT_EXPIRES_AT = '2026-11-27T14:00:00Z'
+
+/** The summaries of {@link hcpEffects}, in order: the approve view's rows. */
 export const ROWS = [
   'Run by Example Labs.',
-  'It can read general preferences to tailor its answers.',
+  'It can read your general preferences.',
+  'To tailor its answers.',
   'It can keep what it reads for up to 10 minutes after reading it.',
   'For 4 hours from when you approve.',
-  'Approving gives access. It is not signing in.',
+  'It follows the instructions you give it about answering.',
 ]
 
+/** A consent request's effects as VTI hcp.md §5.1 (VTI 216fd014b) has the VTA write them: no `grantId`. */
 export function hcpEffects(): Record<string, unknown>[] {
   return [
     {
-      kind: 'hcpGrantClient',
+      kind: 'hcpClient',
       summary: ROWS[0],
-      detail: {
-        clientVid: CLIENT_VID,
-        clientName: 'hcp-cli',
-        operator: { id: 'did:web:labs.example', name: 'Example Labs' },
-        threadId: THREAD,
-        grantId: GRANT,
-      },
+      detail: { clientId: CLIENT_VID, name: 'hcp-cli', operator: { id: 'did:web:labs.example', name: 'Example Labs' } },
     },
     {
-      kind: 'hcpGrantAccess',
+      kind: 'hcpCategory',
       summary: ROWS[1],
+      detail: { category: 'general_preferences', description: 'General preferences', actions: ['read'] },
+    },
+    {
+      kind: 'hcpPurpose',
+      summary: ROWS[2],
       detail: {
-        access: [
-          {
-            actions: ['read'],
-            categories: ['general_preferences'],
-            purposes: [{ code: 'personalization', description: 'tailor its answers' }],
-          },
-        ],
+        purpose: 'https://registry.trustoverip.org/dtg/purpose/personalisation/1',
+        description: 'tailor its answers',
       },
     },
-    { kind: 'hcpGrantUseUntil', summary: ROWS[2], detail: { maxUseSeconds: 600 } },
-    { kind: 'hcpGrantTerm', summary: ROWS[3], detail: { grantType: 'temporary', expiresInSeconds: 14400 } },
-    { kind: 'hcpGrantNotSignIn', summary: ROWS[4], detail: {} },
+    { kind: 'hcpUseUntil', summary: ROWS[3], detail: { maxUseSeconds: 600 } },
+    { kind: 'hcpGrantTerm', summary: ROWS[4], detail: { persistence: 'temporary', expiresAt: GRANT_EXPIRES_AT } },
+    { kind: 'hcpDirectives', summary: ROWS[5], detail: { followsDirectives: true } },
   ]
 }
 
@@ -72,6 +72,8 @@ export function hcpApproval(change: Partial<VtiApproval> = {}): VtiApproval {
     minApprovals: 1,
     expiresAt: new Date(HELD_AT + 5 * 60 * 1000).toISOString(),
     effects: hcpEffects(),
+    // The document's parentThreadId, which vtaAgent keeps: the held grants/request's threadId.
+    parentThreadId: THREAD,
     ...change,
   }
 }

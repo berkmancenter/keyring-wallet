@@ -147,7 +147,9 @@ describe('useHcpApproveFlow', () => {
     expect(result.current.state.state).toBe('approved')
     expect(putInFlight.mock.invocationCallOrder[0]).toBeLessThan(decide.mock.invocationCallOrder[0])
     expect(decide).toHaveBeenCalledWith('consent-1', 'approve')
-    expect(await store.get(CLIENT_VID)).toMatchObject({ grantId: GRANT, name: 'Notes' })
+    // No grantId yet: a §5.1 request names none; the record is the scanned thread's.
+    expect(await store.get(CLIENT_VID)).toMatchObject({ threadId: THREAD, name: 'Notes' })
+    expect((await store.get(CLIENT_VID))?.grantId).toBeUndefined()
     expect(await store.listInFlight()).toEqual([])
   })
 

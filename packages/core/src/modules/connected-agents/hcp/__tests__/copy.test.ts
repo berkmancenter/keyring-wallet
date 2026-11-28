@@ -40,6 +40,20 @@ const KEYS: HcpCopyKey[] = [
   'ApproveCancelled',
   // Added for backlog 2, track 5: nothing was disclosed under the grant, so "Revoked." alone.
   'RevokeNothingDisclosed',
+  // Added for the VTI hcp.md §5.1 contract: the request names no purpose, so the purposes approving allows.
+  'ApproveAllowsPurposes',
+  // Added at review: terms V0 cannot approve (not temporary; an expiry outside the next 24 hours).
+  'ApproveNotTemporary',
+  'ApproveBadTerm',
+  // Added for the VTI hcp.md §5.1 contract: "not signing in" is Keyring's own line, no longer an effect.
+  'ApproveNotSignIn',
+  // Added for the "Telling…" rule: not told with the time past; already expired; already disconnected.
+  'RevokeNotToldPast',
+  'RevokeAlreadyEnded',
+  'RevokeAlreadyDisconnected',
+  // Added at review of the §5.1 alignment: a revoke with nothing sent, the grant not yet issued or not told apart.
+  'RevokeNotYetIssued',
+  'RevokeGrantAmbiguous',
 ]
 const APPROVE_ENDINGS = [
   'ApproveNotApproved',
@@ -84,9 +98,21 @@ describe('HCP_COPY', () => {
     expect(line.source).toBe('PROPOSED')
     expect(hcpPlaceholders(line.en)).toEqual([])
     for (const lang of ['en', 'fr', 'ptBr'] as const) {
-      for (const key of ['RevokeTelling', 'RevokeTold', 'RevokeNotTold'] as const) {
+      for (const key of ['RevokeTelling', 'RevokeTold', 'RevokeNotTold', 'RevokeNotToldPast'] as const) {
         expect(HCP_COPY[key][lang].startsWith(`${line[lang]} `)).toBe(true)
       }
+    }
+  })
+
+  it('the "Telling…" rule’s new lines are PROPOSED and name the agent; the past tense differs from the present', () => {
+    for (const key of ['RevokeNotToldPast', 'RevokeAlreadyEnded', 'RevokeAlreadyDisconnected'] as const) {
+      expect(HCP_COPY[key].source).toBe('PROPOSED')
+      expect(hcpPlaceholders(HCP_COPY[key].en)).toContain('name')
+    }
+    expect(hcpPlaceholders(HCP_COPY.RevokeNotToldPast.en)).toEqual(hcpPlaceholders(HCP_COPY.RevokeNotTold.en))
+    for (const lang of ['en', 'fr', 'ptBr'] as const) {
+      expect(HCP_COPY.RevokeNotToldPast[lang]).not.toBe(HCP_COPY.RevokeNotTold[lang])
+      expect(HCP_COPY.RevokeAlreadyEnded[lang]).not.toBe(HCP_COPY.RevokeAlreadyDisconnected[lang])
     }
   })
 

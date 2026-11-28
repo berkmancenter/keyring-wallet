@@ -1,6 +1,7 @@
 /**
  * The HCP demo's types and task URIs (step 7.27 track C). Hand-written: Keyring has no `hcp/*` types package. The
- * `detail` shapes are those the VTA puts on the five effects of the consent request it sends for an HCP grant.
+ * `detail` shapes are those the VTA puts on the effects of the consent request it sends for an HCP grant: the V0
+ * contract published in VTI `docs/05-design-notes/hcp.md` §5.1.
  *
  * @module connected-agents/hcp/types
  */
@@ -15,57 +16,125 @@ export interface HcpConnectLink {
   threadId: string
 }
 
-/** `detail` of the `hcpGrantClient` effect. */
-export interface HcpGrantClientDetail {
-  clientVid: string
-  clientName: string
-  operator: { id: string; name: string }
-  threadId: string
-  grantId: string
+/**
+ * The Client Operator as the VTA reports it in the `hcpClient` effect (VTI hcp.md §5.1: "from VTA configuration"). Kept
+ * as received and shown only; never derived on the phone. Its source is replaceable: today the VTA's configuration, later
+ * (V1) the community that vouches for the client, or the VTC that hosts the person's VTA. hcp.md does not fix its shape,
+ * so a text value or an object with an `id` and/or a `name` is read.
+ */
+export type HcpOperator = string | { id?: string; name?: string }
+
+/** `detail` of the `hcpClient` effect (one per request; VTI hcp.md §5.1). */
+export interface HcpClientDetail {
+  /** The client VID. */
+  clientId: string
+  /** The client's name as the request gives it (Keyring shows the name the person typed, never this). */
+  name: string
+  operator: HcpOperator
+  /** Not in the §5.1 contract: read only if a VTA sends it, as the grant's id known before approval. */
+  grantId?: string
+  /** Not in the §5.1 contract: read only if a VTA sends it, as a second way to match the scanned thread. */
+  threadId?: string
 }
 
-/** `detail` of the `hcpGrantAccess` effect. */
-export interface HcpGrantAccessDetail {
-  access: { actions: string[]; categories: string[]; purposes: { code: string; description: string }[] }[]
+/** `detail` of an `hcpCategory` effect (one per requested category). */
+export interface HcpCategoryDetail {
+  /** A slug or a URI. */
+  category: string
+  description: string
+  /** The HCP actions asked for this category. */
+  actions: string[]
 }
 
-/** `detail` of the `hcpGrantUseUntil` effect. */
-export interface HcpGrantUseUntilDetail {
+/**
+ * `detail` of a named `hcpPurpose` effect (one per requested purpose). One with `choose: true` (the request names none)
+ * is read apart, by its summary (`./approvals.ts`, `choices`).
+ */
+export interface HcpPurposeDetail {
+  /** The purpose IRI. */
+  purpose: string
+  description: string
+}
+
+/** `detail` of the `hcpUseUntil` effect. */
+export interface HcpUseUntilDetail {
+  /** The longest `useUntil` a disclosure may carry, in seconds. */
   maxUseSeconds: number
 }
 
 /** `detail` of the `hcpGrantTerm` effect. */
 export interface HcpGrantTermDetail {
-  grantType: 'temporary'
-  expiresInSeconds: number
+  /** `temporary` in V0. */
+  persistence: string
+  /** RFC 3339. */
+  expiresAt: string
+}
+
+/** `detail` of the `hcpDirectives` effect. */
+export interface HcpDirectivesDetail {
+  followsDirectives: boolean
 }
 
 /** What the approve screen shows (part 2): copy keys and parameters, never formatted text. */
 export type HcpApprovalView = {
   /** "Connect "<name>"?" */
   title: { key: 'ApproveTitle'; params: { name: string } }
-  /** The five effects' summaries, verbatim, in order. */
+  /** Every effect's summary, verbatim, in the order the VTA sent them (an unknown kind included). */
   rows: string[]
   /** "Only continue if you ran the command…" */
   warning: { key: 'ApproveOwnTerminal' }
+  /**
+   * "Approving gives access. It is not signing in." Keyring's own line, on every HCP consent whatever effects arrive:
+   * never an effect (the old `hcpGrantNotSignIn` kind is gone), as the VTA maintainer confirmed.
+   */
+  notSignIn: { key: 'ApproveNotSignIn' }
   approve: { key: 'Approve' }
   clientVid: string
-  grantId: string
+  /** The grant's id, when the request carried one; otherwise learnt after approval (see `./grantId.ts`). */
+  grantId?: string
+  /** The scanned thread, the request's `threadId`, which the consent request names as `parentThreadId`. */
   threadId: string
-  expiresInSeconds: number
+  /** The grant's expiry, from the `hcpGrantTerm` effect. */
+  expiresAt: string
+  /** The Client Operator as the VTA reported it (`hcpClient`), display-only. */
+  operator: HcpOperator
+  /**
+   * `hcpGrantTerm.persistence`. Only `temporary` can be approved in V0: Approve declines anything else
+   * (`./approveFlow.ts`).
+   */
+  persistence: string
+  /** `hcpUseUntil.maxUseSeconds`, when the request gave it: how long a disclosed copy may be used. */
+  maxUseSeconds?: number
+  /**
+   * Present when the request names no purpose (`hcpPurpose` effects with `choose: true`). No picker is offered: VTI has
+   * not defined how a choice would reach the VTA (`task-consent/decision` carries approve or deny only), so approving
+   * allows every one of them, and the screen says so with their summaries as rows.
+   * TODO(vti): offer a choice once the decision can carry it to the VTA.
+   */
+  purposesAllowed?: { key: 'ApproveAllowsPurposes'; params: { name: string }; rows: string[] }
 }
 
-/** Whether the client has been told of a revoke (part 3). Times are ISO-8601 instants. */
+/**
+ * Whether the client has been told of a revoke (part 3). Times are ISO-8601 instants. Read from the audit log by our
+ * grant (`revoke.ts`), else from the summary. Every state but `telling` is final.
+ */
 export type HcpNoticeState =
   | { state: 'telling'; lastPolledAt?: string }
-  /** `at`: `usableUntil` from the summary, the time of delivery. */
+  /** `at`: the `revocation.notified` event's `timestamp`, else the summary's `usableUntil` (the time of delivery). */
   | { state: 'told'; at: string }
+  /** `usableUntil`: the last time anything disclosed under the grant stays usable. */
   | { state: 'notTold'; usableUntil: string }
   /**
-   * The client's `disclosures/summary` shows nothing disclosed to it under this grant (no entry for the client, or this
-   * `grantId` not in its `grants`): there is nothing to tell it, so the line reads only "Revoked.".
+   * Nothing was disclosed to the client under this grant, so no notice is due (HCP 6.2.2): no `context.read` for the
+   * grant with a non-empty `disclosed`, or, from the summary, no entry for the client or this `grantId` not in its
+   * `grants`. The line reads only "Revoked.". The "Telling…" proposal calls this state `nothingToTell`; #1125's name
+   * and copy key (`RevokeNothingDisclosed`) are kept.
    */
   | { state: 'nothingDisclosed' }
+  /** The grant had expired before the revoke reached the VTA: no `grant.revoked` event for it, so no notice. */
+  | { state: 'ended' }
+  /** The client had relinquished the grant itself (`grant.revoked` initiated by the context client): no notice. */
+  | { state: 'disconnected' }
 
 /** The record Keyring keeps of an approved HCP grant (part 3). Times are ISO-8601 instants. */
 export type HcpConnection = {
@@ -73,24 +142,64 @@ export type HcpConnection = {
   id: string
   /** The name the person gave. */
   name: string
-  grantId: string
+  /**
+   * The grant's id. Absent until it is learnt when the request carried none (VTI hcp.md §5.1 pre-assigns none): read
+   * from the client's `grant.issued` audit event (`./grantId.ts`), then kept here.
+   */
+  grantId?: string
+  /** The learnt grant's `grant.issued` event time: the grant demonstrably existed (so a refused revoke is not "no such grant"). */
+  grantIssuedAt?: string
+  /** `grant.issued`'s `data.expiresAt`, when the VTA gave one: the issued grant's own expiry. */
+  grantExpiresAt?: string
   threadId: string
+  /**
+   * When the approval started (the approval in flight's `startedAt`): the lower bound for every `grant.issued` and
+   * audit lookup, since `approvedAt` can be late (a connection completed by the reconcile is dated up to the
+   * request's own `expiresAt`). Absent on records written before it was kept; `approvedAt` stands in.
+   */
+  approvalStartedAt?: string
   /** When `decide(approve)` resolved. */
   approvedAt: string
-  /** `approvedAt` + `expiresInSeconds`. */
+  /** The `hcpGrantTerm` effect's `expiresAt`. */
   expiresAt: string
+  /** The Client Operator as the VTA reported it (`hcpClient`); absent on older records. See `hcpOperatorId`. */
+  operator?: HcpOperator
+  /** `hcpGrantTerm.persistence` (`temporary`, the only one approved in V0); absent on older records. */
+  persistence?: string
+  /** `hcpUseUntil.maxUseSeconds`, when the request gave it. */
+  maxUseSeconds?: number
   revokedAt?: string
   notice?: HcpNoticeState
   /**
-   * The newest `usableUntil` a notice poll read for this client, kept beside `notice` so that the 24-hour stop settles
+   * The newest `usableUntil` a notice poll read for this client, kept beside `notice` so that the 25-hour stop settles
    * a notice with the same time whether or not the app restarted while it was polling.
    */
   lastUsableUntil?: string
+  /**
+   * The summary fallback's first answer for the client after the revoke (its `notification` and `usableUntil`): an
+   * `abandoned` notice still the same is taken to be stale, from before the revoke, and keeps `telling`.
+   */
+  summaryAtRevoke?: { notification: 'delivered' | 'abandoned' | 'none'; usableUntil: string | null }
+  /**
+   * The audit log's answers that cannot change once the revoke is 5 minutes old (`HCP_ENDED_MARGIN_MS` in
+   * `./revoke.ts`), kept after the first complete read past that point so later polls read only `revocation.notified`.
+   */
+  auditStep1?: HcpAuditStep1
+}
+
+/** What the notice poll read once from the audit log for a revoked grant (`./revoke.ts`). */
+export type HcpAuditStep1 = {
+  /** The first `grant.revoked` for the grant, if the log had one. */
+  revokedEventAt?: string
+  /** The largest `useUntil` disclosed under the grant, if any. */
+  maxUseUntil?: string
+  /** Whether the `context.read` read was cut at its maximum. */
+  cut: boolean
 }
 
 /**
  * An HCP approval in flight (part 3): written before `decide(approve)` is called, under its own kind in the same
- * store and keyed by `grantId`, so an existing connection for the client, and an earlier approval in flight for it,
+ * store and keyed by `threadId`, so an existing connection for the client, and an earlier approval in flight for it,
  * are left as they are until the new one is confirmed. It names the grant the approval would create: if the approval
  * fails, or the app stops before the connection is written, the reconcile completes it or revokes the grant by
  * `grantId`. Times are ISO-8601 instants.
@@ -100,29 +209,53 @@ export type HcpApprovalInFlight = {
   id: string
   /** The name the person gave. */
   name: string
-  /** The grant the approval creates, pre-assigned (the `hcpGrantClient` effect's `grantId`). */
-  grantId: string
+  /** The grant the approval creates, when the request named it; else learnt later. */
+  grantId?: string
+  /** The learnt grant's `grant.issued` event time: the grant demonstrably existed (so a refused revoke is not "no such grant"). */
+  grantIssuedAt?: string
+  /** `grant.issued`'s `data.expiresAt`, when the VTA gave one: the issued grant's own expiry. */
+  grantExpiresAt?: string
+  /** The scanned thread: this record's key, since it names exactly one request and so one grant. */
   threadId: string
   /** The consent request being approved. */
   approvalId: string
   /** The consent request's own `expiresAt`: it cannot be approved after this. */
   approvalExpiresAt: string
-  expiresInSeconds: number
+  /** The grant's expiry, from the `hcpGrantTerm` effect. */
+  expiresAt: string
+  /** As on the view: kept for the connection the reconcile may write. */
+  operator?: HcpOperator
+  persistence?: string
+  maxUseSeconds?: number
   /** When this record was written, just before `decide(approve)`. */
   startedAt: string
 }
 
 /**
  * A grant whose connection a newer approval for the same client replaced while the grant may still be live (part 3):
- * written in the same step as the new connection, under its own kind, keyed by `grantId`; the reconcile revokes it.
+ * written in the same step as the new connection, under its own kind, keyed by `threadId`; the reconcile revokes it.
  * Times are ISO-8601 instants.
  */
 export type HcpRetiringGrant = {
   /** The client's VID. */
   id: string
   name: string
-  grantId: string
+  /** As on the connection it was: absent if never learnt. */
+  grantId?: string
+  /** The learnt grant's `grant.issued` event time: the grant demonstrably existed (so a refused revoke is not "no such grant"). */
+  grantIssuedAt?: string
+  /** `grant.issued`'s `data.expiresAt`, when the VTA gave one: the issued grant's own expiry. */
+  grantExpiresAt?: string
   threadId: string
+  /**
+   * The grant's expiry: once passed there is nothing left to revoke. A record without it was written before the
+   * §5.1 contract (keyed by `grantId`) and is ignored (`./store.ts`).
+   */
+  expiresAt?: string
+  /** When its approval started: where its `grantId` is looked for if never learnt (else `approvedAt`). */
+  approvalStartedAt?: string
+  /** When it was approved. */
+  approvedAt?: string
   /** When the newer connection replaced it. */
   retiredAt: string
 }
@@ -136,13 +269,20 @@ export const HCP_GRANTS_REVOKE = 'https://trusttasks.org/spec/hcp/grants/revoke/
 // version-pinned: the hcp suite is pinned at 0.1 (suite 4e2dd42fa); the VTA serves this version only
 export const HCP_DISCLOSURES_SUMMARY = 'https://trusttasks.org/spec/hcp/disclosures/summary/0.1'
 
-/** The five effect kinds of an HCP grant's consent request, in the order the VTA sends them. */
+/**
+ * The effect kinds of an HCP grant's consent request: the V0 contract of VTI `docs/05-design-notes/hcp.md` §5.1, as at
+ * VTI commit 216fd014b (blob 06537e4f6f8579a993996d6def00440b3fb10fe0). Against the earlier five: `hcpClient` and
+ * `hcpUseUntil` rename `hcpGrantClient` and `hcpGrantUseUntil`; `hcpGrantTerm` keeps its name with the detail
+ * `{ persistence, expiresAt }`; `hcpGrantAccess` splits into one `hcpCategory` per category and one `hcpPurpose` per
+ * purpose; `hcpDirectives` is new; `hcpGrantNotSignIn` is gone. Any other kind is shown by its `summary`.
+ */
 export const HCP_EFFECT_KINDS = [
-  'hcpGrantClient',
-  'hcpGrantAccess',
-  'hcpGrantUseUntil',
+  'hcpClient',
+  'hcpCategory',
+  'hcpPurpose',
+  'hcpUseUntil',
   'hcpGrantTerm',
-  'hcpGrantNotSignIn',
+  'hcpDirectives',
 ] as const
 
 export type HcpEffectKind = (typeof HCP_EFFECT_KINDS)[number]

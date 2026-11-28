@@ -16,6 +16,7 @@ export type HcpCopySource = 'companion finding 6' | 'plan §6' | 'PROPOSED'
 export type HcpCopyKey =
   | 'ApproveTitle'
   | 'ApproveOwnTerminal'
+  | 'ApproveNotSignIn'
   | 'Approve'
   | 'CodeExpired'
   | 'WrongNumber'
@@ -27,12 +28,17 @@ export type HcpCopyKey =
   | 'RevokeTold'
   | 'RevokeNotTold'
   | 'RevokeNothingDisclosed'
+  | 'RevokeNotToldPast'
+  | 'RevokeAlreadyEnded'
+  | 'RevokeAlreadyDisconnected'
   | 'RevokeTitle'
   | 'RevokeBody'
   | 'Revoke'
   | 'Keep'
   | 'RevokeUnreachable'
   | 'RevokeRefused'
+  | 'RevokeNotYetIssued'
+  | 'RevokeGrantAmbiguous'
   | 'NewMemoryTitle'
   | 'NewMemoryField'
   | 'NewMemoryHelper'
@@ -45,6 +51,9 @@ export type HcpCopyKey =
   | 'ApproveDeclined'
   | 'ApproveAnsweredElsewhere'
   | 'ApproveCancelled'
+  | 'ApproveAllowsPurposes'
+  | 'ApproveNotTemporary'
+  | 'ApproveBadTerm'
 
 /**
  * The keys for a refusal (added after the brief, at review): unlike `RevokeUnreachable` and `MemoryNotSaved`, the
@@ -63,6 +72,13 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     en: 'Only continue if you ran the command in your own terminal just now.',
     fr: 'Continuez seulement si vous venez de lancer la commande dans votre propre terminal.',
     ptBr: 'Só continue se você acabou de executar o comando no seu próprio terminal.',
+    source: 'plan §6',
+  },
+  // Keyring's own line on every HCP consent, never an effect: the base path's `ConnectedAgents.ApproveNotSignIn`.
+  ApproveNotSignIn: {
+    en: 'Approving gives access. It is not signing in.',
+    fr: "Approuver donne un accès. Ce n'est pas une connexion à votre compte.",
+    ptBr: 'Aprovar dá acesso. Não é um login.',
     source: 'plan §6',
   },
   Approve: {
@@ -133,6 +149,51 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     ptBr: 'Revogado.',
     source: 'PROPOSED',
   },
+  // Added for the "Telling…" rule (the notice read from the audit log by grant): not told, and the time anything
+  // it read stays usable has already passed (V0 copies last at most 1 h).
+  RevokeNotToldPast: {
+    en: 'Revoked. We couldn\'t tell "{{name}}". Anything it read stopped being usable at {{time}}.',
+    fr: "Révoqué. Nous n'avons pas pu prévenir « {{name}} ». Ce qu'il a lu a cessé d'être utilisable à {{time}}.",
+    ptBr: 'Revogado. Não conseguimos avisar "{{name}}". O que ele leu deixou de poder ser usado às {{time}}.',
+    source: 'PROPOSED',
+  },
+  // The grant had expired before the revoke reached the VTA: no notice is sent for an expired grant. Names the access,
+  // not the agent, as having ended (reworded at review).
+  RevokeAlreadyEnded: {
+    en: 'Access for "{{name}}" had already ended, so there was nothing to tell.',
+    fr: "L'accès de « {{name}} » avait déjà pris fin, il n'y avait donc rien à lui dire.",
+    ptBr: 'O acesso de "{{name}}" já tinha terminado, então não havia nada a avisar.',
+    source: 'PROPOSED',
+  },
+  // The client had relinquished the grant itself: no notice follows a relinquishment.
+  RevokeAlreadyDisconnected: {
+    en: '"{{name}}" had already disconnected, so there was nothing to tell.',
+    fr: "« {{name}} » s'était déjà déconnecté, il n'y avait donc rien à lui dire.",
+    ptBr: '"{{name}}" já tinha se desconectado, então não havia nada a avisar.',
+    source: 'PROPOSED',
+  },
+  // Added for the VTI hcp.md §5.1 contract, reworded at review: a request that names no purpose. No picker is
+  // offered (no choice would reach the VTA), so the line states the real scope; the purposes follow as rows.
+  ApproveAllowsPurposes: {
+    en: '"{{name}}" didn\'t say what it needs this for. If you approve, it may use it for any of these:',
+    fr: "« {{name}} » n'a pas dit à quoi cela lui sert. Si vous approuvez, il pourra l'utiliser pour chacun de ces usages :",
+    ptBr: '"{{name}}" não disse para que precisa disso. Se você aprovar, ele poderá usar para qualquer um destes fins:',
+    source: 'PROPOSED',
+  },
+  // Added at review: V0 approves a temporary grant only, so a request to stay connected is declined.
+  ApproveNotTemporary: {
+    en: '"{{name}}" asks to stay connected. Keyring can\'t approve that yet, so it was declined.',
+    fr: "« {{name}} » demande à rester connecté. Keyring ne peut pas encore l'approuver, la demande a donc été refusée.",
+    ptBr: '"{{name}}" pede para ficar conectado. O Keyring ainda não pode aprovar isso, então o pedido foi recusado.',
+    source: 'PROPOSED',
+  },
+  // Added at review: the grant would end in the past, or more than 24 hours ahead (HCP 6.1.3), so it was declined.
+  ApproveBadTerm: {
+    en: '"{{name}}" asked for access ending at a time Keyring can\'t approve, so it was declined.',
+    fr: '« {{name}} » a demandé un accès qui se termine à une heure que Keyring ne peut pas approuver, la demande a donc été refusée.',
+    ptBr: '"{{name}}" pediu um acesso que termina num horário que o Keyring não pode aprovar, então o pedido foi recusado.',
+    source: 'PROPOSED',
+  },
   RevokeTitle: {
     en: 'Revoke "{{name}}"?',
     fr: 'Révoquer « {{name}} » ?',
@@ -169,6 +230,22 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     en: 'Your VTA refused to revoke "{{name}}", so nothing changed here.',
     fr: "Votre VTA a refusé de révoquer « {{name}} », donc rien n'a changé ici.",
     ptBr: 'Seu VTA recusou revogar "{{name}}", então nada mudou aqui.',
+    source: 'PROPOSED',
+  },
+  // Added at review of the §5.1 alignment: nothing was sent, because the grant is not in the audit log yet (the
+  // client has not picked up its access). It can be tried again shortly.
+  RevokeNotYetIssued: {
+    en: '"{{name}}" hasn\'t picked up its access yet. Try again in a minute.',
+    fr: "« {{name}} » n'a pas encore récupéré son accès. Réessayez dans une minute.",
+    ptBr: '"{{name}}" ainda não pegou seu acesso. Tente de novo em um minuto.',
+    source: 'PROPOSED',
+  },
+  // Added at review of the §5.1 alignment: nothing was sent, because Keyring cannot tell which of the client's grants
+  // is this connection's (two approvals at once). Revoking the wrong one would end the wrong access.
+  RevokeGrantAmbiguous: {
+    en: 'Keyring can\'t tell yet which access of "{{name}}" to end, so nothing changed. Try again later.',
+    fr: "Keyring ne sait pas encore quel accès de « {{name}} » arrêter, donc rien n'a changé. Réessayez plus tard.",
+    ptBr: 'O Keyring ainda não sabe qual acesso de "{{name}}" encerrar, então nada mudou. Tente de novo mais tarde.',
     source: 'PROPOSED',
   },
   NewMemoryTitle: {

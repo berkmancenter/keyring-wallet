@@ -54,11 +54,47 @@ describe('hcpStatus', () => {
       notice: { key: 'RevokeTold', params: { name: 'My notes agent', time: '2026-11-27T11:00:04.000Z' } },
     })
     expect(
-      hcpStatus(connection({ ...base, notice: { state: 'notTold', usableUntil: '2026-11-27T11:15:00.000Z' } }), at(5))
+      hcpStatus(connection({ ...base, notice: { state: 'notTold', usableUntil: '2026-11-27T14:15:00.000Z' } }), at(5))
     ).toEqual({
       key: 'StatusRevoked',
-      notice: { key: 'RevokeNotTold', params: { name: 'My notes agent', time: '2026-11-27T11:15:00.000Z' } },
+      notice: { key: 'RevokeNotTold', params: { name: 'My notes agent', time: '2026-11-27T14:15:00.000Z' } },
     })
+  })
+
+  it('notTold at or after its usableUntil gives RevokeNotToldPast ("stopped being usable")', () => {
+    const base = { revokedAt: '2026-11-27T11:00:00.000Z' }
+    const notTold = connection({ ...base, notice: { state: 'notTold', usableUntil: EXPIRES } })
+    const line = (now: Date) => hcpStatus(notTold, now)
+    expect(line(at(0))).toEqual({
+      key: 'StatusRevoked',
+      notice: { key: 'RevokeNotToldPast', params: { name: 'My notes agent', time: EXPIRES } },
+    })
+    // control: one millisecond before, the present tense.
+    expect(line(at(-1))).toEqual({
+      key: 'StatusRevoked',
+      notice: { key: 'RevokeNotTold', params: { name: 'My notes agent', time: EXPIRES } },
+    })
+    expect(hcpText('RevokeNotToldPast', 'en', { name: 'x', time: '11:15' })).toBe(
+      'Revoked. We couldn\'t tell "x". Anything it read stopped being usable at 11:15.'
+    )
+  })
+
+  it('ended and disconnected give RevokeAlreadyEnded and RevokeAlreadyDisconnected, with the name', () => {
+    const base = { revokedAt: '2026-11-27T11:00:00.000Z' }
+    expect(hcpStatus(connection({ ...base, notice: { state: 'ended' } }), at(-1))).toEqual({
+      key: 'StatusRevoked',
+      notice: { key: 'RevokeAlreadyEnded', params: { name: 'My notes agent' } },
+    })
+    expect(hcpStatus(connection({ ...base, notice: { state: 'disconnected' } }), at(-1))).toEqual({
+      key: 'StatusRevoked',
+      notice: { key: 'RevokeAlreadyDisconnected', params: { name: 'My notes agent' } },
+    })
+    expect(hcpText('RevokeAlreadyEnded', 'en', { name: 'x' })).toBe(
+      'Access for "x" had already ended, so there was nothing to tell.'
+    )
+    expect(hcpText('RevokeAlreadyDisconnected', 'en', { name: 'x' })).toBe(
+      '"x" had already disconnected, so there was nothing to tell.'
+    )
   })
 
   it('nothingDisclosed gives RevokeNothingDisclosed ("Revoked." alone), with no name and no time', () => {

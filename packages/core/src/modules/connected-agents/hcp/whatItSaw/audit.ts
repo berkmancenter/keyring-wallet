@@ -1,6 +1,7 @@
 /**
  * The audit read of "What my agent saw" (C4; backlog brief, section B part 3, "The reads"): Keyring, as Management
- * Client, sends `hcp/audit/read/0.1` `{ client, limit }` through the HCP port and follows `nextCursor` until it is
+ * Client, sends `hcp/audit/read/0.1` `{ client, limit }` (with `eventType` and `from` when a caller narrows the read,
+ * as the grant-id lookup and the revoke notice do) through the HCP port and follows `nextCursor` until it is
  * absent or {@link HCP_AUDIT_MAX_EVENTS} events have been read.
  *
  * Nothing here logs a payload or a response.
@@ -29,6 +30,15 @@ export interface HcpAuditEvent {
   grantId: string | null
   categories: string[]
   purpose: string | null
+  /** `participants.initiator.role` (HCP 8.2), when given: `context-client` on a `grant.revoked` is a relinquishment. */
+  initiatorRole?: string
+  /**
+   * On `context.read`: the entries disclosed (HCP 8.2), each with the use-until time it was given. Only items with a
+   * valid `useUntil` are kept.
+   */
+  disclosed?: { useUntil: string }[]
+  /** The event type's own members (HCP 8.2), such as `outcome` and `lastUseUntil` on `revocation.notified`. */
+  data?: Record<string, unknown>
 }
 
 /**
@@ -49,9 +59,16 @@ export interface HcpAuditQuery {
   limit?: number
   /** Where to start: a `nextCursor` from an earlier read. */
   cursor?: string
+  /** Only events of this type (the task's `eventType` filter). */
+  eventType?: string
+  /** Only events at or after this instant (the task's `from` filter), ISO-8601. */
+  from?: string
 }
 
 const isString = (v: unknown): v is string => typeof v === 'string'
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+/** An ISO-8601 instant Keyring can compare. */
+export const isInstant = (v: unknown): v is string => isString(v) && !Number.isNaN(Date.parse(v))
 
 /** An event of the expected shape, or undefined: one malformed event is left out, not the whole page. */
 function readEvent(value: unknown): HcpAuditEvent | undefined {
@@ -59,6 +76,12 @@ function readEvent(value: unknown): HcpAuditEvent | undefined {
   const e = value as Record<string, unknown>
   if (!isString(e.eventId) || !isString(e.eventType) || !isString(e.timestamp)) return undefined
   if (Number.isNaN(Date.parse(e.timestamp))) return undefined
+  const initiator = isObject(e.participants) && isObject(e.participants.initiator) ? e.participants.initiator : {}
+  const disclosed = Array.isArray(e.disclosed)
+    ? e.disclosed
+        .map((d) => (isObject(d) && isInstant(d.useUntil) ? { useUntil: d.useUntil } : undefined))
+        .filter((d): d is { useUntil: string } => d !== undefined)
+    : undefined
   return {
     eventId: e.eventId,
     eventType: e.eventType,
@@ -66,6 +89,9 @@ function readEvent(value: unknown): HcpAuditEvent | undefined {
     grantId: isString(e.grantId) ? e.grantId : null,
     categories: Array.isArray(e.categories) ? e.categories.filter(isString) : [],
     purpose: isString(e.purpose) ? e.purpose : null,
+    ...(isString(initiator.role) ? { initiatorRole: initiator.role } : {}),
+    ...(disclosed ? { disclosed } : {}),
+    ...(isObject(e.data) ? { data: e.data } : {}),
   }
 }
 
@@ -91,6 +117,8 @@ export async function readHcpAudit(port: HcpVtaPort, query: HcpAuditQuery): Prom
   for (;;) {
     const limit = Math.min(pageLimit, HCP_AUDIT_MAX_EVENTS - events.length)
     const payload: Record<string, unknown> = { client: query.client, limit }
+    if (query.eventType !== undefined) payload.eventType = query.eventType
+    if (query.from !== undefined) payload.from = query.from
     if (cursor !== undefined) payload.cursor = cursor
     const outcome = await callHcp<unknown>(port, HCP_AUDIT_READ, payload)
     if (!outcome.ok) return { events, cut: false, failure: outcome }

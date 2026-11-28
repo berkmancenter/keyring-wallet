@@ -131,6 +131,7 @@ export function useHcpApproveFlow(): {
       clock: ports.clock,
       beforeApprove: beginHcpApproval(ports.store),
       onApproved: recordHcpApproval(ports.store),
+      threadInUse: (threadId) => ports.store.hasThread(threadId),
     })
   )
   useEffect(

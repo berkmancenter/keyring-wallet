@@ -2,8 +2,10 @@
  * The rung's consent request, read by Keyring (backlog Section B, part 2): the `task-consent/request/0.1` payload the
  * reference rung builds for an HCP grant (`tsp-reference/ref-25-agent-pairing/hcp/consent.mjs`, recorded in
  * `fixtures/hcp-consent-request.json`) validates against VTI's own schema at `97fda9813`, arrives through
- * `keepManagerMessage` as every consent request does, and track C's `readHcpEffects` and `findHcpApproval` accept it
- * for the link of the match-number vectors' first case. The rung's `hcp/hcp.test.mjs` holds the other direction.
+ * `keepManagerMessage` as every consent request does (which keeps the document's `parentThreadId`, the thread VTI
+ * hcp.md §5.1 matches on). The rung still records the five effect kinds from before §5.1, which Keyring no longer reads;
+ * the same envelope with the §5.1 effects (`fixtures/hcpApproval.ts`) validates and is found for the link of the
+ * match-number vectors' first case. The rung's `hcp/hcp.test.mjs` holds the other direction.
  */
 import Ajv from 'ajv/dist/2020'
 import { existsSync, readFileSync } from 'fs'
@@ -14,6 +16,7 @@ import { keepManagerMessage, type VtiApproval } from '../../../trust-tasks/modul
 import { findHcpApproval, readHcpEffects } from '../approvals'
 import { readHcpConnectLink } from '../connectLink'
 import { HCP_GRANTS_REQUEST, type HcpConnectLink } from '../types'
+import { hcpEffects } from './fixtures/hcpApproval'
 import vectors from './vectors/match-number.json'
 
 const RUNG_FIXTURE = join(
@@ -49,16 +52,19 @@ function consentRequestSchema() {
 }
 
 /** The payload as `vtaAgent` lists it: the DIDComm message body it arrives in, through `keepManagerMessage`. */
-function received(payload: Payload, now: number): VtiApproval {
+function received(payload: Payload, now: number, parentThreadId?: unknown): VtiApproval {
   const message = {
     id: 'msg-1',
     type: VTA_TASK.consentRequest,
-    body: { id: 'consent-1', type: VTA_TASK.consentRequest, payload },
+    body: { id: 'consent-1', type: VTA_TASK.consentRequest, payload, parentThreadId },
   }
   const kept = keepManagerMessage(message as never, now)
   if (!kept || !('approval' in kept)) throw new Error('keepManagerMessage did not keep the consent request')
   return kept.approval
 }
+
+/** The rung's envelope with the VTI hcp.md §5.1 effects in place of its five. */
+const v0Payload = (): Payload => ({ ...rungPayload(), effects: hcpEffects() })
 
 const first = vectors.cases[0]
 const link = readHcpConnectLink(
@@ -81,33 +87,44 @@ describe("the rung's HCP consent request", () => {
     expect(validate({ ...rungPayload(), expiresAt: 'in five minutes' })).toBe(false)
   })
 
-  it('reads as the five effects track C expects, the summaries verbatim', () => {
-    const effects = readHcpEffects(received(rungPayload(), Date.parse('2026-11-27T10:00:01.000Z')))
-    expect(effects).toBeDefined()
-    expect(effects?.client).toEqual({
-      clientVid: first.clientVid,
-      clientName: 'hcp-cli',
-      operator: { id: 'did:web:labs.example', name: 'Example Labs' },
-      threadId: first.threadId,
-      grantId: 'urn:uuid:3f1c2b4a-5d6e-4f70-8a9b-0c1d2e3f4a5b',
-    })
-    expect(effects?.rows).toEqual((rungPayload().effects as { summary: string }[]).map((e) => e.summary))
-    expect(effects?.useUntil).toEqual({ maxUseSeconds: 600 })
-    expect(effects?.term).toEqual({ grantType: 'temporary', expiresInSeconds: 14400 })
+  it('the rung’s recorded five kinds are the contract before §5.1: they are not read', () => {
+    const approval = received(rungPayload(), Date.parse('2026-11-27T10:00:01.000Z'), first.threadId)
+    expect((rungPayload().effects as { kind: string }[]).map((e) => e.kind)).toContain('hcpGrantClient')
+    expect(readHcpEffects(approval)).toBeUndefined()
+  })
+
+  it('with the §5.1 effects, the envelope validates and reads, the summaries verbatim', () => {
+    const payload = v0Payload()
+    const ok = validate(payload)
+    if (!ok) throw new Error(JSON.stringify(validate.errors, null, 1))
+    const effects = readHcpEffects(received(payload, Date.parse('2026-11-27T10:00:01.000Z'), first.threadId))
+    expect(effects?.client.clientId).toBe(first.clientVid)
+    expect(effects?.rows).toEqual(hcpEffects().map((e) => e.summary))
+  })
+
+  it('keepManagerMessage keeps the document’s parentThreadId on the approval, and only a string one', () => {
+    const now = Date.parse('2026-11-27T10:00:01.000Z')
+    expect(received(v0Payload(), now, first.threadId).parentThreadId).toBe(first.threadId)
+    expect(received(v0Payload(), now, 7).parentThreadId).toBeUndefined()
+    // A payload member of that name never stands in for the document's (N1).
+    expect(received({ ...v0Payload(), parentThreadId: first.threadId } as never, now).parentThreadId).toBeUndefined()
+    expect(received(v0Payload(), now)).not.toHaveProperty('parentThreadId')
   })
 
   it('is found for the link of the match-number vectors’ first case while it is pending', () => {
     expect(link).toBeDefined()
     const now = Date.parse('2026-11-27T10:04:59.000Z')
-    const approval = received(rungPayload(), Date.parse('2026-11-27T10:00:01.000Z'))
+    const approval = received(v0Payload(), Date.parse('2026-11-27T10:00:01.000Z'), first.threadId)
     expect(findHcpApproval([approval], link, new Date(now))).toBe(approval)
+    // control: without the parentThreadId it names no thread, so it is not found.
+    expect(findHcpApproval([received(v0Payload(), now)], link, new Date(now))).toBeUndefined()
   })
 
   it('control: with its expiresAt in the past, it is not found', () => {
     const now = new Date('2026-11-27T10:00:01.000Z')
-    const stale = received({ ...rungPayload(), expiresAt: '2026-11-27T10:00:00.000Z' }, now.getTime())
+    const stale = received({ ...v0Payload(), expiresAt: '2026-11-27T10:00:00.000Z' }, now.getTime(), first.threadId)
     expect(findHcpApproval([stale], link, now)).toBeUndefined()
-    const fresh = received(rungPayload(), now.getTime())
+    const fresh = received(v0Payload(), now.getTime(), first.threadId)
     expect(findHcpApproval([fresh], link, now)).toBe(fresh)
   })
 })
