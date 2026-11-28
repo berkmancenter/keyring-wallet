@@ -3,7 +3,7 @@ import { W3cCredentialRecord } from '@credo-ts/core'
 import { isPeerVrcCredential } from '../credentialTypes'
 import { useNavigation, useIsFocused } from '@react-navigation/native'
 import { StackNavigationProp } from '@react-navigation/stack'
-import React, { useEffect, useMemo, useCallback } from 'react'
+import React, { useEffect, useMemo, useCallback, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FlatList, View, StyleSheet } from 'react-native'
 
@@ -11,8 +11,19 @@ import { DispatchAction } from '../../../contexts/reducers/store'
 import { useStore } from '../../../contexts/store'
 import { useTheme } from '../../../contexts/theme'
 import { useTour } from '../../../contexts/tour/tour-context'
-import { ContactStackParams, Screens, ContactCredentialDetails } from '../../../types/navigators'
+import {
+  ContactStackParams,
+  Screens,
+  ContactCredentialDetails,
+  RootStackParams,
+  Stacks,
+  TabStacks,
+} from '../../../types/navigators'
 import { TOKENS, useServices } from '../../../container-api'
+import { isAgentConnectEnabled } from '../../connected-agents/agentConnectFlag'
+import { useAgentContacts } from '../../connected-agents/ConnectedAgentsProvider'
+import { ConnectedAgentsRoot, administeredVtaDid } from '../../connected-agents/ConnectedAgentsRoot'
+import { vtaAgent } from '../../trust-tasks/module/vtaAgent'
 import { useOpenIDCredentials } from '../../openid/context/OpenIDCredentialRecordProvider'
 import { BaseTourID } from '../../../types/tour'
 import EmptyContactsList from '../components/EmptyContactsList'
@@ -28,11 +39,30 @@ import { useContactFacts } from '../contacts/useContactFacts'
 import { useContactLinks } from '../contacts/useContactLinks'
 import type { ContactCardProps } from '../../../types/contact-card'
 
+/** One of the owner's AI agents, as the contacts list draws it (§3.14, frame 25). */
+type AgentContactRow = { agentId: string; name: string; handle: string }
+
+const isAgentRow = (item: ContactCredentialDetails | AgentContactRow): item is AgentContactRow => 'agentId' in item
+
+const administeredVta = () => administeredVtaDid(vtaAgent.getState())
+
+/** The agents with access, from the agent-connect hooks: only ever rendered inside `ConnectedAgentsRoot`. */
+const WithAgentContacts: React.FC<{ children: (agents: AgentContactRow[]) => React.ReactElement }> = ({ children }) =>
+  children(useAgentContacts())
+
 const ListContacts: React.FC = () => {
   const { t } = useTranslation()
   const [store, dispatch] = useStore()
-  const [{ enableTours: enableToursConfig }, ContactCard] = useServices([TOKENS.CONFIG, TOKENS.COMPONENT_CONTACT_CARD])
+  const [{ enableTours: enableToursConfig }, ContactCard, AgentContactCard] = useServices([
+    TOKENS.CONFIG,
+    TOKENS.COMPONENT_CONTACT_CARD,
+    TOKENS.COMPONENT_AGENT_CONTACT_CARD,
+  ])
   const navigation = useNavigation<StackNavigationProp<ContactStackParams>>()
+  // Agent connect's developer switch, read once when the list mounts; and the VTA its agents are listed from. With
+  // either missing the list is exactly the people.
+  const [agentConnect] = useState(isAgentConnectEnabled)
+  const vtaDid = useSyncExternalStore(vtaAgent.subscribe, administeredVta)
   useTheme()
   const { start, stop } = useTour()
   const screenIsFocused = useIsFocused()
@@ -293,20 +323,49 @@ const ListContacts: React.FC = () => {
     )
   }
 
-  return (
+  // An agent opens its details in My Agent, over that stack's own screens (§3.14).
+  const openAgent = (agent: AgentContactRow) =>
+    (navigation as unknown as StackNavigationProp<RootStackParams>).navigate(Stacks.TabStack, {
+      screen: TabStacks.MyAgentStack,
+      params: { screen: Screens.AgentDetails, params: { agentId: agent.agentId, name: agent.name }, initial: false },
+    })
+
+  const renderItem = ({ item }: { item: ContactCredentialDetails | AgentContactRow }) =>
+    isAgentRow(item) ? (
+      <AgentContactCard name={item.name} onPress={() => openAgent(item)} testID={testIdWithKey('AgentContactCard')} />
+    ) : (
+      renderContactItem({ item })
+    )
+
+  // With no agents the rows are the people's, as they were: the same data, keys and renderer.
+  const list = (agents: AgentContactRow[]) => (
     <View style={{ flex: 1 }}>
-      <FlatList
+      <FlatList<ContactCredentialDetails | AgentContactRow>
         style={styles.listContainer}
         contentContainerStyle={[{ flexGrow: 1 }, styles.listContentContainer]}
-        data={groupedContacts}
-        keyExtractor={(item) => item.issuer.id}
-        renderItem={renderContactItem}
+        data={
+          agents.length === 0
+            ? groupedContacts
+            : [...groupedContacts, ...agents].sort((a, b) =>
+                (isAgentRow(a) ? a.name : a.issuer.name).localeCompare(isAgentRow(b) ? b.name : b.issuer.name)
+              )
+        }
+        keyExtractor={(item) => (isAgentRow(item) ? `agent:${item.agentId}` : item.issuer.id)}
+        renderItem={renderItem}
         // Not "No contacts yet" while the contacts are still being read (after an unlock or a start).
         ListEmptyComponent={isLoading ? null : EmptyContactsList}
         showsVerticalScrollIndicator={false}
       />
     </View>
   )
+
+  if (agentConnect && vtaDid)
+    return (
+      <ConnectedAgentsRoot>
+        <WithAgentContacts>{list}</WithAgentContacts>
+      </ConnectedAgentsRoot>
+    )
+  return list([])
 }
 
 export default ListContacts

@@ -18,6 +18,7 @@ import { DeviceEventEmitter } from 'react-native'
 import { Screens, TabStacks } from '../../../types/navigators'
 import type { AgentDevice } from '../module/vtaDevices'
 import { SIBLING_SEEN_EVENT } from '../module/vtaPresence'
+import { myVtaRoute } from '../module/vtiLinks'
 
 import { deviceViewOf } from './deviceWords'
 import { SiblingNotice } from './SiblingNotice'
@@ -95,9 +96,16 @@ export const SiblingNoticeStrip: React.FC = () => {
       onToggle={() => setNotice({ ...notice, open: !notice.open })}
       onOpen={() => {
         setNotice(NONE)
+        const nav = navigation as unknown as { navigate: (n: string, p?: object) => void }
+        // With agent connect on, the devices are in "My VTA" under Settings (agent-connect plan §7.8).
+        const moved = myVtaRoute(Screens.VtaDevices)
+        if (moved) {
+          nav.navigate(moved.name, moved.params)
+          return
+        }
         // `initial: false`: every tab unmounts on blur, so from another tab this would be the stack's only screen, with
         // no Back (myAgentLinkParams).
-        ;(navigation as unknown as { navigate: (n: string, p?: object) => void }).navigate(TabStacks.MyAgentStack, {
+        nav.navigate(TabStacks.MyAgentStack, {
           screen: Screens.VtaDevices,
           initial: false,
         })

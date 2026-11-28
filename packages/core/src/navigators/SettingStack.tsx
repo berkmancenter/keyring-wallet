@@ -1,5 +1,5 @@
 import { createStackNavigator } from '@react-navigation/stack'
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Animated, Easing } from 'react-native'
 
@@ -27,6 +27,8 @@ import { Screens, SettingStackParams } from '../types/navigators'
 import { testIdWithKey } from '../utils/testable'
 
 import { useDefaultStackOptions } from './defaultStackOptions'
+import VtaStack from './VtaStack'
+import { isAgentConnectEnabled } from '../modules/connected-agents/agentConnectFlag'
 import { TOKENS, useServices } from '../container-api'
 import About from '../screens/About'
 import AutoLock from '../screens/AutoLock'
@@ -45,6 +47,8 @@ const SettingStack: React.FC = () => {
     TOKENS.OBJECT_SCREEN_CONFIG,
   ])
   const defaultStackOptions = useDefaultStackOptions(theme)
+  // Agent connect's developer switch, read once when the stack mounts: a change applies on the next launch.
+  const [agentConnect] = useState(isAgentConnectEnabled)
   const OnboardingTheme = theme.OnboardingTheme
   const carousel = createCarouselStyle(OnboardingTheme)
 
@@ -277,6 +281,19 @@ const SettingStack: React.FC = () => {
             ...ScreenOptionsDictionary[Screens.MyProfiles],
           }}
         />
+        {/* "My VTA" (§7.8, frame 20): the VTA's screens, moved here from the My Agent tab with agent connect on. Its
+            own stack draws the headers (the first one with this stack's back), so this one draws none. */}
+        {agentConnect ? (
+          <Stack.Screen
+            name={Screens.MyVta}
+            component={VtaStack}
+            options={{
+              title: t('ConnectedAgents.MyVta'),
+              headerShown: false,
+              ...ScreenOptionsDictionary[Screens.MyVta],
+            }}
+          />
+        ) : null}
       </Stack.Navigator>
     </Animated.View>
   )
