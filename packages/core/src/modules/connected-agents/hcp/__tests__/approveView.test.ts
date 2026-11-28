@@ -27,9 +27,11 @@ describe('hcpApproveView', () => {
       expiresAt: GRANT_EXPIRES_AT,
       operator: { id: 'did:web:labs.example', name: 'Example Labs' },
       persistence: 'temporary',
+      maxUseSeconds: 600,
     })
   })
 
+  // The view shows a persistent request as sent; Approve declines it (approveFlow.test.ts, S5).
   it('carries a detail grantId when the request sends one, and the term’s persistence as sent', () => {
     const effects = hcpEffects()
     effects[0] = { ...effects[0], detail: { ...(effects[0].detail as object), grantId: GRANT } }
@@ -39,21 +41,26 @@ describe('hcpApproveView', () => {
     expect(view.persistence).toBe('persistent')
   })
 
-  it('offers the choose:true purposes as a choice, not as rows, and none is chosen yet', () => {
+  it('B3: shows choose:true purposes as the purposes approving allows, by summary, and offers no picker', () => {
     const choose = { purpose: 'https://example.org/purpose/research', description: 'research', choose: true }
-    const view = hcpApproveView(
-      'My helper',
-      read([...hcpEffects(), { kind: 'hcpPurpose', summary: 'For research.', detail: choose }]),
-      THREAD
+    const effects = hcpEffects().flatMap((e, i) =>
+      i === 2
+        ? [
+            { kind: 'hcpPurpose', summary: 'For research.', detail: choose },
+            { kind: 'hcpPurpose', summary: 'For your diet.', detail: { ...choose, purpose: 'https://example.org/d' } },
+          ]
+        : [e]
     )
-    expect(view.rows).toEqual(ROWS)
-    expect(view.purposeChoice).toEqual({
-      key: 'ApproveChoosePurpose',
-      options: [{ purpose: choose.purpose, description: 'research', summary: 'For research.' }],
+    const view = hcpApproveView('My helper', read(effects), THREAD)
+    expect(view.rows).toEqual(ROWS.filter((_, i) => i !== 2))
+    expect(view.purposesAllowed).toEqual({
+      key: 'ApproveAllowsPurposes',
+      params: { name: 'My helper' },
+      rows: ['For research.', 'For your diet.'],
     })
-    expect(view.chosenPurpose).toBeUndefined()
-    // control: without one, there is no choice.
-    expect(hcpApproveView('My helper', read(), THREAD).purposeChoice).toBeUndefined()
+    expect(Object.keys(view)).not.toContain('chosenPurpose')
+    // control: a request that names its purpose has no such line.
+    expect(hcpApproveView('My helper', read(), THREAD).purposesAllowed).toBeUndefined()
   })
 
   describe('"not signing in" is Keyring’s own line on every consent, never an effect', () => {

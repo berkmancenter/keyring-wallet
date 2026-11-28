@@ -160,6 +160,8 @@ export interface VtiApproval extends VtaConsentRequest {
    * that agent, and the person who asked. The decision goes to that agent, not to this phone's own.
    */
   forAgent?: { agentDid: string; asker: string; stopAsked?: true }
+  /** The consent document's `parentThreadId`, when a string: an HCP consent request names the held request's thread. */
+  parentThreadId?: string
 }
 
 export interface VtaAgentState {
@@ -576,9 +578,11 @@ export function keepManagerMessage(
     | { id?: string; type?: string; parentThreadId?: unknown; payload?: VtaConsentRequest }
     | undefined
   if (body?.type === VTA_TASK.consentRequest && body.payload?.challenge) {
+    // A payload member named parentThreadId never stands in for the document's.
+    const { parentThreadId: _fromPayload, ...payload } = body.payload
     return {
       approval: {
-        ...body.payload,
+        ...payload,
         // The document's parentThreadId: an HCP consent request names the held request's thread by it.
         ...(typeof body.parentThreadId === 'string' ? { parentThreadId: body.parentThreadId } : {}),
         id: String(body.id ?? body.payload.challenge),

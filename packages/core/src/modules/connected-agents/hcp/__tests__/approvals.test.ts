@@ -4,7 +4,7 @@
  * one `hcpClient` and one `hcpGrantTerm`, an unknown kind kept as its row.
  */
 import type { VtiApproval } from '../../../trust-tasks/module/vtaAgent'
-import { findHcpApproval, hcpApprovalThread, readHcpEffects, vtaAgentApprovalSource } from '../approvals'
+import { findHcpApproval, hcpApprovalThread, hcpOperatorId, readHcpEffects, vtaAgentApprovalSource } from '../approvals'
 import { HCP_EFFECT_KINDS, HCP_ENTRIES_CREATE } from '../types'
 import {
   CLIENT_VID,
@@ -70,6 +70,14 @@ describe('findHcpApproval', () => {
     ['a non-pending status', hcpApproval({ id: 'denied', status: 'denied' })],
     ['an expired one', hcpApproval({ id: 'expired', expiresAt: new Date(NOW.getTime()).toISOString() })],
     ['effects that are not a list', hcpApproval({ id: 'none', effects: undefined })],
+    [
+      "one from another person's agent (forAgent)",
+      hcpApproval({ id: 'foreign', forAgent: { agentDid: 'did:web:other.example', asker: 'Sam' } }),
+    ],
+    [
+      'a detail threadId alone, with no parentThreadId',
+      withDetail(0, { ...CLIENT, threadId: THREAD }, { id: 'detailonly', parentThreadId: undefined }),
+    ],
   ]
 
   it.each(others)('does not take %s', (_what, approval) => {
@@ -89,14 +97,11 @@ describe('findHcpApproval', () => {
     expect(findHcpApproval([hcpApproval({ effects })], LINK, NOW)).toBeDefined()
   })
 
-  it('matches on a detail threadId when the approval carries no parentThreadId, and on both when they agree', () => {
+  it('matches on the parentThreadId, with a detail threadId only as a value that must agree', () => {
+    expect(findHcpApproval([withDetail(0, { ...CLIENT, threadId: THREAD })], LINK, NOW)).toBeDefined()
+    // control: a detail threadId alone is never a source, even for the scanned thread.
     expect(
       findHcpApproval([withDetail(0, { ...CLIENT, threadId: THREAD }, { parentThreadId: undefined })], LINK, NOW)
-    ).toBeDefined()
-    expect(findHcpApproval([withDetail(0, { ...CLIENT, threadId: THREAD })], LINK, NOW)).toBeDefined()
-    // control: a detail threadId for another thread, alone, is not matched.
-    expect(
-      findHcpApproval([withDetail(0, { ...CLIENT, threadId: OTHER_THREAD }, { parentThreadId: undefined })], LINK, NOW)
     ).toBeUndefined()
   })
 
@@ -108,10 +113,10 @@ describe('findHcpApproval', () => {
 })
 
 describe('hcpApprovalThread', () => {
-  it('is the parentThreadId, else the detail threadId; undefined when they disagree', () => {
+  it('is the parentThreadId, required; undefined when a detail threadId disagrees or stands alone', () => {
     const read = (a: VtiApproval) => hcpApprovalThread(a, readHcpEffects(a)!)
     expect(read(hcpApproval())).toBe(THREAD)
-    expect(read(withDetail(0, { ...CLIENT, threadId: OTHER_THREAD }, { parentThreadId: undefined }))).toBe(OTHER_THREAD)
+    expect(read(withDetail(0, { ...CLIENT, threadId: OTHER_THREAD }, { parentThreadId: undefined }))).toBeUndefined()
     expect(read(withDetail(0, { ...CLIENT, threadId: OTHER_THREAD }))).toBeUndefined()
     expect(read(hcpApproval({ parentThreadId: undefined }))).toBeUndefined()
   })
@@ -166,11 +171,29 @@ describe('readHcpEffects', () => {
     expect(read?.rows).toHaveLength(8)
   })
 
-  it('puts a choose:true purpose among the choices, with its summary, and not among the rows', () => {
-    const read = readHcpEffects(hcpApproval({ effects: [...hcpEffects(), CHOOSE] }))
-    expect(read?.rows).toEqual(ROWS)
-    expect(read?.choices).toEqual([{ ...CHOOSE.detail, summary: CHOOSE.summary }])
-    expect(read?.purposes).toHaveLength(2)
+  /** The fixture with its named purpose replaced by `choose: true` ones. */
+  const choosing = (...choices: unknown[]) => hcpEffects().flatMap((e, i) => (i === 2 ? choices : [e]))
+  const ROWS_BUT_PURPOSE = ROWS.filter((_, i) => i !== 2)
+
+  it('puts a choose:true purpose among the choices, by its summary, and not among the rows or purposes', () => {
+    const read = readHcpEffects(hcpApproval({ effects: choosing(CHOOSE) }))
+    expect(read?.rows).toEqual(ROWS_BUT_PURPOSE)
+    expect(read?.choices).toEqual([
+      { summary: CHOOSE.summary, purpose: CHOOSE.detail.purpose, description: CHOOSE.detail.description },
+    ])
+    expect(read?.purposes).toEqual([])
+  })
+
+  it('B3: a choose:true purpose whose detail is otherwise malformed is still a choice, never a row', () => {
+    const bad = { ...CHOOSE, detail: { choose: true } }
+    const read = readHcpEffects(hcpApproval({ effects: choosing(bad) }))
+    expect(read?.rows).toEqual(ROWS_BUT_PURPOSE)
+    expect(read?.choices).toEqual([{ summary: CHOOSE.summary }])
+  })
+
+  it('N6: refuses named and choose:true purposes mixed, and a request with no hcpCategory', () => {
+    expect(readHcpEffects(hcpApproval({ effects: [...hcpEffects(), CHOOSE] }))).toBeUndefined()
+    expect(readHcpEffects(hcpApproval({ effects: without(1) }))).toBeUndefined()
   })
 
   it('reads an operator given as text, and an opportunistic detail grantId', () => {
@@ -216,6 +239,15 @@ describe('readHcpEffects', () => {
       }
     }
     expect(readHcpEffects(hcpApproval({ effects: [...hcpEffects(), { kind: 'new' }] }))).toBeUndefined()
+  })
+})
+
+describe('hcpOperatorId', () => {
+  it('S12: text gives itself, an object its id, and an object with only a name gives none', () => {
+    expect(hcpOperatorId('did:web:labs.example')).toBe('did:web:labs.example')
+    expect(hcpOperatorId({ id: 'did:web:labs.example', name: 'Example Labs' })).toBe('did:web:labs.example')
+    expect(hcpOperatorId({ name: 'Example Labs' })).toBeUndefined()
+    expect(hcpOperatorId(undefined)).toBeUndefined()
   })
 })
 

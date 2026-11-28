@@ -46,12 +46,14 @@ export interface HcpCategoryDetail {
   actions: string[]
 }
 
-/** `detail` of an `hcpPurpose` effect (one per requested purpose; `choose: true` when the request names none). */
+/**
+ * `detail` of a named `hcpPurpose` effect (one per requested purpose). One with `choose: true` (the request names none)
+ * is read apart, by its summary (`./approvals.ts`, `choices`).
+ */
 export interface HcpPurposeDetail {
   /** The purpose IRI. */
   purpose: string
   description: string
-  choose?: boolean
 }
 
 /** `detail` of the `hcpUseUntil` effect. */
@@ -96,15 +98,20 @@ export type HcpApprovalView = {
   expiresAt: string
   /** The Client Operator as the VTA reported it (`hcpClient`), display-only. */
   operator: HcpOperator
-  /** `hcpGrantTerm.persistence` (`temporary` in V0): nothing may offer or imply a persistent grant unless it says so. */
-  persistence: string
   /**
-   * Present when the request names no purpose: the `hcpPurpose` effects with `choose: true` are options the person
-   * picks from, not facts, so they are not among `rows`. Approve needs a choice first ({@link chosenPurpose}).
+   * `hcpGrantTerm.persistence`. Only `temporary` can be approved in V0: Approve declines anything else
+   * (`./approveFlow.ts`).
    */
-  purposeChoice?: { key: 'ApproveChoosePurpose'; options: { purpose: string; description: string; summary: string }[] }
-  /** The purpose IRI the person chose among `purposeChoice.options`. */
-  chosenPurpose?: string
+  persistence: string
+  /** `hcpUseUntil.maxUseSeconds`, when the request gave it: how long a disclosed copy may be used. */
+  maxUseSeconds?: number
+  /**
+   * Present when the request names no purpose (`hcpPurpose` effects with `choose: true`). No picker is offered: VTI has
+   * not defined how a choice would reach the VTA (`task-consent/decision` carries approve or deny only), so approving
+   * allows every one of them, and the screen says so with their summaries as rows.
+   * TODO(vti): offer a choice once the decision can carry it to the VTA.
+   */
+  purposesAllowed?: { key: 'ApproveAllowsPurposes'; params: { name: string }; rows: string[] }
 }
 
 /**
@@ -155,8 +162,12 @@ export type HcpConnection = {
   approvedAt: string
   /** The `hcpGrantTerm` effect's `expiresAt`. */
   expiresAt: string
-  /** The purpose the person chose, when the request named none. */
-  chosenPurpose?: string
+  /** The Client Operator as the VTA reported it (`hcpClient`); absent on older records. See `hcpOperatorId`. */
+  operator?: HcpOperator
+  /** `hcpGrantTerm.persistence` (`temporary`, the only one approved in V0); absent on older records. */
+  persistence?: string
+  /** `hcpUseUntil.maxUseSeconds`, when the request gave it. */
+  maxUseSeconds?: number
   revokedAt?: string
   notice?: HcpNoticeState
   /**
@@ -197,8 +208,10 @@ export type HcpApprovalInFlight = {
   approvalExpiresAt: string
   /** The grant's expiry, from the `hcpGrantTerm` effect. */
   expiresAt: string
-  /** The purpose the person chose, when the request named none. */
-  chosenPurpose?: string
+  /** As on the view: kept for the connection the reconcile may write. */
+  operator?: HcpOperator
+  persistence?: string
+  maxUseSeconds?: number
   /** When this record was written, just before `decide(approve)`. */
   startedAt: string
 }

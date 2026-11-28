@@ -53,10 +53,13 @@ export function vtaAgentApprovalSource(): HcpApprovalSource {
 export interface HcpEffects {
   client: HcpClientDetail
   categories: HcpCategoryDetail[]
-  /** Every purpose read, `choose: true` ones included; see {@link HcpEffects.choices}. */
+  /** The named purposes read (never a `choose: true` one). */
   purposes: HcpPurposeDetail[]
-  /** The `choose: true` purposes with their summaries: options for the person, kept out of `rows`. */
-  choices: (HcpPurposeDetail & { summary: string })[]
+  /**
+   * The `choose: true` purposes (the request names none), each by its summary, with its purpose and description when
+   * its detail reads: kept out of `rows`, and shown as the purposes approving allows (`./approveView.ts`).
+   */
+  choices: { summary: string; purpose?: string; description?: string }[]
   useUntil?: HcpUseUntilDetail
   term: HcpGrantTermDetail
   directives?: HcpDirectivesDetail
@@ -99,10 +102,11 @@ function categoryDetail(d: unknown): HcpCategoryDetail | undefined {
   return { category: d.category, description: d.description, actions: [...d.actions] }
 }
 
+/** A named purpose (`choose: true` is read before this, in {@link readHcpEffects}). */
 function purposeDetail(d: unknown): HcpPurposeDetail | undefined {
   if (!isPlain(d) || !isText(d.purpose) || !isText(d.description)) return undefined
-  if (d.choose !== undefined && typeof d.choose !== 'boolean') return undefined
-  return { purpose: d.purpose, description: d.description, ...(d.choose === true ? { choose: true } : {}) }
+  if (d.choose !== undefined && d.choose !== false) return undefined
+  return { purpose: d.purpose, description: d.description }
 }
 
 function useUntilDetail(d: unknown): HcpUseUntilDetail | undefined {
@@ -122,8 +126,18 @@ function directivesDetail(d: unknown): HcpDirectivesDetail | undefined {
 }
 
 /**
- * The effects, read. A `choose: true` purpose is an option the person picks, not a fact: it goes to `choices`, not to
- * `rows`. Order and count are not fixed beyond what §5.1 says: every effect must be an object with a
+ * The Client Operator's id, the one derivation for every caller (C5's "answers other people" switch): text gives
+ * itself, an object gives its `id`, and an object with only a `name` gives none (no switch).
+ */
+export function hcpOperatorId(operator: HcpOperator | undefined): string | undefined {
+  if (typeof operator === 'string') return operator
+  return operator?.id
+}
+
+/**
+ * The effects, read. A `choose: true` purpose goes to `choices`, not to `rows`, detected before its detail is
+ * validated, so a malformed one can never read as an ordinary row. Requests that mix named and `choose: true`
+ * purposes, or carry no `hcpCategory` at all, are outside VTI hcp.md §5.1 and refused. Order and count are not fixed beyond what §5.1 says: every effect must be an object with a
  * non-empty `summary` (the row a surface must show), and there must be exactly one `hcpClient` and exactly one
  * `hcpGrantTerm` whose `detail` reads, since the match and the record need them. A second `hcpUseUntil` or
  * `hcpDirectives` (one per request) also refuses, as the two could disagree. Categories and purposes are as many as
@@ -143,6 +157,8 @@ export function readHcpEffects(approval: Pick<VtiApproval, 'effects'>): HcpEffec
   let directives: HcpDirectivesDetail | undefined
   let useUntilCount = 0
   let directivesCount = 0
+  let categoryCount = 0
+  let namedPurposeCount = 0
   for (const e of effects as unknown[]) {
     if (!isPlain(e) || !isText(e.summary)) return undefined
     const summary = e.summary
@@ -161,17 +177,25 @@ export function readHcpEffects(approval: Pick<VtiApproval, 'effects'>): HcpEffec
         break
       }
       case 'hcpCategory': {
+        categoryCount++
         const c = categoryDetail(e.detail)
         if (c) categories.push(c)
         break
       }
       case 'hcpPurpose': {
+        if (isPlain(e.detail) && e.detail.choose === true) {
+          const { purpose, description } = e.detail
+          choices.push({
+            summary,
+            ...(isText(purpose) ? { purpose } : {}),
+            ...(isText(description) ? { description } : {}),
+          })
+          isChoice = true
+          break
+        }
+        namedPurposeCount++
         const p = purposeDetail(e.detail)
         if (p) purposes.push(p)
-        if (p?.choose) {
-          choices.push({ ...p, summary })
-          isChoice = true
-        }
         break
       }
       case 'hcpUseUntil':
@@ -189,6 +213,7 @@ export function readHcpEffects(approval: Pick<VtiApproval, 'effects'>): HcpEffec
     if (!isChoice) rows.push(summary)
   }
   if (clients.length !== 1 || terms.length !== 1 || useUntilCount > 1 || directivesCount > 1) return undefined
+  if (categoryCount === 0 || (choices.length > 0 && namedPurposeCount > 0)) return undefined
   return {
     client: clients[0],
     categories,
@@ -202,22 +227,25 @@ export function readHcpEffects(approval: Pick<VtiApproval, 'effects'>): HcpEffec
 }
 
 /**
- * The thread a consent request answers: the document's `parentThreadId` (VTI hcp.md, the "VTA → Keyring" boundary: the VTA
- * always sets it to the held request's `threadId`), which `vtaAgent` keeps on the approval. A `threadId` in the
- * `hcpClient` detail, outside the contract, is read as a second source; when both are present they must agree.
+ * The thread a consent request answers: the document's `parentThreadId` (VTI hcp.md §5.2, the "VTA → Keyring"
+ * boundary: the VTA always sets it to the held request's `threadId`), which `vtaAgent` keeps on the approval. Required:
+ * without it nothing is matched. A `threadId` in the `hcpClient` detail, outside the contract, is never a source on its
+ * own; when present it must agree.
  */
 export function hcpApprovalThread(approval: VtiApproval, effects: HcpEffects): string | undefined {
   const parent = typeof approval.parentThreadId === 'string' ? approval.parentThreadId : undefined
   const inDetail = effects.client.threadId
-  if (parent && inDetail && parent !== inDetail) return undefined
-  return parent ?? inDetail
+  if (!parent || (inDetail && parent !== inDetail)) return undefined
+  return parent
 }
 
 /**
  * Whether an approval is the HCP grant request the link names, whatever its status and time: the task type, the
- * requester, the client effect's VID, and the thread it answers.
+ * requester, the client effect's VID, and the thread it answers. Never one from another person's agent (`forAgent`):
+ * an HCP consent comes from the person's own VTA.
  */
 export function isHcpApprovalFor(approval: VtiApproval, link: HcpConnectLink): boolean {
+  if (approval.forAgent) return false
   if (approval.taskType !== HCP_GRANTS_REQUEST || approval.requester !== link.clientVid) return false
   const effects = readHcpEffects(approval)
   return (

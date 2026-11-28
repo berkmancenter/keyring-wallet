@@ -1,16 +1,18 @@
 /**
  * The HCP approval, as a small state machine (step 7.27 track C, part 2, "The flow, decided"):
  *
- * 1. The person names the agent (the name is Keyring's, never the request's) and scans the link: {@link start}.
+ * 1. The person names the agent (the name is Keyring's, never the request's) and scans the link: {@link start}. A link
+ *    whose thread Keyring already holds a record for (`threadInUse`) is not approved twice: `expired`.
  * 2. Keyring waits for the VTA's consent request for that link ({@link findHcpApproval}).
  * 3. It waits at most {@link HCP_SCAN_WAIT_MS} from the scan, then `expired`.
  * 4. An approval whose own `expiresAt` has passed is `expired` too.
  * 5. The person types the four digits from their terminal: one try. A mismatch denies the request and counts one
  *    wrong number on `../lockout.ts`, as the base path's pairing does; while locked out, scanning gives `locked`
  *    before any wait.
- * 6. A match shows the approve view. When the request names no purpose, the person picks one of the `choose: true`
- *    purposes first ({@link HcpApproveFlow.choosePurpose}); Approve does nothing until they have;
- * 7. Approve first writes part 3's approval in flight (`beforeApprove`, naming the
+ * 6. A match shows the approve view. A request that names no purpose shows the purposes approving allows (no picker:
+ *    VTI has not defined how a choice reaches the VTA);
+ * 7. Approve declines (denies) a request Keyring cannot approve in V0: a `persistence` other than `temporary`, or a
+ *    grant `expiresAt` not in the future or more than {@link HCP_MAX_GRANT_TERM_MS} ahead (HCP 6.1.3). Otherwise it first writes part 3's approval in flight (`beforeApprove`, naming the
  *    grant), then calls `decide(id, 'approve')`, which runs the phone's owner check itself; 8. on `approved`,
  *    `onApproved` makes it part 3's connection; 9. Cancel before Approve denies the request if one was found, and
  *    otherwise sends nothing.
@@ -34,6 +36,12 @@ import type { HcpApprovalView, HcpConnectLink } from './types'
 
 /** How long Keyring waits for the consent request after the scan: the same bound as the request's `expiresAt`. */
 export const HCP_SCAN_WAIT_MS = 5 * 60 * 1000
+
+/** The longest grant term Keyring approves: HCP 6.1.3's 24 hours for a temporary grant. */
+export const HCP_MAX_GRANT_TERM_MS = 24 * 60 * 60 * 1000
+/** The reasons sent with the deny when Keyring cannot approve the request's terms in V0. */
+export const HCP_NOT_TEMPORARY_REASON = 'only a temporary grant can be approved'
+export const HCP_BAD_TERM_REASON = 'the grant expiry is not within the next 24 hours'
 
 /** The reason sent with the deny when the typed number does not match. */
 export const HCP_WRONG_NUMBER_REASON = 'the number did not match'
@@ -62,12 +70,15 @@ export type HcpApproveState =
  *   try may be offered (a second approval creates a second grant).
  * - `ApproveDeclined`: the VTA did not approve (`decide` failed, or the request settled other than approved).
  * - `ApproveAnsweredElsewhere`: approved outside this flow while it waited.
+ * - `ApproveNotTemporary`, `ApproveBadTerm`: Keyring declined terms it cannot approve in V0 (and denied the request).
  */
 export type HcpApproveFailure =
   | { key: 'ApproveNotApproved' }
   | { key: 'ApproveNotRecorded'; params: { name: string } }
   | { key: 'ApproveDeclined' }
   | { key: 'ApproveAnsweredElsewhere' }
+  | { key: 'ApproveNotTemporary'; params: { name: string } }
+  | { key: 'ApproveBadTerm'; params: { name: string } }
 
 export interface HcpApproveFlowDeps {
   source: HcpApprovalSource
@@ -89,6 +100,11 @@ export interface HcpApproveFlowDeps {
    * `decide(approve)` resolved. If it fails, the approval in flight stays and the reconcile completes it.
    */
   onApproved: (view: HcpApprovalView, approvedAt: Date) => Promise<void> | void
+  /**
+   * Whether Keyring already holds a record for the thread (`HcpConnectionStore.hasThread`): such a link is never
+   * approved again. Absent: nothing is checked.
+   */
+  threadInUse?: (threadId: string) => Promise<boolean>
   /** A timer, for the waits; `setTimeout` by default. Returns its cancel. */
   setTimer?: (run: () => void, ms: number) => () => void
 }
@@ -96,8 +112,6 @@ export interface HcpApproveFlowDeps {
 export interface HcpApproveFlow {
   start(input: { name: string; link: HcpConnectLink }): Promise<HcpApproveState>
   typeNumber(digits: string): Promise<HcpApproveState>
-  /** In `approve`, pick one of the view's `purposeChoice` options (by purpose IRI); anything else changes nothing. */
-  choosePurpose(purpose: string): HcpApproveState
   approve(): Promise<HcpApproveState>
   cancel(): Promise<HcpApproveState>
   state(): HcpApproveState
@@ -125,6 +139,19 @@ const CANCELLED: HcpApproveState = { state: 'cancelled', message: { key: 'Approv
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 const failed = (error: string, message: HcpApproveFailure): HcpApproveState => ({ state: 'failed', error, message })
+
+/** Why Keyring cannot approve the view's terms in V0 at `now`, with the deny's reason; undefined when it can. */
+function unapprovable(view: HcpApprovalView, now: Date): { reason: string; message: HcpApproveFailure } | undefined {
+  const params = { name: view.title.params.name }
+  if (view.persistence !== 'temporary') {
+    return { reason: HCP_NOT_TEMPORARY_REASON, message: { key: 'ApproveNotTemporary', params } }
+  }
+  const ends = Date.parse(view.expiresAt) - now.getTime()
+  if (!(ends > 0) || ends > HCP_MAX_GRANT_TERM_MS) {
+    return { reason: HCP_BAD_TERM_REASON, message: { key: 'ApproveBadTerm', params } }
+  }
+  return undefined
+}
 
 export function createHcpApproveFlow(deps: HcpApproveFlowDeps): HcpApproveFlow {
   const setTimer = deps.setTimer ?? defaultTimer
@@ -228,6 +255,9 @@ export function createHcpApproveFlow(deps: HcpApproveFlowDeps): HcpApproveFlow {
             message: { key: 'Locked', params: { n: String(lock.minutesLeft) } },
           })
         }
+        // A link is approved once: a thread Keyring already holds a record for is spent.
+        if (await deps.threadInUse?.(input.link.threadId)) return set(EXPIRED)
+        if (current.state !== 'idle') return current
         name = given
         link = input.link
         scanAt = deps.clock().getTime()
@@ -256,22 +286,17 @@ export function createHcpApproveFlow(deps: HcpApproveFlowDeps): HcpApproveFlow {
       return current
     },
 
-    choosePurpose(purpose) {
-      if (current.state !== 'approve' || !found) return current
-      if (!found.view.purposeChoice?.options.some((o) => o.purpose === purpose)) return current
-      found = { ...found, view: { ...found.view, chosenPurpose: purpose } }
-      return set({ state: 'approve', view: found.view })
-    },
-
     async approve() {
       if (current.state !== 'approve' || !found) return current
-      // A request that names no purpose is approved only with the person's choice.
-      // TODO(vti): the choice is kept on Keyring's own records only. The consent decision (`vtaAgent.decide`,
-      // task-consent/decision) has no field to carry it to the VTA; open question for the VTA side (VTI hcp.md §5.1).
-      if (found.view.purposeChoice && !found.view.chosenPurpose) return current
       refresh()
       if (current.state !== 'approve') return current
       const { id, view } = found
+      const refusal = unapprovable(view, deps.clock())
+      if (refusal) {
+        set(failed(refusal.reason, refusal.message))
+        await deny(id, refusal.reason)
+        return current
+      }
       set({ state: 'approving', view })
       const listed = () => deps.source.list().find((a) => a.id === id)
       const approval = listed()

@@ -31,11 +31,15 @@ export function hcpApproveView(name: string, effects: HcpEffects, threadId: stri
     expiresAt: effects.term.expiresAt,
     operator: effects.client.operator,
     persistence: effects.term.persistence,
+    ...(effects.useUntil ? { maxUseSeconds: effects.useUntil.maxUseSeconds } : {}),
+    // The request names no purpose. No picker: no choice would reach the VTA, so the grant allows them all, and the
+    // screen states that scope. TODO(vti): offer a choice once task-consent/decision can carry it.
     ...(effects.choices.length > 0
       ? {
-          purposeChoice: {
-            key: 'ApproveChoosePurpose' as const,
-            options: effects.choices.map(({ purpose, description, summary }) => ({ purpose, description, summary })),
+          purposesAllowed: {
+            key: 'ApproveAllowsPurposes' as const,
+            params: { name },
+            rows: effects.choices.map((c) => c.summary),
           },
         }
       : {}),

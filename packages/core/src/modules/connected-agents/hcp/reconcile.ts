@@ -122,7 +122,9 @@ function connectionOf(flight: HcpApprovalInFlight, approvedAt: Date): HcpConnect
     approvalStartedAt: flight.startedAt,
     approvedAt: approvedAt.toISOString(),
     expiresAt: flight.expiresAt,
-    ...(flight.chosenPurpose ? { chosenPurpose: flight.chosenPurpose } : {}),
+    ...(flight.operator !== undefined ? { operator: flight.operator } : {}),
+    ...(flight.persistence !== undefined ? { persistence: flight.persistence } : {}),
+    ...(flight.maxUseSeconds !== undefined ? { maxUseSeconds: flight.maxUseSeconds } : {}),
   }
 }
 

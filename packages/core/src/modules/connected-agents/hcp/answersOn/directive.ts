@@ -26,7 +26,7 @@ export const HCP_DIRECTIVES_SET = 'https://trusttasks.org/spec/hcp/directives/se
 export const HCP_ANSWERS_OTHERS_ACTION = 'https://registry.trustoverip.org/dtg/directive-action/answerOthers/1'
 
 export interface HcpAnswersInput {
-  /** The grant's Client Operator id (the `hcpClient` effect's `operator`, its `id` when it has one): the directive applies to it only. */
+  /** The grant's Client Operator id (`hcpOperatorId` of the connection's `operator`; none, so no switch, for a name alone): the directive applies to it only. */
   operatorId: string
   /** On sets a `permit`, off a `deny`. */
   on: boolean

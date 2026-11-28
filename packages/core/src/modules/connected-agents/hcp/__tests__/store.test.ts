@@ -19,7 +19,8 @@ import { CLIENT_VID, GRANT, GRANT_EXPIRES_AT, OTHER_THREAD, OTHER_VID, THREAD } 
 
 const SECOND_THREAD = OTHER_THREAD
 const OLDER_THREAD = 'urn:uuid:00000000-0000-4000-8000-0000000000a1'
-const RESEARCH = 'https://example.org/purpose/research'
+/** What a record keeps of the view's terms (S12, S5): the operator as reported and the persistence. */
+const TERMS = { operator: 'Example Labs', persistence: 'temporary' }
 
 function fakeAgent() {
   const genericRecords = memoryGenericRecords()
@@ -126,14 +127,21 @@ describe('HcpConnectionStore', () => {
 describe('the record written on approval', () => {
   it('approvedAt is the instant decide resolved, expiresAt the grant term’s, the name the person gave', () => {
     const at = new Date('2026-11-27T10:01:02.345Z')
-    expect(hcpConnectionFromApproval(view(), at)).toEqual({ ...approved, approvedAt: '2026-11-27T10:01:02.345Z' })
+    expect(hcpConnectionFromApproval(view(), at)).toEqual({
+      ...approved,
+      ...TERMS,
+      approvedAt: '2026-11-27T10:01:02.345Z',
+    })
   })
 
-  it('carries a grantId and the chosen purpose when the view has them', () => {
+  it('carries a grantId, the operator as reported, the persistence and maxUseSeconds (S12)', () => {
     const at = new Date('2026-11-27T10:01:00.000Z')
-    expect(hcpConnectionFromApproval(view({ grantId: GRANT, chosenPurpose: RESEARCH }), at)).toEqual({
+    const operator = { id: 'did:web:labs.example', name: 'Example Labs' }
+    expect(hcpConnectionFromApproval(view({ grantId: GRANT, maxUseSeconds: 600, operator }), at)).toEqual({
       ...connection(),
-      chosenPurpose: RESEARCH,
+      ...TERMS,
+      operator,
+      maxUseSeconds: 600,
     })
   })
 
@@ -141,7 +149,7 @@ describe('the record written on approval', () => {
     const { agent } = fakeAgent()
     const store = new HcpConnectionStore(agent)
     await recordHcpApproval(store)(view(), new Date('2026-11-27T10:01:00.000Z'))
-    expect(await store.list()).toEqual([approved])
+    expect(await store.list()).toEqual([{ ...approved, ...TERMS }])
   })
 })
 
@@ -165,11 +173,10 @@ describe('the approval in flight', () => {
     expect(await store.list()).toEqual([])
   })
 
-  it('records the chosen purpose, and a grantId the request named', () => {
-    expect(hcpApprovalInFlight(view({ grantId: GRANT, chosenPurpose: RESEARCH }), APPROVAL, STARTED)).toEqual({
+  it('records a grantId the request named', () => {
+    expect(hcpApprovalInFlight(view({ grantId: GRANT }), APPROVAL, STARTED)).toEqual({
       ...inFlight(),
       grantId: GRANT,
-      chosenPurpose: RESEARCH,
     })
   })
 
@@ -188,7 +195,7 @@ describe('the approval in flight', () => {
     await beginHcpApproval(store)(view(), APPROVAL, STARTED)
     await recordHcpApproval(store)(view(), new Date('2026-11-27T10:01:00.000Z'))
     // The approval's start is kept from the approval in flight: the lower bound of every later lookup (B1).
-    expect(await store.list()).toEqual([{ ...approved, approvalStartedAt: STARTED.toISOString() }])
+    expect(await store.list()).toEqual([{ ...approved, ...TERMS, approvalStartedAt: STARTED.toISOString() }])
     expect(await store.listInFlight()).toEqual([])
   })
 
@@ -272,6 +279,19 @@ describe('a connection replaced while its grant may be live', () => {
     expect(await store.getInFlight(OLDER_THREAD)).toMatchObject(learnt)
   })
 
+  it('N5: hasThread is true for a thread with a connection, an approval in flight or a retiring grant', async () => {
+    const { agent } = fakeAgent()
+    const store = new HcpConnectionStore(agent)
+    expect(await store.hasThread(THREAD)).toBe(false)
+    await store.putInFlight(inFlightFor(OLDER_THREAD))
+    expect(await store.hasThread(OLDER_THREAD)).toBe(true)
+    await store.put(connection())
+    expect(await store.hasThread(THREAD)).toBe(true)
+    await store.complete(connection({ threadId: SECOND_THREAD, approvedAt: '2026-11-27T11:00:00.000Z' }), NOW)
+    await store.put(connection({ threadId: SECOND_THREAD }))
+    expect(await store.hasThread(THREAD)).toBe(true)
+  })
+
   it('heldFor lists every approval Keyring holds for the client, with its window', async () => {
     const { agent } = fakeAgent()
     const store = new HcpConnectionStore(agent)
@@ -344,6 +364,7 @@ function inFlightFor(threadId: string): HcpApprovalInFlight {
     approvalId: 'consent-1',
     approvalExpiresAt: '2026-11-27T10:05:00.000Z',
     expiresAt: GRANT_EXPIRES_AT,
+    ...TERMS,
     startedAt: '2026-11-27T10:00:30.000Z',
   }
 }

@@ -40,8 +40,11 @@ const KEYS: HcpCopyKey[] = [
   'ApproveCancelled',
   // Added for backlog 2, track 5: nothing was disclosed under the grant, so "Revoked." alone.
   'RevokeNothingDisclosed',
-  // Added for the VTI hcp.md §5.1 contract: the request names no purpose, so the person picks one.
-  'ApproveChoosePurpose',
+  // Added for the VTI hcp.md §5.1 contract: the request names no purpose, so the purposes approving allows.
+  'ApproveAllowsPurposes',
+  // Added at review: terms V0 cannot approve (not temporary; an expiry outside the next 24 hours).
+  'ApproveNotTemporary',
+  'ApproveBadTerm',
   // Added for the VTI hcp.md §5.1 contract: "not signing in" is Keyring's own line, no longer an effect.
   'ApproveNotSignIn',
   // Added for the "Telling…" rule: not told with the time past; already expired; already disconnected.

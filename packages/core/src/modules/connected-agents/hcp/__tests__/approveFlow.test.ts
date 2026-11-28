@@ -10,6 +10,9 @@ import type { HcpApprovalSource } from '../approvals'
 import {
   createHcpApproveFlow,
   HCP_CANCEL_REASON,
+  HCP_BAD_TERM_REASON,
+  HCP_MAX_GRANT_TERM_MS,
+  HCP_NOT_TEMPORARY_REASON,
   HCP_SCAN_WAIT_MS,
   HCP_WRONG_NUMBER_REASON,
   type HcpApproveState,
@@ -70,7 +73,9 @@ function fakeSource(initial: VtiApproval[] = []) {
   }
 }
 
-function setup(options: { approvals?: VtiApproval[]; wrongTimes?: number[] } = {}) {
+function setup(
+  options: { approvals?: VtiApproval[]; wrongTimes?: number[]; threadInUse?: (t: string) => Promise<boolean> } = {}
+) {
   let now = SCAN_AT
   const timers: { at: number; run: () => void; live: boolean }[] = []
   const clock = () => new Date(now)
@@ -106,7 +111,15 @@ function setup(options: { approvals?: VtiApproval[]; wrongTimes?: number[] } = {
     async (_view: HcpApprovalView, _approval: { id: string; expiresAt: string }, _at: Date) => undefined
   )
   const onApproved = jest.fn(async (_view: HcpApprovalView, _at: Date) => undefined)
-  const flow = createHcpApproveFlow({ source: fake.source, lockout, clock, beforeApprove, onApproved, setTimer })
+  const flow = createHcpApproveFlow({
+    source: fake.source,
+    lockout,
+    clock,
+    beforeApprove,
+    onApproved,
+    setTimer,
+    ...(options.threadInUse ? { threadInUse: options.threadInUse } : {}),
+  })
   const states: HcpApproveState[] = []
   flow.subscribe(() => states.push(flow.state()))
   return {
@@ -133,15 +146,16 @@ const EXPECTED_VIEW: HcpApprovalView = {
   expiresAt: GRANT_EXPIRES_AT,
   operator: { id: 'did:web:labs.example', name: 'Example Labs' },
   persistence: 'temporary',
+  maxUseSeconds: 600,
 }
 
 const RESEARCH = 'https://example.org/purpose/research'
 const DIET = 'https://example.org/purpose/diet'
-/** The fixture with two `choose: true` purposes: a request that names no purpose. */
+/** The fixture with its named purpose replaced by two `choose: true` ones: a request that names no purpose. */
 const choosing = () =>
   hcpApproval({
     effects: [
-      ...hcpEffects(),
+      ...hcpEffects().filter((e) => e.kind !== 'hcpPurpose'),
       {
         kind: 'hcpPurpose',
         summary: 'For research.',
@@ -313,36 +327,65 @@ describe('createHcpApproveFlow', () => {
     expect(t.fake.decide).toHaveBeenCalledTimes(1)
   })
 
-  it('a request that names no purpose is approved only after the person picks one, and the choice is recorded', async () => {
+  it('B3: a request that names no purpose shows the purposes approving allows, with no picker, and approves', async () => {
     const t = setup({ approvals: [choosing()] })
     await t.flow.start({ name: 'My helper', link: LINK })
     await t.flow.typeNumber(NUMBER)
     const shown = t.flow.state()
-    expect(shown.state === 'approve' && shown.view.purposeChoice?.options.map((o) => o.purpose)).toEqual([
-      RESEARCH,
-      DIET,
-    ])
-    // No choice yet: Approve does nothing.
-    expect(await t.flow.approve()).toEqual(shown)
-    expect(t.beforeApprove).not.toHaveBeenCalled()
-    expect(t.fake.decide).not.toHaveBeenCalled()
-    // A purpose that is not an option changes nothing.
-    expect(t.flow.choosePurpose('https://example.org/purpose/other')).toEqual(shown)
-    t.flow.choosePurpose(RESEARCH)
-    t.flow.choosePurpose(DIET)
+    expect(shown.state === 'approve' && shown.view.purposesAllowed).toEqual({
+      key: 'ApproveAllowsPurposes',
+      params: { name: 'My helper' },
+      rows: ['For research.', 'For your diet.'],
+    })
+    expect(t.flow).not.toHaveProperty('choosePurpose')
     await t.flow.approve()
     expect(t.fake.decide.mock.calls).toEqual([['consent-1', 'approve']])
-    expect(t.beforeApprove.mock.calls[0][0].chosenPurpose).toBe(DIET)
-    expect(t.onApproved.mock.calls[0][0].chosenPurpose).toBe(DIET)
     expect(t.flow.state().state).toBe('approved')
   })
 
-  it('control: choosePurpose outside the approve state, or with no choice offered, changes nothing', async () => {
-    const t = setup({ approvals: [hcpApproval()] })
+  const withTerm = (detail: Record<string, unknown>) =>
+    hcpApproval({
+      effects: hcpEffects().map((e) => (e.kind === 'hcpGrantTerm' ? { ...e, detail } : e)),
+    })
+
+  it('S5: Approve declines a request that is not temporary: denied with a reason, nothing recorded', async () => {
+    const t = setup({ approvals: [withTerm({ persistence: 'persistent', expiresAt: GRANT_EXPIRES_AT })] })
     await t.flow.start({ name: 'My helper', link: LINK })
-    expect(t.flow.choosePurpose(RESEARCH).state).toBe('numberEntry')
     await t.flow.typeNumber(NUMBER)
-    expect(t.flow.choosePurpose(RESEARCH)).toEqual({ state: 'approve', view: EXPECTED_VIEW })
+    expect(t.flow.state().state).toBe('approve')
+    await t.flow.approve()
+    expect(t.flow.state()).toEqual({
+      state: 'failed',
+      error: HCP_NOT_TEMPORARY_REASON,
+      message: { key: 'ApproveNotTemporary', params: { name: 'My helper' } },
+    })
+    expect(t.fake.decide.mock.calls).toEqual([['consent-1', 'deny', HCP_NOT_TEMPORARY_REASON]])
+    expect(t.beforeApprove).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['in the past', new Date(SCAN_AT - 1000).toISOString()],
+    ['now', new Date(SCAN_AT).toISOString()],
+    ['more than 24 h ahead', new Date(SCAN_AT + HCP_MAX_GRANT_TERM_MS + 1000).toISOString()],
+  ])('S5: Approve declines a grant expiring %s', async (_what, expiresAt) => {
+    const t = setup({ approvals: [withTerm({ persistence: 'temporary', expiresAt })] })
+    await t.flow.start({ name: 'My helper', link: LINK })
+    await t.flow.typeNumber(NUMBER)
+    await t.flow.approve()
+    expect(t.flow.state()).toMatchObject({ state: 'failed', message: { key: 'ApproveBadTerm' } })
+    expect(t.fake.decide.mock.calls).toEqual([['consent-1', 'deny', HCP_BAD_TERM_REASON]])
+    expect(t.beforeApprove).not.toHaveBeenCalled()
+  })
+
+  it('N5: a link whose thread Keyring already holds a record for is not approved again', async () => {
+    const threadInUse = jest.fn(async (t: string) => t === LINK.threadId)
+    const t = setup({ approvals: [hcpApproval()], threadInUse })
+    expect(await t.flow.start({ name: 'My helper', link: LINK })).toEqual({
+      state: 'expired',
+      message: { key: 'CodeExpired' },
+    })
+    expect(threadInUse).toHaveBeenCalledWith(LINK.threadId)
+    expect(t.fake.decide).not.toHaveBeenCalled()
   })
 
   it('does not approve when the approval in flight cannot be written', async () => {

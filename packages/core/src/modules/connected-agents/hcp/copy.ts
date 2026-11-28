@@ -51,7 +51,9 @@ export type HcpCopyKey =
   | 'ApproveDeclined'
   | 'ApproveAnsweredElsewhere'
   | 'ApproveCancelled'
-  | 'ApproveChoosePurpose'
+  | 'ApproveAllowsPurposes'
+  | 'ApproveNotTemporary'
+  | 'ApproveBadTerm'
 
 /**
  * The keys for a refusal (added after the brief, at review): unlike `RevokeUnreachable` and `MemoryNotSaved`, the
@@ -169,11 +171,26 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     ptBr: '"{{name}}" já tinha se desconectado, então não havia nada a avisar.',
     source: 'PROPOSED',
   },
-  // Added for the VTI hcp.md §5.1 contract: a request that names no purpose, so the person picks one.
-  ApproveChoosePurpose: {
-    en: "It didn't say what it needs this for. Choose one:",
-    fr: "Il n'a pas dit à quoi cela lui sert. Choisissez :",
-    ptBr: 'Ele não disse para que precisa disso. Escolha um:',
+  // Added for the VTI hcp.md §5.1 contract, reworded at review: a request that names no purpose. No picker is
+  // offered (no choice would reach the VTA), so the line states the real scope; the purposes follow as rows.
+  ApproveAllowsPurposes: {
+    en: '"{{name}}" didn\'t say what it needs this for. If you approve, it may use it for any of these:',
+    fr: "« {{name}} » n'a pas dit à quoi cela lui sert. Si vous approuvez, il pourra l'utiliser pour chacun de ces usages :",
+    ptBr: '"{{name}}" não disse para que precisa disso. Se você aprovar, ele poderá usar para qualquer um destes fins:',
+    source: 'PROPOSED',
+  },
+  // Added at review: V0 approves a temporary grant only, so a request to stay connected is declined.
+  ApproveNotTemporary: {
+    en: '"{{name}}" asks to stay connected. Keyring can\'t approve that yet, so it was declined.',
+    fr: "« {{name}} » demande à rester connecté. Keyring ne peut pas encore l'approuver, la demande a donc été refusée.",
+    ptBr: '"{{name}}" pede para ficar conectado. O Keyring ainda não pode aprovar isso, então o pedido foi recusado.',
+    source: 'PROPOSED',
+  },
+  // Added at review: the grant would end in the past, or more than 24 hours ahead (HCP 6.1.3), so it was declined.
+  ApproveBadTerm: {
+    en: '"{{name}}" asked for access ending at a time Keyring can\'t approve, so it was declined.',
+    fr: '« {{name}} » a demandé un accès qui se termine à une heure que Keyring ne peut pas approuver, la demande a donc été refusée.',
+    ptBr: '"{{name}}" pediu um acesso que termina num horário que o Keyring não pode aprovar, então o pedido foi recusado.',
     source: 'PROPOSED',
   },
   RevokeTitle: {

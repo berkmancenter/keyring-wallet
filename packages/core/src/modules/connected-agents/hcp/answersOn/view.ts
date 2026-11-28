@@ -116,7 +116,7 @@ function stateView(state: HcpAnswersState, name: string): HcpAnswersView {
   }
 }
 
-/** Which connection, and the grant's Client Operator id (the `hcpClient` effect's `operator`, its `id` when it has one). */
+/** Which connection, and the grant's Client Operator id (`hcpOperatorId` of the connection's `operator`; none, so no switch, for a name alone). */
 export interface HcpAnswersTarget {
   /** The connection's `id`, the client's VID. */
   connectionId: string

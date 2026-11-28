@@ -105,7 +105,9 @@ describe("the rung's HCP consent request", () => {
   it('keepManagerMessage keeps the document’s parentThreadId on the approval, and only a string one', () => {
     const now = Date.parse('2026-11-27T10:00:01.000Z')
     expect(received(v0Payload(), now, first.threadId).parentThreadId).toBe(first.threadId)
-    expect(received(v0Payload(), now, 7)).not.toHaveProperty('parentThreadId')
+    expect(received(v0Payload(), now, 7).parentThreadId).toBeUndefined()
+    // A payload member of that name never stands in for the document's (N1).
+    expect(received({ ...v0Payload(), parentThreadId: first.threadId } as never, now).parentThreadId).toBeUndefined()
     expect(received(v0Payload(), now)).not.toHaveProperty('parentThreadId')
   })
 

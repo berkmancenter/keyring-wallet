@@ -120,6 +120,16 @@ export class HcpConnectionStore {
   }
 
   /**
+   * Whether Keyring already holds a record for thread `threadId` (a connection, an approval in flight or a retiring
+   * grant): a link is approved once, so a scanned link for such a thread is not approved again.
+   */
+  public async hasThread(threadId: string): Promise<boolean> {
+    if (await this.getInFlight(threadId)) return true
+    if (await getKeyed(this.agent, HCP_CONNECTION_RECORD_TYPE, HCP_RETIRING_KIND, threadId)) return true
+    return (await this.list()).some((c) => c.threadId === threadId)
+  }
+
+  /**
    * Every approval Keyring holds for client `id`: its connection, its approvals in flight and its retiring grants.
    * Learning a grant excludes their grant ids and compares their windows (`./grantId.ts`).
    */
@@ -295,6 +305,13 @@ export class HcpConnectionStore {
   }
 }
 
+/** What a record keeps of the request's terms: the operator as reported, the persistence, the use limit. */
+const termOf = (view: HcpApprovalView): Pick<HcpConnection, 'operator' | 'persistence' | 'maxUseSeconds'> => ({
+  operator: view.operator,
+  persistence: view.persistence,
+  ...(view.maxUseSeconds !== undefined ? { maxUseSeconds: view.maxUseSeconds } : {}),
+})
+
 /**
  * The record for an approval: `approvedAt` is when `decide(approve)` resolved, `expiresAt` the `hcpGrantTerm`
  * effect's, `grantId` only if the request carried one, and the name is the one the person gave (the view's title), never the request's.
@@ -307,7 +324,7 @@ export function hcpConnectionFromApproval(view: HcpApprovalView, approvedAt: Dat
     threadId: view.threadId,
     approvedAt: approvedAt.toISOString(),
     expiresAt: view.expiresAt,
-    ...(view.chosenPurpose ? { chosenPurpose: view.chosenPurpose } : {}),
+    ...termOf(view),
   }
 }
 
@@ -325,7 +342,7 @@ export function hcpApprovalInFlight(
     approvalId: approval.id,
     approvalExpiresAt: approval.expiresAt,
     expiresAt: view.expiresAt,
-    ...(view.chosenPurpose ? { chosenPurpose: view.chosenPurpose } : {}),
+    ...termOf(view),
     startedAt: startedAt.toISOString(),
   }
 }
