@@ -36,6 +36,8 @@ Two more:
 
 - **First, Keyring's own:** B3-0 (Section B, the UI/UX lane): the P1 words and the switch. Every other part starts
   after it merges.
+- **Track A0, mount the agent chat (Section A, fb-C5):** after #1117, #1121 and Keyring's build-setting PR
+  merge.
 - **Track A, logic (Section A):**
   - fb-P1a, after #1117;
   - fb-P1b, after #1121;
@@ -554,6 +556,48 @@ These conditions apply while the P1 switch is reachable: `setAgentRoomsEnabled` 
 - Condition 3's tests: a fixture source that writes `capabilities: ['room-present', 'room-open']` fails and names
   its file. Controls: the `AgentRoomCapability` declaration passes, and a comment naming `roomOpen` passes.
   Mutation: drop the exception's file path, and the wired tree fails on `rooms/types.ts`.
+
+## fb-C5: mount the agent chat service (makes Message and Open chat reachable)
+
+**Start after:** #1117 (carrier, chatIdentity) and #1121 (control, AgentChatService/AgentChatProvider) have merged, and
+Keyring's build-setting PR (`agentConnectAvailableInBuild()`) has merged.
+
+**Files:** new `connected-agents/chat/mountChat.ts` and its test; `ConnectedAgentsRoot.tsx` and its test. No other
+existing file changes.
+
+**Interface:** `createAgentChat(deps): { control: AgentControl; chat: AgentChatService; start(): Promise<void>; stop(): void }`.
+`deps` is `{ agent, store (the services' AgentConnectionStore), events (the app's chat events store), carrier deps as
+#1117's AgentChatCarrierDeps }`. It builds `AgentChatCarrier`, then `AgentControl` over it (with #1116's envelope and
+seenIds), then `AgentChatService({ control, store, events })`.
+
+**Order:** `start()` awaits `control.start()`, then `chat.start()`, because `chat.start()` is the repair that resends
+a crash's `sending` messages and needs the control running (`useAgentChat.ts:34-38`). `stop()` stops the chat, then
+the control.
+
+**Where:** built once inside ConnectedAgentsRoot's mounted branch, next to the services. Children are wrapped in
+`<AgentChatProvider chat={chat}>`. `start()` runs in an effect, and `stop()` runs on unmount.
+
+**Gate:** built only when `isAgentConnectEnabled() && agentConnectAvailableInBuild()`. Otherwise nothing is
+constructed, no session opens, and `useAgentChatService()` is undefined, so the UI keeps Message and Open chat
+hidden.
+
+**`chatDid` stays unannounced until §11 Q7 is ruled:** `ensureChatIdentity` may mint the chat DID and K_c locally,
+but no message, settings document or control envelope sends `chatDid` to the agent, and nothing here adds a field
+that carries it.
+
+**Tests, each with a control:**
+1. **The gate.** Flag and build on: `useAgentChatService()` returns the service. Control: flag off, or build off,
+   gives undefined, and the carrier and control constructors are never called (spies).
+2. **Order.** `control.start` resolves before `chat.start` is called. Mutation: swap them and the test goes red.
+3. **Teardown.** Unmount calls `chat.stop` then `control.stop`, and a second mount builds a fresh pair. Control: a
+   re-render without unmount builds nothing new.
+4. **`chatDid` unannounced.** Drive a send, a settings change and a heartbeat through a fake session, and assert no
+   outbound plaintext contains the record's `chatDid`. Control: the fake does see the message's own text, so the
+   scan is real.
+5. **The release gate** (`releaseGate.test.ts`) stays green, unchanged.
+
+**Repairs it calls** (common rule): `chat.start()`, the resend of a crash's `sending` messages, named in the PR.
+
 
 ---
 
