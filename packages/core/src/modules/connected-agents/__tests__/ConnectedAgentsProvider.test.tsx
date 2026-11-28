@@ -9,10 +9,13 @@ import {
   useAgentContacts,
   useAgentPairing,
   useConnectGuard,
+  useAgentActions,
   useDeleteMemory,
+  useKeepConnectedOffered,
   useMemories,
   useMemoryCounts,
   usePersonas,
+  useRevokeDeps,
   type ConnectedAgentsServices,
   type PairingDriver,
 } from '../ConnectedAgentsProvider'
@@ -47,7 +50,6 @@ function fakeServices(over: Partial<ConnectedAgentsServices> = {}) {
     },
     previewDelete: async () => ({ ok: false, code: 'unreachable' }),
     deleteMemory: async () => ({ ok: false, code: 'unreachable' }),
-    keepConnected: async () => ({ ok: false, code: 'notOffered' }),
     keepConnectedOffered: async () => false,
     driver: async () => {
       throw new Error('no driver in this test')
@@ -61,6 +63,15 @@ function fakeServices(over: Partial<ConnectedAgentsServices> = {}) {
       remove: async () => ({ ok: true }),
       keepConnected: async () => ({ ok: false, code: 'notOffered' }),
     },
+    revokeDeps: {
+      store: {
+        list: async () => [],
+        get: async () => undefined,
+        update: async () => undefined,
+        remove: async () => {},
+      },
+      vta: { findAgentEntries: async () => ({ complete: true, matches: [] }), revokeSubject: async () => ({}) },
+    } as unknown as ConnectedAgentsServices['revokeDeps'],
     reachability: (id) => (id === RECORD_FOR_STATUS.unreachable.record.id ? { reachable: false } : undefined),
     ...over,
   }
@@ -254,5 +265,81 @@ describe('memories', () => {
     const { services } = fakeServices()
     const { result } = renderHook(() => usePersonas(), { wrapper: wrap(services) })
     await waitFor(() => expect(result.current).toEqual([{ did: 'did:webvh:persona.example:ada', name: 'Ada' }]))
+  })
+})
+
+describe('Keep it connected: one path (fb-W1)', () => {
+  it('useKeepConnectedOffered is false while it loads, then what the services answer for that agent', async () => {
+    let answer: (offered: boolean) => void = () => undefined
+    const asked: string[] = []
+    const { services } = fakeServices({
+      keepConnectedOffered: (agentId) => {
+        asked.push(agentId)
+        return new Promise<boolean>((resolve) => (answer = resolve))
+      },
+    })
+    const { result } = renderHook(() => useKeepConnectedOffered('did:key:z6MkNotes'), { wrapper: wrap(services) })
+    expect(result.current).toBe(false)
+    await act(async () => answer(true))
+    expect(result.current).toBe(true)
+    expect(asked).toEqual(['did:key:z6MkNotes'])
+  })
+
+  it('control: an answer that is still loading is never shown as offered, and a failed read is not offered', async () => {
+    // control: dropping `value.agentId === agentId` from useKeepConnectedOffered makes this fail: the first agent's
+    // true is drawn for the second, in the render before its own load starts.
+    const renders: { id: string; offered: boolean }[] = []
+    let calls = 0
+    let second: (offered: boolean) => void = () => undefined
+    const { services } = fakeServices({
+      keepConnectedOffered: () => {
+        calls++
+        if (calls === 1) return Promise.resolve(true)
+        if (calls === 2) return new Promise<boolean>((resolve) => (second = resolve))
+        return Promise.reject(new Error('the store could not be read'))
+      },
+    })
+    const { result, rerender } = renderHook(
+      ({ id }: { id: string }) => {
+        const offered = useKeepConnectedOffered(id)
+        renders.push({ id, offered })
+        return offered
+      },
+      { wrapper: wrap(services), initialProps: { id: 'did:key:z6MkA' } }
+    )
+    await waitFor(() => expect(result.current).toBe(true))
+    rerender({ id: 'did:key:z6MkB' })
+    expect(result.current).toBe(false)
+    await act(async () => second(false))
+    expect(result.current).toBe(false)
+    // Every render drawn for the second agent, the first one included, said not offered.
+    expect(renders.filter((r) => r.id === 'did:key:z6MkB').map((r) => r.offered)).not.toContain(true)
+    rerender({ id: 'did:key:z6MkC' })
+    await waitFor(() => expect(calls).toBe(3))
+    expect(result.current).toBe(false)
+  })
+
+  it('the act is useAgentActions().keepConnected; the services carry no second keepConnected', async () => {
+    const acted: string[] = []
+    const { services } = fakeServices()
+    services.actions.keepConnected = async (agentId) => {
+      acted.push(agentId)
+      return { ok: true }
+    }
+    const { result } = renderHook(() => useAgentActions(), { wrapper: wrap(services) })
+    await act(async () => {
+      expect(await result.current.keepConnected('did:key:z6MkNotes')).toEqual({ ok: true })
+    })
+    expect(acted).toEqual(['did:key:z6MkNotes'])
+    expect('keepConnected' in services).toBe(false)
+  })
+})
+
+describe('useRevokeDeps (step 7.10, fb-W1)', () => {
+  it("is the services' revoke deps: the connection store and the VTA's revoke, with no tellAgent yet", () => {
+    const { services } = fakeServices()
+    const { result } = renderHook(() => useRevokeDeps(), { wrapper: wrap(services) })
+    expect(result.current).toBe(services.revokeDeps)
+    expect(result.current.tellAgent).toBeUndefined()
   })
 })
