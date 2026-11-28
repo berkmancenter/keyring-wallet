@@ -46,13 +46,24 @@ const revoked = (notice: HcpConnection['notice'] = { state: 'telling' }) =>
   connection({ revokedAt: iso(REVOKED_AT), notice })
 
 type Notification = 'delivered' | 'abandoned' | 'none'
+type GrantStatus = { grantId: string; status: 'active' | 'revoked' | 'expired' }
 
-/** A `disclosures/summary` answer, checked against the vendored response schema. */
-function summary(entries: { client?: string; notification: Notification; usableUntil: string | null }[]) {
+/** A grant of the same client's before ours: the summary's `grants` may list it beside ours, or instead of it. */
+const RETIRED_GRANT = 'urn:uuid:9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d'
+
+/**
+ * A `disclosures/summary` answer, checked against the vendored response schema. Each entry lists our grant as
+ * revoked unless `grants` says otherwise.
+ */
+function summary(
+  entries: { client?: string; notification: Notification; usableUntil: string | null; grants?: GrantStatus[] }[],
+  nextCursor?: string
+) {
   const answer = {
+    ...(nextCursor !== undefined ? { nextCursor } : {}),
     clients: entries.map((e) => ({
       client: { id: e.client ?? CLIENT_VID, name: 'hcp-demo', operator: { id: 'did:web:example.org', name: 'Ex' } },
-      grants: [{ grantId: GRANT, status: 'revoked' }],
+      grants: e.grants ?? [{ grantId: GRANT, status: 'revoked' }],
       categories: ['general_preferences'],
       purposes: ['https://hcp.example/purposes/personalization'],
       entries: 1,
@@ -195,11 +206,9 @@ describe('pollHcpNotice', () => {
     })
   })
 
-  it('none, no entry, an entry for another client only, a refusal or no answer: telling, lastPolledAt set', async () => {
+  it('none, a refusal or no answer: telling, lastPolledAt set', async () => {
     const answers: (() => Promise<unknown>)[] = [
       async () => summary([{ notification: 'none', usableUntil: null }]),
-      async () => summary([]),
-      async () => summary([{ client: OTHER_VID, notification: 'delivered', usableUntil: iso(REVOKED_AT) }]),
       async () => {
         throw refusal('permissionDenied')
       },
@@ -264,6 +273,134 @@ describe('pollHcpNotice', () => {
     const { deps, task } = await setup(connection(), undefined, at)
     expect(await pollHcpNotice(deps, CLIENT_VID)).toEqual({ connection: connection() })
     expect(task).not.toHaveBeenCalled()
+  })
+})
+
+/** Backlog 2, track 5: the summary read by our grant, one rule per case, each with its control. */
+describe('pollHcpNotice: the summary read by our grant', () => {
+  const at = REVOKED_AT + 10 * SECOND
+  const answer = (value: unknown) => fakeVta({ summaries: [async () => value] })
+  const noticeAfter = async (value: unknown, record = revoked(), now = at) => {
+    const { deps, store } = await setup(record, answer(value), now)
+    await pollHcpNotice(deps, CLIENT_VID)
+    return store.get(CLIENT_VID)
+  }
+  const TELLING = { state: 'telling', lastPolledAt: iso(at) }
+
+  it('an OK answer with no entry for the client (none, or another client only): nothingDisclosed', async () => {
+    expect((await noticeAfter(summary([])))?.notice).toEqual({ state: 'nothingDisclosed' })
+    const other = summary([{ client: OTHER_VID, notification: 'delivered', usableUntil: iso(REVOKED_AT) }])
+    expect((await noticeAfter(other))?.notice).toEqual({ state: 'nothingDisclosed' })
+  })
+
+  // control: the same answer with an entry for the client (notification none) keeps telling.
+  it('control: an entry for the client, none: telling', async () => {
+    expect((await noticeAfter(summary([{ notification: 'none', usableUntil: null }])))?.notice).toEqual(TELLING)
+  })
+
+  // control: a page with no entry for the client but a nextCursor does not show nothing was disclosed.
+  it('control: no entry on this page and a nextCursor: telling, not nothingDisclosed', async () => {
+    expect((await noticeAfter(summary([], 'page-2')))?.notice).toEqual(TELLING)
+  })
+
+  it('our grantId not in the client’s grants: nothingDisclosed, whatever the notification', async () => {
+    const grants: GrantStatus[] = [{ grantId: RETIRED_GRANT, status: 'revoked' }]
+    for (const notification of ['delivered', 'abandoned', 'none'] as const) {
+      const value = summary([{ notification, usableUntil: iso(REVOKED_AT + 4 * SECOND), grants }])
+      const after = await noticeAfter(value)
+      expect(after?.notice).toEqual({ state: 'nothingDisclosed' })
+      // Another grant's usableUntil is not kept for ours.
+      expect(after?.lastUsableUntil).toBeUndefined()
+    }
+  })
+
+  // control: the same answer with our grant listed beside the retired one reads by its notification.
+  it('control: our grantId listed beside a retired one: delivered after the revoke is told', async () => {
+    const grants: GrantStatus[] = [
+      { grantId: RETIRED_GRANT, status: 'revoked' },
+      { grantId: GRANT, status: 'revoked' },
+    ]
+    const value = summary([{ notification: 'delivered', usableUntil: iso(REVOKED_AT + 4 * SECOND), grants }])
+    expect((await noticeAfter(value))?.notice).toEqual({ state: 'told', at: iso(REVOKED_AT + 4 * SECOND) })
+  })
+
+  it('delivered before our revokedAt is a retired grant’s notice: telling, and its time is not kept', async () => {
+    const value = summary([{ notification: 'delivered', usableUntil: iso(REVOKED_AT - 1) }])
+    const after = await noticeAfter(value)
+    expect(after?.notice).toEqual(TELLING)
+    expect(after?.lastUsableUntil).toBeUndefined()
+  })
+
+  // control: delivered at exactly our revokedAt counts as told.
+  it('control: delivered at our revokedAt: told at that time', async () => {
+    const value = summary([{ notification: 'delivered', usableUntil: iso(REVOKED_AT) }])
+    expect((await noticeAfter(value))?.notice).toEqual({ state: 'told', at: iso(REVOKED_AT) })
+  })
+
+  it('delivered with no usableUntil cannot be shown to be ours: telling', async () => {
+    expect((await noticeAfter(summary([{ notification: 'delivered', usableUntil: null }])))?.notice).toEqual(TELLING)
+  })
+
+  it('abandoned while our grant is listed active or expired is not ours: telling', async () => {
+    for (const status of ['active', 'expired'] as const) {
+      const value = summary([
+        { notification: 'abandoned', usableUntil: iso(REVOKED_AT + 15 * MINUTE), grants: [{ grantId: GRANT, status }] },
+      ])
+      expect((await noticeAfter(value))?.notice).toEqual(TELLING)
+    }
+  })
+
+  // control: the same answer with our grant listed revoked is notTold.
+  it('control: abandoned while our grant is listed revoked: notTold', async () => {
+    const value = summary([
+      {
+        notification: 'abandoned',
+        usableUntil: iso(REVOKED_AT + 15 * MINUTE),
+        grants: [{ grantId: GRANT, status: 'revoked' }],
+      },
+    ])
+    expect((await noticeAfter(value))?.notice).toEqual({ state: 'notTold', usableUntil: iso(REVOKED_AT + 15 * MINUTE) })
+  })
+
+  it('a refusal or an unreachable VTA is no answer, not nothing disclosed: telling', async () => {
+    const answers = [
+      async () => Promise.reject(refusal('permissionDenied')),
+      async () => Promise.reject(new Error('unreachable')),
+    ]
+    for (const a of answers) {
+      const { deps, store } = await setup(revoked(), fakeVta({ summaries: [a] }), at)
+      await pollHcpNotice(deps, CLIENT_VID)
+      expect((await store.get(CLIENT_VID))?.notice).toEqual(TELLING)
+    }
+  })
+
+  // control: the HCP flags off is not nothing disclosed either: the record is left as it is.
+  it('control: the HCP flags off leaves the record as it is', async () => {
+    const { deps, store } = await setup(
+      revoked(),
+      fakeVta({ summaries: [async () => Promise.reject(new HcpOffError())] }),
+      at
+    )
+    await pollHcpNotice(deps, CLIENT_VID)
+    expect(await store.get(CLIENT_VID)).toEqual(revoked())
+  })
+
+  it('nothingDisclosed at the 24-hour stop wins over notTold', async () => {
+    expect((await noticeAfter(summary([]), revoked(), REVOKED_AT + 24 * HOUR))?.notice).toEqual({
+      state: 'nothingDisclosed',
+    })
+  })
+
+  it('nothingDisclosed is final: no later poll is sent and the record stays as it is', async () => {
+    const vta = fakeVta({
+      summaries: [async () => summary([]), async () => summary([{ notification: 'none', usableUntil: null }])],
+    })
+    const { deps, store, task, clock } = await setup(revoked(), vta, at)
+    await pollHcpNotice(deps, CLIENT_VID)
+    clock.now += 5 * SECOND
+    await pollHcpNotice(deps, CLIENT_VID)
+    expect(task).toHaveBeenCalledTimes(1)
+    expect((await store.get(CLIENT_VID))?.notice).toEqual({ state: 'nothingDisclosed' })
   })
 })
 
@@ -410,6 +547,19 @@ describe('useHcpNotice', () => {
     expect(result.current?.notice).toEqual({ state: 'told', at: iso(REVOKED_AT + 7 * SECOND) })
     await advance(10 * MINUTE)
     expect(task).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops polling once the summary shows nothing disclosed', async () => {
+    const { deps, task, clock } = await setup(revoked(), fakeVta({ summaries: [async () => summary([])] }))
+    const { result } = renderHook(() => useHcpNotice(deps, CLIENT_VID))
+    for (const ms of [0, HCP_POLL_FAST_MS, 10 * MINUTE]) {
+      clock.now += ms
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(ms)
+      })
+    }
+    expect(task).toHaveBeenCalledTimes(1)
+    expect(result.current?.notice).toEqual({ state: 'nothingDisclosed' })
   })
 
   it('stops polling when unmounted', async () => {

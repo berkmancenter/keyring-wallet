@@ -2,6 +2,7 @@
  * The status line of an HCP connection (C2), at the boundary instants: connected until `expiresAt`, expired from
  * `expiresAt` on, and revoked (with its notice line) whatever the time.
  */
+import { hcpText } from '../copy'
 import { hcpStatus } from '../status'
 import type { HcpConnection } from '../types'
 import { CLIENT_VID, GRANT, THREAD } from './fixtures/hcpApproval'
@@ -57,6 +58,21 @@ describe('hcpStatus', () => {
     ).toEqual({
       key: 'StatusRevoked',
       notice: { key: 'RevokeNotTold', params: { name: 'My notes agent', time: '2026-11-27T11:15:00.000Z' } },
+    })
+  })
+
+  it('nothingDisclosed gives RevokeNothingDisclosed ("Revoked." alone), with no name and no time', () => {
+    const revoked = connection({ revokedAt: '2026-11-27T11:00:00.000Z', notice: { state: 'nothingDisclosed' } })
+    expect(hcpStatus(revoked, at(-1))).toEqual({ key: 'StatusRevoked', notice: { key: 'RevokeNothingDisclosed' } })
+    expect(hcpText('RevokeNothingDisclosed', 'en')).toBe('Revoked.')
+  })
+
+  // control: a notice still telling, on the same record, is not that line.
+  it('control: the same record still telling reads RevokeTelling, not RevokeNothingDisclosed', () => {
+    const revoked = connection({ revokedAt: '2026-11-27T11:00:00.000Z', notice: { state: 'telling' } })
+    expect(hcpStatus(revoked, at(-1))).toEqual({
+      key: 'StatusRevoked',
+      notice: { key: 'RevokeTelling', params: { name: 'My notes agent' } },
     })
   })
 })

@@ -26,6 +26,7 @@ export type HcpCopyKey =
   | 'RevokeTelling'
   | 'RevokeTold'
   | 'RevokeNotTold'
+  | 'RevokeNothingDisclosed'
   | 'RevokeTitle'
   | 'RevokeBody'
   | 'Revoke'
@@ -123,6 +124,14 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     fr: "Révoqué. Nous n'avons pas pu prévenir « {{name}} ». Ce qu'il a lu cesse d'être utilisable à {{time}}.",
     ptBr: 'Revogado. Não conseguimos avisar "{{name}}". O que ele leu deixa de poder ser usado às {{time}}.',
     source: 'companion finding 6',
+  },
+  // Added for the notice read by grant (backlog 2, track 5): nothing was disclosed to the client under the grant, so
+  // there is no one to tell. The English is the "Revoked." the three lines above open with; no new words.
+  RevokeNothingDisclosed: {
+    en: 'Revoked.',
+    fr: 'Révoqué.',
+    ptBr: 'Revogado.',
+    source: 'PROPOSED',
   },
   RevokeTitle: {
     en: 'Revoke "{{name}}"?',
