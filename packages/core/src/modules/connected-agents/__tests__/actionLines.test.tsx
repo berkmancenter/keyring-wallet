@@ -18,6 +18,7 @@ import { PROPOSED_COPY } from '../proposedCopy'
 import AgentDetailsView, { AgentDetailsData, AgentDetailsViewProps } from '../screens/AgentDetailsView'
 import AgentListView, { AgentRowData } from '../screens/AgentListView'
 import ChangeMemoriesView, { ChangeMemoriesViewProps } from '../screens/ChangeMemoriesView'
+import ConnectedView from '../screens/ConnectedView'
 
 jest.mock('@bifold/credo-tsp-adapter', () => ({}))
 
@@ -274,5 +275,33 @@ describe('ChangeMemoriesView with a line', () => {
     await widenHousing(tree)
     expect(tree.getByText('ConnectedAgents.MemoryChangeFailed')).toBeTruthy()
     expect(tree.queryByTestId(id('ChangeMemoriesLine'))).toBeNull()
+  })
+})
+
+describe('ConnectedView with a line', () => {
+  const done = (keepConnectedLine?: AgentActionLine) =>
+    show(
+      <ConnectedView
+        name="Notes helper"
+        until="14:30"
+        onSeeDetails={jest.fn()}
+        onKeepConnected={jest.fn()}
+        keepConnectedLine={keepConnectedLine}
+      />
+    )
+
+  it("draws Keep it connected's line in place of the button, which it spends", () => {
+    const tree = done({ key: 'KeepNotRecorded', name: 'Notes helper' })
+    expect(tree.queryByTestId(id('ConnectKeepConnected'))).toBeNull()
+    expect(tree.getByTestId(id('ConnectKeepConnectedLine'))).toBeTruthy()
+    expect(tree.getByText(words('KeepNotRecorded'))).toBeTruthy()
+    // The main action is another action, and stays.
+    expect(tree.getByTestId(id('ConnectSeeDetails'))).toBeTruthy()
+  })
+
+  it('// control: with no line, the button is offered', () => {
+    const tree = done()
+    expect(tree.getByTestId(id('ConnectKeepConnected'))).toBeTruthy()
+    expect(tree.queryByTestId(id('ConnectKeepConnectedLine'))).toBeNull()
   })
 })

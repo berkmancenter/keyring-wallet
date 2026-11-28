@@ -6,6 +6,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons'
 import Button, { ButtonType } from '../../../components/buttons/Button'
 import { ThemedText } from '../../../components/texts/ThemedText'
 import { testIdWithKey } from '../../../utils/testable'
+import AgentActionNotice, { AgentActionLine } from '../components/AgentActionNotice'
 import { AgentAvatar, AgentTag } from '../components/AgentMark'
 import { AGENT_COLORS } from '../components/agentStyle'
 
@@ -72,6 +73,11 @@ export interface ConnectedViewProps {
   onSeeDetails: () => void
   /** "Keep it connected": offered only from step 7.28, and only while the agent is temporary (D42). Left out, no button. */
   onKeepConnected?: () => void
+  /**
+   * The line "Keep it connected"'s last outcome left (ac's #1122 obligation 1), from the logic's
+   * `agentActionLine('keepConnected', code)`: drawn in place of the button, which it spends. Left out, as before.
+   */
+  keepConnectedLine?: AgentActionLine
 }
 
 /**
@@ -79,7 +85,14 @@ export interface ConnectedViewProps {
  * until <time>.", the main action, and "Keep it connected" as a secondary one, never pre-selected and only when
  * offered.
  */
-const ConnectedView: React.FC<ConnectedViewProps> = ({ name, until, onOpenChat, onSeeDetails, onKeepConnected }) => {
+const ConnectedView: React.FC<ConnectedViewProps> = ({
+  name,
+  until,
+  onOpenChat,
+  onSeeDetails,
+  onKeepConnected,
+  keepConnectedLine,
+}) => {
   const { t } = useTranslation()
   return (
     <View style={styles.screen} testID={testIdWithKey('ConnectConnected')}>
@@ -114,7 +127,9 @@ const ConnectedView: React.FC<ConnectedViewProps> = ({ name, until, onOpenChat, 
             accessibilityLabel={t('ConnectedAgents.SeeDetails')}
           />
         )}
-        {onKeepConnected ? (
+        {keepConnectedLine ? (
+          <AgentActionNotice line={keepConnectedLine} testID={testIdWithKey('ConnectKeepConnectedLine')} />
+        ) : onKeepConnected ? (
           <Button
             title={t('ConnectedAgents.KeepConnected')}
             buttonType={ButtonType.Secondary}

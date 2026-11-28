@@ -574,6 +574,7 @@
     "ConnectFailure": ["src/modules/connected-agents/screens/ConnectFailureView.tsx"],
     "ConnectFailureClose": ["src/modules/connected-agents/screens/ConnectFailureView.tsx"],
     "ConnectKeepConnected": ["src/modules/connected-agents/screens/ConnectedView.tsx"],
+    "ConnectKeepConnectedLine": ["src/modules/connected-agents/screens/ConnectedView.tsx"],
     "ConnectMyAgentButton": ["src/modules/trust-tasks/screens/MyAgent.ids.ts"],
     "ConnectNotice": ["src/modules/connected-agents/components/ConnectNotice.tsx"],
     "ConnectNumber": ["src/modules/connected-agents/screens/ConnectNumberView.tsx"],
