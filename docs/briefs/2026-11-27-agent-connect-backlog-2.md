@@ -44,6 +44,26 @@ Plugin (PRs into `integration/agent-connect` on github.com/albertoleon7794/vta-a
 11 to 16. Section C **P1 to P6**: CANNOT START until your side has a checkout of that repository and push access
 to the fork. Skip this section until then.
 
+## Tracks for the next run (added 2026-11-28, on your side's ask for tracks)
+
+The parts above, grouped as tracks: one branch and one PR per track, one commit per part, a self-review between
+parts. For these tracks only, "start after X merges" becomes "build on X's open PR, and merge X in each time it
+moves" (merge, never rebase).
+
+- **Track 1, chat tail:** fb-C3, then fb-C4 (Section A). Built on #1116 and #1117. Leave the send call in
+  `carrier.ts` as it is: Keyring's settled send (#1118) replaces it once #1118 merges.
+- **Track 2, screens:** R1, then R2 (Section B), built on fb-W1's PR. Then R4 once track 1 has fb-C3, and R3 once
+  it has fb-C4. R5 stays skippable.
+- **Track 3, the HCP agent client** in openvti-starter, from the plan owner's 00:18Z post: your own work; nothing
+  of Keyring's touches it.
+
+**Not open yet:**
+
+- The plugin parts P1 to P6 (Section C) wait on access to the fork.
+- Keyring's HCP changes for the 00:18Z decisions wait on our impact read.
+- Keyring holds `trust-tasks/**` (#1118).
+- The VTA-side HCP provider is Glenn's (Keyring's local work there is paused).
+
 ## Open for the plan owner (section 11 Q7)
 
 How the agent learns Keyring's chat identity (`chatDid`), the owner's persona and Keyring's mediator. The A/B pair
