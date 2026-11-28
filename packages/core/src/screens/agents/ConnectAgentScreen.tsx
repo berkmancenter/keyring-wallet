@@ -31,6 +31,7 @@ import {
   useAgentActions,
   usePersonas,
 } from '../../modules/connected-agents/ConnectedAgentsProvider'
+import { useAgentChatService } from '../../modules/connected-agents/chat/useAgentChat'
 import { MATCH_NUMBER_DIGITS, aclScopeFor, pairingLinkFromTrigger } from '../../modules/connected-agents/pairing'
 import ApproveView from '../../modules/connected-agents/screens/ApproveView'
 import ConnectAgentForm, { type ConnectFormChoice } from '../../modules/connected-agents/screens/ConnectAgentForm'
@@ -75,18 +76,22 @@ const AgentScanCamera: React.FC<{ onLink: (link: string) => void }> = ({ onLink 
 }
 
 /** "Keep it connected" on the Connected screen: offered only when `useKeepConnectedOffered` says so (step 7.28). */
-const Connected: React.FC<{ agentId: string; name: string; until: string; onSeeDetails: () => void }> = ({
-  agentId,
-  name,
-  until,
-  onSeeDetails,
-}) => {
+const Connected: React.FC<{
+  agentId: string
+  name: string
+  until: string
+  onSeeDetails: () => void
+  onOpenChat: () => void
+}> = ({ agentId, name, until, onSeeDetails, onOpenChat }) => {
   const offered = useKeepConnectedOffered(agentId)
   const actions = useAgentActions()
+  // "Open chat" only while the chat service is mounted: until then See details stays the main action.
+  const chat = useAgentChatService()
   return (
     <ConnectedView
       name={name}
       until={until}
+      onOpenChat={chat ? onOpenChat : undefined}
       onSeeDetails={onSeeDetails}
       onKeepConnected={offered ? () => void actions.keepConnected(agentId).catch(() => undefined) : undefined}
     />
@@ -206,6 +211,9 @@ const ConnectAgentScreen: React.FC<ConnectAgentScreenProps> = ({ navigation }) =
           until={formatAgentTime(Date.parse(state.agent.expiresAt))}
           onSeeDetails={() =>
             navigation.replace(Screens.AgentDetails, { agentId: state.agent.agentDid, name: state.agent.name })
+          }
+          onOpenChat={() =>
+            navigation.replace(Screens.AgentChat, { agentId: state.agent.agentDid, name: state.agent.name })
           }
         />
       )

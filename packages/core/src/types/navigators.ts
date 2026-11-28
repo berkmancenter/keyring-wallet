@@ -118,6 +118,8 @@ export enum Screens {
   ConnectAgent = 'Connect an agent',
   HcpConnect = 'Connect an agent (HCP)',
   AgentMemories = 'Your memories',
+  // An agent's chat (§7.9), in Messages and in My Agent.
+  AgentChat = 'Agent chat',
   // The VTA's own screens, under Settings once agent connect is on (§7.8).
   MyVta = 'My VTA',
 }
@@ -237,6 +239,7 @@ export type MyAgentStackParams = {
   [Screens.ConnectAgent]: { againFrom?: string } | undefined
   [Screens.HcpConnect]: { link: string }
   [Screens.AgentMemories]: { agentId?: string } | undefined
+  [Screens.AgentChat]: { agentId: string; name: string }
 } & RoomScreenParams
 
 /** What a room opens on, in My Agent and in Messages alike (rooms in Messages, R2). */
@@ -307,6 +310,8 @@ export type MessageStackParams = {
   [Screens.ProofDetails]: { recordId: string; isHistory?: boolean }
   [Screens.ProofRequest]: { proofId: string }
   [Screens.JSONDetails]: { jsonBlob: any }
+  // Agent connect (developer switch on only): an agent's chat, from its row in Messages (§7.9).
+  [Screens.AgentChat]: { agentId: string; name: string }
 } & RoomScreenParams
 
 export type ProofRequestsStackParams = {

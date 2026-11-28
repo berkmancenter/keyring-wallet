@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { TOKENS, useServices } from '../container-api'
 import { isAgentConnectEnabled } from '../modules/connected-agents/agentConnectFlag'
 import { ConnectedAgentsRoot } from '../modules/connected-agents/ConnectedAgentsRoot'
+import AgentChatScreen from '../screens/agents/AgentChatScreen'
 import AgentDetailsScreen from '../screens/agents/AgentDetailsScreen'
 import AgentMemoriesScreen from '../screens/agents/AgentMemoriesScreen'
 import AiAgentsScreen from '../screens/agents/AiAgentsScreen'
@@ -41,6 +42,7 @@ const AiAgents = inConnectedAgentsRoot(AiAgentsScreen)
 const AgentDetails = inConnectedAgentsRoot(AgentDetailsScreen)
 const ConnectAgent = inConnectedAgentsRoot(ConnectAgentScreen)
 const AgentMemories = inConnectedAgentsRoot(AgentMemoriesScreen)
+const AgentChat = inConnectedAgentsRoot(AgentChatScreen)
 
 /**
  * The My Agent tab. With agent connect's developer switch off, the VTA's screens (`VtaStack.tsx`'s lists), as always.
@@ -111,6 +113,12 @@ const MyAgentStack: React.FC<MyAgentStackProps> = ({ route, navigation }) => {
         name={Screens.AgentMemories}
         component={AgentMemories}
         options={{ title: t('ConnectedAgents.MemoriesTitle'), ...ScreenOptionsDictionary[Screens.AgentMemories] }}
+      />
+      {/* The chat draws its own header (the robot, the name, "AI agent"), with its own Back (§7.9, frame 27). */}
+      <Stack.Screen
+        name={Screens.AgentChat}
+        component={AgentChat}
+        options={{ headerShown: false, ...ScreenOptionsDictionary[Screens.AgentChat] }}
       />
       {roomScreens(Stack, { t, options: ScreenOptionsDictionary })}
     </Stack.Navigator>

@@ -1,9 +1,11 @@
 import { ParamListBase, RouteProp } from '@react-navigation/native'
 import { createStackNavigator, StackNavigationProp } from '@react-navigation/stack'
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useTheme } from '../contexts/theme'
+import { isAgentConnectEnabled } from '../modules/connected-agents/agentConnectFlag'
+import AgentChatScreen from '../screens/agents/AgentChatScreen'
 import Messages from '../screens/Messages'
 import NewMessage from '../screens/NewMessage'
 import WhatAreConnections from '../modules/vrc/screens/WhatAreConnections'
@@ -35,6 +37,9 @@ const MessageStack: React.FC<MessageStackProps> = ({ route, navigation }) => {
   useEffect(() => {
     if (routedScreen) navigation?.setParams({ screen: undefined, params: undefined })
   }, [routedScreen, navigation])
+  // Agent connect's developer switch, read once when the stack mounts (as MyAgentStack does): with it off, no agent
+  // route is registered.
+  const [agentConnect] = useState(isAgentConnectEnabled)
 
   return (
     <Stack.Navigator screenOptions={{ ...defaultStackOptions }}>
@@ -80,6 +85,14 @@ const MessageStack: React.FC<MessageStackProps> = ({ route, navigation }) => {
         component={RoomOffer}
         options={{ title: t('Rooms.Offer'), ...ScreenOptionsDictionary[Screens.RoomOffer] }}
       />
+      {/* An agent's chat opens here from its row in Messages (§7.9); it draws its own header, with its own Back. */}
+      {agentConnect ? (
+        <Stack.Screen
+          name={Screens.AgentChat}
+          component={AgentChatScreen}
+          options={{ headerShown: false, ...ScreenOptionsDictionary[Screens.AgentChat] }}
+        />
+      ) : null}
     </Stack.Navigator>
   )
 }

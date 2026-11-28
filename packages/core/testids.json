@@ -40,6 +40,13 @@
     "AgentBackupShareAddress": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentBackupShowAsText": ["src/modules/trust-tasks/screens/VtaCreateAgent.ids.ts"],
     "AgentCatchingUp": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
+    "AgentChat": ["src/modules/connected-agents/screens/AgentChatView.tsx"],
+    "AgentChatBack": ["src/modules/connected-agents/screens/AgentChatView.tsx"],
+    "AgentChatBubble": ["src/modules/connected-agents/screens/AgentChatView.tsx"],
+    "AgentChatHeader": ["src/modules/connected-agents/screens/AgentChatView.tsx"],
+    "AgentChatInput": ["src/modules/connected-agents/screens/AgentChatView.tsx"],
+    "AgentChatSend": ["src/modules/connected-agents/screens/AgentChatView.tsx"],
+    "AgentChatState": ["src/modules/connected-agents/screens/AgentChatView.tsx"],
     "AgentChips": ["src/modules/trust-tasks/screens/AgentChips.tsx"],
     "AgentCommunityHighlighted": ["src/modules/trust-tasks/screens/VtaAgentHome.ids.ts"],
     "AgentContactCard": [

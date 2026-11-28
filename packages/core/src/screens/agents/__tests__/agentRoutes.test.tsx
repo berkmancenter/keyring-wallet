@@ -49,6 +49,12 @@ jest.mock('../../../modules/connected-agents/revoke', () => ({
   ...jest.requireActual('../../../modules/connected-agents/revoke'),
   revokeAgentConnection: jest.fn(),
 }))
+// The agent chat's service (fb-C4's AgentChatProvider): mounted or not, per test (R3).
+let mockChatService: object | undefined
+jest.mock('../../../modules/connected-agents/chat/useAgentChat', () => ({
+  ...jest.requireActual('../../../modules/connected-agents/chat/useAgentChat'),
+  useAgentChatService: () => mockChatService,
+}))
 jest.mock('../../../contexts/biometric-confirmation', () => ({
   requestBiometricConfirmationUI: jest.fn(async () => ({ status: 'confirmed', timestamp: '' })),
 }))
@@ -150,6 +156,7 @@ const screenProps = (nav: Nav, params?: object) =>
 let agentActions: ReturnType<typeof actions>
 
 beforeEach(() => {
+  mockChatService = undefined
   agentActions = actions()
   const agents = [agentView()]
   mockHooks.useAgentConnections = jest.fn(() => ({ agents, loading: false, refresh: jest.fn(async () => undefined) }))
@@ -241,6 +248,16 @@ describe('AgentDetailsScreen', () => {
     expect(view.getByTestId(id('AgentDetailsMemoryCount'))).toBeTruthy()
     // Keep it connected is offered only through useKeepConnectedOffered, which says no here.
     expect(view.queryByTestId(id('AgentDetailsKeepConnected'))).toBeNull()
+  })
+
+  // With the chat (R3): Message opens this agent's chat, offered only while the chat service is mounted.
+  it('Message opens the agent chat, only with the chat service mounted', () => {
+    expect(details().queryByTestId(id('AgentDetailsMessage'))).toBeNull()
+    mockChatService = {}
+    const nav = navigation()
+    const view = details(nav)
+    fireEvent.press(view.getByTestId(id('AgentDetailsMessage')))
+    expect(nav.navigate).toHaveBeenCalledWith(Screens.AgentChat, { agentId: 'did:key:agent-1', name: 'Notes helper' })
   })
 
   it('Keep it connected shows only when useKeepConnectedOffered says so, and acts through the actions', async () => {
@@ -365,6 +382,20 @@ describe('ConnectAgentScreen draws each pairing phase', () => {
     expect(view.getByTestId(id('ConnectConnected'))).toBeTruthy()
     fireEvent.press(view.getByTestId(id('ConnectSeeDetails')))
     expect(nav.replace).toHaveBeenCalledWith(Screens.AgentDetails, { agentId: 'did:key:agent-1', name: 'Notes helper' })
+  })
+
+  // With the chat service mounted (R3), Open chat is Connected's main action, in place of See details (#1060 P-e).
+  it('with the chat mounted, confirmed offers Open chat, which opens the new agent’s chat', () => {
+    mockChatService = {}
+    pairingIn({
+      phase: 'confirmed',
+      agent: { name: 'Notes helper', agentDid: 'did:key:agent-1', expiresAt: new Date(NOW + 3_600_000).toISOString() },
+    })
+    const nav = navigation()
+    const view = connect(nav)
+    expect(view.getByTestId(id('ConnectConnected'))).toBeTruthy()
+    fireEvent.press(view.getByTestId(id('ConnectOpenChat')))
+    expect(nav.replace).toHaveBeenCalledWith(Screens.AgentChat, { agentId: 'did:key:agent-1', name: 'Notes helper' })
   })
 
   it.each([[{ phase: 'cancelled' }], [{ phase: 'notFinished' }]])('%j goes back to AI agents', (state) => {
