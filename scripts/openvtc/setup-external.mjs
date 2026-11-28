@@ -45,7 +45,8 @@ for (const [name, pin] of Object.entries(pins.repos)) {
   const dir = join(externalDir, name);
   const url = pin.url ?? `${ORG}/${name}.git`;
 
-  if (!existsSync(dir)) {
+  const fresh = !existsSync(dir);
+  if (fresh) {
     if (STATUS_ONLY) {
       console.log(`  ✗ ${name.padEnd(34)} missing`);
       problems++;
@@ -78,6 +79,7 @@ for (const [name, pin] of Object.entries(pins.repos)) {
     pinSha: pin.sha,
     pinCommit: resolved,
     pinBehindHead: behind,
+    fresh,
   });
   if (state === "pinned") {
     console.log(`  ✓ ${name.padEnd(34)} ${pin.sha} (pinned)`);
