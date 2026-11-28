@@ -146,3 +146,5 @@ export const HCP_EFFECT_KINDS = [
 ] as const
 
 export type HcpEffectKind = (typeof HCP_EFFECT_KINDS)[number]
+
+// Positive control for #1135: this PR touches only this file (comment). Not to be merged.
