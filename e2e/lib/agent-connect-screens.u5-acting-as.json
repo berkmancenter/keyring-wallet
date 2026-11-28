@@ -1,0 +1,104 @@
+{
+  "about": "The \"Acting as\" states of the connect form (finding 18, docs/plans/agent-connect-plan.md §7.7, canvas frame 58), added to the base manifest agent-connect-screens.json; the same rules apply. Named \".u5-acting-as\" rather than \".acting-as\" from when the catalogue found the base file by its sort position; the catalogue now finds it by name, and the name stays. Drawn in packages/core/src/modules/connected-agents/__tests__/fixtures/screenStatesActingAs.tsx with two personas, so the form asks from the start.",
+  "canvas": "docs/plans/agent-connect-plan/canvas/",
+  "kit": "docs/plans/agent-connect-plan/mockups/",
+  "states": [
+    {
+      "id": "connect-acting-as",
+      "step": "7.7",
+      "marker": "ActingAsRow",
+      "frame": "58-acting-as.png",
+      "kit": "01-connect-name.svg",
+      "words": [
+        "ConnectedAgents.NameThisAgent",
+        "ConnectedAgents.ActingAs",
+        "ConnectedAgents.MemoryItCanUse",
+        "ConnectedAgents.ContainsOtherMemories",
+        "ConnectedAgents.NewMemory",
+        "ConnectedAgents.NameHelper",
+        "ConnectedAgents.PurposesTitle",
+        "ConnectedAgents.PurposePersonalisation",
+        "ConnectedAgents.PurposeTaskExecution",
+        "ConnectedAgents.ForFourHours",
+        "ConnectedAgents.ForFourHoursHelper",
+        "ConnectedAgents.TerminalHelper",
+        "Global.Continue"
+      ],
+      "frameOnly": [
+        {
+          "what": "the canvas note (\"Canvas note, not on the phone\")",
+          "why": "a note for the reader of the canvas, never drawn on the phone"
+        },
+        {
+          "what": "the chevron pointing down while the list is open",
+          "why": "the chevron's direction when open: accepted, the platform's convention (it points up while open)"
+        },
+        {
+          "what": "\"Ada\" on the row and checked in the list",
+          "why": "this is the state before a choice (nothing is pre-selected, §7.7); connect-acting-as-chosen draws the chosen one"
+        },
+        {
+          "what": "\"Continue\" on",
+          "why": "with two personas \"Continue\" waits for a choice, and this drawing has no name typed yet"
+        },
+        {
+          "what": "the name \"Notes helper\" typed and \"Education\" ticked",
+          "why": "the drawing starts from an empty form; typing and picking are frame 1's (02-main.png)"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "the rest of the step: \"Contains other memories\", \"New memory\", the name helper, the purposes, \"For 4 hours\" and the terminal helper",
+          "why": "frame 58 draws only what \"Acting as\" adds; its note says the rest of the step is frame 1's (02-main.png), as built"
+        }
+      ]
+    },
+    {
+      "id": "connect-acting-as-chosen",
+      "step": "7.7",
+      "marker": "ActingAsOption",
+      "steps": [{ "pressLabel": "Ada", "within": "ActingAsOption" }],
+      "frame": "58-acting-as.png",
+      "kit": "01-connect-name.svg",
+      "words": [
+        "ConnectedAgents.NameThisAgent",
+        "ConnectedAgents.ActingAs",
+        "ConnectedAgents.MemoryItCanUse",
+        "ConnectedAgents.ContainsOtherMemories",
+        "ConnectedAgents.NewMemory",
+        "ConnectedAgents.NameHelper",
+        "ConnectedAgents.PurposesTitle",
+        "ConnectedAgents.PurposePersonalisation",
+        "ConnectedAgents.PurposeTaskExecution",
+        "ConnectedAgents.ForFourHours",
+        "ConnectedAgents.ForFourHoursHelper",
+        "ConnectedAgents.TerminalHelper",
+        "Global.Continue"
+      ],
+      "frameOnly": [
+        {
+          "what": "the canvas note (\"Canvas note, not on the phone\")",
+          "why": "a note for the reader of the canvas, never drawn on the phone"
+        },
+        {
+          "what": "the chevron pointing down while the list is open",
+          "why": "the chevron's direction when open: accepted, the platform's convention (it points up while open)"
+        },
+        {
+          "what": "\"Continue\" on",
+          "why": "the drawing has no name typed yet, and \"Continue\" waits for a name as in frame 1"
+        },
+        {
+          "what": "the name \"Notes helper\" typed and \"Education\" ticked",
+          "why": "the drawing starts from an empty form; typing and picking are frame 1's (02-main.png)"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "the rest of the step: \"Contains other memories\", \"New memory\", the name helper, the purposes, \"For 4 hours\" and the terminal helper",
+          "why": "frame 58 draws only what \"Acting as\" adds; its note says the rest of the step is frame 1's (02-main.png), as built"
+        }
+      ]
+    }
+  ]
+}
