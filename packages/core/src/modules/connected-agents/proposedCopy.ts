@@ -51,6 +51,5 @@ export const NO_ROOM_FORMS: Readonly<Record<string, string>> = {
  */
 export const SETTLED_ELSEWHERE: Readonly<Record<string, string>> = {
   ActingAs: '§7.7',
-  NotAgentKind: '§3.10',
   OthersReply: '§3.13',
 }
