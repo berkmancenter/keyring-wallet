@@ -1,0 +1,190 @@
+{
+  "about": "Agent connect step 7.13 (docs/plans/agent-connect-plan.md §3.6, §3.8, §3.10): room info's \"Agents in this room\" (frame 37), the agent picker (frame 34), the add sheet (frame 35) with what an add came to, and \"What it remembers\" (frame 36). Added to the base manifest agent-connect-screens.json; the same rules apply. Drawn in packages/core/src/modules/connected-agents/__tests__/fixtures/screenStatesRooms.tsx from the seam's types (backlog 3, Section B, Part T1). The views are not reachable yet: their container comes once fb's useRoomAgents and useAddAgentToRoom merge. Frames 34 to 37 predate backlog 3's rulings 6 and 7 (11-28): they draw the one-room words and an add in an attributed room, which each state's frameOnly says.",
+  "canvas": "docs/plans/agent-connect-plan/canvas/",
+  "kit": "docs/plans/agent-connect-plan/mockups/",
+  "states": [
+    {
+      "id": "room-agents",
+      "step": "7.13",
+      "marker": "AgentRoomSection",
+      "frame": "37-room-agents.png",
+      "kit": "15-room-agents-section.svg",
+      "words": [
+        "ConnectedAgents.AgentsInThisRoom",
+        "Rooms.AgentBadge",
+        "ConnectedAgents.AgentMemory",
+        "ConnectedAgents.AddAnAgent",
+        "ConnectedAgents.AgentsUseEveryRoom"
+      ],
+      "frameOnly": [
+        {
+          "what": "the room's header, its parts (Notes, Files, Members) and the screen title",
+          "why": "room info's own, drawn by RoomInfo above the section; this state draws the section alone"
+        },
+        {
+          "what": "\"Add an agent\" enabled in a room marked \"Attributed\"",
+          "why": "agents work in open rooms only (backlog 3, ruling 7, 11-28): in an attributed room the row is off, with \"Agents can't read or answer in attributed rooms\"; this state draws an open room"
+        },
+        {
+          "what": "the note \"Agents added here can read everything in this room, not only messages that mention them.\"",
+          "why": "an agent added to a room can use every open room the owner is in as that persona (ruling 6): the note is AgentsUseEveryRoom, naming the persona"
+        }
+      ]
+    },
+    {
+      "id": "agent-picker",
+      "step": "7.13",
+      "marker": "AgentPickerSheet",
+      "frame": "34-agent-picker.png",
+      "kit": null,
+      "words": ["Rooms.AgentBadge"],
+      "frameOnly": [
+        {
+          "what": "the stand-in heading \"<heading>\"",
+          "why": "the plan gives the picker no words (the canvas note says so): the sheet has no heading, and a screen reader hears \"Add my agent\" as its label"
+        },
+        {
+          "what": "the canvas note (\"Canvas note, not on the phone\")",
+          "why": "a note for the reader of the canvas, never drawn on the phone"
+        },
+        {
+          "what": "the room behind the sheet",
+          "why": "the sheet's caller draws it; this state draws the sheet's contents"
+        }
+      ]
+    },
+    {
+      "id": "add-to-room",
+      "step": "7.13",
+      "marker": "AgentRoomSheet",
+      "frame": "35-add-to-room.png",
+      "kit": "13-room-add-agent.svg",
+      "words": [
+        "ConnectedAgents.AddToRoomTitle",
+        "ConnectedAgents.AddToRoomBodyAllRooms",
+        "ConnectedAgents.AddRoomMemoryNotice",
+        "ConnectedAgents.MembersWillSee",
+        "ConnectedAgents.AddToRoom",
+        "Global.NotNow"
+      ],
+      "frameOnly": [
+        {
+          "what": "the first notice, \"Adding an agent gives it read access to this room. It is asked to act only when you mention it, but nothing in the room enforces that.\"",
+          "why": "ruling 6: the agent can use every open room the owner is in as that persona, so the notice is AddToRoomBodyAllRooms, naming the persona"
+        },
+        {
+          "what": "the room behind the sheet, marked \"Attributed\"",
+          "why": "the sheet's caller draws the room; and the add is off in an attributed room (ruling 7), so the sheet is reached from an open one"
+        }
+      ]
+    },
+    {
+      "id": "add-to-room-no-widen",
+      "step": "7.13",
+      "marker": "AgentRoomSheet",
+      "frame": null,
+      "noFrame": "an agent already in another room of the persona (widens: null): the add only offers this room, so the eye notice is AddToRoomBodyAlready and there is no memory notice; no frame draws this case",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.AddToRoomTitle",
+        "ConnectedAgents.AddToRoomBodyAlready",
+        "ConnectedAgents.MembersWillSee",
+        "ConnectedAgents.AddToRoom",
+        "Global.NotNow"
+      ]
+    },
+    {
+      "id": "add-to-room-not-addable",
+      "step": "7.13",
+      "marker": "AgentRoomSheetOutcome",
+      "frame": null,
+      "noFrame": "the agent left the addable list between the list and the press (fb's 'notAddable'): the outcome's line replaces the buttons, with one \"Done\"; no frame draws an add's outcome",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.AddToRoomTitle",
+        "ConnectedAgents.AddToRoomBodyAlready",
+        "ConnectedAgents.MembersWillSee",
+        "ConnectedAgents.AddRoomNotAddable",
+        "Global.Done"
+      ]
+    },
+    {
+      "id": "add-to-room-refused",
+      "step": "7.13",
+      "marker": "AgentRoomSheetOutcome",
+      "frame": null,
+      "noFrame": "the VTA refused the update: the outcome's line replaces the buttons, with one \"Done\" and no \"Try again\" (a refusal spends the action); no frame draws an add's outcome",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.AddToRoomTitle",
+        "ConnectedAgents.AddToRoomBodyAlready",
+        "ConnectedAgents.MembersWillSee",
+        "ConnectedAgents.AddRoomRefused",
+        "Global.Done"
+      ]
+    },
+    {
+      "id": "what-it-remembers",
+      "step": "7.13",
+      "marker": "WhatItRemembers",
+      "frame": "36-memory-for-room.png",
+      "kit": "14-what-it-remembers.svg",
+      "words": [
+        "ConnectedAgents.WhatItRemembers",
+        "ConnectedAgents.WhatItRemembersBody",
+        "ConnectedAgents.CanUseEveryRoomAs",
+        "ConnectedAgents.MemoryIsText",
+        "Global.Done",
+        "ConnectedAgents.ConnectAnotherAgent"
+      ],
+      "frameOnly": [
+        {
+          "what": "a chevron on each memory row",
+          "why": "the rows are not tappable in this backlog: \"What a memory holds\" (PLAN:1017) is P1's credentials, not 7.13 (Part T1, decided)"
+        },
+        {
+          "what": "the room behind the sheet",
+          "why": "the sheet's caller draws it; this state draws the sheet's contents"
+        }
+      ],
+      "appOnly": [
+        {
+          "what": "\"It can use every open room you're in as <persona>.\" under the memories",
+          "why": "ruling 6 (11-28) adds CanUseEveryRoomAs here, after the frame was drawn"
+        }
+      ]
+    },
+    {
+      "id": "what-it-remembers-none",
+      "step": "7.13",
+      "marker": "WhatItRemembers",
+      "frame": null,
+      "noFrame": "an agent with no memory: WhatItRemembersNone in place of the body and the rows; frame 36 draws an agent with two",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.WhatItRemembers",
+        "ConnectedAgents.WhatItRemembersNone",
+        "ConnectedAgents.CanUseEveryRoomAs",
+        "ConnectedAgents.MemoryIsText",
+        "Global.Done",
+        "ConnectedAgents.ConnectAnotherAgent"
+      ]
+    },
+    {
+      "id": "room-agents-setting-not-stated",
+      "step": "7.13",
+      "marker": "AgentRoomSetting",
+      "frame": null,
+      "noFrame": "a room whose community has not said agents are welcome (today, every room: no `agents` member in VTI, §3.8): \"Add an agent\" is off, with CommunityNotStated under it and no \"Add anyway\" (PLAN:644); no frame draws it",
+      "kit": null,
+      "words": [
+        "ConnectedAgents.AgentsInThisRoom",
+        "Rooms.AgentBadge",
+        "ConnectedAgents.AgentMemory",
+        "ConnectedAgents.AddAnAgent",
+        "ConnectedAgents.CommunityNotStated",
+        "ConnectedAgents.AgentsUseEveryRoom"
+      ]
+    }
+  ]
+}
