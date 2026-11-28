@@ -318,11 +318,19 @@ describe('the add sheet', () => {
 
   test('a double press calls onAdd once, and "Add to room" is off while the add runs', () => {
     const { props, tree } = drawSheet()
-    const add = tree.getByTestId(id('AgentRoomSheetAdd'))
-    fireEvent.press(add)
-    fireEvent.press(add)
+    // Two presses in the same frame, before the re-render that disables the button: only the ref stops the second.
+    // The touchable itself (the host view under it has no onPress), so both presses reach the sheet's handler.
+    const press = tree
+      .UNSAFE_getAllByProps({ testID: id('AgentRoomSheetAdd') })
+      .map((node) => node.props.onPress)
+      .find((onPress) => typeof onPress === 'function') as () => void
+    act(() => {
+      press()
+      press()
+    })
+    // And a press after the re-render, on the disabled button.
     fireEvent.press(tree.getByTestId(id('AgentRoomSheetAdd')))
-    // control: without the once-only ref, the presses in the same frame each call onAdd.
+    // control: without the once-only ref (`sent`), the two presses in one frame each call onAdd.
     expect(props.onAdd).toHaveBeenCalledTimes(1)
     expect(tree.getByTestId(id('AgentRoomSheetAdd')).props.accessibilityState).toMatchObject({ disabled: true })
     // "Not now" stays: closing the sheet does not undo or repeat the add.
