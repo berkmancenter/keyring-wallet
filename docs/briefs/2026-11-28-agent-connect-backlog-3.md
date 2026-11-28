@@ -104,8 +104,13 @@ Alberto. Ruling 9 is §11's.
 1. **DECIDED (Alberto, coordinator's session, 11-28): fb-P1c's room access is persona-wide, with two hard rules.**
    1. The add grants room access keyed to the one persona the owner acts as in that room: keys listed as that
       persona's signing key, never unrestricted.
-   2. **Rule A:** the entry's capabilities stay `{ scope: listed }`, and the add only appends `roomPresent`. It never
-      widens to the role's own set. A test reads the entry back and asserts the exact list, with a control.
+   2. **Rule A (final):** the entry's capabilities stay `{ scope: listed }`, and the add only appends `roomPresent`.
+      It never widens to the role's own set. A test reads the entry back and asserts the exact list, with a control.
+      **Agents never get `roomOpen`** (DECIDED, Alberto, coordinator's session, 11-28, until VTI changes it
+      upstream): no code path grants it to an agent entry. A test asserts it is absent after the add, with a
+      control, and the release gate checks that nothing grants it (fb-P1h, condition 3). The type note at
+      `rooms/types.ts:398` stays as a type note. The agent can read and answer in open rooms, not in sealed ones;
+      Section B words it.
    3. **Rule B:** the add sends nothing unless the entry's consumer kind reads back as `aiAgent`. This is the plan's
       VTI-Q28 fallback, made a hard gate. A kind that is not `aiAgent`, or cannot be read, gives the outcome
       `notAddable`, and nothing is granted. The kind is read from the device by its `deviceId` through `device/list`,
@@ -331,8 +336,8 @@ export function settleRoomAdds(ports: RoomAddPorts): Promise<{ settled: string[]
 3. **The write:** write the intent `{ agentId, roomId, personaContext, at }` (`keyring/agent-room-add`, keyed
    records). Then one `narrowOrWidenCapabilities` with `act: { from: held, to: held ∪ {personaContext} }`. The
    capabilities stay `{ scope: listed }`, and the write appends only `roomPresent` (wire `room-present`,
-   `vta-sdk/src/acl.rs:305`, VTI clone `97fda9813`) to the listed set; it never widens to the role's own set (ruling
-   1, Rule A). The room access is keyed to the persona the owner acts as in that room: keys listed as that persona's
+   `vta-sdk/src/acl.rs:305`, VTI clone `97fda9813`) to the listed set. It never widens to the role's own set, and it
+   never appends `roomOpen` (ruling 1, Rule A). The room access is keyed to the persona the owner acts as in that room: keys listed as that persona's
    signing key, never unrestricted (ruling 1). Send only the members that change; no VTA write when neither does (a
    second room in the same context).
    `AgentAccessPort.narrowOrWidenCapabilities` (`carriage.ts:82-86`) gains `capabilities?: readonly string[]`, which
@@ -340,8 +345,8 @@ export function settleRoomAdds(ports: RoomAddPorts): Promise<{ settled: string[]
    a throw without one is `unreachable`.
 4. **The read-back:** `act` must equal exactly the bound memories ∪ `allowedBesideMemories(record, roomContexts ∪
    {personaContext})` (`actions.ts:88`). The capabilities must read back with scope `listed` and exactly the listed
-   set held before plus `roomPresent`, and the keys as listed with exactly that persona's signing key. Anything else
-   is `notApplied`, the intent is dropped, and Restore shows the drift.
+   set held before plus `roomPresent`, with no `roomOpen`, and the keys as listed with exactly that persona's
+   signing key. Anything else is `notApplied`, the intent is dropped, and Restore shows the drift.
 5. **The record:** one `store.update` adds the room, `personaContext` to `contexts`, and `roomPresent` to
    `capabilities`. Then the intent is removed.
 6. **The first room's grant:** a new VDC grant with `vdcScopeOf(record)` (`keyring.agent.room-present`), stored, then
@@ -395,6 +400,8 @@ export function settleRoomAdds(ports: RoomAddPorts): Promise<{ settled: string[]
     plus `roomPresent`, and keys listed as exactly that persona's signing key. Control: an entry read back with one
     more capability, or with unrestricted keys, is `notApplied`. Mutation: check the capabilities by containment, and
     the test goes red.
+  - `roomOpen` is absent from the entry after the add, and the write the fake VTA received does not name it.
+    Control: an entry read back holding `roomOpen` is `notApplied`, and the record does not gain it.
   - A second room in the same context makes no VTA write. Control: the first room does.
   - `notAllowed` and `notStated` refuse with their own codes and make no VTA call. Control: `allowed` proceeds.
   - An intent left by a crash, with the entry widened, is recorded by `settleRoomAdds`. Control: an intent whose
@@ -532,9 +539,15 @@ These conditions apply while the P1 switch is reachable: `setAgentRoomsEnabled` 
 1. A non-test file with `['"]room-present['"]` in its `live` text also calls `requireAiAgentKind(` in its `bare` text.
 2. `addAgentToRoom` is exported from a file whose `bare` text calls both `requireAiAgentKind(` and
    `communityAgentsSetting(`.
+3. **Always, switch or not:** no non-test file's `live` text names the capability `room-open` or `roomOpen` in a
+   string (`['"]room-open['"]`, `['"]roomOpen['"]`), except the type declaration `AgentRoomCapability` in
+   `rooms/types.ts` (`:401`). Nothing may grant `roomOpen` to an agent entry (ruling 1).
 
 - Tests: the wired tree passes. Removing either call fails and names it. A call that exists only in a comment or a
   string does not count. Control: `vdc.ts`'s `'keyring.agent.room-present'` does not trip condition 1.
+- Condition 3's tests: a fixture source that writes `capabilities: ['room-present', 'room-open']` fails and names
+  its file. Controls: the `AgentRoomCapability` declaration passes, and a comment naming `roomOpen` passes.
+  Mutation: drop the exception's file path, and the wired tree fails on `rooms/types.ts`.
 
 ---
 
