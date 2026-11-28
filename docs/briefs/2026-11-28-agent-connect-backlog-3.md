@@ -610,6 +610,19 @@ on ruling 4) and **B3-Z** (the developer switch row, last).
    below is eb's draft, marked PROPOSED. `OthersReply`'s fr and pt-br are the plan's own drafts (PLAN:752-756), under
    D16's release gate (c5's ruling 2). Nothing here waits on the read; a release does.
 
+6. **DECIDED (Alberto, coordinator's session, 11-28; relayed to eb by the coordinator): an agent added to a room can
+   use every room the owner is in as that persona, not only that room.** It is the same decision as Section A's
+   ruling 1, and fb's Section A carries the grant rules (its rule B). The
+   words say so plainly, in three PROPOSED keys added by **B3-0b (#1124)**:
+   - `AddToRoomBodyAllRooms` replaces `AddToRoomBody` on the add sheet;
+   - `AgentsUseEveryRoom` replaces `AgentsReadEverything` under room info's section;
+   - `CanUseEveryRoomAs` is a new line in "What it remembers" and in the details. It replaces the per-room
+     `CanReadAllOf` lines.
+
+   No line in these parts says or implies "only this room". The four keys that did (`AddToRoomBody`,
+   `AgentsReadEverything`, `CanReadAllOf` and `WidenBodyRooms`) are removed by #1124, and the parts below no longer
+   use them.
+
 Also relevant: c5's ruling 3 (shipping the switch with the hook alone) decides whether the plugin honours "On". The
 views here follow fb's `offered` value, whatever that ruling says.
 
@@ -631,10 +644,15 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
   {
     offered: boolean,               // false for a private room, or with either switch off
     setting: 'yes' | 'no' | 'notStated',
+    persona: string,                // the persona the owner acts as in this room, by its name
     inRoom: { agentId, name, memoryNames: string[] }[],
     addable: { agentId, name, memoryNames: string[], widens: { context: string } | null }[],
   }
   ```
+
+  - **After ruling 6:** `inRoom` is every own agent that can use this room, which means every agent added to any room
+    of this persona, not only one added here. `addable` leaves those out. fb's Section A rules decide the sets; the
+    views draw what they're given.
 
   - `setting` is `'yes'` only on the community's explicit yes. **fb differs:** a room no community hosts reads
     `'notStated'`, because no field marks a room as the person's own, and a room with no `communityDid` is often a
@@ -647,13 +665,13 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
 - **For T1:** `useAddAgentToRoom(roomId)` returns `{ add(agentId): Promise<AddRoomOutcome> }`, where `AddRoomOutcome`
   is one of:
   - `'added'`;
-  - `'notAgentKind'`, the §3.10 refusal;
   - `'refused'`, the VTA refused the update;
   - `'unreachable'`;
   - `'accessChanged'`, the read-back of `act` isn't exactly the bound memories plus the persona's context (PLAN:1361);
   - `'settingNo'` and `'settingNotStated'`, the setting re-read at the call;
   - `'notAddable'` (**fb's addition**): the agent left `addable` between the list and the press. `'refused'` would
-    word it falsely.
+    word it falsely. Under fb's rule B, a wrong, absent or unreadable agent kind, and an entry with no device, also
+    give `'notAddable'`, so **there is no `'notAgentKind'` outcome**. Its key, `NotAgentKind`, is removed by #1124.
 
   The intent record, the kind check, the grant, the VDC re-issue and the room offer are fb's. **fb differs:** the
   grant doesn't go through `grantAgentAccess`, which is `notYet` in the real service and does no kind check. The
@@ -668,12 +686,14 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
   - `offered` is false when the hook check (0.3(f)) failed. D23 is met today (PLAN:774), so fb returns true, but the
     branch is built and tested.
   - `pending` means stored, but not yet sent to the agent (ruling 3).
-  - The rooms list in `useAgentConnection(id)`: `rooms: { roomId, name }[]`.
+  - On `useAgentConnection(id)`: `persona?: string`, the name of the persona whose rooms the agent can use. It is
+    absent when the agent has been added to no room (ruling 6; this replaces a per-room list).
   - The access line's names: `actNames: string[]`, every context in the entry's `act`, so the persona's context
     shows (PLAN:1361, "the effective-access lines show the persona's context").
 - **For T4 (7.14):** `useMemberListAgents(roomId)` returns `{ own: AgentRow[], others: AgentRow[] }`, where `AgentRow`
-  is `{ did, name, handle, owner, agentId? }`. `others` holds only agents with a verified delegation (§3.16); none
-  appear until a room's profile lists `delegation`, which is correct today.
+  is `{ did, name, handle, owner, agentId? }`. `own` follows ruling 6: every own agent that can use this room.
+  `others` holds only agents with a verified delegation (§3.16); none appear until a room's profile lists
+  `delegation`, which is correct today.
 - **For T4:** `useAgentIdentity(roomId, did)` returns one of:
   - `{ kind: 'none' }`, a person (or either switch off);
   - `{ kind: 'own', agentId, name, handle, owner, revoked?: true }`;
@@ -687,6 +707,7 @@ exist or doesn't fit stops and says so; it doesn't reshape a view to fit.
 | Part | Creates | Edits |
 |---|---|---|
 | B3-0 (eb; lands first; **PR #1123**) | `connected-agents/agentRoomsFlag.ts` (only if ruling 1 says a separate switch) | the three locale files (`ConnectedAgents.*` only); `connected-agents/proposedCopy.ts` (PROPOSED and SETTLED_ELSEWHERE entries only) |
+| B3-0b (eb; **PR #1124**, after B3-0) | none | the three locale files (three keys added beside B3-0's block, four removed); `proposedCopy.ts` (three PROPOSED entries) |
 | T1 7.13 room info and the add flow (frames 34 to 37) | `rooms/components/AgentRoomSection.tsx`, `rooms/components/AgentPickerSheet.tsx`, `rooms/components/AgentRoomSheet.tsx` (the add sheet; the plan's name, PLAN:984), `rooms/components/AddAgentFlow.tsx`, `connected-agents/screens/WhatItRemembersSheet.tsx`, `rooms/__tests__/addAgentToRoom.test.tsx`, `connected-agents/__tests__/fixtures/screenStatesRooms.tsx`, `e2e/lib/agent-connect-screens.rooms.json` | `rooms/screens/RoomInfo.tsx` |
 | T2 7.13 and 7.14 composer (frames 31 to 33) | `rooms/components/ComposerMoreSheet.tsx` (the plan's name, PLAN:991), `rooms/components/MentionSuggestions.tsx`, `rooms/__tests__/composerAgents.test.tsx`, `fixtures/screenStatesComposer.tsx`, `e2e/lib/agent-connect-screens.composer.json` | `rooms/components/RoomComposer.tsx`, `rooms/screens/Room.tsx` |
 | T3 7.14 "Answers other people" and the P1 lines (frames 12 to 16) | `connected-agents/components/AnswersOthersRow.tsx`, `connected-agents/screens/AnswersOthersConfirmSheet.tsx`, `connected-agents/__tests__/answersOthers.test.tsx`, `fixtures/screenStatesAnswers.tsx`, `e2e/lib/agent-connect-screens.answers.json` | `connected-agents/screens/AgentDetailsView.tsx`, `AgentListView.tsx`, `ChangeMemoriesView.tsx`; `screens/agents/AgentDetailsScreen.tsx` and `AiAgentsScreen.tsx` (new props only) |
@@ -783,7 +804,6 @@ Two more apply:
 |---|---|---|---|
 | `AgentsInThisRoom` | Agents in this room | Agents dans ce salon | Agentes nesta sala |
 | `AddAnAgent` | Add an agent | Ajouter un agent | Adicionar um agente |
-| `AgentsReadEverything` | Agents added here can read everything in this room, not only messages that mention them. | Les agents ajoutés ici peuvent lire tout ce salon, pas seulement les messages qui les mentionnent. | Os agentes adicionados aqui podem ler tudo nesta sala, não só as mensagens que os mencionam. |
 | `AgentMemory` | Memory: {{names}} | Mémoire : {{names}} | Memória: {{names}} |
 | `AgentNoMemory` | No memory | Aucune mémoire | Nenhuma memória |
 | `WhatItRemembers` | What {{name}} remembers | Ce dont {{name}} se souvient | Do que {{name}} se lembra |
@@ -792,7 +812,6 @@ Two more apply:
 | `ConnectAnotherAgent` | Connect another agent | Connecter un autre agent | Conectar outro agente |
 | `MemoryIsText` | Memory is stored as text on your VTA. It is not a place for secrets. | La mémoire est stockée sous forme de texte sur votre VTA. Ce n'est pas un endroit pour les secrets. | A memória é guardada como texto no seu VTA. Não é um lugar para segredos. |
 | `AddToRoomTitle` | Add "{{name}}" to this room? | Ajouter « {{name}} » à ce salon ? | Adicionar "{{name}}" a esta sala? |
-| `AddToRoomBody` | Adding an agent gives it read access to this room. It is asked to act only when you mention it, but nothing in the room enforces that. | Ajouter un agent lui donne l'accès en lecture à ce salon. On lui demande d'agir seulement quand vous le mentionnez, mais rien dans le salon ne l'impose. | Adicionar um agente dá a ele acesso de leitura a esta sala. Pede-se que ele aja só quando você o mencionar, mas nada na sala garante isso. |
 | `MembersWillSee` | Members of this room will see that this agent belongs to you. | Les membres de ce salon verront que cet agent vous appartient. | Os membros desta sala verão que este agente pertence a você. |
 | `AddRoomMemoryNotice` | It can also read and change your memory "{{context}}", as can any other agent you add to a room. | Il peut aussi lire et modifier votre mémoire « {{context}} », comme tout autre agent que vous ajoutez à un salon. | Ele também pode ler e alterar sua memória "{{context}}", assim como qualquer outro agente que você adicionar a uma sala. |
 | `AddToRoom` | Add to room | Ajouter au salon | Adicionar à sala |
@@ -811,8 +830,6 @@ Two more apply:
 | `AnswersOnHelp` | {{name}} also acts on mentions from other people in rooms you added it to. | {{name}} agit aussi sur les mentions d'autres personnes dans les salons où vous l'avez ajouté. | {{name}} também age quando outras pessoas o mencionam nas salas em que você o adicionou. |
 | `WhatOthersSee` | What others see | Ce que voient les autres | O que os outros veem |
 | `CanUseInEveryRoom` | Can use memory {{names}} in every room it is in. | Peut utiliser la mémoire {{names}} dans chaque salon où il se trouve. | Pode usar a memória {{names}} em todas as salas em que está. |
-| `CanReadAllOf` | Can read all of {{room}}, not only messages that mention it. | Peut lire tout le salon {{room}}, pas seulement les messages qui le mentionnent. | Pode ler toda a sala {{room}}, não só as mensagens que o mencionam. |
-| `WidenBodyRooms` | This also applies in {{rooms}}. It will be able to read and change it. | Cela s'applique aussi dans {{rooms}}. Il pourra la lire et la modifier. | Isso também vale em {{rooms}}. Ele poderá lê-la e alterá-la. |
 | `AnswersOnTitle` | Let "{{name}}" answer other people? | Laisser « {{name}} » répondre aux autres personnes ? | Deixar "{{name}}" responder a outras pessoas? |
 | `AnswersOnBody` | Anyone in a room can then ask it to do things by mentioning it. It could be tricked into using your memory or posting for you, and your phone cannot prevent that. | N'importe qui dans un salon pourra alors lui demander de faire des choses en le mentionnant. Il pourrait être manipulé pour utiliser votre mémoire ou publier à votre place, et votre téléphone ne peut pas l'empêcher. | Qualquer pessoa em uma sala poderá então pedir que ele faça coisas, mencionando-o. Ele pode ser enganado para usar sua memória ou publicar por você, e seu celular não pode impedir isso. |
 | `TurnOn` | Turn on | Activer | Ligar |
@@ -829,14 +846,13 @@ Two more apply:
 | `OwnerUnknown` | Keyring can't tell who this belongs to. | Keyring ne peut pas savoir à qui il appartient. | O Keyring não consegue saber a quem ele pertence. |
 
 - **Settled elsewhere** (`SETTLED_ELSEWHERE`):
-  - `NotAgentKind` → `'§3.10'`: "This agent isn't registered as an agent on your VTA. Reconnect it." The fr is "Cet
-    agent n'est pas enregistré comme agent sur votre VTA. Reconnectez-le." and the pt-br is "Este agente não está
-    registrado como agente no seu VTA. Conecte-o de novo." Both are PROPOSED.
+  - (`NotAgentKind`, §3.10's line, was added by B3-0 and is removed by #1124: nothing produces its outcome.)
   - `OthersReply` → `'§3.13'`: the plan's three texts exactly (PLAN:752-756). The shared vector file with the plugin
     (PLAN:759) is fb's, beside c5's RM4 copy.
 - **PROPOSED in en too** (`PROPOSED_COPY`, each with a reason naming its ruling):
-  - `AddRoomNotAddable` (ruling 2; for fb's `'notAddable'`): ""{{name}}" can't be added to this room now." / "« {{name}}
-    » ne peut pas être ajouté à ce salon maintenant." / ""{{name}}" não pode ser adicionado a esta sala agora."
+  - `AddRoomNotAddable` (ruling 2; for fb's `'notAddable'`): ""{{name}}" can't be added to this room." / "« {{name}} »
+    ne peut pas être ajouté à ce salon." / ""{{name}}" não pode ser adicionado a esta sala." #1124 drops "now", which
+    would promise that a later attempt can work: not true for a wrong kind.
   - `AddRoomRefused` (ruling 2): "Your VTA refused this. "{{name}}" wasn't added." / "Votre VTA a refusé. « {{name}} »
     n'a pas été ajouté." / "Seu VTA recusou. "{{name}}" não foi adicionado."
   - `AddRoomUnreachable` (ruling 2): "Couldn't reach your VTA. "{{name}}" wasn't added." / "Impossible de joindre
@@ -855,6 +871,22 @@ Two more apply:
 - **Tests:** the copy test and the placeholder test pass. Each new key is in all three files, with the same
   placeholders. The no-retry pattern test passes in all three languages.
 - `// control:` drop one fr key, and the three-language test names it.
+
+## Part B3-0b (eb): the words for ruling 6 (PR #1124)
+
+**Start after:** B3-0 (#1123, merged). Every track that draws these words starts after B3-0b merges.
+
+| Key | en (PROPOSED) | fr (PROPOSED) | pt-br (PROPOSED) |
+|---|---|---|---|
+| `AddToRoomBodyAllRooms` | Adding an agent lets it use every room you're in as {{persona}}, not only this one. It is asked to act only when you mention it, but nothing in a room enforces that. | Ajouter un agent lui permet d'utiliser tous les salons où vous êtes en tant que {{persona}}, pas seulement celui-ci. On lui demande d'agir seulement quand vous le mentionnez, mais rien dans un salon ne l'impose. | Adicionar um agente permite que ele use todas as salas em que você está como {{persona}}, não só esta. Pede-se que ele aja só quando você o mencionar, mas nada em uma sala garante isso. |
+| `AgentsUseEveryRoom` | Agents added here can use every room you're in as {{persona}}, and read everything in them, not only messages that mention them. | Les agents ajoutés ici peuvent utiliser tous les salons où vous êtes en tant que {{persona}}, et tout y lire, pas seulement les messages qui les mentionnent. | Os agentes adicionados aqui podem usar todas as salas em que você está como {{persona}} e ler tudo nelas, não só as mensagens que os mencionam. |
+| `CanUseEveryRoomAs` | It can use every room you're in as {{persona}}. | Il peut utiliser tous les salons où vous êtes en tant que {{persona}}. | Ele pode usar todas as salas em que você está como {{persona}}. |
+
+- **Removed:** `AddToRoomBody`, `AgentsReadEverything`, `CanReadAllOf` and `WidenBodyRooms`. No code used them, and
+  §6 still quotes them until the plan owner updates it.
+- **Test:** the copy test passes.
+- `// control:` taking `CanUseEveryRoomAs` out of `PROPOSED_COPY` fails "carries no words that are neither in the plan
+  nor listed as a proposal".
 
 ## Part T1: room info's "Agents in this room" and the add flow (7.13; frames 34 to 37)
 
@@ -879,7 +911,8 @@ Two more apply:
 - **The row "+ Add an agent"** (`AddAnAgent`) is present only when `canAdd`, meaning `addable` is not empty.
   - With `setting` `'no'` or `'notStated'`, the row is disabled, with `CommunityNo` or `CommunityNotStated` under it
     (PLAN:644). There is no "Add anyway".
-- **The note** under the card is `AgentsReadEverything`, with the eye icon.
+- **The note** under the card is `AgentsUseEveryRoom` with `{{persona}}` (ruling 6), with the eye icon. It needs a
+  `persona` prop.
 - **Decided here, on when the section shows:** it is absent when `offered` is false, and when there are no agents in
   the room and none addable. A person with no agent sees today's RoomInfo.
 - testIDs: `AgentRoomSection`, `AgentRoomRow`, `AgentRoomAdd`, `AgentRoomSetting`, `AgentRoomNote`.
@@ -902,7 +935,8 @@ Two more apply:
 }
 ```
 
-- **The words, in this order:** `AddToRoomTitle`; `AddToRoomBody` (the eye notice); `AddRoomMemoryNotice` with
+- **The words, in this order:** `AddToRoomTitle`; `AddToRoomBodyAllRooms` with `{{persona}}` (the eye notice; ruling 6;
+  the sheet takes a `persona` prop); `AddRoomMemoryNotice` with
   `{{context}}`, only when `widensContext` is given (the layers notice); `MembersWillSee`, with the people icon.
 - **The buttons:** "Add to room" (`AddToRoom`) and "Not now" (`Global.NotNow`).
 - **Focus** (PLAN:1361, "before the button is focusable"):
@@ -914,7 +948,6 @@ Two more apply:
 
   | outcome | line |
   |---|---|
-  | `notAgentKind` | `NotAgentKind` |
   | `refused` | `AddRoomRefused` |
   | `unreachable` | `AddRoomUnreachable` |
   | `notAddable` | `AddRoomNotAddable` |
@@ -927,10 +960,11 @@ Two more apply:
   `AgentRoomSheetDone`.
 
 **`WhatItRemembersSheet`** (frame 36; in `connected-agents/screens/`, since the agent's details may use it later) has
-the props `{ name, memoryNames: string[], onDone, onConnectAnother }`.
+the props `{ name, persona, memoryNames: string[], onDone, onConnectAnother }`.
 - **With memories:** `WhatItRemembers`, then `WhatItRemembersBody` with the names joined by ", ", then one row per
   memory.
 - **With none:** `WhatItRemembers`, then `WhatItRemembersNone`.
+- **Then, either way:** `CanUseEveryRoomAs` with `{{persona}}` (ruling 6).
 - Then the note `MemoryIsText`, and the buttons "Done" (`Global.Done`) and `ConnectAnotherAgent`.
 - **Decided here:** the memory rows are **not tappable** in this backlog. Frame 36 draws chevrons, but "What a memory
   holds" (PLAN:1017) is P1 (credentials), not 7.13. The manifest entry marks the chevrons `frameOnly`.
@@ -958,7 +992,7 @@ mounts `AddAgentFlow`. Nothing else in the file changes.
 | `agent-picker` | 34 | the stand-in heading is `frameOnly` |
 | `add-to-room` | 35 | with `widensContext` |
 | `add-to-room-no-widen` | none | `noFrame` |
-| `add-to-room-not-agent-kind` | none | `noFrame` |
+| `add-to-room-not-addable` | none | `noFrame` |
 | `add-to-room-refused` | none | `noFrame` |
 | `what-it-remembers` | 36 | |
 | `what-it-remembers-none` | none | `noFrame` |
@@ -1086,7 +1120,7 @@ depend on T1 or T2.
 ```
 {
   handle?: string,
-  rooms?: { name }[],
+  persona?: string,
   actNames?: string[],
   answersOthers?: AnswersOthersRow props,
 }
@@ -1094,22 +1128,22 @@ depend on T1 or T2.
 
 - **"Mention it as":** `MentionAs` under the owner line, when `handle` is given.
 - **"Answers other people":** `AnswersOthersRow`, when `answersOthers` is given.
-- **With `rooms` not empty:**
+- **With `persona` given** (the agent has been added to a room):
   - `CanUseInEveryRoom` with `actNames`, in place of the no-room "Can use memory …" line;
-  - one `CanReadAllOf` per room, in the rooms' order (PLAN:1039 puts one line for the memories and one per room's
-    read).
-- **With `rooms` empty or absent:** the P0 no-room form, unchanged. **Decided here:** "in every room it is in" is
+  - one `CanUseEveryRoomAs` line with `{{persona}}` (ruling 6). This replaces §6's one "Can read all of <room>" line
+    per room, which would imply only those rooms.
+- **With `persona` absent:** the P0 no-room form, unchanged. **Decided here:** "in every room it is in" is
   never drawn for an agent in no room. The no-room form is true, and the room form would claim rooms that don't
   exist.
 
 **`AgentListView`** (frames 12 and 13): each row of a base-path agent gets `AnswersOthersOffLine` or
 `AnswersOthersOnLine` under its status, when the row's `answersOthers` is given. The HCP list is not touched.
 
-**`ChangeMemoriesView`:** the widening body is `WidenBodyRooms` with the rooms joined by ", " when the agent has rooms,
-or else `WidenBody`, as today (`NO_ROOM_FORMS` keeps `WidenBody`).
+**`ChangeMemoriesView`:** unchanged. The widening body stays `WidenBody`, which is true in every case. The rooms form
+(`WidenBodyRooms`, removed by #1124) would list only the rooms the agent was added to (ruling 6).
 
 **The containers** (R1's `AgentDetailsScreen` and `AiAgentsScreen`; new props only):
-- pass `handle`, `rooms`, `actNames` and `answersOthers` from fb's hooks, only when `isAgentRoomsEnabled()`;
+- pass `handle`, `persona`, `actNames` and `answersOthers` from fb's hooks, only when `isAgentRoomsEnabled()`;
 - `onTurnOn` opens the confirm sheet, whose "Turn on" calls `set(true)`;
 - `onTurnOff` calls `set(false)`;
 - `'notSaved'` sets `notSaved` until the next change.
@@ -1134,8 +1168,8 @@ or else `WidenBody`, as today (`NO_ROOM_FORMS` keeps `WidenBody`).
 - `pending` and `notSaved` show their lines. After `'notSaved'`, the switch is at its old value.
 - `OthersReply` in en, fr and pt-br equals §3.13's table cell for that language. fb's shared vector test is the other
   half.
-- The details with rooms show `CanUseInEveryRoom` and one `CanReadAllOf` per room; with none, the no-room line and no
-  "every room".
+- The details with `persona` show `CanUseInEveryRoom` and one `CanUseEveryRoomAs`; without it, the no-room line and
+  no "every room".
 - The list shows the Off and On lines.
 - The widen body has its rooms form only with rooms.
 - `// control:` with the switches off, the details and the list render as on the tip (no `MentionAs`, no row, no list
