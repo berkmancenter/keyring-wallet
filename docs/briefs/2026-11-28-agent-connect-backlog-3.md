@@ -1322,6 +1322,10 @@ depend on T1 or T2.
 
 **The containers** (R1's `AgentDetailsScreen` and `AiAgentsScreen`; new props only):
 - pass `handle`, `persona`, `actNames` and `answersOthers` from fb's hooks, only when `isAgentRoomsEnabled()`;
+- the list's `AgentRowData.answersOthers` is `value && offered`, so the list never says "On" where the details say
+  "Off" (#1137's frame check);
+- a `set(...)` that throws is mapped to `'notSaved'`, so the row shows `AnswersOthersNotSaved`, never nothing. The
+  sheet catches the throw and leaves the outcome to the container (#1137's frame check);
 - `onTurnOn` opens the confirm sheet, whose "Turn on" calls `set(true)`;
 - `onTurnOff` calls `set(false)`;
 - `'notSaved'` sets `notSaved` until the next change.
