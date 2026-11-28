@@ -3,7 +3,9 @@
  * (C6)"). Its own file: the base path's `../revoke.ts` is not this.
  *
  * - {@link revokeHcpGrant} sends `hcp/grants/revoke/0.1` `{ grantId }` once (never retried on its own). On success the
- *   record reads revoked, with the notice `telling`; on a refusal or an unreachable VTA it is unchanged.
+ *   record reads revoked, with the notice `telling`; on a refusal or an unreachable VTA it is unchanged. A record
+ *   with no `grantId` (VTI hcp.md §5.1 pre-assigns none) first learns it (`./grantId.ts`) and keeps it; a grant not
+ *   yet in the audit log is refused `grantNotIssued`, sending no revoke.
  * - {@link pollHcpNotice} sends `hcp/disclosures/summary/0.1` `{ client }` and reads it by our grant (backlog 2,
  *   track 5):
  *   - an OK answer with no `clients` entry for the client, or an entry whose `grants` does not list our `grantId`:
@@ -24,6 +26,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 
+import { HCP_GRANT_NOT_ISSUED, learnHcpGrantId } from './grantId'
 import { isHcpEnabled } from './hcpFlag'
 import type { HcpConnectionReader } from './store'
 import { HCP_DISCLOSURES_SUMMARY, HCP_GRANTS_REVOKE, type HcpConnection, type HcpNoticeState } from './types'
@@ -62,7 +65,31 @@ export async function revokeHcpGrant(deps: HcpRevokeDeps, id: string): Promise<H
   const c = await deps.store.get(id)
   if (!c) return { ok: false, missing: true }
   if (c.revokedAt) return { ok: true, connection: c }
-  const outcome = await callHcp<unknown>(deps.port, HCP_GRANTS_REVOKE, { grantId: c.grantId })
+  const refusedFor = (code: string): HcpRevokeResult => ({
+    ok: false,
+    refused: code,
+    message: { key: 'RevokeRefused', params: { name: c.name } },
+  })
+  let grantId = c.grantId
+  if (!grantId) {
+    const learnt = await learnHcpGrantId(deps.port, { clientVid: c.id, since: c.approvedAt })
+    if (!learnt.ok) {
+      return onHcpFailure<HcpRevokeResult>(learnt, {
+        refused: refusedFor,
+        unreachable: () => ({
+          ok: false,
+          unreachable: true,
+          message: { key: 'RevokeUnreachable', params: { name: c.name } },
+        }),
+        off: () => ({ ok: false, off: true }),
+      })
+    }
+    if (!('grantId' in learnt)) return refusedFor(HCP_GRANT_NOT_ISSUED)
+    const known = learnt.grantId
+    grantId = known
+    await deps.store.update(id, (r) => (r.grantId || r.threadId !== c.threadId ? r : { ...r, grantId: known }))
+  }
+  const outcome = await callHcp<unknown>(deps.port, HCP_GRANTS_REVOKE, { grantId })
   if (!outcome.ok) {
     return onHcpFailure<HcpRevokeResult>(outcome, {
       refused: (code) => ({ ok: false, refused: code, message: { key: 'RevokeRefused', params: { name: c.name } } }),
@@ -173,7 +200,7 @@ export async function pollHcpNotice(deps: HcpRevokeDeps, id: string): Promise<Hc
   const off = !outcome.ok && onHcpFailure(outcome, { refused: () => false, unreachable: () => false, off: () => true })
   if (off) return { connection: c }
   const now = deps.clock()
-  const summary = outcome.ok ? readClientSummary(outcome.value, c.id, c.grantId) : undefined
+  const summary = outcome.ok && c.grantId ? readClientSummary(outcome.value, c.id, c.grantId) : undefined
   const entry = summary?.kind === 'entry' ? summary : undefined
   // Where a notice was delivered, `usableUntil` is its time of delivery, not a time anything stops being usable: one
   // before our revoke (a retired grant's notice) is not kept for the stop's "stops being usable at".

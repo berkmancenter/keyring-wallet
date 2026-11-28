@@ -22,10 +22,13 @@ import {
 import { HcpConnectionStore } from '../store'
 import { HCP_DISCLOSURES_SUMMARY, HCP_GRANTS_REVOKE, type HcpConnection } from '../types'
 import { HcpOffError, type HcpVtaPort } from '../vtaPort'
+import { HCP_AUDIT_READ } from '../whatItSaw/audit'
+import { auditEvent } from '../whatItSaw/__tests__/fixtures/fakeVta'
+import { whatItSawSchemas } from '../whatItSaw/__tests__/fixtures/whatItSawSchemas'
 import { expectValid, hcpSchemas } from './fixtures/hcpSchemas'
 import { CLIENT_VID, GRANT, OTHER_VID, THREAD } from './fixtures/hcpApproval'
 
-const S = hcpSchemas()
+const S = { ...hcpSchemas(), ...whatItSawSchemas() }
 const REVOKED_AT = Date.parse('2026-11-27T11:00:00.000Z')
 const SECOND = 1000
 const MINUTE = 60 * SECOND
@@ -84,10 +87,22 @@ const refusal = (code: string) => Object.assign(new Error('refused'), { name: 'V
  * A fake VTA: answers `grants/revoke` with `{}` (or `revoke()` if given) and `disclosures/summary` with the next of
  * `summaries` (or the last, once they run out). Every request it is sent is checked against the vendored schema.
  */
-function fakeVta(options: { revoke?: () => Promise<unknown>; summaries?: (() => Promise<unknown>)[] } = {}) {
+function fakeVta(
+  options: {
+    revoke?: () => Promise<unknown>
+    summaries?: (() => Promise<unknown>)[]
+    /** The `hcp/audit/read` answer, given the request; by default no events. */
+    audit?: (payload: Record<string, unknown>) => Promise<unknown>
+  } = {}
+) {
   let polls = 0
   const task = jest.fn(async (type: string, payload: Record<string, unknown>) => {
     expectValid(S[type].request, payload)
+    if (type === HCP_AUDIT_READ) {
+      const answer = options.audit ? await options.audit(payload) : { events: [] }
+      expectValid(S[HCP_AUDIT_READ].response, answer)
+      return answer
+    }
     if (type === HCP_GRANTS_REVOKE) {
       if (options.revoke) return options.revoke()
       const answer = {}
@@ -122,6 +137,34 @@ describe('revokeHcpGrant', () => {
     const after = revoked()
     expect(result).toEqual({ ok: true, connection: after })
     expect(await store.get(CLIENT_VID)).toEqual(after)
+  })
+
+  it('a record with no grantId learns it from grant.issued, keeps it, then revokes it', async () => {
+    const { grantId: _none, ...noId } = connection()
+    const vta = fakeVta({
+      audit: async () => ({
+        events: [auditEvent('grant.issued', '2026-11-27T10:01:01.000Z', { grantId: GRANT })],
+      }),
+    })
+    const { deps, store, task } = await setup(noId, vta)
+    const result = await revokeHcpGrant(deps, CLIENT_VID)
+    expect(task.mock.calls.map((c) => c[0])).toEqual([HCP_AUDIT_READ, HCP_GRANTS_REVOKE])
+    expect(task.mock.calls[0][1]).toMatchObject({ client: CLIENT_VID, eventType: 'grant.issued' })
+    expect(task.mock.calls[1][1]).toStrictEqual({ grantId: GRANT })
+    expect(result).toEqual({ ok: true, connection: revoked() })
+    expect((await store.get(CLIENT_VID))?.grantId).toBe(GRANT)
+  })
+
+  it('a record with no grantId and no grant.issued yet is refused grantNotIssued, and nothing is revoked', async () => {
+    const { grantId: _none, ...noId } = connection()
+    const { deps, store, task } = await setup(noId)
+    expect(await revokeHcpGrant(deps, CLIENT_VID)).toEqual({
+      ok: false,
+      refused: 'grantNotIssued',
+      message: { key: 'RevokeRefused', params: { name: 'My notes agent' } },
+    })
+    expect(task.mock.calls.map((c) => c[0])).toEqual([HCP_AUDIT_READ])
+    expect(await store.get(CLIENT_VID)).toEqual(noId)
   })
 
   // control: the opposite of the case above: the record stays as it was.

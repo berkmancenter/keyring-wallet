@@ -1,6 +1,7 @@
 /**
  * The audit read of "What my agent saw" (C4; backlog brief, section B part 3, "The reads"): Keyring, as Management
- * Client, sends `hcp/audit/read/0.1` `{ client, limit }` through the HCP port and follows `nextCursor` until it is
+ * Client, sends `hcp/audit/read/0.1` `{ client, limit }` (with `eventType` and `from` when a caller narrows the read,
+ * as the grant-id lookup and the revoke notice do) through the HCP port and follows `nextCursor` until it is
  * absent or {@link HCP_AUDIT_MAX_EVENTS} events have been read.
  *
  * Nothing here logs a payload or a response.
@@ -49,6 +50,10 @@ export interface HcpAuditQuery {
   limit?: number
   /** Where to start: a `nextCursor` from an earlier read. */
   cursor?: string
+  /** Only events of this type (the task's `eventType` filter). */
+  eventType?: string
+  /** Only events at or after this instant (the task's `from` filter), ISO-8601. */
+  from?: string
 }
 
 const isString = (v: unknown): v is string => typeof v === 'string'
@@ -91,6 +96,8 @@ export async function readHcpAudit(port: HcpVtaPort, query: HcpAuditQuery): Prom
   for (;;) {
     const limit = Math.min(pageLimit, HCP_AUDIT_MAX_EVENTS - events.length)
     const payload: Record<string, unknown> = { client: query.client, limit }
+    if (query.eventType !== undefined) payload.eventType = query.eventType
+    if (query.from !== undefined) payload.from = query.from
     if (cursor !== undefined) payload.cursor = cursor
     const outcome = await callHcp<unknown>(port, HCP_AUDIT_READ, payload)
     if (!outcome.ok) return { events, cut: false, failure: outcome }

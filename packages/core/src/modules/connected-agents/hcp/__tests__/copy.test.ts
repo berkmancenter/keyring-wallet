@@ -40,6 +40,8 @@ const KEYS: HcpCopyKey[] = [
   'ApproveCancelled',
   // Added for backlog 2, track 5: nothing was disclosed under the grant, so "Revoked." alone.
   'RevokeNothingDisclosed',
+  // Added for the VTI hcp.md §5.1 contract: the request names no purpose, so the person picks one.
+  'ApproveChoosePurpose',
 ]
 const APPROVE_ENDINGS = [
   'ApproveNotApproved',

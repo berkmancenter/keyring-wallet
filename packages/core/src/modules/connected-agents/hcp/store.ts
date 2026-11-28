@@ -3,9 +3,9 @@
  * `HcpConnection` per client, keyed by the client's VID, as a Credo generic record through `keyedRecords`, so
  * concurrent writers of one key queue and a duplicate heals on the next read.
  *
- * Before an approval, an {@link HcpApprovalInFlight} is written under its own kind, keyed by the grant the approval
- * would create (the pattern of the base path's `../revoke.ts`, where a record moves to `revoking` before the VTA is
- * called). Keyed by grant, not by client, so a second approval for the same client is written beside the first and
+ * Before an approval, an {@link HcpApprovalInFlight} is written under its own kind, keyed by the request's thread, which
+ * names the one grant the approval would create (VTI hcp.md §5.1 pre-assigns no `grantId`) (the pattern of the base path's `../revoke.ts`, where a record moves to `revoking` before the VTA is
+ * called). Keyed by thread, not by client, so a second approval for the same client is written beside the first and
  * never over it. It becomes the connection once the approval is confirmed; if the approval fails, or the app stops in
  * between, it stays, and `./reconcile.ts` completes it or revokes its grant.
  *
@@ -27,11 +27,11 @@ import type { HcpApprovalInFlight, HcpApprovalView, HcpConnection, HcpRetiringGr
 export const HCP_CONNECTION_RECORD_TYPE = 'keyring/hcp-connection'
 export const HCP_CONNECTION_KIND = 'connection'
 /**
- * The kind of an {@link HcpApprovalInFlight}: the same record type, keyed by `grantId`. Every write of one is made under
+ * The kind of an {@link HcpApprovalInFlight}: the same record type, keyed by `threadId`. Every write of one is made under
  * its client's lock, the connection's, so one lock covers all of a client's records.
  */
 export const HCP_APPROVAL_IN_FLIGHT_KIND = 'approving'
-/** The kind of an {@link HcpRetiringGrant}: the same record type, keyed by `grantId`, written under the client's lock. */
+/** The kind of an {@link HcpRetiringGrant}: the same record type, keyed by `threadId`, written under the client's lock. */
 export const HCP_RETIRING_KIND = 'retiring'
 
 /** What `revoke.ts` and the hook need of the store. */
@@ -75,13 +75,14 @@ export class HcpConnectionStore {
     return listKeyed<HcpApprovalInFlight>(this.agent, HCP_CONNECTION_RECORD_TYPE, HCP_APPROVAL_IN_FLIGHT_KIND)
   }
 
-  /** The approval in flight for a grant. */
-  public getInFlight(grantId: string): Promise<HcpApprovalInFlight | undefined> {
-    return getKeyed<HcpApprovalInFlight>(this.agent, HCP_CONNECTION_RECORD_TYPE, HCP_APPROVAL_IN_FLIGHT_KIND, grantId)
+  /** The approval in flight for a request's thread. */
+  public getInFlight(threadId: string): Promise<HcpApprovalInFlight | undefined> {
+    return getKeyed<HcpApprovalInFlight>(this.agent, HCP_CONNECTION_RECORD_TYPE, HCP_APPROVAL_IN_FLIGHT_KIND, threadId)
   }
 
   /**
-   * Write the approval in flight for its grant. An earlier approval in flight for the same client, for another grant,
+   * Write the approval in flight for its thread (so for its grant). Rewriting it with the same thread (to add a
+   * `grantId` learnt later) replaces it. An earlier approval in flight for the same client, for another grant,
    * is kept beside it, and the client's connection is not touched.
    */
   public putInFlight(record: HcpApprovalInFlight): Promise<void> {
@@ -90,15 +91,15 @@ export class HcpConnectionStore {
         this.agent,
         HCP_CONNECTION_RECORD_TYPE,
         HCP_APPROVAL_IN_FLIGHT_KIND,
-        record.grantId,
+        record.threadId,
         record as unknown as Record<string, unknown>
       )
     )
   }
 
-  /** Remove the approval in flight for `grantId` if it is client `id`'s. Returns whether one was removed. */
-  public removeInFlight(id: string, grantId: string): Promise<boolean> {
-    return this.locked(id, () => this.drop(HCP_APPROVAL_IN_FLIGHT_KIND, id, grantId))
+  /** Remove the approval in flight for `threadId` if it is client `id`'s. Returns whether one was removed. */
+  public removeInFlight(id: string, threadId: string): Promise<boolean> {
+    return this.locked(id, () => this.drop(HCP_APPROVAL_IN_FLIGHT_KIND, id, threadId))
   }
 
   /** Every retiring grant: one whose connection a newer one replaced while the grant may still be live. */
@@ -106,28 +107,41 @@ export class HcpConnectionStore {
     return listKeyed<HcpRetiringGrant>(this.agent, HCP_CONNECTION_RECORD_TYPE, HCP_RETIRING_KIND)
   }
 
-  /** Remove the retiring grant `grantId` if it is client `id`'s. Returns whether one was removed. */
-  public removeRetiring(id: string, grantId: string): Promise<boolean> {
-    return this.locked(id, () => this.drop(HCP_RETIRING_KIND, id, grantId))
+  /** Remove the retiring grant of thread `threadId` if it is client `id`'s. Returns whether one was removed. */
+  public removeRetiring(id: string, threadId: string): Promise<boolean> {
+    return this.locked(id, () => this.drop(HCP_RETIRING_KIND, id, threadId))
+  }
+
+  /** Rewrite a retiring grant (to add a `grantId` learnt later), under its thread. */
+  public putRetiring(record: HcpRetiringGrant): Promise<void> {
+    return this.locked(record.id, () =>
+      putKeyed(
+        this.agent,
+        HCP_CONNECTION_RECORD_TYPE,
+        HCP_RETIRING_KIND,
+        record.threadId,
+        record as unknown as Record<string, unknown>
+      )
+    )
   }
 
   /**
-   * If client `id`'s connection still names `grantId` (the app stopped inside {@link complete}, between writing the
-   * retiring grant and the new connection), remove the retiring grant `grantId` and return true: the grant is the
+   * If client `id`'s connection still names thread `threadId` (the app stopped inside {@link complete}, between writing
+   * the retiring grant and the new connection), remove that retiring grant and return true: the grant is the
    * connection, not retiring. Otherwise remove nothing and return false. Decided and done as one step under the
    * client's lock, so a `complete` that retires the grant again in between cannot have its record removed.
    */
-  public removeRetiringIfCurrent(id: string, grantId: string): Promise<boolean> {
+  public removeRetiringIfCurrent(id: string, threadId: string): Promise<boolean> {
     return this.locked(id, async () => {
-      if ((await this.get(id))?.grantId !== grantId) return false
-      await this.drop(HCP_RETIRING_KIND, id, grantId)
+      if ((await this.get(id))?.threadId !== threadId) return false
+      await this.drop(HCP_RETIRING_KIND, id, threadId)
       return true
     })
   }
 
   /**
    * Make a confirmed approval the client's connection, as one step under the client's lock: write `connection`, then
-   * remove the approval in flight for its grant. Stopping between the two leaves both, which the reconcile resolves
+   * remove the approval in flight for its thread. Stopping between the two leaves both, which the reconcile resolves
    * by removing the approval in flight (the connection already names its grant).
    *
    * The client's connection for another grant is never dropped while that grant may be live:
@@ -138,16 +152,16 @@ export class HcpConnectionStore {
   public complete(connection: HcpConnection, now: Date = new Date()): Promise<void> {
     return this.locked(connection.id, async () => {
       const existing = await this.get(connection.id)
-      if (existing && existing.grantId !== connection.grantId) {
+      if (existing && existing.threadId !== connection.threadId) {
         if (Date.parse(existing.approvedAt) > Date.parse(connection.approvedAt)) {
           await this.retire(connection, now)
-          await this.drop(HCP_APPROVAL_IN_FLIGHT_KIND, connection.id, connection.grantId)
+          await this.drop(HCP_APPROVAL_IN_FLIGHT_KIND, connection.id, connection.threadId)
           return
         }
         if (!existing.revokedAt) await this.retire(existing, now)
       }
       await this.write(connection)
-      await this.drop(HCP_APPROVAL_IN_FLIGHT_KIND, connection.id, connection.grantId)
+      await this.drop(HCP_APPROVAL_IN_FLIGHT_KIND, connection.id, connection.threadId)
     })
   }
 
@@ -155,23 +169,25 @@ export class HcpConnectionStore {
     const record: HcpRetiringGrant = {
       id: c.id,
       name: c.name,
-      grantId: c.grantId,
+      ...(c.grantId ? { grantId: c.grantId } : {}),
       threadId: c.threadId,
+      expiresAt: c.expiresAt,
+      approvedAt: c.approvedAt,
       retiredAt: at.toISOString(),
     }
     return putKeyed(
       this.agent,
       HCP_CONNECTION_RECORD_TYPE,
       HCP_RETIRING_KIND,
-      record.grantId,
+      record.threadId,
       record as unknown as Record<string, unknown>
     )
   }
 
-  private async drop(kind: string, id: string, grantId: string): Promise<boolean> {
-    const current = await getKeyed<{ id: string }>(this.agent, HCP_CONNECTION_RECORD_TYPE, kind, grantId)
+  private async drop(kind: string, id: string, threadId: string): Promise<boolean> {
+    const current = await getKeyed<{ id: string }>(this.agent, HCP_CONNECTION_RECORD_TYPE, kind, threadId)
     if (!current || current.id !== id) return false
-    await deleteKeyed(this.agent, HCP_CONNECTION_RECORD_TYPE, kind, grantId)
+    await deleteKeyed(this.agent, HCP_CONNECTION_RECORD_TYPE, kind, threadId)
     return true
   }
 
@@ -192,17 +208,18 @@ export class HcpConnectionStore {
 }
 
 /**
- * The record for an approval: `approvedAt` is when `decide(approve)` resolved, `expiresAt` that plus the view's
- * `expiresInSeconds`, and the name is the one the person gave (the view's title), never the request's.
+ * The record for an approval: `approvedAt` is when `decide(approve)` resolved, `expiresAt` the `hcpGrantTerm`
+ * effect's, `grantId` only if the request carried one, and the name is the one the person gave (the view's title), never the request's.
  */
 export function hcpConnectionFromApproval(view: HcpApprovalView, approvedAt: Date): HcpConnection {
   return {
     id: view.clientVid,
     name: view.title.params.name,
-    grantId: view.grantId,
+    ...(view.grantId ? { grantId: view.grantId } : {}),
     threadId: view.threadId,
     approvedAt: approvedAt.toISOString(),
-    expiresAt: new Date(approvedAt.getTime() + view.expiresInSeconds * 1000).toISOString(),
+    expiresAt: view.expiresAt,
+    ...(view.chosenPurpose ? { chosenPurpose: view.chosenPurpose } : {}),
   }
 }
 
@@ -215,11 +232,12 @@ export function hcpApprovalInFlight(
   return {
     id: view.clientVid,
     name: view.title.params.name,
-    grantId: view.grantId,
+    ...(view.grantId ? { grantId: view.grantId } : {}),
     threadId: view.threadId,
     approvalId: approval.id,
     approvalExpiresAt: approval.expiresAt,
-    expiresInSeconds: view.expiresInSeconds,
+    expiresAt: view.expiresAt,
+    ...(view.chosenPurpose ? { chosenPurpose: view.chosenPurpose } : {}),
     startedAt: startedAt.toISOString(),
   }
 }

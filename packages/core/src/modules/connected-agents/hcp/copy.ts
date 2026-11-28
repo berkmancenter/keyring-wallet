@@ -45,6 +45,7 @@ export type HcpCopyKey =
   | 'ApproveDeclined'
   | 'ApproveAnsweredElsewhere'
   | 'ApproveCancelled'
+  | 'ApproveChoosePurpose'
 
 /**
  * The keys for a refusal (added after the brief, at review): unlike `RevokeUnreachable` and `MemoryNotSaved`, the
@@ -131,6 +132,13 @@ export const HCP_COPY: Record<HcpCopyKey, { en: string; fr: string; ptBr: string
     en: 'Revoked.',
     fr: 'Révoqué.',
     ptBr: 'Revogado.',
+    source: 'PROPOSED',
+  },
+  // Added for the VTI hcp.md §5.1 contract: a request that names no purpose, so the person picks one.
+  ApproveChoosePurpose: {
+    en: "It didn't say what it needs this for. Choose one:",
+    fr: "Il n'a pas dit à quoi cela lui sert. Choisissez :",
+    ptBr: 'Ele não disse para que precisa disso. Escolha um:',
     source: 'PROPOSED',
   },
   RevokeTitle: {

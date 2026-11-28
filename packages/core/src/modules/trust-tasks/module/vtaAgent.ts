@@ -572,11 +572,15 @@ export function keepManagerMessage(
   plaintext: DidCommV2PlaintextMessage,
   now: number
 ): { approval: VtiApproval } | { granted: true } | undefined {
-  const body = plaintext.body as { id?: string; type?: string; payload?: VtaConsentRequest } | undefined
+  const body = plaintext.body as
+    | { id?: string; type?: string; parentThreadId?: unknown; payload?: VtaConsentRequest }
+    | undefined
   if (body?.type === VTA_TASK.consentRequest && body.payload?.challenge) {
     return {
       approval: {
         ...body.payload,
+        // The document's parentThreadId: an HCP consent request names the held request's thread by it.
+        ...(typeof body.parentThreadId === 'string' ? { parentThreadId: body.parentThreadId } : {}),
         id: String(body.id ?? body.payload.challenge),
         receivedAt: new Date(now).toISOString(),
         status: 'pending',

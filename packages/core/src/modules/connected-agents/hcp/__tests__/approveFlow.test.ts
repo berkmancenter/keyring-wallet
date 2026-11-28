@@ -16,7 +16,18 @@ import {
 } from '../approveFlow'
 import { setHcpEnabled } from '../hcpFlag'
 import type { HcpApprovalView } from '../types'
-import { CLIENT_VID, GRANT, HELD_AT, hcpApproval, LINK, NUMBER, OTHER_VID, ROWS, THREAD } from './fixtures/hcpApproval'
+import {
+  CLIENT_VID,
+  GRANT_EXPIRES_AT,
+  HELD_AT,
+  hcpApproval,
+  hcpEffects,
+  LINK,
+  NUMBER,
+  OTHER_VID,
+  ROWS,
+  THREAD,
+} from './fixtures/hcpApproval'
 
 jest.mock('../../../trust-tasks/module/vtaAgent', () => ({ vtaAgent: {} }))
 
@@ -117,10 +128,27 @@ const EXPECTED_VIEW: HcpApprovalView = {
   warning: { key: 'ApproveOwnTerminal' },
   approve: { key: 'Approve' },
   clientVid: CLIENT_VID,
-  grantId: GRANT,
   threadId: THREAD,
-  expiresInSeconds: 14400,
+  expiresAt: GRANT_EXPIRES_AT,
+  operator: { id: 'did:web:labs.example', name: 'Example Labs' },
+  persistence: 'temporary',
 }
+
+const RESEARCH = 'https://example.org/purpose/research'
+const DIET = 'https://example.org/purpose/diet'
+/** The fixture with two `choose: true` purposes: a request that names no purpose. */
+const choosing = () =>
+  hcpApproval({
+    effects: [
+      ...hcpEffects(),
+      {
+        kind: 'hcpPurpose',
+        summary: 'For research.',
+        detail: { purpose: RESEARCH, description: 'research', choose: true },
+      },
+      { kind: 'hcpPurpose', summary: 'For your diet.', detail: { purpose: DIET, description: 'diet', choose: true } },
+    ],
+  })
 
 describe('createHcpApproveFlow', () => {
   beforeEach(() => {
@@ -282,6 +310,38 @@ describe('createHcpApproveFlow', () => {
     await t.flow.approve()
     await t.flow.cancel()
     expect(t.fake.decide).toHaveBeenCalledTimes(1)
+  })
+
+  it('a request that names no purpose is approved only after the person picks one, and the choice is recorded', async () => {
+    const t = setup({ approvals: [choosing()] })
+    await t.flow.start({ name: 'My helper', link: LINK })
+    await t.flow.typeNumber(NUMBER)
+    const shown = t.flow.state()
+    expect(shown.state === 'approve' && shown.view.purposeChoice?.options.map((o) => o.purpose)).toEqual([
+      RESEARCH,
+      DIET,
+    ])
+    // No choice yet: Approve does nothing.
+    expect(await t.flow.approve()).toEqual(shown)
+    expect(t.beforeApprove).not.toHaveBeenCalled()
+    expect(t.fake.decide).not.toHaveBeenCalled()
+    // A purpose that is not an option changes nothing.
+    expect(t.flow.choosePurpose('https://example.org/purpose/other')).toEqual(shown)
+    t.flow.choosePurpose(RESEARCH)
+    t.flow.choosePurpose(DIET)
+    await t.flow.approve()
+    expect(t.fake.decide.mock.calls).toEqual([['consent-1', 'approve']])
+    expect(t.beforeApprove.mock.calls[0][0].chosenPurpose).toBe(DIET)
+    expect(t.onApproved.mock.calls[0][0].chosenPurpose).toBe(DIET)
+    expect(t.flow.state().state).toBe('approved')
+  })
+
+  it('control: choosePurpose outside the approve state, or with no choice offered, changes nothing', async () => {
+    const t = setup({ approvals: [hcpApproval()] })
+    await t.flow.start({ name: 'My helper', link: LINK })
+    expect(t.flow.choosePurpose(RESEARCH).state).toBe('numberEntry')
+    await t.flow.typeNumber(NUMBER)
+    expect(t.flow.choosePurpose(RESEARCH)).toEqual({ state: 'approve', view: EXPECTED_VIEW })
   })
 
   it('does not approve when the approval in flight cannot be written', async () => {

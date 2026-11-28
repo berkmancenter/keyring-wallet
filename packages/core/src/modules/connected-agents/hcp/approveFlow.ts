@@ -8,7 +8,9 @@
  * 5. The person types the four digits from their terminal: one try. A mismatch denies the request and counts one
  *    wrong number on `../lockout.ts`, as the base path's pairing does; while locked out, scanning gives `locked`
  *    before any wait.
- * 6. A match shows the approve view; 7. Approve first writes part 3's approval in flight (`beforeApprove`, naming the
+ * 6. A match shows the approve view. When the request names no purpose, the person picks one of the `choose: true`
+ *    purposes first ({@link HcpApproveFlow.choosePurpose}); Approve does nothing until they have;
+ * 7. Approve first writes part 3's approval in flight (`beforeApprove`, naming the
  *    grant), then calls `decide(id, 'approve')`, which runs the phone's owner check itself; 8. on `approved`,
  *    `onApproved` makes it part 3's connection; 9. Cancel before Approve denies the request if one was found, and
  *    otherwise sends nothing.
@@ -94,6 +96,8 @@ export interface HcpApproveFlowDeps {
 export interface HcpApproveFlow {
   start(input: { name: string; link: HcpConnectLink }): Promise<HcpApproveState>
   typeNumber(digits: string): Promise<HcpApproveState>
+  /** In `approve`, pick one of the view's `purposeChoice` options (by purpose IRI); anything else changes nothing. */
+  choosePurpose(purpose: string): HcpApproveState
   approve(): Promise<HcpApproveState>
   cancel(): Promise<HcpApproveState>
   state(): HcpApproveState
@@ -164,7 +168,7 @@ export function createHcpApproveFlow(deps: HcpApproveFlowDeps): HcpApproveFlow {
       if (approval) {
         const effects = readHcpEffects(approval)
         if (!effects) return
-        found = { id: approval.id, view: hcpApproveView(name, effects) }
+        found = { id: approval.id, view: hcpApproveView(name, effects, link.threadId) }
         set({ state: 'numberEntry' })
         armAt(Date.parse(approval.expiresAt))
         return
@@ -252,8 +256,19 @@ export function createHcpApproveFlow(deps: HcpApproveFlowDeps): HcpApproveFlow {
       return current
     },
 
+    choosePurpose(purpose) {
+      if (current.state !== 'approve' || !found) return current
+      if (!found.view.purposeChoice?.options.some((o) => o.purpose === purpose)) return current
+      found = { ...found, view: { ...found.view, chosenPurpose: purpose } }
+      return set({ state: 'approve', view: found.view })
+    },
+
     async approve() {
       if (current.state !== 'approve' || !found) return current
+      // A request that names no purpose is approved only with the person's choice.
+      // TODO(vti): the choice is kept on Keyring's own records only. The consent decision (`vtaAgent.decide`,
+      // task-consent/decision) has no field to carry it to the VTA; open question for the VTA side (VTI hcp.md §5.1).
+      if (found.view.purposeChoice && !found.view.chosenPurpose) return current
       refresh()
       if (current.state !== 'approve') return current
       const { id, view } = found
